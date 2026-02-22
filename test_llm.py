@@ -9,7 +9,10 @@
 
 
 
-
+# if you got an error related to the gemini api
+# you can try to set the environment variable
+# ( $env:GEMINI_API_KEY="AIzaSyApwhWPssGbI6L5siyrfn24AYQWe52NW2E" )
+# then run from the terminal (python test_llm.py) 
 
 from ai_agent.gemini_placer import gemini_generate_placement
 
