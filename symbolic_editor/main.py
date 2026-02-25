@@ -459,16 +459,16 @@ class SymbolicEditor(QGraphicsView):
         self.scene.clear()
         self.device_items.clear()
 
-        self.scale = 80  # visual scaling
+        self.scale_factor = 80  # visual scaling
 
         for node in nodes:
             geom = node.get("geometry", {})
 
-            x = geom.get("x", 0) * self.scale
-            y = -geom.get("y", 0) * self.scale  # invert Y axis
+            x = geom.get("x", 0) * self.scale_factor
+            y = -geom.get("y", 0) * self.scale_factor  # invert Y axis
 
-            width = geom.get("width", 1) * self.scale
-            height = geom.get("height", 0.5) * self.scale
+            width = geom.get("width", 1) * self.scale_factor
+            height = geom.get("height", 0.5) * self.scale_factor
 
             item = DeviceItem(
                 node.get("id", "unknown"),
@@ -491,8 +491,8 @@ class SymbolicEditor(QGraphicsView):
         for dev_id, item in self.device_items.items():
             pos = item.pos()
             positions[dev_id] = (
-                pos.x() / self.scale,
-                -pos.y() / self.scale,  # un-invert Y axis
+                pos.x() / self.scale_factor,
+                -pos.y() / self.scale_factor,  # un-invert Y axis
             )
         return positions
 
