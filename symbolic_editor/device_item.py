@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (
     QStyleOptionGraphicsItem,
     QStyle,
 )
-from PySide6.QtGui import QBrush, QPen, QColor, QFont, QPainter
+from PySide6.QtGui import QBrush, QPen, QColor, QFont, QPainter, QLinearGradient
 from PySide6.QtCore import Qt, QRectF, QObject, Signal, QPointF
 
 
@@ -32,15 +32,25 @@ class DeviceItem(QGraphicsRectItem):
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
 
+        # --- Color palette per device type ---
         if dev_type == "nmos":
-            self._fill = QColor("#d6eaf8")
-            self._border = QColor("#5b9bd5")
+            self._source_color = QColor("#d6eaf8")   # soft sky blue
+            self._gate_color = QColor("#1b4f72")      # deep navy blue
+            self._drain_color = QColor("#d6eaf8")     # soft sky blue
+            self._border = QColor("#1a5276")
+            self._label_color = QColor("#1a5276")
+            self._terminal_label_color = QColor("#eaf2f8")
         else:
-            self._fill = QColor("#fadbd8")
-            self._border = QColor("#e74c3c")
+            self._source_color = QColor("#fadbd8")    # soft rose
+            self._gate_color = QColor("#78281f")      # deep burgundy
+            self._drain_color = QColor("#fadbd8")     # soft rose
+            self._border = QColor("#7b241c")
+            self._label_color = QColor("#7b241c")
+            self._terminal_label_color = QColor("#f9ebea")
 
-        self.setBrush(QBrush(self._fill))
-        self.setPen(QPen(self._border, 1.5))
+        # Transparent fill — we paint everything custom
+        self.setBrush(QBrush(Qt.BrushStyle.NoBrush))
+        self.setPen(QPen(Qt.PenStyle.NoPen))
 
     # --------------------------------------------------
     # Drag tracking
@@ -64,29 +74,115 @@ class DeviceItem(QGraphicsRectItem):
         super().mouseReleaseEvent(event)
 
     # --------------------------------------------------
-    # Painting
+    # Painting — 3-section MOS layout
     # --------------------------------------------------
     def paint(self, painter: QPainter, option, widget=None):
-        # Suppress the default dashed selection rectangle
-        my_option = QStyleOptionGraphicsItem(option)
-        my_option.state &= ~QStyle.StateFlag.State_Selected
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        # Draw the rectangle with suppressed selection
-        super().paint(painter, my_option, widget)
-
-        # Draw bright selection border if selected
-        if self.isSelected():
-            pen = QPen(QColor("#FFB300"), 3.0, Qt.PenStyle.SolidLine)
-            painter.setPen(pen)
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawRect(self.rect().adjusted(1, 1, -1, -1))
-
-        # Draw device name centered inside the rectangle
         rect = self.rect()
-        painter.setPen(QColor("#000000"))
+        w = rect.width()
+        h = rect.height()
+        x0 = rect.x()
+        y0 = rect.y()
 
-        # Pick a font size that fits inside the device width
-        font_size = max(4, min(12, int(rect.width() / 4)))
-        font = QFont("Segoe UI", font_size, QFont.Weight.Bold)
-        painter.setFont(font)
-        painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, self.device_name)
+        # Divide into 3 vertical sections: Source | Gate | Drain
+        source_w = w * 0.30
+        gate_w = w * 0.40
+        drain_w = w * 0.30
+
+        source_rect = QRectF(x0, y0, source_w, h)
+        gate_rect = QRectF(x0 + source_w, y0, gate_w, h)
+        drain_rect = QRectF(x0 + source_w + gate_w, y0, drain_w, h)
+
+        # --- Draw Source (left) ---
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(self._source_color))
+        painter.drawRect(source_rect)
+
+        # --- Draw Gate (center) — full fill with gradient ---
+        gradient = QLinearGradient(gate_rect.topLeft(), gate_rect.bottomLeft())
+        gradient.setColorAt(0.0, self._gate_color.lighter(115))
+        gradient.setColorAt(0.5, self._gate_color)
+        gradient.setColorAt(1.0, self._gate_color.darker(115))
+        painter.setBrush(QBrush(gradient))
+        painter.drawRect(gate_rect)
+
+        # --- Draw Drain (right) ---
+        painter.setBrush(QBrush(self._drain_color))
+        painter.drawRect(drain_rect)
+
+        # --- Outer border (sharp corners) ---
+        border_pen = QPen(self._border, 1.5)
+        painter.setPen(border_pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRect(rect.adjusted(0.5, 0.5, -0.5, -0.5))
+
+        # --- Vertical separator lines ---
+        sep_pen = QPen(self._border.darker(120), 1.0)
+        painter.setPen(sep_pen)
+        painter.drawLine(
+            QPointF(x0 + source_w, y0),
+            QPointF(x0 + source_w, y0 + h)
+        )
+        painter.drawLine(
+            QPointF(x0 + source_w + gate_w, y0),
+            QPointF(x0 + source_w + gate_w, y0 + h)
+        )
+
+        # --- Terminal labels (S, G, D) ---
+        term_font_size = max(3, min(9, int(min(source_w, h) / 3)))
+        term_font = QFont("Segoe UI", term_font_size, QFont.Weight.Bold)
+        painter.setFont(term_font)
+
+        # S label
+        painter.setPen(self._label_color)
+        painter.drawText(source_rect, Qt.AlignmentFlag.AlignCenter, "S")
+
+        # G label (lower portion of gate)
+        g_label_rect = QRectF(gate_rect.x(), gate_rect.y() + gate_rect.height() * 0.45,
+                              gate_rect.width(), gate_rect.height() * 0.55)
+        painter.setPen(self._terminal_label_color)
+        painter.drawText(g_label_rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, "G")
+
+        # D label
+        painter.setPen(self._label_color)
+        painter.drawText(drain_rect, Qt.AlignmentFlag.AlignCenter, "D")
+
+        # --- Device name inside gate area, spanning full width (drawn last = on top) ---
+        name_font_size = max(3, min(10, int(w / 5)))
+        name_font = QFont("Segoe UI", name_font_size, QFont.Weight.Bold)
+        painter.setFont(name_font)
+        painter.setPen(QColor("#FFFFFF"))
+
+        # Span full device width so long names aren't clipped
+        name_rect = QRectF(x0, gate_rect.y() + 2, w, gate_rect.height() * 0.50)
+        painter.drawText(name_rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, self.device_name)
+
+        # --- Selection highlight (thin black border inside rect) ---
+        if self.isSelected():
+            sel_pen = QPen(QColor("#000000"), 1.0, Qt.PenStyle.SolidLine)
+            painter.setPen(sel_pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRect(rect.adjusted(1, 1, -1, -1))
+
+    def terminal_anchors(self):
+        """Return scene positions for S, G, D terminal centers."""
+        rect = self.rect()
+        w = rect.width()
+        h = rect.height()
+        x0 = rect.x()
+        y0 = rect.y()
+
+        source_w = w * 0.30
+        gate_w = w * 0.40
+
+        # Center of each terminal section, mapped to scene coords
+        s_local = QPointF(x0 + source_w / 2, y0 + h / 2)
+        g_local = QPointF(x0 + source_w + gate_w / 2, y0 + h / 2)
+        d_local = QPointF(x0 + source_w + gate_w + (w * 0.30) / 2, y0 + h / 2)
+
+        return {
+            "S": self.mapToScene(s_local),
+            "G": self.mapToScene(g_local),
+            "D": self.mapToScene(d_local),
+        }
