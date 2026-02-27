@@ -10,6 +10,9 @@ from PySide6.QtWidgets import (
     QApplication,
     QGraphicsView,
     QGraphicsScene,
+    QGraphicsLineItem,
+    QGraphicsPathItem,
+    QGraphicsSimpleTextItem,
     QMainWindow,
     QSplitter,
     QTreeWidget,
@@ -26,8 +29,8 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QSizePolicy,
 )
-from PySide6.QtCore import Qt, Signal, QObject, QTimer
-from PySide6.QtGui import QPainter, QColor, QFont, QIcon, QAction, QKeySequence
+from PySide6.QtCore import Qt, Signal, QObject, QTimer, QPointF, QLineF
+from PySide6.QtGui import QPainter, QPen, QPainterPath, QColor, QFont, QIcon, QAction, QKeySequence
 
 from device_item import DeviceItem
 
@@ -119,10 +122,20 @@ class ChatPanel(QWidget):
             "- bullet lists, `code`.\n"
         )
         if self._layout_context:
-            prompt += (
-                "\nCurrent layout data (JSON):\n"
-                f"```json\n{json.dumps(self._layout_context, indent=2)}\n```\n"
-            )
+            # Build a compact summary instead of dumping full JSON
+            nodes = self._layout_context.get("nodes", [])
+            edges = self._layout_context.get("edges", [])
+            dev_lines = []
+            for n in nodes:
+                pos = n.get("position", {})
+                dev_lines.append(
+                    f"  {n.get('id','?')} ({n.get('type','?')}) "
+                    f"at ({pos.get('x',0):.1f}, {pos.get('y',0):.1f})"
+                )
+            nets = sorted({e.get("net", "") for e in edges if e.get("net")})
+            prompt += f"\nDevices ({len(nodes)}):\n" + "\n".join(dev_lines) + "\n"
+            if nets:
+                prompt += f"Nets: {', '.join(nets)}\n"
         return prompt
 
     # -----------------------------------------
@@ -440,78 +453,129 @@ class ChatPanel(QWidget):
         thread.start()
 
     def _llm_worker(self, user_message):
-        """Worker that runs in a background thread."""
+        """Worker that runs in a background thread.
+        Cascading fallback: tries multiple models per provider.
+        """
         system_prompt = self._build_system_prompt()
 
         # Build multi-turn context
         history_text = ""
-        for msg in self._chat_history[-10:]:  # last 10 messages for context
+        for msg in self._chat_history[-4:]:
             role_label = "User" if msg["role"] == "user" else "Assistant"
             history_text += f"{role_label}: {msg['content']}\n"
 
         full_prompt = f"{system_prompt}\n\nConversation history:\n{history_text}"
 
+        # Build chat messages for OpenAI-compatible APIs
+        chat_messages = [{"role": "system", "content": system_prompt}]
+        for msg in self._chat_history[-4:]:
+            chat_messages.append(msg)
+
+        errors = []
+
+        # ============================================
+        # Priority 1: Ollama (local, instant, no rate limits)
+        # ============================================
         try:
-            # Try Gemini first
-            api_key = "AIzaSyApwhWPssGbI6L5siyrfn24AYQWe52NW2E"
-            if api_key:
-                from google import genai
-
-                client = genai.Client(api_key=api_key)
-                response = client.models.generate_content(
-                    model="gemini-2.5-flash",
-                    contents=full_prompt,
-                )
-                if response and response.text:
-                    self.llm_signals.response_ready.emit(response.text.strip())
-                    return
-
-            # Try OpenAI
-            api_key = os.environ.get("OPENAI_API_KEY")
-            if api_key:
-                from openai import OpenAI
-
-                client = OpenAI(api_key=api_key)
-                messages = [{"role": "system", "content": system_prompt}]
-                for msg in self._chat_history[-10:]:
-                    messages.append(msg)
-                response = client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=messages,
-                    temperature=0.3,
-                )
-                reply = response.choices[0].message.content
+            import requests
+            resp = requests.post(
+                "http://localhost:11434/api/generate",
+                json={
+                    "model": "llama3.2",
+                    "prompt": full_prompt,
+                    "stream": False,
+                },
+                timeout=120,
+            )
+            resp.raise_for_status()
+            result = resp.json()
+            reply = result.get("response", "")
+            if reply:
+                print("[LLM] ✓ Ollama/llama3.2 responded")
                 self.llm_signals.response_ready.emit(reply.strip())
                 return
+        except Exception as e:
+            errors.append(f"Ollama: {e}")
+            print(f"[LLM] ✗ Ollama: {e}")
 
-            # Try Ollama (local)
-            import requests
-
+        # ============================================
+        # Priority 2: Gemini (multiple models)
+        # ============================================
+        gemini_models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-8b"]
+        for model_name in gemini_models:
             try:
-                resp = requests.post(
-                    "http://localhost:11434/api/generate",
-                    json={
-                        "model": "llama3.2",
-                        "prompt": full_prompt,
-                        "stream": False,
-                    },
-                    timeout=30,
+                from google import genai
+                from google.genai import types as genai_types
+                client = genai.Client(api_key="AIzaSyApwhWPssGbI6L5siyrfn24AYQWe52NW2E")
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=full_prompt,
+                    config=genai_types.GenerateContentConfig(
+                        max_output_tokens=256,
+                        temperature=0.3,
+                    ),
                 )
-                resp.raise_for_status()
-                result = resp.json()
-                reply = result.get("response", "")
+                if response and response.text:
+                    print(f"[LLM] ✓ Gemini/{model_name} responded")
+                    self.llm_signals.response_ready.emit(response.text.strip())
+                    return
+            except Exception as e:
+                errors.append(f"Gemini/{model_name}: {e}")
+                print(f"[LLM] ✗ Gemini/{model_name}: {e}")
+
+        # ============================================
+        # Priority 3: OpenAI (multiple models)
+        # ============================================
+        openai_models = ["gpt-4o-mini", "gpt-3.5-turbo"]
+        for model_name in openai_models:
+            try:
+                from openai import OpenAI
+                client = OpenAI(
+                    api_key="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"
+                )
+                response = client.chat.completions.create(
+                    model=model_name,
+                    messages=chat_messages,
+                    temperature=0.3,
+                    max_tokens=256,
+                )
+                reply = response.choices[0].message.content
                 if reply:
+                    print(f"[LLM] ✓ OpenAI/{model_name} responded")
                     self.llm_signals.response_ready.emit(reply.strip())
                     return
-            except Exception:
-                pass
+            except Exception as e:
+                errors.append(f"OpenAI/{model_name}: {e}")
+                print(f"[LLM] ✗ OpenAI/{model_name}: {e}")
 
-            self.llm_signals.error_occurred.emit(
-                "No LLM configured. Set GEMINI_API_KEY, OPENAI_API_KEY, "
-                "or run Ollama locally."
+        # ============================================
+        # Priority 4: DeepSeek
+        # ============================================
+        try:
+            from openai import OpenAI
+            client = OpenAI(
+                api_key=os.environ.get("DEEPSEEK_API_KEY", "sk-46424a0c783c4df58d181ba0f36d58fc"),
+                base_url="https://api.deepseek.com",
             )
+            response = client.chat.completions.create(
+                model="deepseek-chat",
+                messages=chat_messages,
+                temperature=0.3,
+                max_tokens=256,
+            )
+            reply = response.choices[0].message.content
+            if reply:
+                print("[LLM] ✓ DeepSeek/deepseek-chat responded")
+                self.llm_signals.response_ready.emit(reply.strip())
+                return
         except Exception as e:
-            self.llm_signals.error_occurred.emit(str(e))
+            errors.append(f"DeepSeek: {e}")
+            print(f"[LLM] ✗ DeepSeek: {e}")
+
+        # All backends exhausted
+        self.llm_signals.error_occurred.emit(
+            "All AI models exhausted. Please wait a minute and try again."
+        )
 
     def _on_llm_response(self, text):
         self._stop_thinking()
@@ -558,12 +622,16 @@ class ChatPanel(QWidget):
 # Device Tree Panel (Left Panel)
 # -------------------------------------------------
 class DeviceTreePanel(QWidget):
-    """Left panel showing devices and hierarchy."""
+    """Left panel showing devices, hierarchy, and terminal connectivity."""
 
     device_selected = Signal(str)
+    connection_selected = Signal(str, str, str)  # (dev_id, net_name, other_dev_id)
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._terminal_nets = {}  # dev_id -> {"D": net, "G": net, "S": net}
+        self._edges = []
+        self._conn_map = {}  # dev_id -> [(other_id, net), ...]
         self._init_ui()
 
     def _init_ui(self):
@@ -571,23 +639,27 @@ class DeviceTreePanel(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # Header
+        # Header with gradient
         header = QFrame()
-        header.setFixedHeight(40)
+        header.setFixedHeight(44)
         header.setStyleSheet(
-            "background-color: #1e2a3a; border-bottom: 1px solid #2d3f54;"
+            "background: qlineargradient(x1:0,y1:0,x2:1,y2:0,"
+            "stop:0 #1e2a3a, stop:1 #2d3f54);"
+            "border-bottom: 1px solid #4a90d9;"
         )
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(12, 0, 12, 0)
-        title = QLabel("Device Hierarchy")
+        title = QLabel("📋 Device Hierarchy")
         title.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
-        title.setStyleSheet("color: #c8d6e5;")
+        title.setStyleSheet("color: #e0e8f0;")
         header_layout.addWidget(title)
         layout.addWidget(header)
 
         # Tree widget
         self.tree = QTreeWidget()
         self.tree.setHeaderHidden(True)
+        self.tree.setIndentation(18)
+        self.tree.setAnimated(True)
         self.tree.setStyleSheet(
             """
             QTreeWidget {
@@ -595,27 +667,65 @@ class DeviceTreePanel(QWidget):
                 border: none;
                 color: #c8d6e5;
                 font-family: 'Segoe UI', sans-serif;
-                font-size: 13px;
+                font-size: 12px;
                 padding: 4px;
             }
             QTreeWidget::item {
-                padding: 6px 8px;
-                border-radius: 4px;
+                padding: 4px 6px;
+                border-radius: 3px;
+                margin: 1px 2px;
             }
             QTreeWidget::item:hover {
                 background-color: #2d3f54;
             }
             QTreeWidget::item:selected {
-                background-color: #4a90d9;
+                background-color: #3a6fa0;
                 color: white;
             }
             QTreeWidget::branch {
                 background-color: #1a2332;
             }
+            QTreeWidget::branch:has-children:!has-siblings:closed,
+            QTreeWidget::branch:closed:has-children:has-siblings {
+                image: none;
+                border-image: none;
+            }
+            QTreeWidget::branch:open:has-children:!has-siblings,
+            QTreeWidget::branch:open:has-children:has-siblings {
+                image: none;
+                border-image: none;
+            }
+            QScrollBar:vertical {
+                width: 6px;
+                background: transparent;
+            }
+            QScrollBar::handle:vertical {
+                background: #3d5066;
+                border-radius: 3px;
+                min-height: 30px;
+            }
             """
         )
         self.tree.itemClicked.connect(self._on_item_clicked)
         layout.addWidget(self.tree)
+
+    def set_edges(self, edges):
+        """Store edge data and build connectivity lookup."""
+        self._edges = edges or []
+        self._conn_map.clear()
+        for edge in self._edges:
+            src = edge.get("source")
+            tgt = edge.get("target")
+            net = edge.get("net", "")
+            if src and tgt:
+                self._conn_map.setdefault(src, []).append((tgt, net))
+                self._conn_map.setdefault(tgt, []).append((src, net))
+
+    def set_terminal_nets(self, terminal_nets):
+        """Store terminal-to-net mapping per device.
+        terminal_nets: {dev_id: {'D': net, 'G': net, 'S': net}}
+        """
+        self._terminal_nets = terminal_nets or {}
 
     def load_devices(self, nodes):
         """Populate tree from the placement JSON nodes."""
@@ -633,29 +743,64 @@ class DeviceTreePanel(QWidget):
 
         # NMOS group
         if nmos_devices:
-            nmos_root = QTreeWidgetItem(self.tree, ["NMOS Devices"])
+            nmos_root = QTreeWidgetItem(
+                self.tree, [f"⬜ NMOS Devices ({len(nmos_devices)})"]
+            )
             nmos_root.setFont(0, QFont("Segoe UI", 11, QFont.Weight.Bold))
             nmos_root.setForeground(0, QColor("#7ec8e3"))
             for dev in nmos_devices:
-                dev_id = dev.get("id", "unknown")
-                elec = dev.get("electrical", {})
-                info = f"{dev_id}  (nf={elec.get('nf',1)}, nfin={elec.get('nfin','?')})"
-                item = QTreeWidgetItem(nmos_root, [info])
-                item.setData(0, Qt.ItemDataRole.UserRole, dev_id)
+                self._add_device_item(nmos_root, dev)
             nmos_root.setExpanded(True)
 
         # PMOS group
         if pmos_devices:
-            pmos_root = QTreeWidgetItem(self.tree, ["PMOS Devices"])
+            pmos_root = QTreeWidgetItem(
+                self.tree, [f"⬜ PMOS Devices ({len(pmos_devices)})"]
+            )
             pmos_root.setFont(0, QFont("Segoe UI", 11, QFont.Weight.Bold))
             pmos_root.setForeground(0, QColor("#e87474"))
             for dev in pmos_devices:
-                dev_id = dev.get("id", "unknown")
-                elec = dev.get("electrical", {})
-                info = f"{dev_id}  (nf={elec.get('nf',1)}, nfin={elec.get('nfin','?')})"
-                item = QTreeWidgetItem(pmos_root, [info])
-                item.setData(0, Qt.ItemDataRole.UserRole, dev_id)
+                self._add_device_item(pmos_root, dev)
             pmos_root.setExpanded(True)
+
+    def _add_device_item(self, parent, dev):
+        """Add a device and its terminal connections as tree items."""
+        dev_id = dev.get("id", "unknown")
+        elec = dev.get("electrical", {})
+        info = f"🔷 {dev_id}  (nf={elec.get('nf', 1)}, nfin={elec.get('nfin', '?')})"
+        item = QTreeWidgetItem(parent, [info])
+        item.setData(0, Qt.ItemDataRole.UserRole, dev_id)
+        item.setFont(0, QFont("Segoe UI", 11))
+
+        term_nets = self._terminal_nets.get(dev_id, {})
+        connections = self._conn_map.get(dev_id, [])
+
+        # Build net -> [connected devices] map
+        net_to_devs = {}
+        for other_id, net in connections:
+            net_to_devs.setdefault(net, []).append(other_id)
+
+        # Show each terminal with its net and connected devices
+        for term_label, term_key, icon in [
+            ("Gate", "G", "🟦"),
+            ("Drain", "D", "🟩"),
+            ("Source", "S", "🟨"),
+        ]:
+            net_name = term_nets.get(term_key, "?")
+            connected = net_to_devs.get(net_name, [])
+            if connected:
+                devs_str = ", ".join(connected)
+                text = f"{icon} {term_label} ({net_name}) → {devs_str}"
+            else:
+                text = f"{icon} {term_label} ({net_name})"
+
+            sub = QTreeWidgetItem(item, [text])
+            sub.setForeground(0, QColor("#8899aa"))
+            sub.setFont(0, QFont("Segoe UI", 10))
+            # Store data for click-to-highlight
+            sub.setData(0, Qt.ItemDataRole.UserRole, None)  # not a device
+            sub.setData(0, Qt.ItemDataRole.UserRole + 1, dev_id)
+            sub.setData(0, Qt.ItemDataRole.UserRole + 2, net_name)
 
     def highlight_device(self, dev_id):
         """Highlight the tree item matching the given device id."""
@@ -676,7 +821,15 @@ class DeviceTreePanel(QWidget):
     def _on_item_clicked(self, item, column):
         dev_id = item.data(0, Qt.ItemDataRole.UserRole)
         if dev_id:
+            # Device item clicked
             self.device_selected.emit(dev_id)
+        else:
+            # Connection sub-item clicked
+            parent_dev = item.data(0, Qt.ItemDataRole.UserRole + 1)
+            net_name = item.data(0, Qt.ItemDataRole.UserRole + 2)
+            if parent_dev and net_name:
+                self.device_selected.emit(parent_dev)
+                self.connection_selected.emit(parent_dev, net_name, "")
 
 
 # -------------------------------------------------
@@ -712,6 +865,28 @@ class SymbolicEditor(QGraphicsView):
 
         # Device items lookup by id
         self.device_items = {}
+
+        # Connectivity data
+        self._edges = []          # raw edge list from JSON
+        self._conn_map = {}       # device_id -> [(other_id, net_name), ...]
+        self._conn_lines = []     # active QGraphicsPathItem items
+        self._terminal_nets = {}  # {dev_id: {'D': net, 'G': net, 'S': net}}
+
+        # Net color palette
+        self._net_colors = {
+            '__palette': [
+                QColor("#e74c3c"),  # red
+                QColor("#3498db"),  # blue
+                QColor("#2ecc71"),  # green
+                QColor("#9b59b6"),  # purple
+                QColor("#f39c12"),  # orange
+                QColor("#1abc9c"),  # teal
+                QColor("#e67e22"),  # dark orange
+                QColor("#e84393"),  # pink
+                QColor("#00cec9"),  # cyan
+                QColor("#6c5ce7"),  # indigo
+            ]
+        }
 
         # Grid settings
         self._grid_size = 20   # base grid spacing in scene coords
@@ -786,11 +961,162 @@ class SymbolicEditor(QGraphicsView):
             return True
         return False
 
+    def set_edges(self, edges):
+        """Store edge data and build connectivity lookup."""
+        self._edges = edges or []
+        self._conn_map.clear()
+        for edge in self._edges:
+            src = edge.get("source")
+            tgt = edge.get("target")
+            net = edge.get("net", "")
+            if src and tgt:
+                self._conn_map.setdefault(src, []).append((tgt, net))
+                self._conn_map.setdefault(tgt, []).append((src, net))
+
+    def set_terminal_nets(self, terminal_nets):
+        """Store terminal-net mapping: {dev_id: {'D': net, 'G': net, 'S': net}}"""
+        self._terminal_nets = terminal_nets or {}
+
+    def _get_terminal_for_net(self, dev_id, net_name):
+        """Return which terminal ('S','G','D') of dev_id connects to net_name."""
+        term_map = self._terminal_nets.get(dev_id, {})
+        for term, net in term_map.items():
+            if net == net_name:
+                return term
+        return "G"  # fallback
+
+    def _get_net_color(self, net_name):
+        """Return a consistent color for a given net name."""
+        if net_name not in self._net_colors:
+            palette = self._net_colors['__palette']
+            idx = (len(self._net_colors) - 1) % len(palette)
+            self._net_colors[net_name] = palette[idx]
+        return self._net_colors[net_name]
+
+    def _clear_connections(self):
+        """Remove all connection lines and labels from the scene."""
+        if self._conn_lines:
+            self.scene.blockSignals(True)
+            for item in self._conn_lines:
+                self.scene.removeItem(item)
+            self._conn_lines.clear()
+            self.scene.blockSignals(False)
+
+    def _show_connections(self, dev_id):
+        """Draw curved lines from dev_id terminals to connected device terminals."""
+        self._clear_connections()
+        connections = self._conn_map.get(dev_id, [])
+        if not connections:
+            return
+
+        src_item = self.device_items.get(dev_id)
+        if not src_item:
+            return
+
+        src_anchors = src_item.terminal_anchors()
+
+        self.scene.blockSignals(True)
+        for i, (other_id, net_name) in enumerate(connections):
+            tgt_item = self.device_items.get(other_id)
+            if not tgt_item:
+                continue
+
+            tgt_anchors = tgt_item.terminal_anchors()
+            color = self._get_net_color(net_name)
+
+            # Look up correct terminals from SPICE data
+            src_term = self._get_terminal_for_net(dev_id, net_name)
+            tgt_term = self._get_terminal_for_net(other_id, net_name)
+            p1 = src_anchors[src_term]
+            p2 = tgt_anchors[tgt_term]
+
+            # Build a curved bezier path
+            path = QPainterPath()
+            path.moveTo(p1)
+            dx = p2.x() - p1.x()
+            dy = p2.y() - p1.y()
+            offset = max(abs(dx), abs(dy)) * 0.3
+            sign = 1.0 if i % 2 == 0 else -1.0
+            if abs(dx) > abs(dy):
+                ctrl1 = QPointF(p1.x() + dx * 0.33, p1.y() + sign * offset)
+                ctrl2 = QPointF(p1.x() + dx * 0.66, p2.y() + sign * offset)
+            else:
+                ctrl1 = QPointF(p1.x() + sign * offset, p1.y() + dy * 0.33)
+                ctrl2 = QPointF(p2.x() + sign * offset, p1.y() + dy * 0.66)
+            path.cubicTo(ctrl1, ctrl2, p2)
+
+            path_item = QGraphicsPathItem(path)
+            pen = QPen(color, 0.5, Qt.PenStyle.DashLine)
+            path_item.setPen(pen)
+            path_item.setZValue(10)
+            path_item.setFlag(QGraphicsPathItem.GraphicsItemFlag.ItemIsSelectable, False)
+            self.scene.addItem(path_item)
+            self._conn_lines.append(path_item)
+        self.scene.blockSignals(False)
+
+    def _show_net_connections(self, dev_id, net_name):
+        """Highlight only connections for a specific net from a device."""
+        self._clear_connections()
+        connections = [(oid, n) for oid, n in self._conn_map.get(dev_id, [])
+                       if n == net_name]
+        if not connections:
+            return
+
+        src_item = self.device_items.get(dev_id)
+        if not src_item:
+            return
+
+        src_anchors = src_item.terminal_anchors()
+        src_term = self._get_terminal_for_net(dev_id, net_name)
+        color = self._get_net_color(net_name)
+
+        self.scene.blockSignals(True)
+        for i, (other_id, _) in enumerate(connections):
+            tgt_item = self.device_items.get(other_id)
+            if not tgt_item:
+                continue
+
+            tgt_anchors = tgt_item.terminal_anchors()
+            tgt_term = self._get_terminal_for_net(other_id, net_name)
+            p1 = src_anchors[src_term]
+            p2 = tgt_anchors[tgt_term]
+
+            path = QPainterPath()
+            path.moveTo(p1)
+            dx = p2.x() - p1.x()
+            dy = p2.y() - p1.y()
+            offset = max(abs(dx), abs(dy)) * 0.25
+            sign = 1.0 if i % 2 == 0 else -1.0
+            if abs(dx) > abs(dy):
+                ctrl1 = QPointF(p1.x() + dx * 0.33, p1.y() + sign * offset)
+                ctrl2 = QPointF(p1.x() + dx * 0.66, p2.y() + sign * offset)
+            else:
+                ctrl1 = QPointF(p1.x() + sign * offset, p1.y() + dy * 0.33)
+                ctrl2 = QPointF(p2.x() + sign * offset, p1.y() + dy * 0.66)
+            path.cubicTo(ctrl1, ctrl2, p2)
+
+            path_item = QGraphicsPathItem(path)
+            pen = QPen(color, 0.5, Qt.PenStyle.DashLine)
+            path_item.setPen(pen)
+            path_item.setZValue(10)
+            path_item.setFlag(QGraphicsPathItem.GraphicsItemFlag.ItemIsSelectable, False)
+            self.scene.addItem(path_item)
+            self._conn_lines.append(path_item)
+        self.scene.blockSignals(False)
+
     def _on_selection_changed(self):
         """Emit device_clicked when user selects a device on the canvas."""
-        selected = self.scene.selectedItems()
-        if selected and hasattr(selected[0], 'device_name'):
-            self.device_clicked.emit(selected[0].device_name)
+        try:
+            selected = [s for s in self.scene.selectedItems()
+                        if hasattr(s, 'device_name')]
+        except RuntimeError:
+            return  # scene deleted during shutdown
+        if selected:
+            dev_id = selected[0].device_name
+            self.device_clicked.emit(dev_id)
+            self._show_connections(dev_id)
+        else:
+            self._clear_connections()
 
     def fit_to_view(self):
         """Zoom and pan to fit all devices in the viewport."""
@@ -929,6 +1255,7 @@ class MainWindow(QMainWindow):
         self._undo_stack = []
         self._redo_stack = []
         self._current_file = placement_file
+        self._terminal_nets = {}  # {dev_id: {'D': net, 'G': net, 'S': net}}
 
         # Load placement data
         self._load_data(placement_file)
@@ -972,6 +1299,9 @@ class MainWindow(QMainWindow):
 
         # Connect device tree selection to canvas highlight
         self.device_tree.device_selected.connect(self.editor.highlight_device)
+
+        # Connect tree connection click to canvas net highlight
+        self.device_tree.connection_selected.connect(self._on_connection_selected)
 
         # Connect canvas selection to tree highlight
         self.editor.device_clicked.connect(self.device_tree.highlight_device)
@@ -1124,11 +1454,46 @@ class MainWindow(QMainWindow):
             raise ValueError("JSON must contain 'nodes' key")
         self._original_data = data
         self.nodes = data["nodes"]
+        # Try to find and parse matching SPICE file for terminal nets
+        self._terminal_nets = self._parse_spice_terminals(filepath)
+
+    @staticmethod
+    def _parse_spice_terminals(json_path):
+        """Parse .sp files in the same directory to extract terminal-net mapping.
+        MOSFET format: name drain gate source bulk model ...
+        Returns: {dev_id: {'D': net, 'G': net, 'S': net}}
+        """
+        terminal_nets = {}
+        sp_dir = os.path.dirname(json_path)
+        sp_files = [f for f in os.listdir(sp_dir) if f.endswith('.sp')]
+        for sp_file in sp_files:
+            try:
+                with open(os.path.join(sp_dir, sp_file)) as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith('*') or line.startswith('.'):
+                            continue
+                        tokens = line.split()
+                        if len(tokens) >= 5 and tokens[0].startswith('M'):
+                            dev_name = tokens[0]
+                            terminal_nets[dev_name] = {
+                                'D': tokens[1],
+                                'G': tokens[2],
+                                'S': tokens[3],
+                            }
+            except Exception:
+                pass
+        return terminal_nets
 
     def _refresh_panels(self):
         """Refresh all panels from self.nodes."""
+        edges = self._original_data.get("edges")
+        self.device_tree.set_edges(edges)
+        self.device_tree.set_terminal_nets(self._terminal_nets)
         self.device_tree.load_devices(self.nodes)
         self.editor.load_placement(self.nodes)
+        self.editor.set_edges(edges)
+        self.editor.set_terminal_nets(self._terminal_nets)
         self.chat_panel.set_layout_context(
             self.nodes, self._original_data.get("edges")
         )
@@ -1136,6 +1501,11 @@ class MainWindow(QMainWindow):
         for item in self.editor.device_items.values():
             item.signals.drag_started.connect(self._on_device_drag_start)
             item.signals.drag_finished.connect(self._on_device_drag_end)
+
+    def _on_connection_selected(self, dev_id, net_name, _other):
+        """When a connection sub-item is clicked in the tree, highlight that net."""
+        self.editor.highlight_device(dev_id)
+        self.editor._show_net_connections(dev_id, net_name)
 
     def _build_output_data(self):
         """Build the output dict with updated positions."""
