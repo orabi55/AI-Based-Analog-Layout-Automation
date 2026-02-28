@@ -22,18 +22,31 @@ class DeviceItem(QGraphicsRectItem):
 
         self.setPos(x, y)
         self.device_name = name
-        self.device_type = dev_type
+        self.device_type = str(dev_type).strip().lower()
         self.signals = DeviceSignals()
 
         self._drag_active = False
         self._drag_start_pos = QPointF()
+        self._snap_grid_x = None
+        self._snap_grid_y = None
+        self._flip_h = False
+        self._flip_v = False
 
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
 
         # --- Color palette per device type ---
-        if dev_type == "nmos":
+        dtype = self.device_type
+        if str(name).upper().startswith("DUMMY"):
+            # Keep one consistent dummy color (pink) for both N/P.
+            self._source_color = QColor("#ffd6ea")
+            self._gate_color = QColor("#d14d94")
+            self._drain_color = QColor("#ffd6ea")
+            self._border = QColor("#b83b7c")
+            self._label_color = QColor("#8f2d61")
+            self._terminal_label_color = QColor("#fff1f8")
+        elif dtype == "nmos":
             self._source_color = QColor("#d6eaf8")   # soft sky blue
             self._gate_color = QColor("#1b4f72")      # deep navy blue
             self._drain_color = QColor("#d6eaf8")     # soft sky blue
@@ -51,6 +64,60 @@ class DeviceItem(QGraphicsRectItem):
         # Transparent fill — we paint everything custom
         self.setBrush(QBrush(Qt.BrushStyle.NoBrush))
         self.setPen(QPen(Qt.PenStyle.NoPen))
+
+    def set_snap_grid(self, grid_x, grid_y=None):
+        """Enable snapping item movement to scene grid (separate X/Y pitch)."""
+        self._snap_grid_x = float(grid_x) if grid_x else None
+        self._snap_grid_y = (
+            float(grid_y) if grid_y else self._snap_grid_x
+        )
+
+    def flip_horizontal(self):
+        """Mirror device left/right."""
+        self._flip_h = not self._flip_h
+        self.update()
+
+    def flip_vertical(self):
+        """Mirror device up/down."""
+        self._flip_v = not self._flip_v
+        self.update()
+
+    def is_flip_h(self):
+        return self._flip_h
+
+    def set_flip_h(self, state):
+        self._flip_h = bool(state)
+        self.update()
+
+    def is_flip_v(self):
+        return self._flip_v
+
+    def set_flip_v(self, state):
+        self._flip_v = bool(state)
+        self.update()
+
+    def orientation_string(self):
+        """Compact orientation token for save/export."""
+        base = "R0"
+        if self._flip_h and self._flip_v:
+            return f"{base}_FH_FV"
+        if self._flip_h:
+            return f"{base}_FH"
+        if self._flip_v:
+            return f"{base}_FV"
+        return base
+
+    def itemChange(self, change, value):
+        """Snap dragged positions to grid so devices never float between tracks."""
+        if (
+            change == QGraphicsItem.GraphicsItemChange.ItemPositionChange
+            and self._snap_grid_x
+            and self._snap_grid_y
+        ):
+            x = round(value.x() / self._snap_grid_x) * self._snap_grid_x
+            y = round(value.y() / self._snap_grid_y) * self._snap_grid_y
+            return QPointF(x, y)
+        return super().itemChange(change, value)
 
     # --------------------------------------------------
     # Drag tracking
@@ -84,6 +151,13 @@ class DeviceItem(QGraphicsRectItem):
         h = rect.height()
         x0 = rect.x()
         y0 = rect.y()
+        cx = x0 + w / 2.0
+        cy = y0 + h / 2.0
+
+        painter.save()
+        painter.translate(cx, cy)
+        painter.scale(-1.0 if self._flip_h else 1.0, -1.0 if self._flip_v else 1.0)
+        painter.translate(-cx, -cy)
 
         # Divide into 3 vertical sections: Source | Gate | Drain
         source_w = w * 0.30
@@ -152,7 +226,7 @@ class DeviceItem(QGraphicsRectItem):
         name_font_size = max(3, min(10, int(w / 5)))
         name_font = QFont("Segoe UI", name_font_size, QFont.Weight.Bold)
         painter.setFont(name_font)
-        painter.setPen(QColor("#FFFFFF"))
+        painter.setPen(QColor("#000000"))
 
         # Span full device width so long names aren't clipped
         name_rect = QRectF(x0, gate_rect.y() + 2, w, gate_rect.height() * 0.50)
@@ -164,6 +238,8 @@ class DeviceItem(QGraphicsRectItem):
             painter.setPen(sel_pen)
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawRect(rect.adjusted(1, 1, -1, -1))
+
+        painter.restore()
 
     def terminal_anchors(self):
         """Return scene positions for S, G, D terminal centers."""
