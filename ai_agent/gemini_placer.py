@@ -53,8 +53,7 @@ def gemini_generate_placement(input_json: str, output_json: str):
     Generates initial transistor placement using Gemini API.
     """
 
-    #api_key = os.getenv("GEMINI_API_KEY")
-    api_key = "AIzaSyApwhWPssGbI6L5siyrfn24AYQWe52NW2E"
+    api_key = os.getenv("GEMINI_API_KEY")
 
     if not api_key:
         raise ValueError("GEMINI_API_KEY not set")
