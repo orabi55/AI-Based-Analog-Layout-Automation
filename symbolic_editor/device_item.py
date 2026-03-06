@@ -154,12 +154,7 @@ class DeviceItem(QGraphicsRectItem):
         cx = x0 + w / 2.0
         cy = y0 + h / 2.0
 
-        painter.save()
-        painter.translate(cx, cy)
-        painter.scale(-1.0 if self._flip_h else 1.0, -1.0 if self._flip_v else 1.0)
-        painter.translate(-cx, -cy)
-
-        # Divide into 3 vertical sections: Source | Gate | Drain
+        # --- Section geometry (always in local item coords) ---
         source_w = w * 0.30
         gate_w = w * 0.40
         drain_w = w * 0.30
@@ -168,12 +163,19 @@ class DeviceItem(QGraphicsRectItem):
         gate_rect = QRectF(x0 + source_w, y0, gate_w, h)
         drain_rect = QRectF(x0 + source_w + gate_w, y0, drain_w, h)
 
-        # --- Draw Source (left) ---
+        # ── Draw coloured sections WITH flip transform ─────────
+        painter.save()
+        painter.translate(cx, cy)
+        painter.scale(-1.0 if self._flip_h else 1.0,
+                       -1.0 if self._flip_v else 1.0)
+        painter.translate(-cx, -cy)
+
+        # Source (left in unflipped orientation)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QBrush(self._source_color))
         painter.drawRect(source_rect)
 
-        # --- Draw Gate (center) — full fill with gradient ---
+        # Gate (centre) — gradient fill
         gradient = QLinearGradient(gate_rect.topLeft(), gate_rect.bottomLeft())
         gradient.setColorAt(0.0, self._gate_color.lighter(115))
         gradient.setColorAt(0.5, self._gate_color)
@@ -181,68 +183,79 @@ class DeviceItem(QGraphicsRectItem):
         painter.setBrush(QBrush(gradient))
         painter.drawRect(gate_rect)
 
-        # --- Draw Drain (right) ---
+        # Drain (right in unflipped orientation)
         painter.setBrush(QBrush(self._drain_color))
         painter.drawRect(drain_rect)
 
-        # --- Outer border (sharp corners) ---
-        border_pen = QPen(self._border, 1.5)
-        painter.setPen(border_pen)
+        # Outer border
+        painter.setPen(QPen(self._border, 1.5))
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawRect(rect.adjusted(0.5, 0.5, -0.5, -0.5))
 
-        # --- Vertical separator lines ---
+        # Vertical separator lines
         sep_pen = QPen(self._border.darker(120), 1.0)
         painter.setPen(sep_pen)
-        painter.drawLine(
-            QPointF(x0 + source_w, y0),
-            QPointF(x0 + source_w, y0 + h)
-        )
-        painter.drawLine(
-            QPointF(x0 + source_w + gate_w, y0),
-            QPointF(x0 + source_w + gate_w, y0 + h)
-        )
+        painter.drawLine(QPointF(x0 + source_w, y0),
+                         QPointF(x0 + source_w, y0 + h))
+        painter.drawLine(QPointF(x0 + source_w + gate_w, y0),
+                         QPointF(x0 + source_w + gate_w, y0 + h))
 
-        # --- Terminal labels (S, G, D) ---
+        painter.restore()  # back to un-flipped coordinates
+
+        # ── Draw text labels WITHOUT flip (always readable) ────
+        # Visual position of terminals after horizontal flip:
+        #   flip_h  → left=Drain, right=Source
+        #   normal  → left=Source, right=Drain
+        left_rect  = QRectF(x0, y0, source_w, h)
+        center_rect = QRectF(x0 + source_w, y0, gate_w, h)
+        right_rect = QRectF(x0 + source_w + gate_w, y0, drain_w, h)
+
+        left_label  = "D" if self._flip_h else "S"
+        right_label = "S" if self._flip_h else "D"
+
         term_font_size = max(3, min(9, int(min(source_w, h) / 3)))
         term_font = QFont("Segoe UI", term_font_size, QFont.Weight.Bold)
         painter.setFont(term_font)
 
-        # S label
+        # Left terminal label
         painter.setPen(self._label_color)
-        painter.drawText(source_rect, Qt.AlignmentFlag.AlignCenter, "S")
+        painter.drawText(left_rect, Qt.AlignmentFlag.AlignCenter, left_label)
 
         # G label (lower portion of gate)
-        g_label_rect = QRectF(gate_rect.x(), gate_rect.y() + gate_rect.height() * 0.45,
-                              gate_rect.width(), gate_rect.height() * 0.55)
+        g_label_rect = QRectF(center_rect.x(),
+                              center_rect.y() + center_rect.height() * 0.45,
+                              center_rect.width(),
+                              center_rect.height() * 0.55)
         painter.setPen(self._terminal_label_color)
-        painter.drawText(g_label_rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, "G")
+        painter.drawText(g_label_rect,
+                         Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, "G")
 
-        # D label
+        # Right terminal label
         painter.setPen(self._label_color)
-        painter.drawText(drain_rect, Qt.AlignmentFlag.AlignCenter, "D")
+        painter.drawText(right_rect, Qt.AlignmentFlag.AlignCenter, right_label)
 
-        # --- Device name inside gate area, spanning full width (drawn last = on top) ---
+        # Device name — centred over gate area, spanning full width
         name_font_size = max(3, min(10, int(w / 5)))
         name_font = QFont("Segoe UI", name_font_size, QFont.Weight.Bold)
         painter.setFont(name_font)
-        painter.setPen(QColor("#000000"))
+        painter.setPen(QColor("#ffffff"))
+        name_rect = QRectF(x0, center_rect.y() + 2, w, center_rect.height() * 0.50)
+        painter.drawText(name_rect,
+                         Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
+                         self.device_name)
 
-        # Span full device width so long names aren't clipped
-        name_rect = QRectF(x0, gate_rect.y() + 2, w, gate_rect.height() * 0.50)
-        painter.drawText(name_rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, self.device_name)
-
-        # --- Selection highlight (thin black border inside rect) ---
+        # ── Selection highlight (un-flipped) ───────────────────
         if self.isSelected():
-            sel_pen = QPen(QColor("#000000"), 1.0, Qt.PenStyle.SolidLine)
+            sel_pen = QPen(QColor("#4a90d9"), 2.0, Qt.PenStyle.SolidLine)
             painter.setPen(sel_pen)
-            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.setBrush(QBrush(QColor(74, 144, 217, 30)))
             painter.drawRect(rect.adjusted(1, 1, -1, -1))
 
-        painter.restore()
-
     def terminal_anchors(self):
-        """Return scene positions for S, G, D terminal centers."""
+        """Return scene positions for S, G, D terminal centers.
+
+        Accounts for horizontal flip so anchors match the visual layout.
+        """
         rect = self.rect()
         w = rect.width()
         h = rect.height()
@@ -251,11 +264,17 @@ class DeviceItem(QGraphicsRectItem):
 
         source_w = w * 0.30
         gate_w = w * 0.40
+        drain_w = w * 0.30
 
-        # Center of each terminal section, mapped to scene coords
-        s_local = QPointF(x0 + source_w / 2, y0 + h / 2)
+        if self._flip_h:
+            # Flipped: Source visually on the right, Drain on the left
+            s_local = QPointF(x0 + source_w + gate_w + drain_w / 2, y0 + h / 2)
+            d_local = QPointF(x0 + source_w / 2, y0 + h / 2)
+        else:
+            s_local = QPointF(x0 + source_w / 2, y0 + h / 2)
+            d_local = QPointF(x0 + source_w + gate_w + drain_w / 2, y0 + h / 2)
+
         g_local = QPointF(x0 + source_w + gate_w / 2, y0 + h / 2)
-        d_local = QPointF(x0 + source_w + gate_w + (w * 0.30) / 2, y0 + h / 2)
 
         return {
             "S": self.mapToScene(s_local),

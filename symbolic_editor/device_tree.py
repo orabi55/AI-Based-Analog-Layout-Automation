@@ -9,11 +9,14 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QFrame,
+    QPushButton,
     QTreeWidget,
     QTreeWidgetItem,
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QFont
+
+from icons import icon_panel_toggle
 
 
 class DeviceTreePanel(QWidget):
@@ -21,6 +24,7 @@ class DeviceTreePanel(QWidget):
 
     device_selected = Signal(str)
     connection_selected = Signal(str, str, str)  # (dev_id, net_name, other_dev_id)
+    toggle_requested = Signal()  # emitted when the user clicks the panel-toggle button
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -34,51 +38,76 @@ class DeviceTreePanel(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # Header with gradient
+        # Header
         header = QFrame()
-        header.setFixedHeight(44)
+        header.setFixedHeight(48)
         header.setStyleSheet(
-            "background: qlineargradient(x1:0,y1:0,x2:1,y2:0,"
-            "stop:0 #1e2a3a, stop:1 #2d3f54);"
-            "border-bottom: 1px solid #4a90d9;"
+            "background-color: #1a1f2b;"
+            "border-bottom: 1px solid #2d3548;"
         )
         header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(12, 0, 12, 0)
+        header_layout.setContentsMargins(14, 0, 14, 0)
         title = QLabel("📋 Device Hierarchy")
-        title.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
-        title.setStyleSheet("color: #e0e8f0;")
+        title.setFont(QFont("Segoe UI", 12, QFont.Weight.DemiBold))
+        title.setStyleSheet("color: #c8d0dc;")
         header_layout.addWidget(title)
+
+        header_layout.addStretch()
+
+        # Panel toggle button
+        toggle_btn = QPushButton()
+        toggle_btn.setIcon(icon_panel_toggle())
+        toggle_btn.setFixedSize(28, 28)
+        toggle_btn.setToolTip("Hide panel")
+        toggle_btn.setStyleSheet(
+            """
+            QPushButton {
+                background: transparent;
+                border: none;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: rgba(255,255,255,0.12);
+            }
+            QPushButton:pressed {
+                background-color: rgba(255,255,255,0.20);
+            }
+            """
+        )
+        toggle_btn.clicked.connect(self.toggle_requested.emit)
+        header_layout.addWidget(toggle_btn)
+
         layout.addWidget(header)
 
         # Tree widget
         self.tree = QTreeWidget()
         self.tree.setHeaderHidden(True)
-        self.tree.setIndentation(18)
+        self.tree.setIndentation(20)
         self.tree.setAnimated(True)
         self.tree.setStyleSheet(
             """
             QTreeWidget {
-                background-color: #1a2332;
+                background-color: #111621;
                 border: none;
-                color: #c8d6e5;
+                color: #c0cad8;
                 font-family: 'Segoe UI', sans-serif;
                 font-size: 12px;
-                padding: 4px;
+                padding: 6px;
             }
             QTreeWidget::item {
-                padding: 4px 6px;
-                border-radius: 3px;
-                margin: 1px 2px;
+                padding: 5px 8px;
+                border-radius: 6px;
+                margin: 1px 3px;
             }
             QTreeWidget::item:hover {
-                background-color: #2d3f54;
+                background-color: #1e2a3a;
             }
             QTreeWidget::item:selected {
-                background-color: #3a6fa0;
-                color: white;
+                background-color: rgba(74, 144, 217, 0.25);
+                color: #ffffff;
             }
             QTreeWidget::branch {
-                background-color: #1a2332;
+                background-color: #111621;
             }
             QTreeWidget::branch:has-children:!has-siblings:closed,
             QTreeWidget::branch:closed:has-children:has-siblings {
@@ -91,13 +120,20 @@ class DeviceTreePanel(QWidget):
                 border-image: none;
             }
             QScrollBar:vertical {
-                width: 6px;
+                width: 8px;
                 background: transparent;
+                border-radius: 4px;
             }
             QScrollBar::handle:vertical {
-                background: #3d5066;
-                border-radius: 3px;
+                background: #2d3548;
+                border-radius: 4px;
                 min-height: 30px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #3d5066;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
             }
             """
         )
@@ -126,36 +162,57 @@ class DeviceTreePanel(QWidget):
         """Populate tree from the placement JSON nodes."""
         self.tree.clear()
 
-        # Group devices by type
-        nmos_devices = []
-        pmos_devices = []
+        # Classify devices
+        nmos_real, nmos_dummy = [], []
+        pmos_real, pmos_dummy = [], []
         for node in nodes:
             dev_type = node.get("type", "unknown")
+            is_dummy = node.get("is_dummy", False) or str(node.get("id", "")).upper().startswith("DUMMY")
             if dev_type == "nmos":
-                nmos_devices.append(node)
+                (nmos_dummy if is_dummy else nmos_real).append(node)
             elif dev_type == "pmos":
-                pmos_devices.append(node)
+                (pmos_dummy if is_dummy else pmos_real).append(node)
 
         # NMOS group
-        if nmos_devices:
+        all_nmos = nmos_real + nmos_dummy
+        if all_nmos:
             nmos_root = QTreeWidgetItem(
-                self.tree, [f"⬜ NMOS Devices ({len(nmos_devices)})"]
+                self.tree, [f"⬜ NMOS Devices ({len(all_nmos)})"]
             )
             nmos_root.setFont(0, QFont("Segoe UI", 11, QFont.Weight.Bold))
             nmos_root.setForeground(0, QColor("#7ec8e3"))
-            for dev in nmos_devices:
+            for dev in nmos_real:
                 self._add_device_item(nmos_root, dev)
+            if nmos_dummy:
+                dummy_n_root = QTreeWidgetItem(
+                    nmos_root, [f"🟪 Dummy NMOS ({len(nmos_dummy)})"]
+                )
+                dummy_n_root.setFont(0, QFont("Segoe UI", 10, QFont.Weight.DemiBold))
+                dummy_n_root.setForeground(0, QColor("#d14d94"))
+                for dev in nmos_dummy:
+                    self._add_device_item(dummy_n_root, dev)
+                dummy_n_root.setExpanded(True)
             nmos_root.setExpanded(True)
 
         # PMOS group
-        if pmos_devices:
+        all_pmos = pmos_real + pmos_dummy
+        if all_pmos:
             pmos_root = QTreeWidgetItem(
-                self.tree, [f"⬜ PMOS Devices ({len(pmos_devices)})"]
+                self.tree, [f"⬜ PMOS Devices ({len(all_pmos)})"]
             )
             pmos_root.setFont(0, QFont("Segoe UI", 11, QFont.Weight.Bold))
             pmos_root.setForeground(0, QColor("#e87474"))
-            for dev in pmos_devices:
+            for dev in pmos_real:
                 self._add_device_item(pmos_root, dev)
+            if pmos_dummy:
+                dummy_p_root = QTreeWidgetItem(
+                    pmos_root, [f"🟪 Dummy PMOS ({len(pmos_dummy)})"]
+                )
+                dummy_p_root.setFont(0, QFont("Segoe UI", 10, QFont.Weight.DemiBold))
+                dummy_p_root.setForeground(0, QColor("#d14d94"))
+                for dev in pmos_dummy:
+                    self._add_device_item(dummy_p_root, dev)
+                dummy_p_root.setExpanded(True)
             pmos_root.setExpanded(True)
 
     def _add_device_item(self, parent, dev):
@@ -198,19 +255,22 @@ class DeviceTreePanel(QWidget):
             sub.setData(0, Qt.ItemDataRole.UserRole + 2, net_name)
 
     def highlight_device(self, dev_id):
-        """Highlight the tree item matching the given device id."""
+        """Highlight the tree item matching the given device id (recursive)."""
         self.tree.blockSignals(True)
         self.tree.clearSelection()
-        root = self.tree.invisibleRootItem()
-        for i in range(root.childCount()):
-            group = root.child(i)
-            for j in range(group.childCount()):
-                child = group.child(j)
+
+        def _search(parent):
+            for i in range(parent.childCount()):
+                child = parent.child(i)
                 if child.data(0, Qt.ItemDataRole.UserRole) == dev_id:
                     child.setSelected(True)
                     self.tree.scrollToItem(child)
-                    self.tree.blockSignals(False)
-                    return
+                    return True
+                if _search(child):
+                    return True
+            return False
+
+        _search(self.tree.invisibleRootItem())
         self.tree.blockSignals(False)
 
     def _on_item_clicked(self, item, column):
