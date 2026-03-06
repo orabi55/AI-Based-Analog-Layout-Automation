@@ -23,6 +23,7 @@ from PySide6.QtCore import Qt, Signal, QTimer, QThread
 from PySide6.QtGui import QFont
 
 from ai_agent.llm_worker import LLMWorker, build_system_prompt
+from icons import icon_panel_toggle
 
 
 # -------------------------------------------------
@@ -72,6 +73,7 @@ class ChatPanel(QWidget):
     """
 
     command_requested = Signal(dict)  # emits parsed command dicts
+    toggle_requested = Signal()  # emitted when the user clicks the panel-toggle button
 
     # Private signal: triggers LLMWorker.process_request across threads
     request_inference = Signal(str, list)
@@ -112,11 +114,13 @@ class ChatPanel(QWidget):
     # -----------------------------------------
     # Layout context
     # -----------------------------------------
-    def set_layout_context(self, nodes, edges=None):
+    def set_layout_context(self, nodes, edges=None, terminal_nets=None):
         """Store the layout data so the LLM can reference it."""
         self._layout_context = {"nodes": nodes}
         if edges:
             self._layout_context["edges"] = edges
+        if terminal_nets:
+            self._layout_context["terminal_nets"] = terminal_nets
 
     # -----------------------------------------
     # UI
@@ -164,6 +168,29 @@ class ChatPanel(QWidget):
         clear_btn.clicked.connect(self._clear_chat)
         header_layout.addWidget(clear_btn)
 
+        # Panel toggle button
+        toggle_btn = QPushButton()
+        toggle_btn.setIcon(icon_panel_toggle())
+        toggle_btn.setFixedSize(28, 28)
+        toggle_btn.setToolTip("Hide panel")
+        toggle_btn.setStyleSheet(
+            """
+            QPushButton {
+                background: transparent;
+                border: none;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: rgba(255,255,255,0.12);
+            }
+            QPushButton:pressed {
+                background-color: rgba(255,255,255,0.20);
+            }
+            """
+        )
+        toggle_btn.clicked.connect(self.toggle_requested.emit)
+        header_layout.addWidget(toggle_btn)
+
         layout.addWidget(header)
 
         # Chat display
@@ -172,12 +199,15 @@ class ChatPanel(QWidget):
         self.chat_display.setTextInteractionFlags(
             Qt.TextInteractionFlag.NoTextInteraction
         )
+        self.chat_display.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
         self.chat_display.setStyleSheet(
             """
             QTextEdit {
-                background-color: #1a2332;
+                background-color: #111621;
                 border: none;
-                padding: 8px;
+                padding: 10px;
                 font-family: 'Segoe UI', sans-serif;
                 font-size: 13px;
                 color: #d0d8e0;
@@ -185,35 +215,42 @@ class ChatPanel(QWidget):
             QScrollBar:vertical {
                 width: 6px;
                 background: transparent;
+                border-radius: 3px;
             }
             QScrollBar::handle:vertical {
-                background: #3d5066;
+                background: #2d3548;
                 border-radius: 3px;
                 min-height: 30px;
             }
+            QScrollBar::handle:vertical:hover {
+                background: #3d5066;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
             """
         )
-        layout.addWidget(self.chat_display)
+        layout.addWidget(self.chat_display, 1)  # stretch factor = 1 → fills space
 
         # Input area
         input_frame = QFrame()
         input_frame.setStyleSheet(
-            "background-color: #1e2a3a; border-top: 1px solid #2d3f54;"
+            "background-color: #1a1f2b; border-top: 1px solid #2d3548;"
         )
         input_layout = QHBoxLayout(input_frame)
-        input_layout.setContentsMargins(8, 8, 8, 8)
-        input_layout.setSpacing(6)
+        input_layout.setContentsMargins(10, 10, 10, 10)
+        input_layout.setSpacing(8)
 
         self.input_field = ChatInputEdit()
         self.input_field.setStyleSheet(
             """
             QTextEdit {
-                border: 1px solid #3d5066;
-                border-radius: 8px;
-                padding: 6px 10px;
+                border: 1px solid #2d3548;
+                border-radius: 12px;
+                padding: 8px 14px;
                 font-size: 13px;
                 font-family: 'Segoe UI';
-                background: #253445;
+                background: #232a38;
                 color: #e0e8f0;
             }
             QTextEdit:focus {
@@ -225,21 +262,21 @@ class ChatPanel(QWidget):
         input_layout.addWidget(self.input_field)
 
         send_btn = QPushButton("➤")
-        send_btn.setFixedSize(36, 36)
+        send_btn.setFixedSize(38, 38)
         send_btn.setStyleSheet(
             """
             QPushButton {
                 background-color: #4a90d9;
                 color: white;
                 border: none;
-                border-radius: 18px;
-                font-size: 16px;
+                border-radius: 19px;
+                font-size: 17px;
             }
             QPushButton:hover {
-                background-color: #357abd;
+                background-color: #5a9fe8;
             }
             QPushButton:pressed {
-                background-color: #2a5f9e;
+                background-color: #357abd;
             }
             """
         )
@@ -315,19 +352,19 @@ class ChatPanel(QWidget):
 
         if role == "user":
             html = f"""
-            <div style="text-align:right; margin:4px 0;">
+            <div style="text-align:right; margin:6px 0;">
                 <div style="display:inline-block; max-width:82%; text-align:left;">
                     <div style="
-                        background: #4a90d9;
+                        background-color: #4a90d9;
                         color: white;
-                        padding: 10px 14px;
-                        border-radius: 14px 14px 4px 14px;
+                        padding: 10px 16px;
+                        border-radius: 16px 16px 4px 16px;
                         font-size: 13px;
-                        line-height: 1.4;
+                        line-height: 1.45;
                     ">
                         {content}
                     </div>
-                    <div style="font-size:10px; color:#667788; text-align:right; margin-top:2px;">
+                    <div style="font-size:10px; color:#556677; text-align:right; margin-top:3px;">
                         {now}
                     </div>
                 </div>
@@ -335,27 +372,27 @@ class ChatPanel(QWidget):
             """
         else:
             avatar = "🤖" if role == "ai" else "ℹ️"
-            bg = "#253445" if role == "ai" else "#3a3520"
-            border_col = "#3d5066" if role == "ai" else "#5a5030"
-            text_col = "#e0e8f0" if role == "ai" else "#f0e8c0"
+            bg = "#1a2230" if role == "ai" else "#2a2518"
+            border_col = "#2d3548" if role == "ai" else "#4a4020"
+            text_col = "#d0d8e0" if role == "ai" else "#e8ddb8"
             html = f"""
-            <div style="text-align:left; margin:4px 0;">
+            <div style="text-align:left; margin:6px 0;">
                 <div style="display:inline-block; max-width:88%; text-align:left;">
-                    <div style="font-size:10px; color:#667788; margin-bottom:2px;">
-                        {avatar} AI Assistant
+                    <div style="font-size:10px; color:#556677; margin-bottom:3px;">
+                        {avatar}  AI Assistant
                     </div>
                     <div style="
                         background: {bg};
                         color: {text_col};
-                        padding: 10px 14px;
-                        border-radius: 4px 14px 14px 14px;
+                        padding: 10px 16px;
+                        border-radius: 4px 16px 16px 16px;
                         font-size: 13px;
                         line-height: 1.5;
                         border: 1px solid {border_col};
                     ">
                         {content}
                     </div>
-                    <div style="font-size:10px; color:#667788; margin-top:2px;">
+                    <div style="font-size:10px; color:#556677; margin-top:3px;">
                         {now}
                     </div>
                 </div>
@@ -376,6 +413,19 @@ class ChatPanel(QWidget):
         self._append_bubble("user", text)
         self._chat_history.append({"role": "user", "content": text})
         self.input_field.clear()
+
+        # --- Execute commands from user text IMMEDIATELY ---
+        # This is deterministic and does not depend on the LLM at all.
+        user_cmds = self._infer_commands_from_text(text)
+        if user_cmds:
+            print(f"[CHAT] Direct user commands: {user_cmds}")
+            for cmd in user_cmds:
+                self.command_requested.emit(cmd)
+            self._user_cmds_executed = True   # prevent double-exec from [CMD] blocks
+        else:
+            self._user_cmds_executed = False
+
+        # Still send to LLM for conversational response
         self._call_llm(text)
 
     def _clear_chat(self):
@@ -427,17 +477,31 @@ class ChatPanel(QWidget):
 
         system_prompt = build_system_prompt(self._layout_context)
 
-        # Build multi-turn context for non-chat APIs (Ollama, Gemini)
+        # Trim history: last 4 msgs, strip old [CMD] blocks & error noise
+        def _clean(content):
+            c = re.sub(r'\[CMD\].*?\[/CMD\]', '', content, flags=re.DOTALL)
+            if c.startswith("⚠️ Error:"):
+                return "(error – skipped)"
+            return c.strip()
+
+        recent = self._chat_history[-4:]
+
+        # Build conversation-only text (NO system prompt mixed in)
         history_text = ""
-        for msg in self._chat_history[-4:]:
+        for msg in recent:
             role_label = "User" if msg["role"] == "user" else "Assistant"
-            history_text += f"{role_label}: {msg['content']}\n"
-        full_prompt = f"{system_prompt}\n\nConversation history:\n{history_text}"
+            history_text += f"{role_label}: {_clean(msg['content'])}\n"
+
+        # full_prompt = system + conversation (for providers that need one blob)
+        full_prompt = f"{system_prompt}\n\nConversation:\n{history_text}"
 
         # Build chat messages for OpenAI-compatible APIs
         chat_messages = [{"role": "system", "content": system_prompt}]
-        for msg in self._chat_history[-4:]:
-            chat_messages.append(msg)
+        for msg in recent:
+            chat_messages.append({
+                "role": msg["role"],
+                "content": _clean(msg["content"]),
+            })
 
         # Emit signal → crosses thread boundary → runs on worker thread
         self.request_inference.emit(full_prompt, chat_messages)
@@ -445,14 +509,170 @@ class ChatPanel(QWidget):
     # -----------------------------------------
     # Response handling (GUI thread)
     # -----------------------------------------
+    @staticmethod
+    def _infer_commands_from_text(text):
+        """Extract swap/move intents from natural language text.
+
+        Works on both user messages and AI responses so that commands
+        are executed even when the model forgets [CMD] blocks.
+        Handles many natural-language variations.
+        """
+        commands = []
+        if not text:
+            return commands
+
+        # --- Swap detection (many variations) ---
+        swap_patterns = [
+            # "swap MM28 with MM25", "swap 28 and 25"
+            re.compile(
+                r"swap(?:ped|ping)?\s+([A-Za-z]*\d+)\s+(?:with|and|&)\s+([A-Za-z]*\d+)",
+                re.IGNORECASE,
+            ),
+            # "swap between MM28 and MM25"
+            re.compile(
+                r"swap(?:ped|ping)?\s+between\s+([A-Za-z]*\d+)\s+(?:and|&)\s+([A-Za-z]*\d+)",
+                re.IGNORECASE,
+            ),
+            # "MM28 and MM25 have been swapped" / "MM28 and MM25 are swapped"
+            re.compile(
+                r"([A-Za-z]*\d+)\s+(?:and|&|with)\s+([A-Za-z]*\d+)\s+(?:have been|are|were|got)\s+swap",
+                re.IGNORECASE,
+            ),
+            # "swapped MM28 and MM25" (at start of sentence)
+            re.compile(
+                r"swapped\s+([A-Za-z]*\d+)\s+(?:and|&|with)\s+([A-Za-z]*\d+)",
+                re.IGNORECASE,
+            ),
+            # "I've/I have swapped MM28 and MM25"
+            re.compile(
+                r"(?:I'?ve|I\s+have)\s+swapped\s+([A-Za-z]*\d+)\s+(?:and|&|with)\s+([A-Za-z]*\d+)",
+                re.IGNORECASE,
+            ),
+        ]
+        for pat in swap_patterns:
+            for m in pat.finditer(text):
+                commands.append({
+                    "action": "swap",
+                    "device_a": m.group(1),
+                    "device_b": m.group(2),
+                })
+            if commands:
+                break  # don't double-count from multiple patterns
+
+        # --- Move detection ---
+        move_patterns = [
+            # "move MM3 to x=0.5 y=0.3" / "move MM3 to x=0.5, y=0.3"
+            re.compile(
+                r"mov(?:e|ed|ing)\s+([A-Za-z]*\d+)\s+to\s+"
+                r"x\s*=\s*(-?\d+(?:\.\d+)?)\s*,?\s*"
+                r"y\s*=\s*(-?\d+(?:\.\d+)?)",
+                re.IGNORECASE,
+            ),
+            # "move MM3 to (0.5, 0.3)" / "move MM3 to 0.5 0.3"
+            re.compile(
+                r"mov(?:e|ed|ing)\s+([A-Za-z]*\d+)\s+to\s+"
+                r"\(?\s*(-?\d+(?:\.\d+)?)\s*[,\s]\s*(-?\d+(?:\.\d+)?)\s*\)?",
+                re.IGNORECASE,
+            ),
+        ]
+        for pat in move_patterns:
+            for m in pat.finditer(text):
+                commands.append({
+                    "action": "move",
+                    "device": m.group(1),
+                    "x": float(m.group(2)),
+                    "y": float(m.group(3)),
+                })
+            if commands:
+                break
+
+        # --- Dummy detection ---
+        # "add dummy nmos", "add 3 nmos dummies", "add 2 pmos dummy"
+        if not commands:
+            dummy_patterns = [
+                # "add 3 nmos dummies" / "add 3 nmos dummy"
+                re.compile(
+                    r"add\s+(\d+)\s+(nmos|pmos)\s+dumm(?:y|ies)",
+                    re.IGNORECASE,
+                ),
+                # "add nmos dummy" / "add pmos dummies"
+                re.compile(
+                    r"add\s+(nmos|pmos)\s+dumm(?:y|ies)",
+                    re.IGNORECASE,
+                ),
+                # "add dummy nmos" / "add dummies pmos"
+                re.compile(
+                    r"add\s+dumm(?:y|ies)\s+(nmos|pmos)",
+                    re.IGNORECASE,
+                ),
+                # "add 3 dummies nmos"
+                re.compile(
+                    r"add\s+(\d+)\s+dumm(?:y|ies)\s+(nmos|pmos)",
+                    re.IGNORECASE,
+                ),
+                # bare "add dummy" / "add dummies"
+                re.compile(
+                    r"add\s+(?:(\d+)\s+)?dumm(?:y|ies)",
+                    re.IGNORECASE,
+                ),
+            ]
+            for pat in dummy_patterns:
+                m = pat.search(text)
+                if m:
+                    groups = m.groups()
+                    count = 1
+                    dev_type = "nmos"
+                    for g in groups:
+                        if g is None:
+                            continue
+                        if g.isdigit():
+                            count = int(g)
+                        elif g.lower() in ("nmos", "pmos"):
+                            dev_type = g.lower()
+                    # Detect side hint (left / right)
+                    side = "left"
+                    if re.search(r"\bright\b", text, re.IGNORECASE):
+                        side = "right"
+                    commands.append({
+                        "action": "add_dummy",
+                        "type": dev_type,
+                        "count": count,
+                        "side": side,
+                    })
+                    break
+
+        return commands
+
+    @staticmethod
+    def _ai_response_is_affirmative(text):
+        """Check if the AI response indicates it performed/confirmed an action."""
+        if not text:
+            return False
+        affirmative = re.search(
+            r"(?:okay|ok|sure|done|swapped|moved|I.ve|I have|certainly|"
+            r"of course|completed|executed|here you go|right away)",
+            text, re.IGNORECASE,
+        )
+        return affirmative is not None
+
     def _on_llm_response(self, text):
         self._stop_thinking()
         self._remove_last_message()
 
-        # Parse and execute any [CMD]...[/CMD] blocks
+        print(f"[CHAT] Raw LLM response: {text[:300]}")
+
+        # Only execute explicit [CMD]...[/CMD] blocks from the AI,
+        # and ONLY if we didn't already execute the user's commands directly.
+        # Otherwise a duplicated swap would undo itself.
         display_text, commands = self._parse_commands(text)
-        for cmd in commands:
-            self.command_requested.emit(cmd)
+        if commands and not getattr(self, '_user_cmds_executed', False):
+            print(f"[CHAT] Parsed [CMD] blocks from AI: {commands}")
+            for cmd in commands:
+                self.command_requested.emit(cmd)
+        else:
+            reason = "user cmds already ran" if getattr(self, '_user_cmds_executed', False) else "none found"
+            print(f"[CHAT] Skipping AI [CMD] blocks ({reason}).")
+        self._user_cmds_executed = False   # reset for next turn
 
         clean = display_text.strip()
         self._chat_history.append({"role": "assistant", "content": clean})
@@ -474,7 +694,10 @@ class ChatPanel(QWidget):
     def _on_llm_error(self, error_text):
         self._stop_thinking()
         self._remove_last_message()
-        self._append_bubble("ai", f"⚠️ Error: {error_text}")
+        self._user_cmds_executed = False          # reset so next turn works
+        err_msg = f"⚠️ Error: {error_text}"
+        self._chat_history.append({"role": "assistant", "content": err_msg})
+        self._append_bubble("ai", err_msg)
 
     def _remove_last_message(self):
         """Remove the last appended message (the thinking bubble)."""

@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QGraphicsScene,
     QGraphicsPathItem,
     QGraphicsRectItem,
+    QGraphicsItem,
 )
 from PySide6.QtCore import Qt, Signal, QPointF
 from PySide6.QtGui import QPainter, QPen, QPainterPath, QColor, QBrush
@@ -84,11 +85,32 @@ class SymbolicEditor(QGraphicsView):
         self._dummy_preview = None
         self._dummy_place_callback = None
 
-        self.setStyleSheet("border: none; background-color: #f0f2f5;")
+        # When True, skip compaction in set_terminal_nets
+        self._skip_compaction = False
+
+        # Virtual grid extents (shown as empty slots when > actual device count)
+        self._virtual_row_count = 0
+        self._virtual_col_count = 0
+
+        # Custom row gap override (None = auto)
+        self._custom_row_gap = None
+
+        # Completely disable scrollbars (policy is more reliable than CSS)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+        self.setStyleSheet("""
+            QGraphicsView {
+                border: none;
+                background-color: #0e1219;
+            }
+        """)
 
     def set_dummy_mode(self, enabled):
         """Enable/disable click-to-place dummy mode."""
         self._dummy_mode = bool(enabled)
+        self.setMouseTracking(self._dummy_mode)
+        self.viewport().setMouseTracking(self._dummy_mode)
         if not self._dummy_mode:
             self._clear_dummy_preview()
 
@@ -109,8 +131,14 @@ class SymbolicEditor(QGraphicsView):
         """Keep occupancy guides fresh when devices move/add/remove."""
         self.resetCachedContent()
 
-    def _compute_dummy_candidate(self, scene_pos):
-        """Build a preview candidate aligned to nearest NMOS/PMOS row."""
+    def _compute_dummy_candidate(self, scene_pos, snap_to_free=True):
+        """Build a preview candidate aligned to nearest NMOS/PMOS row.
+
+        Args:
+            scene_pos: cursor position in scene coordinates.
+            snap_to_free: if True, snap x to nearest free slot;
+                          if False, follow cursor x exactly (for preview).
+        """
         type_items = {"nmos": [], "pmos": []}
         for item in self.device_items.values():
             dev_type = str(getattr(item, "device_type", "")).strip().lower()
@@ -131,12 +159,15 @@ class SymbolicEditor(QGraphicsView):
         ref_item = type_items[target_type][0]
         width = ref_item.rect().width()
         height = ref_item.rect().height()
-        x = self.find_nearest_free_x(
-            row_y=target_y,
-            width=width,
-            target_x=self._snap_value(scene_pos.x()),
-            exclude_id=None,
-        )
+        if snap_to_free:
+            x = self.find_nearest_free_x(
+                row_y=target_y,
+                width=width,
+                target_x=self._snap_value(scene_pos.x()),
+                exclude_id=None,
+            )
+        else:
+            x = self._snap_value(scene_pos.x())
         y = self._snap_row(target_y)
         return {
             "type": str(target_type).lower(),
@@ -156,21 +187,41 @@ class SymbolicEditor(QGraphicsView):
             self._dummy_preview = None
 
     def _update_dummy_preview(self, scene_pos):
-        candidate = self._compute_dummy_candidate(scene_pos)
+        # The preview follows the cursor position (not snapped to a free slot)
+        candidate = self._compute_dummy_candidate(scene_pos, snap_to_free=False)
         if not candidate:
             self._clear_dummy_preview()
             return
 
-        if self._dummy_preview is None:
-            self._dummy_preview = QGraphicsRectItem()
+        # Use a real DeviceItem as preview so it looks identical to final placement
+        if self._dummy_preview is None or not isinstance(self._dummy_preview, DeviceItem):
+            self._clear_dummy_preview()
+            self._dummy_preview = DeviceItem(
+                "DUMMY",
+                candidate["type"],
+                candidate["x"],
+                candidate["y"],
+                candidate["width"],
+                candidate["height"],
+            )
+            self._dummy_preview.setOpacity(0.55)
             self._dummy_preview.setZValue(1000)
+            # Disable interaction on the preview ghost
+            self._dummy_preview.setFlag(
+                QGraphicsItem.GraphicsItemFlag.ItemIsMovable, False
+            )
+            self._dummy_preview.setFlag(
+                QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False
+            )
+            self._dummy_preview.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
             self.scene.addItem(self._dummy_preview)
+        else:
+            # Update type colours if we crossed a row boundary
+            if getattr(self._dummy_preview, 'device_type', '') != candidate["type"]:
+                self._clear_dummy_preview()
+                self._update_dummy_preview(scene_pos)
+                return
 
-        fill = QColor(255, 154, 210, 105)
-        border = QColor("#d14d94")
-        self._dummy_preview.setBrush(QBrush(fill))
-        self._dummy_preview.setPen(QPen(border, 1.2, Qt.PenStyle.DashLine))
-        self._dummy_preview.setRect(0, 0, candidate["width"], candidate["height"])
         self._dummy_preview.setPos(candidate["x"], candidate["y"])
 
     def _commit_dummy_at(self, scene_pos):
@@ -185,8 +236,15 @@ class SymbolicEditor(QGraphicsView):
     # -------------------------------------------------
     # Load AI JSON Placement
     # -------------------------------------------------
-    def load_placement(self, nodes):
-        """Load placement from a list of node dicts."""
+    def load_placement(self, nodes, compact=True):
+        """Load placement from a list of node dicts.
+
+        Args:
+            nodes: list of node dicts with geometry.
+            compact: if True (default), run abutted row compaction.
+                     Set to False to preserve exact positions from data
+                     (e.g. after an AI swap/move command).
+        """
         self._clear_dummy_preview()
         self.scene.clear()
         self.device_items.clear()
@@ -225,14 +283,20 @@ class SymbolicEditor(QGraphicsView):
             self._snap_grid = max(1.0, min_w + col_gap)
         if heights:
             max_h = max(heights)
-            row_gap = max(24.0, max_h * 0.55)
+            if self._custom_row_gap is not None:
+                row_gap = self._custom_row_gap
+            else:
+                row_gap = max(24.0, max_h * 0.55)
             self._row_pitch = max(1.0, max_h + row_gap)
 
         for item in self.device_items.values():
             item.set_snap_grid(self._snap_grid, self._row_pitch)
             item.setPos(self._snap_point(item.pos().x(), item.pos().y()))
 
-        self._compact_rows_abutted()
+        if compact:
+            self._compact_rows_abutted()
+        else:
+            self._skip_compaction = True
 
         # Practically unlimited canvas.
         self.scene.setSceneRect(-1000000, -1000000, 2000000, 2000000)
@@ -453,6 +517,20 @@ class SymbolicEditor(QGraphicsView):
         min_bottom = max(rect.bottom(), (max(row_count, 1) + 1) * self._row_pitch + margin)
         self.scene.setSceneRect(rect.left(), rect.top(), min_right - rect.left(), min_bottom - rect.top())
 
+    def set_virtual_extents(self, row_count, col_count):
+        """Set virtual grid extents; empty bands are drawn for extra rows/cols."""
+        self._virtual_row_count = max(0, int(row_count))
+        self._virtual_col_count = max(0, int(col_count))
+        self.resetCachedContent()
+
+    def set_custom_row_gap(self, gap_px):
+        """Override the automatic row gap.
+
+        Args:
+            gap_px: gap in scene pixels between rows, or None for auto.
+        """
+        self._custom_row_gap = float(gap_px) if gap_px is not None else None
+
     def get_row_col(self, dev_id):
         item = self.device_items.get(dev_id)
         if not item:
@@ -553,7 +631,10 @@ class SymbolicEditor(QGraphicsView):
     def set_terminal_nets(self, terminal_nets):
         """Store terminal-net mapping: {dev_id: {'D': net, 'G': net, 'S': net}}"""
         self._terminal_nets = terminal_nets or {}
-        # Re-pack with net-aware adjacency as soon as terminal nets are available.
+        # Re-pack with net-aware adjacency — but NOT if compact was suppressed.
+        if self._skip_compaction:
+            self._skip_compaction = False
+            return
         if self.device_items:
             self._compact_rows_abutted()
             self.resetCachedContent()
@@ -728,47 +809,71 @@ class SymbolicEditor(QGraphicsView):
     # Background Grid
     # -------------------------------------------------
     def drawBackground(self, painter: QPainter, rect):
-        """Draw occupied row tracks only (abut style)."""
+        """Draw row track bands — occupied and virtual (empty) rows."""
         super().drawBackground(painter, rect)
 
-        if not self.device_items:
+        has_devices = bool(self.device_items)
+        has_virtual = (self._virtual_row_count > 0 or self._virtual_col_count > 0)
+
+        if not has_devices and not has_virtual:
             return
 
+        # Gather actual occupied rows
         rows = {}
         for it in self.device_items.values():
             row_y = self._snap_row(it.pos().y())
             rows.setdefault(row_y, []).append(it)
 
-        track_fill = QBrush(QColor("#f7f9fc"))
-        track_pen = QPen(QColor("#c5ccd8"), 1.0)
-        frame_pen = QPen(QColor("#b5bcc8"), 1.1)
+        actual_row_ys = sorted(rows.keys())
 
-        outer_left = None
-        outer_top = None
-        outer_right = None
-        outer_bottom = None
+        # Reference metrics from existing devices
+        if has_devices:
+            all_items = list(self.device_items.values())
+            ref_min_x = min(it.pos().x() for it in all_items)
+            ref_max_x = max(it.pos().x() + it.rect().width() for it in all_items)
+            ref_max_dev_h = max(it.rect().height() for it in all_items)
+        else:
+            ref_min_x = 0.0
+            ref_max_x = 0.0
+            ref_max_dev_h = self._row_pitch * 0.5
 
-        for row_y in sorted(rows.keys()):
-            items = rows[row_y]
-            min_x = min(it.pos().x() for it in items)
-            max_x = max(it.pos().x() + it.rect().width() for it in items)
-            row_h = max(it.rect().height() for it in items)
+        # Virtual column right edge
+        virtual_right_x = (
+            ref_min_x + self._virtual_col_count * self._snap_grid
+            if self._virtual_col_count > 0
+            else ref_max_x
+        )
 
-            band_x = min_x - 8.0
+        # Add virtual rows below existing ones
+        all_row_ys = list(actual_row_ys)
+        if self._virtual_row_count > len(actual_row_ys):
+            last_y = actual_row_ys[-1] if actual_row_ys else -self._row_pitch
+            for i in range(self._virtual_row_count - len(actual_row_ys)):
+                all_row_ys.append(last_y + (i + 1) * self._row_pitch)
+
+        # Compute a single symmetric left / right for ALL bands
+        global_left = ref_min_x
+        global_right = max(ref_max_x, virtual_right_x)
+
+        # Drawing styles
+        track_fill = QBrush(QColor("#151c28"))
+        empty_fill = QBrush(QColor("#121823"))
+        track_pen = QPen(QColor("#232d3e"), 1.0)
+        slot_pen = QPen(QColor("#1c2535"), 0.5, Qt.PenStyle.DotLine)
+
+        band_x = global_left - 8.0
+        band_w = (global_right - global_left) + 16.0
+
+        for row_y in sorted(all_row_ys):
+            items = rows.get(row_y, [])
+            is_empty = (len(items) == 0)
+            row_h = (
+                max(it.rect().height() for it in items) if items
+                else ref_max_dev_h
+            )
+
             band_y = row_y - 6.0
-            band_w = (max_x - min_x) + 16.0
             band_h = row_h + 12.0
-
-            if outer_left is None:
-                outer_left = band_x
-                outer_top = band_y
-                outer_right = band_x + band_w
-                outer_bottom = band_y + band_h
-            else:
-                outer_left = min(outer_left, band_x)
-                outer_top = min(outer_top, band_y)
-                outer_right = max(outer_right, band_x + band_w)
-                outer_bottom = max(outer_bottom, band_y + band_h)
 
             if (
                 band_x > rect.right()
@@ -779,18 +884,19 @@ class SymbolicEditor(QGraphicsView):
                 continue
 
             painter.setPen(track_pen)
-            painter.setBrush(track_fill)
+            painter.setBrush(empty_fill if is_empty else track_fill)
             painter.drawRoundedRect(band_x, band_y, band_w, band_h, 1.5, 1.5)
 
-        if outer_left is not None:
-            painter.setPen(frame_pen)
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawRect(
-                outer_left - 8.0,
-                outer_top - 8.0,
-                (outer_right - outer_left) + 16.0,
-                (outer_bottom - outer_top) + 16.0,
-            )
+            # Draw column slot markers in extended / empty regions
+            if self._virtual_col_count > 0:
+                painter.setPen(slot_pen)
+                for c in range(self._virtual_col_count + 1):
+                    col_x = ref_min_x + c * self._snap_grid
+                    if global_left <= col_x <= global_right:
+                        painter.drawLine(
+                            QPointF(col_x, band_y + 2),
+                            QPointF(col_x, band_y + band_h - 2),
+                        )
 
     # -------------------------------------------------
     # Zoom with Mouse Wheel
