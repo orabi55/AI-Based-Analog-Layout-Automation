@@ -145,7 +145,14 @@ class MainWindow(QMainWindow):
         self.editor.scene.selectionChanged.connect(self._on_selection_count_changed)
 
         # Connect AI command execution
-        self.chat_panel.command_requested.connect(self._handle_ai_command)
+        # command_requested carries ONE cmd dict at a time; we batch-collect
+        # them so orchestrator multi-CMD responses become ONE undo operation.
+        self._pending_cmds = []           # collects commands in the same Qt event-loop turn
+        self._batch_flush_timer = None    # fires after all cmds arrive this turn
+        self.chat_panel.command_requested.connect(self._enqueue_ai_command)
+        # Wire orchestrator stage events → canvas highlight
+        self.chat_panel._llm_worker.stage_completed.connect(self._on_pipeline_stage_completed)
+        self._stage_highlight_timer = None  # auto-clear timer
         self.editor.set_dummy_place_callback(self._add_dummy_device)
 
         # Connect panel toggle buttons (in each panel header)
@@ -787,11 +794,13 @@ class MainWindow(QMainWindow):
         self._update_grid_counts()
 
     def _build_output_data(self):
-        """Build the output dict with updated positions."""
+        """Build the output dict with updated positions and routing annotations."""
         self._sync_node_positions()
         output = {"nodes": copy.deepcopy(self.nodes)}
         if "edges" in self._original_data:
             output["edges"] = self._original_data["edges"]
+        if hasattr(self, "_routing_annotations") and self._routing_annotations:
+            output["routing_annotations"] = copy.deepcopy(self._routing_annotations)
         return output
 
     # -------------------------------------------------
@@ -1143,8 +1152,146 @@ class MainWindow(QMainWindow):
         )
 
     # -------------------------------------------------
-    # AI command execution
+    # Pipeline stage canvas highlights
     # -------------------------------------------------
+    def _on_pipeline_stage_completed(self, stage_index, stage_name):
+        """Briefly highlight devices relevant to the completed pipeline stage.
+
+        Stage 0 – Topology Analyst:  amber
+        Stage 1 – Placement Specialist: blue
+        Stage 2 – DRC Critic:         red (overlapping devices only)
+        Stage 3 – Routing Pre-Viewer: purple
+
+        NOTE: we capture only device *IDs*, not Qt item pointers, so the
+        restore callback is safe even after swap commands rebuild the items.
+        """
+        from PySide6.QtCore import QTimer as _QTimer
+
+        device_items = (
+            getattr(self, 'editor', None)
+            and getattr(self.editor, 'device_items', {})
+        ) or {}
+        if not device_items:
+            return
+
+        # ---- Choose which device IDs to highlight ----
+        if stage_index == 2:
+            # DRC stage: highlight overlapping pairs only
+            from ai_agent.drc_critic import run_drc_check
+            nodes = []
+            for dev_id, item in device_items.items():
+                try:
+                    pos = item.scenePos()
+                    br  = item.boundingRect()
+                    nodes.append({
+                        "id": dev_id,
+                        "geometry": {
+                            "x": pos.x(), "y": pos.y(),
+                            "width": br.width(), "height": br.height(),
+                        },
+                    })
+                except RuntimeError:
+                    pass  # item already deleted; skip
+            drc = run_drc_check(nodes)
+            if not drc["pass"] and drc.get("structured"):
+                overlap_ids = set()
+                for v in drc["structured"]:
+                    overlap_ids.add(v.dev_a)
+                    overlap_ids.add(v.dev_b)
+                highlight_ids = overlap_ids
+            else:
+                highlight_ids = set(device_items.keys())
+        else:
+            highlight_ids = set(device_items.keys())
+
+        # ---- Dim selected items (capture IDs, not object refs) ----
+        dimmed_ids = set()
+        for dev_id in highlight_ids:
+            item = device_items.get(dev_id)
+            if item is None:
+                continue
+            try:
+                item.setOpacity(0.55)
+                dimmed_ids.add(dev_id)
+            except RuntimeError:
+                pass
+
+        print(f"[STAGE HL] Stage {stage_index} ({stage_name}): "
+              f"{len(dimmed_ids)} device(s) highlighted")
+
+        # ---- Auto-restore after 3 s --- safe: re-lookup items by ID ----
+        if self._stage_highlight_timer and self._stage_highlight_timer.isActive():
+            try:
+                self._stage_highlight_timer.stop()
+            except RuntimeError:
+                pass
+
+        def _restore():
+            """Restore opacity by re-looking up live items from editor."""
+            live_items = (
+                getattr(self, 'editor', None)
+                and getattr(self.editor, 'device_items', {})
+            ) or {}
+            for did in dimmed_ids:
+                itm = live_items.get(did)
+                if itm is None:
+                    continue
+                try:
+                    itm.setOpacity(1.0)
+                except RuntimeError:
+                    pass  # item deleted between highlight and restore
+            self._stage_highlight_timer = None
+
+        self._stage_highlight_timer = _QTimer(self)
+        self._stage_highlight_timer.setSingleShot(True)
+        self._stage_highlight_timer.timeout.connect(_restore)
+        self._stage_highlight_timer.start(3000)
+
+    def _clear_stage_highlights(self):
+        """Restore all devices to full opacity immediately."""
+        device_items = getattr(self, 'editor', None) and self.editor.device_items or {}
+        for item in device_items.values():
+            item.setOpacity(1.0)
+        if self._stage_highlight_timer:
+            self._stage_highlight_timer.stop()
+            self._stage_highlight_timer = None
+
+
+    def _enqueue_ai_command(self, cmd):
+        """Collect commands emitted this Qt event-loop turn, then flush atomically.
+
+        The Orchestrator may emit many command_requested signals in rapid
+        succession (one per [CMD] block). By queuing them and flushing with a
+        zero-delay timer we ensure a single undo snapshot covers all of them.
+        """
+        self._pending_cmds.append(cmd)
+        if self._batch_flush_timer is None:
+            from PySide6.QtCore import QTimer as _QTimer
+            self._batch_flush_timer = _QTimer(self)
+            self._batch_flush_timer.setSingleShot(True)
+            self._batch_flush_timer.timeout.connect(self._flush_ai_command_batch)
+        # Re-start with 0 ms so it fires after current event processing finishes
+        self._batch_flush_timer.start(0)
+
+    def _flush_ai_command_batch(self):
+        """Execute all pending AI commands as one atomic undo group."""
+        cmds = list(self._pending_cmds)
+        self._pending_cmds.clear()
+        self._batch_flush_timer = None
+        if not cmds:
+            return
+        print(f"[AI BATCH] Executing {len(cmds)} command(s) as one undo group")
+        # Push a SINGLE undo snapshot covering all commands
+        self._sync_node_positions()
+        self._push_undo()
+        # Execute each command without individual undo pushes
+        for cmd in cmds:
+            self._handle_ai_command(cmd, _skip_undo=True)
+        # One refresh after all commands
+        self._refresh_panels(compact=False)
+        self._sync_node_positions()
+
+
     def _resolve_device_id(self, raw_id):
         """Resolve a device id from AI text (case-insensitive)."""
         if raw_id is None:
@@ -1172,8 +1319,14 @@ class MainWindow(QMainWindow):
 
         return None
 
-    def _handle_ai_command(self, cmd):
-        """Execute a command dict from the AI on the canvas."""
+    def _handle_ai_command(self, cmd, _skip_undo=False):
+        """Execute a command dict from the AI on the canvas.
+
+        Args:
+            cmd: dict with 'action' and action-specific keys.
+            _skip_undo: if True, do NOT push an undo snapshot (caller
+                already pushed one for the whole batch).
+        """
         print(f"[AI CMD] Received command: {cmd}")
 
         if not isinstance(cmd, dict):
@@ -1202,7 +1355,8 @@ class MainWindow(QMainWindow):
 
                 # Sync current canvas state into self.nodes
                 self._sync_node_positions()
-                self._push_undo()
+                if not _skip_undo:
+                    self._push_undo()
 
                 # --- Swap at data level: exchange geometry in self.nodes ---
                 node_a = next((n for n in self.nodes if n.get("id") == id_a), None)
@@ -1260,7 +1414,8 @@ class MainWindow(QMainWindow):
                     return
 
                 self._sync_node_positions()
-                self._push_undo()
+                if not _skip_undo:
+                    self._push_undo()
 
                 # --- Move at data level ---
                 node = next((n for n in self.nodes if n.get("id") == dev_id), None)
@@ -1296,7 +1451,8 @@ class MainWindow(QMainWindow):
                     return
                 print(f"[AI CMD] Add dummy: type={dev_type}, count={count}")
                 self._sync_node_positions()
-                self._push_undo()
+                if not _skip_undo:
+                    self._push_undo()
                 added = []
                 for _ in range(count):
                     template = next(
@@ -1370,6 +1526,67 @@ class MainWindow(QMainWindow):
                     "#1a1a2e",
                 )
 
+            elif action == "net_priority":
+                net = cmd.get("net", "")
+                priority = cmd.get("priority", "medium")
+                if not hasattr(self, "_routing_annotations"):
+                    self._routing_annotations = {}
+                self._routing_annotations.setdefault(net, {})["priority"] = priority
+                print(f"[AI CMD] net_priority: net={net} priority={priority}")
+                self.chat_panel._append_message(
+                    "AI",
+                    f"📡 Net **{net}** marked as **{priority}** priority for routing.",
+                    "#e8f4fd", "#1a1a2e",
+                )
+                # Highlight net on canvas
+                if hasattr(self, "editor") and hasattr(self.editor, "highlight_net_by_name"):
+                    color = "#e74c3c" if priority == "high" else "#3498db"
+                    self.editor.highlight_net_by_name(net, color)
+
+            elif action == "wire_width":
+                net = cmd.get("net", "")
+                width_um = cmd.get("width_um", 0.3)
+                if not hasattr(self, "_routing_annotations"):
+                    self._routing_annotations = {}
+                self._routing_annotations.setdefault(net, {})["wire_width_um"] = float(width_um)
+                print(f"[AI CMD] wire_width: net={net} width={width_um}µm")
+                self.chat_panel._append_message(
+                    "AI",
+                    f"🔌 Wire width for **{net}** set to **{width_um} µm**.",
+                    "#e8f4fd", "#1a1a2e",
+                )
+
+            elif action == "wire_spacing":
+                net_a = cmd.get("net_a", "")
+                net_b = cmd.get("net_b", "")
+                spacing_um = cmd.get("spacing_um", 0.2)
+                if not hasattr(self, "_routing_annotations"):
+                    self._routing_annotations = {}
+                key = f"{net_a}|{net_b}"
+                self._routing_annotations.setdefault(key, {})["spacing_um"] = float(spacing_um)
+                print(f"[AI CMD] wire_spacing: {net_a}<>{net_b} spacing={spacing_um}µm")
+                self.chat_panel._append_message(
+                    "AI",
+                    f"📏 Minimum spacing between **{net_a}** and **{net_b}** set to **{spacing_um} µm**.",
+                    "#e8f4fd", "#1a1a2e",
+                )
+
+            elif action == "net_reroute":
+                net = cmd.get("net", "")
+                reason = cmd.get("reason", "")
+                if not hasattr(self, "_routing_annotations"):
+                    self._routing_annotations = {}
+                self._routing_annotations.setdefault(net, {})["reroute"] = reason
+                print(f"[AI CMD] net_reroute: net={net} reason={reason!r}")
+                self.chat_panel._append_message(
+                    "AI",
+                    f"🔀 Net **{net}** flagged for reroute: _{reason}_",
+                    "#e8f4fd", "#1a1a2e",
+                )
+                # Highlight as needing attention
+                if hasattr(self, "editor") and hasattr(self.editor, "highlight_net_by_name"):
+                    self.editor.highlight_net_by_name(net, "#f39c12")
+
             else:
                 print(f"[AI CMD] Unsupported action: '{action}'")
                 self.chat_panel._append_message(
@@ -1378,6 +1595,7 @@ class MainWindow(QMainWindow):
                     "#fde8e8",
                     "#a00",
                 )
+
         except (KeyError, TypeError, ValueError) as e:
             print(f"[AI CMD] Exception: {e}")
             self.chat_panel._append_message(
