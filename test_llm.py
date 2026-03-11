@@ -17,8 +17,8 @@
 from ai_agent.gemini_placer import gemini_generate_placement
 
 gemini_generate_placement(
-    "Xor_layout_graph.json",
-    "Xor_initial_placement.json"
+    "examples/std_cell/Std_Cell_layout_graph.json",
+    "examples/std_cell/Std_Cell_initial_placement.json"
 )
 
 

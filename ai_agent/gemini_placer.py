@@ -2,6 +2,7 @@ import os
 import json
 import re
 from google import genai
+from google.genai import types
 
 
 # -------------------------------------------------------
@@ -11,37 +12,38 @@ from google import genai
 def sanitize_json(text: str) -> dict:
     """
     Extract and sanitize Gemini output into strict JSON.
-    Handles:
-    - Extra explanation text
-    - Markdown ```json blocks
-    - Unquoted keys
-    - Unquoted string values
-    - Trailing commas
     """
-
     if not text or len(text.strip()) == 0:
         raise ValueError("Empty response from Gemini")
 
     # Remove markdown wrappers
     text = text.replace("```json", "").replace("```", "").strip()
 
-    # Extract first {...} block
+    # Try direct parse
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # Extract largest {...} block
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if not match:
         raise ValueError("No JSON object found in Gemini output")
 
     s = match.group(0)
 
-    # Quote keys if missing
-    s = re.sub(r'(\{|,)\s*([A-Za-z_][A-Za-z0-9_]*)\s*:', r'\1 "\2":', s)
-
-    # Quote unquoted string values (id, orientation, etc.)
-    s = re.sub(r':\s*([A-Za-z_][A-Za-z0-9_%]*)', r': "\1"', s)
-
-    # Remove trailing commas
+    # Remove trailing commas & inline comments
     s = re.sub(r',\s*([\]}])', r'\1', s)
+    s = re.sub(r'//[^\n]*', '', s)
 
-    return json.loads(s)
+    try:
+        return json.loads(s)
+    except json.JSONDecodeError as e:
+        debug_path = "gemini_raw_output_debug.txt"
+        with open(debug_path, "w", encoding="utf-8") as f:
+            f.write(text)
+        print(f"[Sanitizer] Saved raw output to {debug_path}")
+        raise ValueError(f"Could not parse Gemini output: {e}")
 
 
 # -------------------------------------------------------
@@ -51,9 +53,13 @@ def sanitize_json(text: str) -> dict:
 def gemini_generate_placement(input_json: str, output_json: str):
     """
     Generates initial transistor placement using Gemini API.
+
+    Strategy: send only compact node summaries (not full graph with edges)
+    to stay within output token limits, then merge placements back
+    into the full graph structure.
     """
 
-    api_key = os.getenv("GEMINI_API_KEY")
+    api_key = "AIzaSyA5jgr9UZXRolTphNQNV_ogNqcMBndq9CY"
 
     if not api_key:
         raise ValueError("GEMINI_API_KEY not set")
@@ -67,62 +73,72 @@ def gemini_generate_placement(input_json: str, output_json: str):
     nodes = graph_data.get("nodes", [])
     edges = graph_data.get("edges", [])
 
-    # Build structured prompt
-   # Build structured prompt
-    prompt = f"""
-You are an expert VLSI placement engineer.
+    # Build a COMPACT node summary for the prompt (no edges, minimal info)
+    compact_nodes = []
+    for n in nodes:
+        compact_nodes.append({
+            "id": n["id"],
+            "type": n["type"],
+            "w": round(n.get("geometry", {}).get("width", 0.3), 4),
+            "h": round(n.get("geometry", {}).get("height", 0.7), 4),
+        })
 
-Given this transistor-level graph:
+    # Build compact edge summary (just pairs)
+    compact_edges = []
+    for e in edges:
+        compact_edges.append(f"{e['source']}-{e['target']}")
 
-{json.dumps(graph_data, indent=2)}
+    prompt = f"""You are an expert VLSI placement engineer.
 
-Generate an initial transistor placement based on the following strict DRC and Floorplanning rules:
+Place these {len(compact_nodes)} transistors:
 
-1. Device Types & Y-Axis Placement:
-- Place PMOS devices at y = 0.
-- Place NMOS devices right below the PMOS devices.
+{json.dumps(compact_nodes)}
 
-2. Fin Quantization & Grid:
-- Placement coordinates must snap to a discrete Fin Grid.
-- The Fin pitch is 0.014 µm. Continuous (fractional) coordinate placement is strictly forbidden.
+Connected nets: {', '.join(compact_edges[:30])}{'...' if len(compact_edges) > 30 else ''}
 
-3. Spacing and Overlap Limits:
-- Side-by-side overlap between any devices (NMOS/NMOS, PMOS/PMOS, or NMOS/PMOS) must not exceed 0.028 µm.
-- Vertical (up/down) overlap is strictly forbidden.
-- Both devices in any pair must be aligned on the same boundary.
+Rules:
+1. PMOS at y=0, NMOS at y=-1.0 (below PMOS row)
+2. Snap x to fin grid (multiples of 0.014)
+3. No overlaps - minimum x spacing = device width + 0.042
+4. Minimize wire crossings between connected devices
+5. Group devices that share nets close together
 
-4. Voltage Domains & Isolation:
-- Strictly isolate different voltage domains (0.8 V, 1.5 V, 1.8 V).
-- Direct adjacency between 0.8 V and 1.8 V blocks is strictly forbidden.
+Return a JSON object with a single key "placements" containing an array.
+Each element: {{"id": "...", "x": number, "y": number, "orientation": "R0"}}
+Return ONLY the JSON, nothing else."""
 
-5. Diffusion & Routing:
-- Do not place blocks completely back-to-back.
-- You must reserve dedicated whitespace between blocks for diffusion breaks (SDB/DDB) and dummy fill.
-- Minimize net/wire crossings.
-
-IMPORTANT:
-You must return the EXACT same JSON structure as the input, keeping all existing keys and arrays intact. 
-Your only task is to add or update the "x", "y", and "orientation" (default "R0") keys inside every object within the "nodes" array.
-
-Return ONLY raw JSON. Do not include explanations, markdown, or text outside the JSON object.
-"""
-
-    # Call Gemini model
+    # Call Gemini with JSON mode
     response = client.models.generate_content(
         model="gemini-2.5-flash",
         contents=prompt,
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+        ),
     )
 
     if not response or not response.text:
         raise ValueError("Gemini returned empty response")
 
     raw_output = response.text.strip()
+    result = sanitize_json(raw_output)
 
-    # Parse safely
-    placement = sanitize_json(raw_output)
+    # Merge placements back into the full graph structure
+    placements = result.get("placements", [])
+    placement_map = {p["id"]: p for p in placements}
 
-    # Save result
+    for node in nodes:
+        nid = node["id"]
+        if nid in placement_map:
+            p = placement_map[nid]
+            geom = node.setdefault("geometry", {})
+            geom["x"] = p.get("x", 0)
+            geom["y"] = p.get("y", 0)
+            geom["orientation"] = p.get("orientation", "R0")
+
+    output_data = {"nodes": nodes, "edges": edges}
+
     with open(output_json, "w") as f:
-        json.dump(placement, f, indent=4)
+        json.dump(output_data, f, indent=4)
 
-    print("Placement saved to:", output_json)
+    placed = len([n for n in nodes if "geometry" in n and "x" in n.get("geometry", {})])
+    print(f"Placement saved to: {output_json} ({placed}/{len(nodes)} devices placed)")
