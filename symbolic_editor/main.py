@@ -2,6 +2,7 @@ import sys
 import os
 import json
 import copy
+import glob
 
 # ---------------------------------------------------------------------------
 # Ensure the project root is on sys.path so that cross-package imports
@@ -37,6 +38,7 @@ from PySide6.QtGui import QFont, QAction, QKeySequence, QColor, QPalette
 from chat_panel import ChatPanel
 from device_tree import DeviceTreePanel
 from editor_view import SymbolicEditor
+from klayout_panel import KLayoutPanel
 from icons import (
     icon_undo, icon_redo, icon_fit_view,
     icon_zoom_in, icon_zoom_out, icon_zoom_reset,
@@ -72,18 +74,38 @@ class MainWindow(QMainWindow):
         self.device_tree = DeviceTreePanel()
         self.editor = SymbolicEditor()
         self.chat_panel = ChatPanel()
+        self.klayout_panel = KLayoutPanel()
 
         # --- Toolbar ---
         self._create_menu_bar()
         self._create_toolbar()
 
+        # --- Right-side vertical splitter (Chat + KLayout Preview) ---
+        self._right_splitter = QSplitter(Qt.Orientation.Vertical)
+        self._right_splitter.addWidget(self.chat_panel)
+        self._right_splitter.addWidget(self.klayout_panel)
+        self._right_splitter.setStretchFactor(0, 1)
+        self._right_splitter.setStretchFactor(1, 1)
+        self._right_splitter.setSizes([480, 380])
+        self._right_splitter.setStyleSheet(
+            """
+            QSplitter::handle {
+                background-color: #2d3548;
+                height: 2px;
+            }
+            QSplitter::handle:hover {
+                background-color: #4a90d9;
+            }
+            """
+        )
+
         # --- Splitter layout ---
         self._splitter = QSplitter(Qt.Orientation.Horizontal)
         self._splitter.addWidget(self.device_tree)
         self._splitter.addWidget(self.editor)
-        self._splitter.addWidget(self.chat_panel)
+        self._splitter.addWidget(self._right_splitter)
 
-        # Set proportions: left ~200px, center stretches, right ~300px
+        # Set proportions: left ~200px, center stretches, right ~320px
         self._splitter.setStretchFactor(0, 0)
         self._splitter.setStretchFactor(1, 1)
         self._splitter.setStretchFactor(2, 0)
@@ -225,16 +247,31 @@ class MainWindow(QMainWindow):
         self._act_file_save_as.triggered.connect(self._on_save_as)
         file_menu.addAction(self._act_file_save_as)
 
-        self._act_file_export = QAction("Export", self)
+        self._act_file_export = QAction("Export JSON", self)
         self._act_file_export.setShortcut(QKeySequence("Ctrl+E"))
         self._act_file_export.triggered.connect(self._on_export)
         file_menu.addAction(self._act_file_export)
 
-        for name in ["Design", "View"]:
-            menu = mb.addMenu(name)
-            a = QAction(f"{name} Placeholder", self)
-            a.setEnabled(False)
-            menu.addAction(a)
+        self._act_export_oas = QAction("Export to OAS", self)
+        self._act_export_oas.setShortcut(QKeySequence("Ctrl+Shift+E"))
+        self._act_export_oas.triggered.connect(self._on_export_oas)
+        file_menu.addAction(self._act_export_oas)
+
+        file_menu.addSeparator()
+
+        self._act_view_klayout = QAction("View in KLayout", self)
+        self._act_view_klayout.triggered.connect(self._on_view_in_klayout)
+        file_menu.addAction(self._act_view_klayout)
+
+        design_menu = mb.addMenu("Design")
+        a = QAction("Design Placeholder", self)
+        a.setEnabled(False)
+        design_menu.addAction(a)
+
+        view_menu = mb.addMenu("View")
+        a = QAction("View Placeholder", self)
+        a.setEnabled(False)
+        view_menu.addAction(a)
 
         # --- Edit menu (functional) ---
         edit_menu = mb.addMenu("Edit")
@@ -282,6 +319,10 @@ class MainWindow(QMainWindow):
         act_toggle_chat = QAction("Toggle AI Chat", self)
         act_toggle_chat.triggered.connect(self._toggle_chat_panel)
         edit_menu.addAction(act_toggle_chat)
+
+        act_toggle_klayout = QAction("Toggle KLayout Preview", self)
+        act_toggle_klayout.triggered.connect(self._toggle_klayout_panel)
+        edit_menu.addAction(act_toggle_klayout)
 
         for name in ["Options", "Window", "Help"]:
             menu = mb.addMenu(name)
@@ -563,6 +604,20 @@ class MainWindow(QMainWindow):
             sizes = self._splitter.sizes()
             sizes[2] = self._chat_default_width
             self._splitter.setSizes(sizes)
+
+    def _toggle_klayout_panel(self):
+        """Collapse or expand the KLayout preview panel."""
+        self.klayout_panel.setVisible(not self.klayout_panel.isVisible())
+
+    def _on_view_in_klayout(self):
+        """Find the sibling OAS file and open it in KLayout."""
+        if not self._current_file:
+            return
+        json_dir = os.path.dirname(os.path.abspath(self._current_file))
+        oas_files = glob.glob(os.path.join(json_dir, "*.oas"))
+        if oas_files:
+            self.klayout_panel._oas_path = oas_files[0]
+            self.klayout_panel._on_open_klayout()
 
     def keyPressEvent(self, event):
         """Esc releases active modes and selection.  M enters move mode."""
@@ -1141,6 +1196,77 @@ class MainWindow(QMainWindow):
             "#e8f4fd",
             "#1a1a2e",
         )
+
+    def _on_export_oas(self):
+        """Export the current placement back into an OAS layout file."""
+        # Locate the original .oas and .sp files next to the loaded JSON
+        if not self._current_file:
+            self.chat_panel._append_message(
+                "AI", "No layout loaded. Load a JSON first.",
+                "#fde8e8", "#a00",
+            )
+            return
+
+        json_dir = os.path.dirname(os.path.abspath(self._current_file))
+
+        # Find sibling .oas file
+        oas_files = glob.glob(os.path.join(json_dir, "*.oas"))
+        if not oas_files:
+            self.chat_panel._append_message(
+                "AI",
+                "No .oas file found next to the loaded JSON.",
+                "#fde8e8", "#a00",
+            )
+            return
+        oas_path = oas_files[0]
+
+        # Find sibling .sp file
+        sp_files = glob.glob(os.path.join(json_dir, "*.sp"))
+        if not sp_files:
+            self.chat_panel._append_message(
+                "AI",
+                "No .sp netlist file found next to the loaded JSON.",
+                "#fde8e8", "#a00",
+            )
+            return
+        sp_path = sp_files[0]
+
+        # Ask user where to save
+        default_name = os.path.splitext(os.path.basename(oas_path))[0] + "_updated.oas"
+        default_path = os.path.join(json_dir, default_name)
+        output_path, _ = QFileDialog.getSaveFileName(
+            self, "Export to OAS", default_path,
+            "OASIS Files (*.oas);;GDS Files (*.gds);;All Files (*)",
+        )
+        if not output_path:
+            return
+
+        # Sync current canvas positions into self.nodes
+        self._sync_node_positions()
+
+        try:
+            from export.oas_writer import update_oas_placement
+            update_oas_placement(
+                oas_path=oas_path,
+                sp_path=sp_path,
+                nodes=self.nodes,
+                output_path=output_path,
+            )
+            self.chat_panel._append_message(
+                "AI",
+                f"Layout exported to **{os.path.basename(output_path)}**",
+                "#e8f4fd", "#1a1a2e",
+            )
+            # Auto-refresh KLayout preview
+            self.klayout_panel.refresh_preview(output_path)
+        except Exception as e:
+            self.chat_panel._append_message(
+                "AI",
+                f"Export to OAS failed: {e}",
+                "#fde8e8", "#a00",
+            )
+            import traceback
+            traceback.print_exc()
 
     # -------------------------------------------------
     # AI command execution
