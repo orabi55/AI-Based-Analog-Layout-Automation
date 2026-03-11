@@ -1573,7 +1573,7 @@ if __name__ == "__main__":
     """)
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    placement_path = os.path.join(script_dir, "..", "Xor_initial_placement.json")
+    placement_path = os.path.join(script_dir, "..", "examples", "xor", "Xor_initial_placement.json")
 
     window = MainWindow(placement_path)
     window.show()
