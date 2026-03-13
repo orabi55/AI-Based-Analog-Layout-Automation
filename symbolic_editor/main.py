@@ -1573,7 +1573,17 @@ if __name__ == "__main__":
     """)
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
+<<<<<<< Updated upstream
     placement_path = os.path.join(script_dir, "..", "examples", "xor", "Xor_initial_placement.json")
+=======
+    if len(sys.argv) > 1:
+        placement_path = sys.argv[1]
+        # Resolve relative to current working directory if not absolute
+        if not os.path.isabs(placement_path):
+            placement_path = os.path.abspath(placement_path)
+    else:
+        placement_path = os.path.join(script_dir, "..", "CM_initial_placement.json")
+>>>>>>> Stashed changes
 
     window = MainWindow(placement_path)
     window.show()
