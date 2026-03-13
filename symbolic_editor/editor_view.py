@@ -257,7 +257,11 @@ class SymbolicEditor(QGraphicsView):
             geom = node.get("geometry", {})
 
             x = geom.get("x", 0) * self.scale_factor
-            y = geom.get("y", 0) * self.scale_factor
+            # Layout JSON uses math convention: y increases upward.
+            # Qt uses screen convention: y increases downward.
+            # Negate y so PMOS (layout y=0) stays at top and
+            # NMOS (layout y < 0) renders BELOW PMOS.
+            y = -geom.get("y", 0) * self.scale_factor
 
             width = geom.get("width", 1) * self.scale_factor
             height = geom.get("height", 0.5) * self.scale_factor
@@ -291,9 +295,10 @@ class SymbolicEditor(QGraphicsView):
 
         for item in self.device_items.values():
             item.set_snap_grid(self._snap_grid, self._row_pitch)
-            item.setPos(self._snap_point(item.pos().x(), item.pos().y()))
 
         if compact:
+            for item in self.device_items.values():
+                item.setPos(self._snap_point(item.pos().x(), item.pos().y()))
             self._compact_rows_abutted()
         else:
             self._skip_compaction = True
@@ -308,7 +313,8 @@ class SymbolicEditor(QGraphicsView):
             pos = item.pos()
             positions[dev_id] = (
                 pos.x() / self.scale_factor,
-                pos.y() / self.scale_factor,
+                # Un-negate y to restore layout convention (y increases upward)
+                -pos.y() / self.scale_factor,
             )
         return positions
 
@@ -761,10 +767,68 @@ class SymbolicEditor(QGraphicsView):
             pen = QPen(color, 0.5, Qt.PenStyle.DashLine)
             path_item.setPen(pen)
             path_item.setZValue(10)
-            path_item.setFlag(QGraphicsPathItem.GraphicsItemFlag.ItemIsSelectable, False)
             self.scene.addItem(path_item)
             self._conn_lines.append(path_item)
         self.scene.blockSignals(False)
+
+    def highlight_net_by_name(self, net_name, color):
+        """Highlight all connections for a specific net across the layout using a custom color."""
+        if not getattr(self, "_edges", None):
+            return
+
+        self.scene.blockSignals(True)
+        drawn = set()
+        for i, edge in enumerate(self._edges):
+            if edge.get("net") == net_name:
+                src = edge.get("source")
+                tgt = edge.get("target")
+                if not src or not tgt:
+                    continue
+                
+                # Avoid drawing the exact same undirected edge twice if it exists
+                edge_sig = tuple(sorted([src, tgt]))
+                if edge_sig in drawn:
+                    continue
+                drawn.add(edge_sig)
+
+                src_item = self.device_items.get(src)
+                tgt_item = self.device_items.get(tgt)
+                if not src_item or not tgt_item:
+                    continue
+
+                src_anchors = src_item.terminal_anchors()
+                tgt_anchors = tgt_item.terminal_anchors()
+                
+                src_term = self._get_terminal_for_net(src, net_name)
+                tgt_term = self._get_terminal_for_net(tgt, net_name)
+                
+                p1 = src_anchors[src_term]
+                p2 = tgt_anchors[tgt_term]
+
+                path = QPainterPath()
+                path.moveTo(p1)
+                dx = p2.x() - p1.x()
+                dy = p2.y() - p1.y()
+                offset = max(abs(dx), abs(dy)) * 0.25
+                sign = 1.0 if i % 2 == 0 else -1.0
+                if abs(dx) > abs(dy):
+                    ctrl1 = QPointF(p1.x() + dx * 0.33, p1.y() + sign * offset)
+                    ctrl2 = QPointF(p1.x() + dx * 0.66, p2.y() + sign * offset)
+                else:
+                    ctrl1 = QPointF(p1.x() + sign * offset, p1.y() + dy * 0.33)
+                    ctrl2 = QPointF(p2.x() + sign * offset, p1.y() + dy * 0.66)
+                path.cubicTo(ctrl1, ctrl2, p2)
+
+                path_item = QGraphicsPathItem(path)
+                # use solid thicker line for highlight
+                pen = QPen(QColor(color), 1.5, Qt.PenStyle.SolidLine)
+                path_item.setPen(pen)
+                path_item.setZValue(15)
+                path_item.setFlag(QGraphicsPathItem.GraphicsItemFlag.ItemIsSelectable, False)
+                self.scene.addItem(path_item)
+                self._conn_lines.append(path_item)
+        self.scene.blockSignals(False)
+
 
     def _on_selection_changed(self):
         """Emit device_clicked when user selects a device on the canvas."""
