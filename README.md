@@ -1,10 +1,46 @@
 # AI-Based Analog Layout Automation
 
-Symbolic analog layout editor with AI-assisted placement operations for PMOS/NMOS device-level floorplanning.
+> Symbolic analog layout editor with AI-assisted placement for PMOS/NMOS device-level floorplanning.
 
 ![Canvas view — PMOS and NMOS rows with dummy devices](images/editor_canvas.png)
 
 ![Full editor — Device Hierarchy, Canvas, and AI Chat panels](images/editor_full.png)
+
+---
+
+## Quick Start
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/orabi55/AI-Based-Analog-Layout-Automation.git
+cd AI-Based-Analog-Layout-Automation
+
+# 2. Create a virtual environment
+python -m venv .venv
+# Windows
+.venv\Scripts\activate
+# macOS / Linux
+source .venv/bin/activate
+
+# 3. Install dependencies
+pip install -r requirements.txt
+
+# 4. Configure API keys
+copy .env.example .env        # Windows
+# cp .env.example .env        # macOS / Linux
+# Then edit .env and paste your API keys
+
+# 5. Run the application
+python symbolic_editor/main.py
+```
+
+Load an example placement directly:
+
+```bash
+python symbolic_editor/main.py examples/xor/Xor_initial_placement.json
+```
+
+> **📖 For a detailed walkthrough see [docs/USER_GUIDE.md](docs/USER_GUIDE.md)**
 
 ---
 
@@ -24,20 +60,12 @@ Symbolic analog layout editor with AI-assisted placement operations for PMOS/NMO
 - **Live ghost preview** follows the cursor at 55 % opacity showing exactly where the dummy will land.
 - Click to place; the dummy snaps to the nearest free grid slot in the closest PMOS or NMOS row.
 - Dummy devices are rendered with dedicated pink styling to distinguish them from active transistors.
-- Grouped under collapsible **"Dummy NMOS / Dummy PMOS"** headers in the Device Hierarchy tree.
 
-### Row / Column Controls
-- **Row** and **Col** spin-boxes in the toolbar set the virtual grid extent.
-- Increasing rows/columns creates visible empty track slots for planning future placement.
-
-### PMOS–NMOS Row Gap Control (Edit Menu)
-- **"Close PMOS–NMOS gap"** checkbox with an adjustable **Gap (px)** spin-box.
-- Overrides the automatic row spacing so you can bring the two rows closer or farther apart.
-
-### Collapsible Side Panels
-- **Device Hierarchy** (left) and **AI Chat** (right) panels can be collapsed via header toggle buttons.
-- Thin **reopen strips** appear at the edges when a panel is hidden, allowing one-click restoration.
-- Panel toggles are also available in the **Edit** menu.
+### AI Chat Panel (Multi-Agent Pipeline)
+- Built-in chat with **LLM cascade** (Gemini → Groq → OpenAI → DeepSeek → Ollama).
+- **4-stage pipeline**: Topology Analysis → Placement → DRC Check → Routing Preview.
+- AI can execute layout commands: swap, move, flip, merge, add dummy, delete, and more.
+- Chat messages appear with timestamps; layout context is sent automatically.
 
 ### Keyboard Shortcuts
 | Key | Action |
@@ -56,81 +84,92 @@ Symbolic analog layout editor with AI-assisted placement operations for PMOS/NMO
 | `Ctrl+E` | Export |
 | `Esc` | Cancel current mode / deselect |
 
-### Connection Highlighting
-- Graph edges and SPICE terminal-net data (when a matching `.sp` file is found) drive interactive connection curves.
-- Click a device in the hierarchy or canvas to see its net connections drawn as coloured dashed bézier curves.
-
-### AI Chat Panel
-- Built-in chat with **LLM cascade** (Gemini → Groq → OpenAI → DeepSeek → Ollama).
-- AI can execute layout commands: swap, move, flip, merge, add dummy, delete, and more.
-- Chat messages appear with timestamps; layout context is sent automatically.
-
 ### Dark Theme & Vector Icons
 - Global dark palette (#0e1219 canvas, #111621 panels, #1a1f2b toolbar).
-- 15 procedural QPainter vector icons — no external image files required.
-
-### File I/O
-- **Load** placement JSON (`nodes`, optional `edges`).
-- **Save / Save As** — writes updated positions back to JSON.
-- **Export** — generates a clean placement export.
+- Procedural QPainter vector icons — no external image files required.
 
 ---
 
 ## API Key Configuration
-Use a project-level `.env` file for web LLM providers:
 
-```env
-OPENAI_API_KEY=
-GEMINI_API_KEY=
-ANTHROPIC_API_KEY=
-DEEPSEEK_API_KEY=
+Copy the template and fill in your keys:
+
+```bash
+copy .env.example .env   # Windows
+# cp .env.example .env   # macOS / Linux
 ```
 
-`.env` is ignored by git via `.gitignore`.
+At minimum, set **one** of these (Gemini recommended):
 
----
-
-## Run
-
-```powershell
-py -3 symbolic_editor/main.py
-```
-
-Or with a specific placement file:
-
-```powershell
-py -3 symbolic_editor/main.py CM_initial_placement.json
-```
+| Provider | Env Variable | Free Tier |
+|----------|-------------|-----------|
+| Google Gemini | `GEMINI_API_KEY` | ✅ [aistudio.google.com](https://aistudio.google.com) |
+| Groq | `GROQ_API_KEY` | ✅ [console.groq.com](https://console.groq.com) |
+| OpenAI | `OPENAI_API_KEY` | ❌ Paid |
+| DeepSeek | `DEEPSEEK_API_KEY` | ❌ Paid |
 
 ---
 
 ## Project Structure
 
 ```
-├── ai_agent/          # LLM worker, Gemini/OpenAI/Ollama placers
-├── export/            # JSON export utilities
-├── parser/            # Netlist & layout readers, circuit graph
-├── symbolic_editor/   # PySide6 GUI application
-│   ├── main.py        # Main window, toolbar, menus, commands
-│   ├── editor_view.py # QGraphicsView canvas
-│   ├── device_item.py # QGraphicsRectItem for each transistor
-│   ├── device_tree.py # Device Hierarchy side panel
-│   ├── chat_panel.py  # AI Chat side panel
-│   └── icons.py       # 15 procedural vector icons
-├── CM_initial_placement.json
-├── Current_Mirror_CM.sp
-└── README.md
+AI-Based-Analog-Layout-Automation/
+│
+├── symbolic_editor/        # PySide6 GUI application
+│   ├── main.py             #   Main window, toolbar, menus, commands
+│   ├── editor_view.py      #   QGraphicsView canvas
+│   ├── device_item.py      #   QGraphicsRectItem for each transistor
+│   ├── device_tree.py      #   Device Hierarchy side panel
+│   ├── chat_panel.py       #   AI Chat side panel
+│   ├── klayout_panel.py    #   KLayout integration panel
+│   └── icons.py            #   Procedural vector icons
+│
+├── ai_agent/               # Multi-agent AI system
+│   ├── orchestrator.py     #   4-stage pipeline controller
+│   ├── llm_worker.py       #   LLM API worker (Qt thread)
+│   ├── topology_analyst.py #   Stage 1 — circuit constraint extraction
+│   ├── placement_specialist.py # Stage 2 — device placement
+│   ├── drc_critic.py       #   Stage 3 — DRC violation checker
+│   ├── routing_previewer.py#   Stage 4 — routing cost optimizer
+│   ├── pipeline_optimizer.py#  Deterministic placement optimizer
+│   ├── classifier_agent.py #   User intent classifier
+│   ├── strategy_selector.py#   Placement strategy selection
+│   ├── analog_kb.py        #   Analog layout knowledge base
+│   ├── rag_store.py        #   RAG vector store
+│   ├── rag_indexer.py      #   RAG example indexer
+│   └── rag_retriever.py    #   RAG example retriever
+│
+├── parser/                 # Netlist & layout file readers
+│   ├── netlist_reader.py   #   SPICE netlist parser
+│   ├── layout_reader.py    #   OASIS/GDS layout parser
+│   ├── circuit_graph.py    #   Circuit graph builder
+│   └── device_matcher.py   #   Layout ↔ schematic matching
+│
+├── export/                 # Output file generators
+│   ├── export_json.py      #   JSON placement export
+│   ├── oas_writer.py       #   OASIS file writer
+│   └── klayout_renderer.py #   KLayout rendering
+│
+├── examples/               # Example circuits (ready to load)
+│   ├── comparator/         #   Comparator circuit
+│   ├── xor/                #   XOR gate
+│   └── std_cell/           #   Standard cell
+│
+├── tests/                  # Test suite
+├── netlists/               # Additional SPICE netlists
+├── scripts/                # Utility scripts
+├── logs/                   # Runtime logs
+├── images/                 # Screenshots for documentation
+├── docs/                   # User documentation
+│   └── USER_GUIDE.md       #   Comprehensive user guide
+│
+├── .env.example            # API key template
+├── requirements.txt        # Python dependencies
+└── README.md               # This file
 ```
 
 ---
 
-## Repository Hygiene
-`.gitignore` covers:
-- Python cache / build artifacts
-- Virtual environments
-- Editor / OS junk files
-- Local secrets (`.env`, `.env.*`)
+## License
 
----
-
-# Hussain
+This project is developed as part of an academic senior design project.

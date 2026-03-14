@@ -33,8 +33,7 @@ Thumbs.db
 .env
 .env.*
 !.env.example
-AI-Based-Analog-Layout-Automation.rar
-__pycache__/
-*.log
-crash_log.txt
-debug_log.txt
+
+# Archives
+*.rar
+*.zip
