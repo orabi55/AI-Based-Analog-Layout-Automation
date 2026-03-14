@@ -11,7 +11,7 @@
 3. [Installation](#3-installation)
 4. [Running the Application](#4-running-the-application)
 5. [User Interface Overview](#5-user-interface-overview)
-6. [Generating an Initial Placement (Full Pipeline)](#6-generating-an-initial-placement-full-pipeline)
+6. [End-to-End Workflow (Import > Place > Edit)](#6-end-to-end-workflow-import--place--edit)
 7. [Working with Layouts](#7-working-with-layouts)
 8. [Canvas Operations](#8-canvas-operations)
 9. [AI Chat Assistant](#9-ai-chat-assistant)
@@ -117,7 +117,9 @@ GROQ_API_KEY=your-groq-key-here
 python symbolic_editor/main.py
 ```
 
-The editor opens with an empty canvas. Use **File → Open** to load a placement JSON file.
+The editor opens with an empty canvas. From here you can:
+- **File > Load** (`Ctrl+O`) — open an existing placement JSON.
+- **File > Import from Netlist + Layout** (`Ctrl+I`) — import a new circuit from design files (see [Section 6](#6-end-to-end-workflow-import-place-edit)).
 
 ### Launch with a File
 
@@ -171,165 +173,241 @@ The application window has three main panels:
 - Collapsible — click the header or use **Edit → Toggle AI Chat**.
 
 ### Toolbar
-- **File operations**: New, Open, Save, Save As, Export.
+- **File operations**: Load, Import, Save, Save As, Export JSON, Export OAS.
+- **Design**: Run AI Initial Placement.
 - **Edit tools**: Undo, Redo, Swap, Flip H, Flip V, Merge S-S, Merge D-D, Delete.
 - **Modes**: Move mode (M), Dummy mode (D).
 - **View**: Zoom In, Zoom Out, Fit (F), Row/Col controls.
 
+### Menu Bar
+
+| Menu | Item | Shortcut | Description |
+|------|------|----------|-------------|
+| **File** | Load | `Ctrl+O` | Open an existing placement JSON |
+| | Import from Netlist + Layout | `Ctrl+I` | Parse .sp + .oas and show the circuit graph |
+| | Save | `Ctrl+S` | Save current layout to file |
+| | Save As | `Ctrl+Shift+S` | Save to a new file |
+| | Export JSON | `Ctrl+E` | Export placement as JSON |
+| | Export to OAS | `Ctrl+Shift+E` | Export placement back to OAS layout |
+| | View in KLayout | — | Open current layout in KLayout |
+| **Design** | Run AI Initial Placement | `Ctrl+P` | Send current graph to Gemini for AI placement |
+| **View** | (placeholders) | — | Future view options |
+
 ---
 
-## 6. Generating an Initial Placement (Full Pipeline)
+## 6. End-to-End Workflow (Import → Place → Edit)
 
-This is the **core workflow** of the tool — going from raw design files to a fully placed symbolic layout.
+This is the **core workflow** of the tool — going from raw design files to a fully placed and refined symbolic layout, **entirely within the GUI**.
 
 ### Overview
 
-The pipeline has **3 stages**:
+The pipeline has **3 stages**, all accessible from the GUI:
 
 ```
-┌─────────────────────┐     ┌──────────────────────┐     ┌─────────────────────┐
-│  STAGE 1: Parser    │     │  STAGE 2: AI Placer  │     │  STAGE 3: GUI       │
-│                     │     │                      │     │                     │
-│  Inputs:            │     │  Input:              │     │  Input:             │
-│  • circuit.sp       │ ──► │  • layout_graph.json │ ──► │  • placement.json   │
-│  • circuit.oas      │     │                      │     │                     │
-│                     │     │  Output:             │     │  Features:          │
-│  Output:            │     │  • placement.json    │     │  • Visual editing   │
-│  • layout_graph.json│     │    (with x,y coords) │     │  • AI chat refine   │
-└─────────────────────┘     └──────────────────────┘     └─────────────────────┘
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │                           GUI (main.py)                                │
+  │                                                                        │
+  │   STEP 1                    STEP 2                    STEP 3           │
+  │   File > Import             Design > Run AI           Edit & Refine    │
+  │   (Ctrl+I)                  Placement (Ctrl+P)        (manual + chat)  │
+  │                                                                        │
+  │  ┌──────────────┐       ┌──────────────────┐       ┌────────────────┐  │
+  │  │ Parse .sp    │       │ Send graph to    │       │ Swap, flip,    │  │
+  │  │ Parse .oas   │  -->  │ Gemini LLM       │  -->  │ merge, add     │  │
+  │  │ Match devices│       │ Get optimized    │       │ dummies, chat  │  │
+  │  │ Build graph  │       │ x/y positions    │       │ with AI        │  │
+  │  └──────────────┘       └──────────────────┘       └────────────────┘  │
+  │                                                                        │
+  │  Output:                 Output:                    Output:            │
+  │  *_graph.json            *_initial_placement.json   Save / Export OAS  │
+  └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Stage 1 — Parsing (Netlist + Layout → Graph JSON)
+---
 
-The `parser/` module reads your input files and produces a **layout graph JSON** — the symbolic representation of your circuit.
+### Step 1 — Import from Netlist + Layout (`Ctrl+I`)
 
-**What you need:**
-- A **SPICE netlist** (`.sp`) — describes transistor connectivity (which nets connect to D, G, S of each device).
-- A **layout file** (`.oas` or `.gds`) — provides physical cell geometry (device widths, heights, positions from the PDK).
+This is the entry point for any new circuit.
 
-**What happens internally:**
+#### What you need
+
+| File | Required? | Description | Example |
+|------|-----------|-------------|--------|
+| **SPICE netlist** (`.sp`) | **Yes** | Transistor connectivity (D, G, S nets) | `Current_Mirror_CM.sp` |
+| **Layout file** (`.oas` / `.gds`) | Optional | Physical geometry from PDK | `Current_Mirror_CM.oas` |
+
+> **Tip:** If you don't have a `.oas` file, the tool will use default grid positions. You can always rearrange later.
+
+#### How to do it
+
+1. Open the GUI: `python symbolic_editor/main.py`
+2. Go to **File > Import from Netlist + Layout** (or press `Ctrl+I`)
+3. The **Import Dialog** opens:
+
+```
+  ┌─────────────────────────────────────────────────┐
+  │  Import Circuit from Design Files               │
+  │                                                  │
+  │  Select a SPICE netlist and (optionally) a       │
+  │  layout file to generate the placement.          │
+  │                                                  │
+  │  ┌── Design Files ──────────────────────────┐    │
+  │  │ SPICE Netlist:  [path/to/circuit.sp] [Browse] │
+  │  │ Layout File:    [path/to/circuit.oas][Browse] │
+  │  └──────────────────────────────────────────┘    │
+  │                                                  │
+  │                         [Cancel]  [Import]       │
+  └─────────────────────────────────────────────────┘
+```
+
+4. Click **Browse** to select your `.sp` file (required).
+5. Click **Browse** to select your `.oas` / `.gds` file (optional).
+6. Click **Import**.
+
+#### What happens behind the scenes
 
 | Step | Module | What It Does |
 |------|--------|--------------|
-| 1 | `parser/netlist_reader.py` | Reads the `.sp` file, flattens hierarchy, expands multi-finger devices (nf>1 → individual fingers) |
+| 1 | `parser/netlist_reader.py` | Reads the `.sp` file, flattens hierarchy, expands multi-finger devices (nf>1 into individual fingers) |
 | 2 | `parser/layout_reader.py` | Reads the `.oas`/`.gds` file, extracts transistor instances with positions, widths, heights |
-| 3 | `parser/device_matcher.py` | Matches each netlist device to its layout instance (NMOS↔NMOS, PMOS↔PMOS, by position order) |
-| 4 | `parser/circuit_graph.py` | Builds a connectivity graph — nodes are devices, edges are shared nets (gate, drain, source connections) |
+| 3 | `parser/device_matcher.py` | Matches each netlist device to its layout instance (NMOS with NMOS, PMOS with PMOS, by position order) |
+| 4 | `parser/circuit_graph.py` | Builds a connectivity graph — nodes are devices, edges are shared nets |
 
-**How to run it:**
+#### Result
 
-Use the included `generate_cm.py` as a reference. Here's how to write your own script:
+- The **circuit graph** is displayed on the canvas with original layout positions.
+- PMOS devices appear on the **top row**, NMOS on the **bottom row**.
+- A `*_graph.json` file is saved next to the `.sp` file.
+- The AI Chat panel shows a summary of imported devices.
 
-```python
-import json
-import os
-from parser.layout_reader import extract_layout_instances
-from parser.netlist_reader import read_netlist
-from parser.circuit_graph import build_circuit_graph
-
-# ----- Paths to your design files -----
-oas_file = "your_circuit.oas"   # Layout (physical geometry)
-sp_file  = "your_circuit.sp"    # Netlist (connectivity)
-
-# ----- Stage 1a: Parse layout -----
-instances = extract_layout_instances(oas_file)
-
-# ----- Stage 1b: Parse netlist -----
-netlist = read_netlist(sp_file)
-
-# ----- Stage 1c: Combine into graph -----
-nodes = []
-for dev_name, dev in netlist.devices.items():
-    dev_type = "nmos" if "n" in dev.type.lower() else "pmos"
-    nodes.append({
-        "id": dev_name,
-        "type": dev_type,
-        "electrical": {
-            "l": dev.params.get("l", 0),
-            "nf": dev.params.get("nf", 1),
-            "nfin": dev.params.get("nfin", 1),
-        },
-        "geometry": {
-            "x": 0.0,  "y": 0.0,   # placeholder — AI placer assigns these
-            "width": 0.294, "height": 0.668,
-            "orientation": "R0"
-        }
-    })
-
-G = build_circuit_graph(netlist)
-edges = [{"source": u, "target": v, "net": d.get("net", "")}
-         for u, v, d in G.edges(data=True)]
-
-# ----- Save the graph JSON -----
-with open("my_circuit_graph.json", "w") as f:
-    json.dump({"nodes": nodes, "edges": edges}, f, indent=4)
-
-print("Graph JSON saved — ready for AI placement!")
-```
-
-**Output:** A `*_layout_graph.json` file containing all devices (as nodes) and their net connections (as edges), but **without optimized x/y positions yet**.
+> **Note:** At this point, the positions come directly from the layout file.  
+> To get AI-optimized placement, proceed to **Step 2**.
 
 ---
 
-### Stage 2 — AI Initial Placement (Graph → Placed JSON)
+### Step 2 — Run AI Initial Placement (`Ctrl+P`)
 
-The **Gemini Placer** (`ai_agent/gemini_placer.py`) sends the graph JSON to the Gemini LLM, which assigns optimized x/y coordinates to every device based on analog placement rules.
+Once you have a circuit graph loaded (from Step 1 or from an existing JSON), you can ask the AI to generate an optimized placement.
 
-**What it does:**
-1. Reads the graph JSON (nodes + edges).
-2. Analyses net adjacency and device types.
-3. Builds a detailed prompt with DRC and floorplanning rules.
-4. Sends to Gemini API → receives placement coordinates.
-5. Validates the result (no overlaps, no missing devices, correct row assignments).
-6. Saves the output as a placement JSON.
+#### How to do it
 
-**How to run it:**
+1. Make sure a circuit is loaded (either imported or opened from JSON).
+2. Go to **Design > Run AI Initial Placement** (or press `Ctrl+P`).
+3. A progress dialog appears while the AI processes the layout.
+4. When complete, the canvas updates with AI-optimized positions.
 
-```python
-from ai_agent.gemini_placer import gemini_generate_placement
+#### What happens behind the scenes
 
-# Make sure GEMINI_API_KEY is set in your .env file
-gemini_generate_placement(
-    input_json  = "my_circuit_graph.json",     # from Stage 1
-    output_json = "my_circuit_placement.json",  # AI-placed output
-)
-```
+| Step | What It Does |
+|------|--------------|
+| 1 | Sends the current graph JSON (nodes + edges) to the **Gemini LLM** |
+| 2 | The LLM analyzes net adjacency, device types, and analog design rules |
+| 3 | It generates optimized x/y coordinates for every device |
+| 4 | The result is validated (no overlaps, correct row assignments) |
+| 5 | The canvas is updated and a `*_initial_placement.json` is saved |
 
-> **Note:** This requires a valid `GEMINI_API_KEY` in your `.env` file.
+#### Requirements
+
+- A valid **`GEMINI_API_KEY`** must be set in your `.env` file.
+- Internet connection for the API call.
+
+> **Tip:** If AI placement fails (e.g., no API key), an error message will appear and your original layout positions are preserved.
 
 ---
 
-### Stage 3 — Visualize & Refine in the GUI
+### Step 3 — Edit & Refine
 
-Load the placed JSON into the Symbolic Layout Editor to see and refine the result:
+After import and optional AI placement, you can refine the layout:
 
-```bash
-python symbolic_editor/main.py my_circuit_placement.json
-```
-
-From here you can:
-- **Visually inspect** the placement (PMOS on top, NMOS on bottom).
-- **Manually adjust** — swap devices, move, flip, add dummies.
-- **Ask the AI Chat** to optimise further: *"Optimize this layout for matched current mirrors"*.
-- **Save / Export** the final result.
+| Action | How |
+|--------|-----|
+| **Swap two devices** | Select both > click Swap (or ask AI: `"Swap MM0 and MM1"`) |
+| **Flip a device** | Select > Flip H or Flip V button |
+| **Merge diffusion** | Select two adjacent > press `G` (S-S) or `Shift+G` (D-D) |
+| **Add dummy devices** | Press `D`, hover over row, click to place |
+| **Move a device** | Drag to new position (snaps to grid) |
+| **Ask AI for help** | Type in chat: `"Optimize for matched current mirrors"` |
+| **Save** | `Ctrl+S` to save, `Ctrl+Shift+S` for Save As |
+| **Export to OAS** | `Ctrl+Shift+E` to export back to OASIS layout |
 
 ---
 
 ### Complete Example: Current Mirror
 
-Here's the full pipeline with the included Current Mirror example:
+Here's the full workflow using the included Current Mirror example:
 
-```bash
-# Step 1: Generate graph JSON from netlist + layout
-python generate_cm.py
-# Output: CM_initial_placement.json
-
-# Step 2: (Optional) Run AI placer for optimized coordinates
-python -c "from ai_agent.gemini_placer import gemini_generate_placement; gemini_generate_placement('CM_initial_placement.json', 'CM_placed.json')"
-
-# Step 3: Open in GUI
-python symbolic_editor/main.py CM_initial_placement.json
 ```
+1. Launch the GUI:
+   > python symbolic_editor/main.py
+
+2. Import the circuit:
+   > File > Import from Netlist + Layout (Ctrl+I)
+   > SPICE Netlist:  examples/comparator/Comparator.sp
+   > Layout File:    examples/comparator/Comparator.oas
+   > Click [Import]
+
+3. Inspect the graph:
+   > The canvas shows all devices with original layout positions.
+   > The Device Hierarchy (left panel) lists all PMOS and NMOS devices.
+   > Click any device to see its net connections.
+
+4. Run AI placement:
+   > Design > Run AI Initial Placement (Ctrl+P)
+   > Wait for the AI to process...
+   > The canvas updates with optimized positions.
+
+5. Refine manually:
+   > Select MM0 and MM1 > click Swap to exchange positions.
+   > Press D to add dummy devices for symmetry.
+   > Type in chat: "Check for DRC violations"
+
+6. Save your work:
+   > File > Save (Ctrl+S)
+   > File > Export to OAS (Ctrl+Shift+E) to create the final layout.
+```
+
+### Complete Example: XOR Gate
+
+Using the included XOR example:
+
+```
+1. Launch:  python symbolic_editor/main.py
+2. Import:  Ctrl+I > Select examples/xor/Xor_Automation.sp
+                    > Select examples/xor/Xor_Automation.oas
+3. View:    The 4 PMOS + 4 NMOS devices appear on the canvas.
+4. Place:   Ctrl+P to run AI placement.
+5. Chat:    "Analyze this XOR gate and suggest placement improvements"
+6. Export:  Ctrl+Shift+E to export as OAS.
+```
+
+---
+
+### Advanced: Using Scripts (Optional)
+
+If you prefer command-line scripting over the GUI, you can run the pipeline manually:
+
+```python
+# Stage 1: Parse netlist + layout into graph JSON
+from parser.netlist_reader import read_netlist
+from parser.layout_reader import extract_layout_instances
+from parser.device_matcher import match_devices
+from parser.circuit_graph import build_circuit_graph
+import json
+
+netlist   = read_netlist("circuit.sp")
+instances = extract_layout_instances("circuit.oas")
+mapping   = match_devices(netlist, instances)
+# ... build nodes and edges ...
+
+# Stage 2: AI placement
+from ai_agent.gemini_placer import gemini_generate_placement
+gemini_generate_placement("graph.json", "placement.json")
+
+# Stage 3: Open in GUI
+# > python symbolic_editor/main.py placement.json
+```
+
+See `generate_cm.py` in the project root for a complete working example.
 
 ---
 
@@ -430,6 +508,13 @@ A placement JSON file contains:
 
 | Key | Action |
 |-----|--------|
+| `Ctrl+I` | Import from Netlist + Layout |
+| `Ctrl+P` | Run AI Initial Placement |
+| `Ctrl+O` | Load placement JSON |
+| `Ctrl+S` | Save |
+| `Ctrl+Shift+S` | Save As |
+| `Ctrl+E` | Export JSON |
+| `Ctrl+Shift+E` | Export to OAS |
 | `G` | Merge S-S (selected pair) |
 | `Shift+G` | Merge D-D (selected pair) |
 | `M` | Toggle move mode |
@@ -439,9 +524,6 @@ A placement JSON file contains:
 | `Ctrl+A` | Select all |
 | `Ctrl+Z` | Undo |
 | `Ctrl+Y` | Redo |
-| `Ctrl+S` | Save |
-| `Ctrl+Shift+S` | Save As |
-| `Ctrl+E` | Export |
 | `Esc` | Cancel current mode / deselect |
 
 ---
@@ -594,7 +676,22 @@ pip install -r requirements.txt
 
 ### How do I generate a placement JSON from a new circuit?
 
-See [Section 6 — Generating an Initial Placement](#6-generating-an-initial-placement-full-pipeline) for the full step-by-step pipeline.
+Use the GUI: **File > Import from Netlist + Layout** (`Ctrl+I`). See [Section 6](#6-end-to-end-workflow-import--place--edit) for the full step-by-step workflow.
+
+### Import succeeded but devices have wrong positions
+
+**Cause:** The device matcher could not align netlist devices to layout instances (e.g., NMOS/PMOS count mismatch between `.sp` and `.oas`).
+
+**Fix:** Check the terminal output for `[Import] Device matching failed` messages. Ensure your netlist and layout have the same number of NMOS and PMOS devices.
+
+### AI Initial Placement does nothing / fails
+
+**Cause:** Missing or invalid `GEMINI_API_KEY`.
+
+**Fix:**
+1. Open `.env` and set `GEMINI_API_KEY=your-key-here`.
+2. Get a free key at [aistudio.google.com](https://aistudio.google.com).
+3. Restart the application.
 
 ---
 
