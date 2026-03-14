@@ -68,7 +68,7 @@ class RAGStore:
             terminal_nets:  {device_id: {gate, drain, source, bulk}} dict
             drc_result:     output of run_drc_check()
             routing_result: output of score_routing()
-            label:          optional human label e.g. "xor_good_run_1"
+            label:          optional human label e.g. "cm_good_run_1"
 
         Returns:
             example_id (str)
