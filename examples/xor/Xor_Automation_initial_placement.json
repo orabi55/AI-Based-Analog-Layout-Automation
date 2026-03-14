@@ -1,0 +1,445 @@
+{
+    "nodes": [
+        {
+            "id": "MM28",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0
+            },
+            "geometry": {
+                "x": 0.0,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            }
+        },
+        {
+            "id": "MM5",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0
+            },
+            "geometry": {
+                "x": 0.294,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            }
+        },
+        {
+            "id": "MM4",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0
+            },
+            "geometry": {
+                "x": 0.588,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            }
+        },
+        {
+            "id": "MM3",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0
+            },
+            "geometry": {
+                "x": 0.8819999999999999,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            }
+        },
+        {
+            "id": "MM2",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0
+            },
+            "geometry": {
+                "x": 1.176,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            }
+        },
+        {
+            "id": "MM25",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0
+            },
+            "geometry": {
+                "x": 1.47,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            }
+        },
+        {
+            "id": "MM29",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0
+            },
+            "geometry": {
+                "x": 0.0,
+                "y": 0.668,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            }
+        },
+        {
+            "id": "MM9",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0
+            },
+            "geometry": {
+                "x": 0.294,
+                "y": 0.668,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            }
+        },
+        {
+            "id": "MM8",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0
+            },
+            "geometry": {
+                "x": 0.588,
+                "y": 0.668,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            }
+        },
+        {
+            "id": "MM7",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0
+            },
+            "geometry": {
+                "x": 0.8819999999999999,
+                "y": 0.668,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            }
+        },
+        {
+            "id": "MM6",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0
+            },
+            "geometry": {
+                "x": 1.176,
+                "y": 0.668,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            }
+        },
+        {
+            "id": "MM24",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0
+            },
+            "geometry": {
+                "x": 1.47,
+                "y": 0.668,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            }
+        }
+    ],
+    "edges": [
+        {
+            "source": "MM28",
+            "target": "MM5",
+            "net": "Bb"
+        },
+        {
+            "source": "MM28",
+            "target": "MM29",
+            "net": "B"
+        },
+        {
+            "source": "MM28",
+            "target": "MM8",
+            "net": "Bb"
+        },
+        {
+            "source": "MM28",
+            "target": "MM3",
+            "net": "B"
+        },
+        {
+            "source": "MM28",
+            "target": "MM7",
+            "net": "B"
+        },
+        {
+            "source": "MM5",
+            "target": "MM29",
+            "net": "Bb"
+        },
+        {
+            "source": "MM5",
+            "target": "MM8",
+            "net": "Bb"
+        },
+        {
+            "source": "MM5",
+            "target": "MM4",
+            "net": "PDN"
+        },
+        {
+            "source": "MM5",
+            "target": "MM3",
+            "net": "PDN"
+        },
+        {
+            "source": "MM5",
+            "target": "MM2",
+            "net": "PDN"
+        },
+        {
+            "source": "MM4",
+            "target": "MM3",
+            "net": "PDN"
+        },
+        {
+            "source": "MM4",
+            "target": "MM2",
+            "net": "PDN"
+        },
+        {
+            "source": "MM4",
+            "target": "MM25",
+            "net": "A"
+        },
+        {
+            "source": "MM4",
+            "target": "MM6",
+            "net": "A"
+        },
+        {
+            "source": "MM4",
+            "target": "MM24",
+            "net": "A"
+        },
+        {
+            "source": "MM3",
+            "target": "MM29",
+            "net": "B"
+        },
+        {
+            "source": "MM3",
+            "target": "MM7",
+            "net": "OUT"
+        },
+        {
+            "source": "MM3",
+            "target": "MM2",
+            "net": "OUT"
+        },
+        {
+            "source": "MM3",
+            "target": "MM6",
+            "net": "OUT"
+        },
+        {
+            "source": "MM2",
+            "target": "MM7",
+            "net": "OUT"
+        },
+        {
+            "source": "MM2",
+            "target": "MM6",
+            "net": "OUT"
+        },
+        {
+            "source": "MM2",
+            "target": "MM25",
+            "net": "Ab"
+        },
+        {
+            "source": "MM2",
+            "target": "MM9",
+            "net": "Ab"
+        },
+        {
+            "source": "MM2",
+            "target": "MM24",
+            "net": "Ab"
+        },
+        {
+            "source": "MM25",
+            "target": "MM6",
+            "net": "A"
+        },
+        {
+            "source": "MM25",
+            "target": "MM24",
+            "net": "Ab"
+        },
+        {
+            "source": "MM25",
+            "target": "MM9",
+            "net": "Ab"
+        },
+        {
+            "source": "MM29",
+            "target": "MM8",
+            "net": "Bb"
+        },
+        {
+            "source": "MM29",
+            "target": "MM7",
+            "net": "B"
+        },
+        {
+            "source": "MM9",
+            "target": "MM24",
+            "net": "Ab"
+        },
+        {
+            "source": "MM9",
+            "target": "MM8",
+            "net": "PUN"
+        },
+        {
+            "source": "MM9",
+            "target": "MM7",
+            "net": "PUN"
+        },
+        {
+            "source": "MM9",
+            "target": "MM6",
+            "net": "PUN"
+        },
+        {
+            "source": "MM8",
+            "target": "MM7",
+            "net": "PUN"
+        },
+        {
+            "source": "MM8",
+            "target": "MM6",
+            "net": "PUN"
+        },
+        {
+            "source": "MM7",
+            "target": "MM6",
+            "net": "PUN"
+        },
+        {
+            "source": "MM6",
+            "target": "MM24",
+            "net": "A"
+        }
+    ],
+    "terminal_nets": {
+        "MM28": {
+            "D": "Bb",
+            "G": "B",
+            "S": "VSS"
+        },
+        "MM5": {
+            "D": "PDN",
+            "G": "Bb",
+            "S": "VSS"
+        },
+        "MM4": {
+            "D": "PDN",
+            "G": "A",
+            "S": "VSS"
+        },
+        "MM3": {
+            "D": "OUT",
+            "G": "B",
+            "S": "PDN"
+        },
+        "MM2": {
+            "D": "OUT",
+            "G": "Ab",
+            "S": "PDN"
+        },
+        "MM25": {
+            "D": "Ab",
+            "G": "A",
+            "S": "VSS"
+        },
+        "MM29": {
+            "D": "Bb",
+            "G": "B",
+            "S": "VDD"
+        },
+        "MM9": {
+            "D": "PUN",
+            "G": "Ab",
+            "S": "VDD"
+        },
+        "MM8": {
+            "D": "PUN",
+            "G": "Bb",
+            "S": "VDD"
+        },
+        "MM7": {
+            "D": "OUT",
+            "G": "B",
+            "S": "PUN"
+        },
+        "MM6": {
+            "D": "OUT",
+            "G": "A",
+            "S": "PUN"
+        },
+        "MM24": {
+            "D": "Ab",
+            "G": "A",
+            "S": "VDD"
+        }
+    }
+}
