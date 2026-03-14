@@ -18,9 +18,10 @@ FIXES APPLIED:
   - Bug #NUMERIC: Numeric suffix _N only grouped when >= 2 siblings exist.
 """
 
+from __future__ import annotations
+
 import re
 from collections import defaultdict
-from typing import Dict, List, Tuple
 
 
 # ---------------------------------------------------------------------------
@@ -44,7 +45,7 @@ MIN_NUMERIC_SIBLINGS = 2
 # must be EXCLUDED. These are separate devices, not fingers of one device.
 # We explicitly reject any ID containing '<' or '>'.
 
-_FINGER_PATTERNS: List[re.Pattern] = [
+_FINGER_PATTERNS: list[re.Pattern] = [
     # MM0_F1, MM0_F2  (uppercase F)
     re.compile(r"^(.+)_F(\d+)$"),
     # MM0_f1, MM0_f2  (lowercase f)
@@ -76,7 +77,7 @@ def _is_bus_notation(device_id: str) -> bool:
     return "<" in device_id or ">" in device_id
 
 
-def extract_base_and_finger(device_id: str) -> Tuple[str, int]:
+def extract_base_and_finger(device_id: str) -> tuple[str, int]:
     """
     Extract base device name and finger number from a device ID.
 
@@ -112,7 +113,7 @@ def is_finger_device(device_id: str) -> bool:
     return finger > 0
 
 
-def group_fingers(nodes: List[dict]) -> Dict[str, List[dict]]:
+def group_fingers(nodes: list[dict]) -> dict[str, list[dict]]:
     """
     Group physical finger devices into logical transistors.
 
@@ -131,7 +132,7 @@ def group_fingers(nodes: List[dict]) -> Dict[str, List[dict]]:
         For non-finger devices: base_name == device_id, list has one element.
     """
     # ── Pass 1: Tentative grouping ──────────────────────────────────────────
-    tentative: Dict[str, List[dict]] = defaultdict(list)
+    tentative: dict[str, list[dict]] = defaultdict(list)
 
     for node in nodes:
         if node.get("is_dummy"):
@@ -152,7 +153,7 @@ def group_fingers(nodes: List[dict]) -> Dict[str, List[dict]]:
     # if it has >= MIN_NUMERIC_SIBLINGS members.
     # If a group like "MM5" has only one member "MM5_1", it was a false split
     # — keep the original device ID.
-    validated: Dict[str, List[dict]] = {}
+    validated: dict[str, list[dict]] = {}
 
     for base_name, group_nodes in tentative.items():
         if len(group_nodes) == 1:
@@ -194,7 +195,7 @@ def group_fingers(nodes: List[dict]) -> Dict[str, List[dict]]:
 # Logical Device Aggregation
 # ---------------------------------------------------------------------------
 
-def aggregate_to_logical_devices(nodes: List[dict]) -> List[dict]:
+def aggregate_to_logical_devices(nodes: list[dict]) -> list[dict]:
     """
     Convert physical finger devices to logical transistor representation.
 
@@ -215,7 +216,7 @@ def aggregate_to_logical_devices(nodes: List[dict]) -> List[dict]:
         list of logical device nodes
     """
     finger_groups = group_fingers(nodes)
-    logical_nodes: List[dict] = []
+    logical_nodes: list[dict] = []
 
     for base_name, finger_nodes in finger_groups.items():
         if len(finger_nodes) == 1:
@@ -234,7 +235,7 @@ def aggregate_to_logical_devices(nodes: List[dict]) -> List[dict]:
     return logical_nodes
 
 
-def _create_logical_node(base_name: str, finger_nodes: List[dict]) -> dict:
+def _create_logical_node(base_name: str, finger_nodes: list[dict]) -> dict:
     """
     Create a single logical device node from multiple finger nodes.
 
@@ -288,10 +289,10 @@ def _create_logical_node(base_name: str, finger_nodes: List[dict]) -> dict:
 # ---------------------------------------------------------------------------
 
 def expand_logical_to_fingers(
-    logical_nodes: List[dict],
-    original_nodes: List[dict],
+    logical_nodes: list[dict],
+    original_nodes: list[dict],
     pitch: float = 0.294,
-) -> List[dict]:
+) -> list[dict]:
     """
     Expand logical device positions back to physical finger positions.
 
@@ -307,7 +308,7 @@ def expand_logical_to_fingers(
         list of physical nodes with updated positions
     """
     original_map = {n["id"]: n for n in original_nodes}
-    physical_nodes: List[dict] = []
+    physical_nodes: list[dict] = []
 
     for logical_node in logical_nodes:
         if not logical_node.get("_is_logical"):
@@ -347,7 +348,7 @@ def interdigitate_fingers(
     y: float,
     pitch: float = 0.294,
     pattern: str = "ABAB",
-) -> List[dict]:
+) -> list[dict]:
     """
     Create interdigitated finger placement for two matched devices.
 
@@ -369,23 +370,19 @@ def interdigitate_fingers(
         len(fingers_a), len(fingers_b), pattern
     )
 
-    interdigitated: List[dict] = []
-    idx_a = 0
-    idx_b = 0
+    interdigitated: list[dict] = []
+    counters = {"A": 0, "B": 0}
+    fingers = {"A": fingers_a, "B": fingers_b}
+    sources = {"A": device_a_logical, "B": device_b_logical}
 
     for i, label in enumerate(sequence):
-        if label == "A":
-            if idx_a >= len(fingers_a):
-                continue
-            finger_id = fingers_a[idx_a]
-            idx_a    += 1
-            src       = device_a_logical
-        else:
-            if idx_b >= len(fingers_b):
-                continue
-            finger_id = fingers_b[idx_b]
-            idx_b    += 1
-            src       = device_b_logical
+        flist = fingers[label]
+        ci = counters[label]
+        if ci >= len(flist):
+            continue
+        finger_id = flist[ci]
+        counters[label] = ci + 1
+        src = sources[label]
 
         interdigitated.append({
             "id":       finger_id,
@@ -408,7 +405,7 @@ def _generate_interdig_sequence(
     nf_a: int,
     nf_b: int,
     pattern: str
-) -> List[str]:
+) -> list[str]:
     """
     Generate interdigitation label sequence.
 
@@ -421,7 +418,7 @@ def _generate_interdig_sequence(
         list of "A" and "B" labels
     """
     if pattern == "ABAB":
-        seq: List[str] = []
+        seq: list[str] = []
         for i in range(max(nf_a, nf_b)):
             if i < nf_a:
                 seq.append("A")
@@ -446,8 +443,8 @@ def _generate_interdig_sequence(
 # ---------------------------------------------------------------------------
 
 def validate_finger_integrity(
-    original_nodes: List[dict],
-    processed_nodes: List[dict],
+    original_nodes: list[dict],
+    processed_nodes: list[dict],
 ) -> dict:
     """
     Verify that all finger devices are preserved after aggregation/expansion.
