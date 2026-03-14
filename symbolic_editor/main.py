@@ -1462,10 +1462,10 @@ class MainWindow(QMainWindow):
     def _run_parser_pipeline(sp_path, oas_path=""):
         """
         Run the full parser pipeline:
-          1. Parse SPICE netlist → Netlist object
-          2. Parse layout (.oas/.gds) → device instances (optional)
-          3. Build circuit graph → edges
-          4. Assemble nodes with geometry + edges into a dict
+          1. Parse SPICE netlist
+          2. Parse layout (.oas/.gds) and match devices
+          3. Build circuit graph (edges)
+          4. Assemble nodes with geometry + edges
 
         Returns: {"nodes": [...], "edges": [...], "terminal_nets": {...}}
         """
@@ -1475,21 +1475,24 @@ class MainWindow(QMainWindow):
         # 1. Parse netlist
         netlist = read_netlist(sp_path)
 
-        # 2. Parse layout (optional)
+        # 2. Parse layout (optional) and match devices
         layout_instances = []
+        device_mapping = {}  # {device_name: layout_index}
         if oas_path and os.path.isfile(oas_path):
             try:
                 from parser.layout_reader import extract_layout_instances
                 layout_instances = extract_layout_instances(oas_path)
             except Exception as e:
-                print(f"[Import] Layout parsing failed ({e}), using placeholder geometry")
+                print(f"[Import] Layout parsing failed ({e}), using grid placement")
 
-        # Build a lookup for layout geometry
-        layout_map = {}
         if layout_instances:
-            # Index by cell name for matching
-            for inst in layout_instances:
-                layout_map[inst["cell"]] = inst
+            try:
+                from parser.device_matcher import match_devices
+                device_mapping = match_devices(netlist, layout_instances)
+                print(f"[Import] Matched {len(device_mapping)} devices to layout")
+            except Exception as e:
+                print(f"[Import] Device matching failed ({e}), using grid placement")
+                device_mapping = {}
 
         # 3. Build nodes
         PITCH_UM = 0.294
@@ -1502,12 +1505,13 @@ class MainWindow(QMainWindow):
         for dev_name, dev in netlist.devices.items():
             dev_type = "nmos" if "n" in dev.type.lower() else "pmos"
 
-            # Try to get geometry from layout
-            inst = layout_map.get(dev_name)
-            if inst:
+            # Try to get geometry from layout via device matcher
+            layout_idx = device_mapping.get(dev_name)
+            if layout_idx is not None and layout_idx < len(layout_instances):
+                inst = layout_instances[layout_idx]
                 geom = {
-                    "x": inst["x"],
-                    "y": inst["y"],
+                    "x": inst.get("x", 0.0),
+                    "y": inst.get("y", 0.0),
                     "width": inst.get("width", PITCH_UM),
                     "height": inst.get("height", ROW_HEIGHT_UM),
                     "orientation": inst.get("orientation", "R0"),
