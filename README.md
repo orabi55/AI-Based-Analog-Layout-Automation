@@ -99,7 +99,7 @@ py -3 symbolic_editor/main.py
 Or with a specific placement file:
 
 ```powershell
-py -3 symbolic_editor/main.py Xor_initial_placement.json
+py -3 symbolic_editor/main.py CM_initial_placement.json
 ```
 
 ---
@@ -117,8 +117,8 @@ py -3 symbolic_editor/main.py Xor_initial_placement.json
 │   ├── device_tree.py # Device Hierarchy side panel
 │   ├── chat_panel.py  # AI Chat side panel
 │   └── icons.py       # 15 procedural vector icons
-├── Xor_initial_placement.json
-├── Xor_Automation.sp
+├── CM_initial_placement.json
+├── Current_Mirror_CM.sp
 └── README.md
 ```
 
