@@ -589,15 +589,24 @@ These are automatically parsed and applied to your layout. Supported actions:
 
 The `examples/` directory contains ready-to-use circuits:
 
-### Current Mirror (`CM_initial_placement.json`)
+### Current Mirror (`examples/current_mirror/`)
 
-A basic NMOS current mirror at the project root. Great for learning the basics.
+A basic NMOS current mirror. Great for learning the basics.
 
 ```bash
-python symbolic_editor/main.py CM_initial_placement.json
+python symbolic_editor/main.py examples/current_mirror/CM_initial_placement.json
 ```
 
-**Try asking the AI:** `"Analyze this circuit and optimize placement for matching"`
+**Or import from source files via the GUI:**
+```
+Ctrl+I > Select examples/current_mirror/Current_Mirror_CM.sp
+       > Select examples/current_mirror/Current_Mirror_CM.oas
+```
+
+**Files included:**
+- `Current_Mirror_CM.sp` -- SPICE netlist
+- `Current_Mirror_CM.oas` -- OASIS layout
+- `CM_initial_placement.json` -- Pre-generated placement
 
 ### XOR Gate (`examples/xor/`)
 
@@ -607,18 +616,24 @@ A complementary CMOS XOR gate with PMOS and NMOS rows.
 python symbolic_editor/main.py examples/xor/Xor_initial_placement.json
 ```
 
+**Or import from source files via the GUI:**
+```
+Ctrl+I > Select examples/xor/Xor_Automation.sp
+       > Select examples/xor/Xor_Automation.oas
+```
+
 **Files included:**
-- `Xor_Automation.sp` — SPICE netlist
-- `Xor_Automation.oas` — OASIS layout
-- `Xor_initial_placement.json` — Initial placement
+- `Xor_Automation.sp` -- SPICE netlist
+- `Xor_Automation.oas` -- OASIS layout
+- `Xor_Automation_initial_placement.json` -- Pre-generated placement
 
 ### Comparator (`examples/comparator/`)
 
 An analog comparator circuit (more complex topology with diff-pairs and mirrors).
 
-```bash
-# Requires generating placement JSON first — load the .sp file
-# and use the parser to create the initial placement.
+```
+Ctrl+I > Select examples/comparator/Comparator.sp
+       > Select examples/comparator/Comparator.oas
 ```
 
 **Files included:**
@@ -699,68 +714,63 @@ Use the GUI: **File > Import from Netlist + Layout** (`Ctrl+I`). See [Section 6]
 
 ```
 AI-Based-Analog-Layout-Automation/
-│
-├── symbolic_editor/           # GUI application
-│   ├── main.py                #   Main window, toolbar, menus
-│   ├── editor_view.py         #   QGraphicsView canvas
-│   ├── device_item.py         #   Device rectangle rendering
-│   ├── device_tree.py         #   Device hierarchy tree panel
-│   ├── chat_panel.py          #   AI chat panel
-│   ├── klayout_panel.py       #   KLayout integration
-│   └── icons.py               #   Procedural vector icons
-│
-├── ai_agent/                  # Multi-agent AI pipeline
-│   ├── orchestrator.py        #   4-stage pipeline controller
-│   ├── llm_worker.py          #   LLM API calls (Qt thread)
-│   ├── topology_analyst.py    #   Stage 1: constraint extraction
-│   ├── placement_specialist.py#   Stage 2: placement generation
-│   ├── drc_critic.py          #   Stage 3: DRC validation
-│   ├── routing_previewer.py   #   Stage 4: routing optimization
-│   ├── pipeline_optimizer.py  #   Deterministic placement optimizer
-│   ├── classifier_agent.py    #   Intent classification
-│   ├── strategy_selector.py   #   Strategy selection
-│   ├── analog_kb.py           #   Analog layout knowledge base
-│   ├── finger_grouping.py     #   Multi-finger device grouping
-│   ├── rag_store.py           #   RAG vector store
-│   ├── rag_indexer.py         #   RAG example indexer
-│   ├── rag_retriever.py       #   RAG example retriever
-│   ├── gemini_placer.py       #   Gemini-specific placement
-│   ├── ollama_placer.py       #   Ollama-specific placement
-│   ├── openai_placer.py       #   OpenAI-specific placement
-│   └── tools.py               #   Shared utility functions
-│
-├── parser/                    # Input file readers
-│   ├── netlist_reader.py      #   SPICE netlist parser
-│   ├── layout_reader.py       #   OASIS/GDS layout parser
-│   ├── circuit_graph.py       #   Circuit graph construction
-│   ├── device_matcher.py      #   Layout ↔ schematic matching
-│   ├── hierarchy.py           #   Hierarchical netlist support
-│   ├── merged_graph.py        #   Graph merging utilities
-│   ├── device.py              #   Device data model
-│   ├── netlist.py             #   Netlist data model
-│   └── units.py               #   Unit conversions
-│
-├── export/                    # Output generators
-│   ├── export_json.py         #   JSON placement export
-│   ├── oas_writer.py          #   OASIS file writer
-│   └── klayout_renderer.py    #   KLayout rendering
-│
-├── examples/                  # Example circuits
-│   ├── comparator/            #   Analog comparator
-│   ├── xor/                   #   XOR gate
-│   └── std_cell/              #   Standard cell
-│
-├── tests/                     # Test suite
-├── netlists/                  # Additional SPICE files
-├── scripts/                   # Utility scripts
-├── logs/                      # Runtime logs
-├── images/                    # Documentation screenshots
-├── docs/                      # Documentation
-│   └── USER_GUIDE.md          #   This file
-│
-├── .env.example               # API key template
-├── requirements.txt           # Python dependencies
-└── README.md                  # Project overview
+|
+|-- symbolic_editor/           # PySide6 GUI application
+|   |-- main.py                #   Main window, toolbar, menus, import pipeline
+|   |-- editor_view.py         #   QGraphicsView canvas
+|   |-- device_item.py         #   Device rectangle rendering
+|   |-- device_tree.py         #   Device hierarchy tree panel
+|   |-- chat_panel.py          #   AI chat panel
+|   |-- klayout_panel.py       #   KLayout integration
+|   \-- icons.py               #   Procedural vector icons
+|
+|-- ai_agent/                  # Multi-agent AI pipeline
+|   |-- orchestrator.py        #   4-stage pipeline controller
+|   |-- llm_worker.py          #   LLM API calls (Qt thread)
+|   |-- gemini_placer.py       #   Gemini-based initial placement
+|   |-- topology_analyst.py    #   Stage 1: constraint extraction
+|   |-- placement_specialist.py#   Stage 2: placement generation
+|   |-- drc_critic.py          #   Stage 3: DRC validation
+|   |-- routing_previewer.py   #   Stage 4: routing optimization
+|   |-- pipeline_optimizer.py  #   Deterministic placement optimizer
+|   |-- classifier_agent.py    #   Intent classification
+|   |-- strategy_selector.py   #   Placement strategy selection
+|   |-- analog_kb.py           #   Analog layout knowledge base
+|   |-- finger_grouping.py     #   Multi-finger device grouping
+|   |-- rag_store.py           #   RAG vector store
+|   |-- rag_indexer.py         #   RAG example indexer
+|   \-- rag_retriever.py       #   RAG example retriever
+|
+|-- parser/                    # Netlist & layout file readers
+|   |-- netlist_reader.py      #   SPICE netlist parser
+|   |-- layout_reader.py       #   OASIS/GDS layout parser
+|   |-- circuit_graph.py       #   Circuit graph construction
+|   |-- device_matcher.py      #   Layout <-> schematic matching
+|   |-- hierarchy.py           #   Hierarchical netlist support
+|   |-- merged_graph.py        #   Graph merging utilities
+|   |-- device.py              #   Device data model
+|   |-- netlist.py             #   Netlist data model
+|   \-- units.py               #   Unit conversions
+|
+|-- export/                    # Output generators
+|   |-- export_json.py         #   JSON placement export
+|   |-- oas_writer.py          #   OASIS file writer
+|   \-- klayout_renderer.py    #   KLayout rendering
+|
+|-- examples/                  # Example circuits (ready to load)
+|   |-- current_mirror/        #   NMOS current mirror
+|   |-- comparator/            #   Analog comparator
+|   |-- xor/                   #   CMOS XOR gate
+|   \-- std_cell/              #   Large standard cell
+|
+|-- tests/                     # Test suite
+|-- docs/                      # Documentation
+|   |-- USER_GUIDE.md          #   This file
+|   \-- images/                #   Screenshots
+|
+|-- .env.example               # API key template
+|-- requirements.txt           # Python dependencies
+\-- README.md                  # Project overview
 ```
 
 ---

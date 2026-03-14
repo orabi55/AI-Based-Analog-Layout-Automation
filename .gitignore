@@ -27,6 +27,7 @@ dist/
 Thumbs.db
 
 # Logs
+logs/
 *.log
 
 # Secrets / local config
@@ -37,3 +38,7 @@ Thumbs.db
 # Archives
 *.rar
 *.zip
+
+# Generated placement files (keep source .sp and .oas, ignore intermediates)
+*_graph.json
+*_placed.json
