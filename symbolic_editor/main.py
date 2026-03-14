@@ -234,6 +234,9 @@ class MainWindow(QMainWindow):
         self._rows_virtual_min = 0
         self._cols_virtual_min = 0
         self._ignore_grid_spin_change = False
+        self._original_data = None  # raw loaded JSON (for edges + terminals)
+        self.nodes = None
+
 
         # Load placement data
         self._load_data(placement_file)
@@ -882,6 +885,8 @@ class MainWindow(QMainWindow):
     # -------------------------------------------------
     def _load_data(self, filepath):
         """Load placement JSON into internal state."""
+        if filepath == None or not os.path.isfile(filepath): 
+            return
         with open(filepath) as f:
             data = json.load(f)
         if "nodes" not in data:
@@ -926,6 +931,8 @@ class MainWindow(QMainWindow):
             compact: passed to editor.load_placement. Set False to
                      preserve exact node positions (after AI swap/move).
         """
+        if not self._original_data:
+            return
         edges = self._original_data.get("edges")
         self.device_tree.set_edges(edges)
         self.device_tree.set_terminal_nets(self._terminal_nets)
@@ -1039,8 +1046,9 @@ class MainWindow(QMainWindow):
     # -------------------------------------------------
     def _push_undo(self):
         """Snapshot current positions onto the undo stack."""
+        if not self.nodes:
+            return
         snapshot = copy.deepcopy(self.nodes)
-        print("Pushing undo snapshot:", snapshot)
         self._undo_stack.append(snapshot)
         self._redo_stack.clear()
         self._update_undo_redo_state()
@@ -1077,11 +1085,9 @@ class MainWindow(QMainWindow):
             return
         # Make sure current canvas positions are synced before saving to redo
         self._sync_node_positions()
-        print("Pushing redo snapshot:", self.nodes)
         self._redo_stack.append(copy.deepcopy(self.nodes))
         # Restore previous state
         self.nodes = self._undo_stack.pop()
-        print("Popped undo snapshot:", self.nodes)
         self._original_data["nodes"] = self.nodes
         self._refresh_panels()
         self._update_undo_redo_state()
@@ -2272,7 +2278,7 @@ if __name__ == "__main__":
         if not os.path.isabs(placement_path):
             placement_path = os.path.abspath(placement_path)
     else:
-        placement_path = os.path.join(script_dir, "..", "CM_initial_placement.json")
+        placement_path = None
 
     window = MainWindow(placement_path)
     window.show()
