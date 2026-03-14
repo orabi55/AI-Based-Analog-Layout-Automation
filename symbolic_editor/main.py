@@ -174,21 +174,6 @@ class ImportDialog(QDialog):
 
         layout.addWidget(files_group)
 
-        # --- Options ---
-        options_group = QGroupBox("Placement Options")
-        options_layout = QVBoxLayout(options_group)
-
-        self._ai_check = QCheckBox("Run AI Initial Placement (requires API key)")
-        self._ai_check.setChecked(False)
-        options_layout.addWidget(self._ai_check)
-
-        ai_note = QLabel("If unchecked, devices are placed on a simple grid for quick preview.")
-        ai_note.setStyleSheet("font-size: 8pt; color: #667788; margin-left: 24px;")
-        ai_note.setWordWrap(True)
-        options_layout.addWidget(ai_note)
-
-        layout.addWidget(options_group)
-
         # --- Buttons ---
         btn_row = QHBoxLayout()
         btn_row.addStretch()
@@ -204,7 +189,6 @@ class ImportDialog(QDialog):
         # Results
         self.sp_path = ""
         self.oas_path = ""
-        self.run_ai_placement = False
 
     def _browse_sp(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -229,7 +213,6 @@ class ImportDialog(QDialog):
             return
         self.sp_path = self._sp_edit.text().strip()
         self.oas_path = self._oas_edit.text().strip()
-        self.run_ai_placement = self._ai_check.isChecked()
         self.accept()
 
 
@@ -463,9 +446,10 @@ class MainWindow(QMainWindow):
         file_menu.addAction(self._act_view_klayout)
 
         design_menu = mb.addMenu("Design")
-        a = QAction("Design Placeholder", self)
-        a.setEnabled(False)
-        design_menu.addAction(a)
+        self._act_ai_placement = QAction("Run AI Initial Placement", self)
+        self._act_ai_placement.setShortcut(QKeySequence("Ctrl+P"))
+        self._act_ai_placement.triggered.connect(self._on_run_ai_placement)
+        design_menu.addAction(self._act_ai_placement)
 
         view_menu = mb.addMenu("View")
         a = QAction("View Placeholder", self)
@@ -1348,17 +1332,16 @@ class MainWindow(QMainWindow):
     # Import from Netlist + Layout
     # -------------------------------------------------
     def _on_import_netlist_layout(self):
-        """Open the import dialog and run the parse → place pipeline."""
+        """Open the import dialog, parse files, and visualize the graph."""
         dlg = ImportDialog(self)
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
 
         sp_path = dlg.sp_path
         oas_path = dlg.oas_path
-        run_ai = dlg.run_ai_placement
 
         # Show progress
-        progress = QProgressDialog("Parsing design files…", None, 0, 0, self)
+        progress = QProgressDialog("Parsing design files...", None, 0, 0, self)
         progress.setWindowTitle("Import")
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(0)
@@ -1383,36 +1366,95 @@ class MainWindow(QMainWindow):
             )
             return
 
-        # Optional AI placement
-        if run_ai:
-            progress.setLabelText("Running AI initial placement…")
-            QApplication.processEvents()
-            try:
-                data = self._run_ai_initial_placement(data)
-            except Exception as e:
-                progress.close()
-                QMessageBox.warning(
-                    self, "AI Placement Failed",
-                    f"AI placement failed (grid placement used instead):\n\n{e}",
-                )
-
         progress.close()
 
-        # Save the generated data to a JSON file next to the .sp file
+        # Save the generated graph JSON next to the .sp file
         base_name = os.path.splitext(os.path.basename(sp_path))[0]
         sp_dir = os.path.dirname(os.path.abspath(sp_path))
-        out_path = os.path.join(sp_dir, f"{base_name}_initial_placement.json")
+        out_path = os.path.join(sp_dir, f"{base_name}_graph.json")
         with open(out_path, "w") as f:
             json.dump(data, f, indent=4)
 
         # Load into the GUI
         self._load_from_data_dict(data, out_path)
 
+        num_nodes = len(data.get('nodes', []))
         self.chat_panel._append_message(
             "AI",
-            f"✅ Imported {len(data.get('nodes', []))} devices from "
+            f"Imported {num_nodes} devices from "
             f"{os.path.basename(sp_path)}\n"
-            f"Saved to: {os.path.basename(out_path)}",
+            f"Saved graph to: {os.path.basename(out_path)}\n\n"
+            f"To run AI initial placement: Design > Run AI Initial Placement (Ctrl+P)",
+            "#e8f4fd", "#1a1a2e",
+        )
+
+    # -------------------------------------------------
+    # Run AI Initial Placement (Design menu)
+    # -------------------------------------------------
+    def _on_run_ai_placement(self):
+        """Run AI initial placement on the currently loaded data."""
+        if not self.nodes:
+            self.chat_panel._append_message(
+                "AI", "No layout loaded. Import a netlist first (Ctrl+I).",
+                "#fde8e8", "#a00",
+            )
+            return
+
+        # Build the data dict from current state
+        self._sync_node_positions()
+        data = copy.deepcopy(self._build_output_data())
+        if "terminal_nets" not in data:
+            data["terminal_nets"] = self._terminal_nets
+
+        progress = QProgressDialog("Running AI initial placement...", None, 0, 0, self)
+        progress.setWindowTitle("AI Placement")
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setMinimumDuration(0)
+        progress.setStyleSheet("""
+            QProgressDialog {
+                background-color: #1a1f2b;
+                color: #c8d0dc;
+                font-family: 'Segoe UI';
+            }
+            QLabel { color: #c8d0dc; font-size: 10pt; }
+        """)
+        progress.show()
+        QApplication.processEvents()
+
+        try:
+            data = self._run_ai_initial_placement(data)
+        except Exception as e:
+            progress.close()
+            QMessageBox.warning(
+                self, "AI Placement Failed",
+                f"AI placement failed:\n\n{e}",
+            )
+            return
+
+        progress.close()
+
+        # Save the placement JSON
+        if self._current_file:
+            base = os.path.splitext(self._current_file)[0]
+            # Replace _graph with _placement, or append _placement
+            if base.endswith("_graph"):
+                out_path = base.replace("_graph", "_initial_placement") + ".json"
+            else:
+                out_path = base + "_placed.json"
+        else:
+            out_path = os.path.join(os.getcwd(), "placement.json")
+
+        with open(out_path, "w") as f:
+            json.dump(data, f, indent=4)
+
+        # Load the updated placement into the GUI
+        self._load_from_data_dict(data, out_path)
+
+        self.chat_panel._append_message(
+            "AI",
+            f"AI initial placement complete!\n"
+            f"Saved to: {os.path.basename(out_path)}\n"
+            f"You can now edit the layout, swap devices, or chat with the AI.",
             "#e8f4fd", "#1a1a2e",
         )
 
