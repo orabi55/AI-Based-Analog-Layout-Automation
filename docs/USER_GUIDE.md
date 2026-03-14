@@ -11,12 +11,13 @@
 3. [Installation](#3-installation)
 4. [Running the Application](#4-running-the-application)
 5. [User Interface Overview](#5-user-interface-overview)
-6. [Working with Layouts](#6-working-with-layouts)
-7. [Canvas Operations](#7-canvas-operations)
-8. [AI Chat Assistant](#8-ai-chat-assistant)
-9. [Examples & Tutorials](#9-examples--tutorials)
-10. [Troubleshooting & FAQ](#10-troubleshooting--faq)
-11. [Project Structure Reference](#11-project-structure-reference)
+6. [Generating an Initial Placement (Full Pipeline)](#6-generating-an-initial-placement-full-pipeline)
+7. [Working with Layouts](#7-working-with-layouts)
+8. [Canvas Operations](#8-canvas-operations)
+9. [AI Chat Assistant](#9-ai-chat-assistant)
+10. [Examples & Tutorials](#10-examples--tutorials)
+11. [Troubleshooting & FAQ](#11-troubleshooting--faq)
+12. [Project Structure Reference](#12-project-structure-reference)
 
 ---
 
@@ -177,7 +178,162 @@ The application window has three main panels:
 
 ---
 
-## 6. Working with Layouts
+## 6. Generating an Initial Placement (Full Pipeline)
+
+This is the **core workflow** of the tool — going from raw design files to a fully placed symbolic layout.
+
+### Overview
+
+The pipeline has **3 stages**:
+
+```
+┌─────────────────────┐     ┌──────────────────────┐     ┌─────────────────────┐
+│  STAGE 1: Parser    │     │  STAGE 2: AI Placer  │     │  STAGE 3: GUI       │
+│                     │     │                      │     │                     │
+│  Inputs:            │     │  Input:              │     │  Input:             │
+│  • circuit.sp       │ ──► │  • layout_graph.json │ ──► │  • placement.json   │
+│  • circuit.oas      │     │                      │     │                     │
+│                     │     │  Output:             │     │  Features:          │
+│  Output:            │     │  • placement.json    │     │  • Visual editing   │
+│  • layout_graph.json│     │    (with x,y coords) │     │  • AI chat refine   │
+└─────────────────────┘     └──────────────────────┘     └─────────────────────┘
+```
+
+### Stage 1 — Parsing (Netlist + Layout → Graph JSON)
+
+The `parser/` module reads your input files and produces a **layout graph JSON** — the symbolic representation of your circuit.
+
+**What you need:**
+- A **SPICE netlist** (`.sp`) — describes transistor connectivity (which nets connect to D, G, S of each device).
+- A **layout file** (`.oas` or `.gds`) — provides physical cell geometry (device widths, heights, positions from the PDK).
+
+**What happens internally:**
+
+| Step | Module | What It Does |
+|------|--------|--------------|
+| 1 | `parser/netlist_reader.py` | Reads the `.sp` file, flattens hierarchy, expands multi-finger devices (nf>1 → individual fingers) |
+| 2 | `parser/layout_reader.py` | Reads the `.oas`/`.gds` file, extracts transistor instances with positions, widths, heights |
+| 3 | `parser/device_matcher.py` | Matches each netlist device to its layout instance (NMOS↔NMOS, PMOS↔PMOS, by position order) |
+| 4 | `parser/circuit_graph.py` | Builds a connectivity graph — nodes are devices, edges are shared nets (gate, drain, source connections) |
+
+**How to run it:**
+
+Use the included `generate_cm.py` as a reference. Here's how to write your own script:
+
+```python
+import json
+import os
+from parser.layout_reader import extract_layout_instances
+from parser.netlist_reader import read_netlist
+from parser.circuit_graph import build_circuit_graph
+
+# ----- Paths to your design files -----
+oas_file = "your_circuit.oas"   # Layout (physical geometry)
+sp_file  = "your_circuit.sp"    # Netlist (connectivity)
+
+# ----- Stage 1a: Parse layout -----
+instances = extract_layout_instances(oas_file)
+
+# ----- Stage 1b: Parse netlist -----
+netlist = read_netlist(sp_file)
+
+# ----- Stage 1c: Combine into graph -----
+nodes = []
+for dev_name, dev in netlist.devices.items():
+    dev_type = "nmos" if "n" in dev.type.lower() else "pmos"
+    nodes.append({
+        "id": dev_name,
+        "type": dev_type,
+        "electrical": {
+            "l": dev.params.get("l", 0),
+            "nf": dev.params.get("nf", 1),
+            "nfin": dev.params.get("nfin", 1),
+        },
+        "geometry": {
+            "x": 0.0,  "y": 0.0,   # placeholder — AI placer assigns these
+            "width": 0.294, "height": 0.668,
+            "orientation": "R0"
+        }
+    })
+
+G = build_circuit_graph(netlist)
+edges = [{"source": u, "target": v, "net": d.get("net", "")}
+         for u, v, d in G.edges(data=True)]
+
+# ----- Save the graph JSON -----
+with open("my_circuit_graph.json", "w") as f:
+    json.dump({"nodes": nodes, "edges": edges}, f, indent=4)
+
+print("Graph JSON saved — ready for AI placement!")
+```
+
+**Output:** A `*_layout_graph.json` file containing all devices (as nodes) and their net connections (as edges), but **without optimized x/y positions yet**.
+
+---
+
+### Stage 2 — AI Initial Placement (Graph → Placed JSON)
+
+The **Gemini Placer** (`ai_agent/gemini_placer.py`) sends the graph JSON to the Gemini LLM, which assigns optimized x/y coordinates to every device based on analog placement rules.
+
+**What it does:**
+1. Reads the graph JSON (nodes + edges).
+2. Analyses net adjacency and device types.
+3. Builds a detailed prompt with DRC and floorplanning rules.
+4. Sends to Gemini API → receives placement coordinates.
+5. Validates the result (no overlaps, no missing devices, correct row assignments).
+6. Saves the output as a placement JSON.
+
+**How to run it:**
+
+```python
+from ai_agent.gemini_placer import gemini_generate_placement
+
+# Make sure GEMINI_API_KEY is set in your .env file
+gemini_generate_placement(
+    input_json  = "my_circuit_graph.json",     # from Stage 1
+    output_json = "my_circuit_placement.json",  # AI-placed output
+)
+```
+
+> **Note:** This requires a valid `GEMINI_API_KEY` in your `.env` file.
+
+---
+
+### Stage 3 — Visualize & Refine in the GUI
+
+Load the placed JSON into the Symbolic Layout Editor to see and refine the result:
+
+```bash
+python symbolic_editor/main.py my_circuit_placement.json
+```
+
+From here you can:
+- **Visually inspect** the placement (PMOS on top, NMOS on bottom).
+- **Manually adjust** — swap devices, move, flip, add dummies.
+- **Ask the AI Chat** to optimise further: *"Optimize this layout for matched current mirrors"*.
+- **Save / Export** the final result.
+
+---
+
+### Complete Example: Current Mirror
+
+Here's the full pipeline with the included Current Mirror example:
+
+```bash
+# Step 1: Generate graph JSON from netlist + layout
+python generate_cm.py
+# Output: CM_initial_placement.json
+
+# Step 2: (Optional) Run AI placer for optimized coordinates
+python -c "from ai_agent.gemini_placer import gemini_generate_placement; gemini_generate_placement('CM_initial_placement.json', 'CM_placed.json')"
+
+# Step 3: Open in GUI
+python symbolic_editor/main.py CM_initial_placement.json
+```
+
+---
+
+## 7. Working with Layouts
 
 ### Input Files
 
@@ -227,7 +383,7 @@ A placement JSON file contains:
 
 ---
 
-## 7. Canvas Operations
+## 8. Canvas Operations
 
 ### Selecting Devices
 - **Click** a device to select it. Selected devices get a blue highlight.
@@ -290,7 +446,7 @@ A placement JSON file contains:
 
 ---
 
-## 8. AI Chat Assistant
+## 9. AI Chat Assistant
 
 ### How It Works
 
@@ -347,7 +503,7 @@ These are automatically parsed and applied to your layout. Supported actions:
 
 ---
 
-## 9. Examples & Tutorials
+## 10. Examples & Tutorials
 
 The `examples/` directory contains ready-to-use circuits:
 
@@ -397,7 +553,7 @@ python symbolic_editor/main.py examples/std_cell/Std_Cell_initial_placement.json
 
 ---
 
-## 10. Troubleshooting & FAQ
+## 11. Troubleshooting & FAQ
 
 ### "All AI models failed"
 
@@ -438,25 +594,11 @@ pip install -r requirements.txt
 
 ### How do I generate a placement JSON from a new circuit?
 
-1. Place your `.sp` (SPICE netlist) and `.oas` (OASIS layout) files in a directory.
-2. Use the parser module to generate the initial placement:
-
-```python
-from parser.netlist_reader import read_netlist
-from parser.layout_reader import read_layout
-from parser.device_matcher import match_devices
-
-# Read inputs
-netlist = read_netlist("your_circuit.sp")
-layout = read_layout("your_circuit.oas")
-
-# Match and generate placement JSON
-placement = match_devices(netlist, layout)
-```
+See [Section 6 — Generating an Initial Placement](#6-generating-an-initial-placement-full-pipeline) for the full step-by-step pipeline.
 
 ---
 
-## 11. Project Structure Reference
+## 12. Project Structure Reference
 
 ```
 AI-Based-Analog-Layout-Automation/
