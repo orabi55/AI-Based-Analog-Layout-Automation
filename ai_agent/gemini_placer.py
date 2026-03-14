@@ -251,6 +251,6 @@ Return ONLY raw JSON. Do not include explanations, markdown, or text outside the
 
     # Save result
     with open(output_json, "w") as f:
-        json.dump(output_data, f, indent=4)
+        json.dump(placement, f, indent=4)
 
     print("Placement saved to:", output_json)
