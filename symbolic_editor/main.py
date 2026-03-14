@@ -30,6 +30,14 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QCheckBox,
     QDoubleSpinBox,
+    QDialog,
+    QFormLayout,
+    QPushButton,
+    QProgressDialog,
+    QMessageBox,
+    QGroupBox,
+    QDialogButtonBox,
+    QLineEdit,
 )
 from PySide6.QtCore import Qt, QTimer, QSize
 from PySide6.QtGui import QFont, QAction, QKeySequence, QColor, QPalette
@@ -46,6 +54,182 @@ from icons import (
     icon_flip_h, icon_flip_v,
     icon_merge_ss, icon_merge_dd, icon_add_dummy,
 )
+
+
+# -------------------------------------------------
+# Import Dialog — select .sp + .oas and parse
+# -------------------------------------------------
+class ImportDialog(QDialog):
+    """Dialog for importing a SPICE netlist and layout file."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Import from Netlist + Layout")
+        self.setMinimumWidth(520)
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #1a1f2b;
+                color: #c8d0dc;
+                font-family: 'Segoe UI';
+            }
+            QLabel {
+                color: #c8d0dc;
+                font-size: 10pt;
+            }
+            QLineEdit {
+                background-color: #232a38;
+                color: #c8d0dc;
+                border: 1px solid #2d3548;
+                border-radius: 6px;
+                padding: 6px 10px;
+                font-size: 10pt;
+            }
+            QPushButton {
+                background-color: #2a3345;
+                color: #c8d0dc;
+                border: 1px solid #3d5066;
+                border-radius: 6px;
+                padding: 6px 16px;
+                font-size: 10pt;
+            }
+            QPushButton:hover {
+                background-color: #3d5066;
+                color: #ffffff;
+            }
+            QPushButton#ok_btn {
+                background-color: #4a90d9;
+                border-color: #4a90d9;
+                color: #ffffff;
+                font-weight: bold;
+            }
+            QPushButton#ok_btn:hover {
+                background-color: #5da0e9;
+            }
+            QCheckBox {
+                color: #c8d0dc;
+                font-size: 10pt;
+                spacing: 8px;
+            }
+            QCheckBox::indicator {
+                width: 16px; height: 16px;
+            }
+            QGroupBox {
+                color: #8899aa;
+                border: 1px solid #2d3548;
+                border-radius: 8px;
+                margin-top: 12px;
+                padding-top: 16px;
+                font-size: 9pt;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 12px;
+                padding: 0 6px;
+            }
+        """)
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        # Title
+        title = QLabel("Import Circuit from Design Files")
+        title.setStyleSheet("font-size: 13pt; font-weight: bold; color: #e0e8f0;")
+        layout.addWidget(title)
+
+        subtitle = QLabel("Select a SPICE netlist and (optionally) a layout file to generate the placement.")
+        subtitle.setStyleSheet("font-size: 9pt; color: #8899aa; margin-bottom: 8px;")
+        subtitle.setWordWrap(True)
+        layout.addWidget(subtitle)
+
+        # --- File pickers ---
+        files_group = QGroupBox("Design Files")
+        files_layout = QFormLayout(files_group)
+        files_layout.setSpacing(10)
+
+        # Netlist (.sp)
+        sp_row = QHBoxLayout()
+        self._sp_edit = QLineEdit()
+        self._sp_edit.setPlaceholderText("Select a .sp netlist file (required)")
+        self._sp_edit.setReadOnly(True)
+        sp_btn = QPushButton("Browse…")
+        sp_btn.setFixedWidth(90)
+        sp_btn.clicked.connect(self._browse_sp)
+        sp_row.addWidget(self._sp_edit, 1)
+        sp_row.addWidget(sp_btn)
+        files_layout.addRow("SPICE Netlist:", sp_row)
+
+        # Layout (.oas / .gds)
+        oas_row = QHBoxLayout()
+        self._oas_edit = QLineEdit()
+        self._oas_edit.setPlaceholderText("Select a .oas/.gds layout file (optional)")
+        self._oas_edit.setReadOnly(True)
+        oas_btn = QPushButton("Browse…")
+        oas_btn.setFixedWidth(90)
+        oas_btn.clicked.connect(self._browse_oas)
+        oas_row.addWidget(self._oas_edit, 1)
+        oas_row.addWidget(oas_btn)
+        files_layout.addRow("Layout File:", oas_row)
+
+        layout.addWidget(files_group)
+
+        # --- Options ---
+        options_group = QGroupBox("Placement Options")
+        options_layout = QVBoxLayout(options_group)
+
+        self._ai_check = QCheckBox("Run AI Initial Placement (requires API key)")
+        self._ai_check.setChecked(False)
+        options_layout.addWidget(self._ai_check)
+
+        ai_note = QLabel("If unchecked, devices are placed on a simple grid for quick preview.")
+        ai_note.setStyleSheet("font-size: 8pt; color: #667788; margin-left: 24px;")
+        ai_note.setWordWrap(True)
+        options_layout.addWidget(ai_note)
+
+        layout.addWidget(options_group)
+
+        # --- Buttons ---
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+        btn_row.addWidget(cancel_btn)
+        ok_btn = QPushButton("Import")
+        ok_btn.setObjectName("ok_btn")
+        ok_btn.clicked.connect(self._on_ok)
+        btn_row.addWidget(ok_btn)
+        layout.addLayout(btn_row)
+
+        # Results
+        self.sp_path = ""
+        self.oas_path = ""
+        self.run_ai_placement = False
+
+    def _browse_sp(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select SPICE Netlist", "",
+            "SPICE Files (*.sp *.spice *.cdl *.cir);;All Files (*)"
+        )
+        if path:
+            self._sp_edit.setText(path)
+
+    def _browse_oas(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select Layout File", "",
+            "Layout Files (*.oas *.gds);;All Files (*)"
+        )
+        if path:
+            self._oas_edit.setText(path)
+
+    def _on_ok(self):
+        if not self._sp_edit.text().strip():
+            QMessageBox.warning(self, "Missing File",
+                                "Please select a SPICE netlist (.sp) file.")
+            return
+        self.sp_path = self._sp_edit.text().strip()
+        self.oas_path = self._oas_edit.text().strip()
+        self.run_ai_placement = self._ai_check.isChecked()
+        self.accept()
 
 
 # -------------------------------------------------
@@ -243,6 +427,13 @@ class MainWindow(QMainWindow):
         self._act_file_load.setShortcut(QKeySequence("Ctrl+O"))
         self._act_file_load.triggered.connect(self._on_load)
         file_menu.addAction(self._act_file_load)
+
+        self._act_import = QAction("Import from Netlist + Layout…", self)
+        self._act_import.setShortcut(QKeySequence("Ctrl+I"))
+        self._act_import.triggered.connect(self._on_import_netlist_layout)
+        file_menu.addAction(self._act_import)
+
+        file_menu.addSeparator()
 
         self._act_file_save = QAction("Save", self)
         self._act_file_save.setShortcut(QKeySequence("Ctrl+S"))
@@ -1153,6 +1344,243 @@ class MainWindow(QMainWindow):
         )
 
     # -------------------------------------------------
+    # Import from Netlist + Layout
+    # -------------------------------------------------
+    def _on_import_netlist_layout(self):
+        """Open the import dialog and run the parse → place pipeline."""
+        dlg = ImportDialog(self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        sp_path = dlg.sp_path
+        oas_path = dlg.oas_path
+        run_ai = dlg.run_ai_placement
+
+        # Show progress
+        progress = QProgressDialog("Parsing design files…", None, 0, 0, self)
+        progress.setWindowTitle("Import")
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setMinimumDuration(0)
+        progress.setStyleSheet("""
+            QProgressDialog {
+                background-color: #1a1f2b;
+                color: #c8d0dc;
+                font-family: 'Segoe UI';
+            }
+            QLabel { color: #c8d0dc; font-size: 10pt; }
+        """)
+        progress.show()
+        QApplication.processEvents()
+
+        try:
+            data = self._run_parser_pipeline(sp_path, oas_path)
+        except Exception as e:
+            progress.close()
+            QMessageBox.critical(
+                self, "Import Failed",
+                f"Failed to parse design files:\n\n{e}",
+            )
+            return
+
+        # Optional AI placement
+        if run_ai:
+            progress.setLabelText("Running AI initial placement…")
+            QApplication.processEvents()
+            try:
+                data = self._run_ai_initial_placement(data)
+            except Exception as e:
+                progress.close()
+                QMessageBox.warning(
+                    self, "AI Placement Failed",
+                    f"AI placement failed (grid placement used instead):\n\n{e}",
+                )
+
+        progress.close()
+
+        # Save the generated data to a JSON file next to the .sp file
+        base_name = os.path.splitext(os.path.basename(sp_path))[0]
+        sp_dir = os.path.dirname(os.path.abspath(sp_path))
+        out_path = os.path.join(sp_dir, f"{base_name}_initial_placement.json")
+        with open(out_path, "w") as f:
+            json.dump(data, f, indent=4)
+
+        # Load into the GUI
+        self._load_from_data_dict(data, out_path)
+
+        self.chat_panel._append_message(
+            "AI",
+            f"✅ Imported {len(data.get('nodes', []))} devices from "
+            f"{os.path.basename(sp_path)}\n"
+            f"Saved to: {os.path.basename(out_path)}",
+            "#e8f4fd", "#1a1a2e",
+        )
+
+    @staticmethod
+    def _run_parser_pipeline(sp_path, oas_path=""):
+        """
+        Run the full parser pipeline:
+          1. Parse SPICE netlist → Netlist object
+          2. Parse layout (.oas/.gds) → device instances (optional)
+          3. Build circuit graph → edges
+          4. Assemble nodes with geometry + edges into a dict
+
+        Returns: {"nodes": [...], "edges": [...], "terminal_nets": {...}}
+        """
+        from parser.netlist_reader import read_netlist
+        from parser.circuit_graph import build_circuit_graph
+
+        # 1. Parse netlist
+        netlist = read_netlist(sp_path)
+
+        # 2. Parse layout (optional)
+        layout_instances = []
+        if oas_path and os.path.isfile(oas_path):
+            try:
+                from parser.layout_reader import extract_layout_instances
+                layout_instances = extract_layout_instances(oas_path)
+            except Exception as e:
+                print(f"[Import] Layout parsing failed ({e}), using placeholder geometry")
+
+        # Build a lookup for layout geometry
+        layout_map = {}
+        if layout_instances:
+            # Index by cell name for matching
+            for inst in layout_instances:
+                layout_map[inst["cell"]] = inst
+
+        # 3. Build nodes
+        PITCH_UM = 0.294
+        ROW_HEIGHT_UM = 0.668
+        nmos_idx = 0
+        pmos_idx = 0
+        nodes = []
+        terminal_nets = {}
+
+        for dev_name, dev in netlist.devices.items():
+            dev_type = "nmos" if "n" in dev.type.lower() else "pmos"
+
+            # Try to get geometry from layout
+            inst = layout_map.get(dev_name)
+            if inst:
+                geom = {
+                    "x": inst["x"],
+                    "y": inst["y"],
+                    "width": inst.get("width", PITCH_UM),
+                    "height": inst.get("height", ROW_HEIGHT_UM),
+                    "orientation": inst.get("orientation", "R0"),
+                }
+            else:
+                # Grid-based default placement
+                if dev_type == "pmos":
+                    geom = {
+                        "x": pmos_idx * PITCH_UM,
+                        "y": ROW_HEIGHT_UM,
+                        "width": PITCH_UM,
+                        "height": ROW_HEIGHT_UM,
+                        "orientation": "R0",
+                    }
+                    pmos_idx += 1
+                else:
+                    geom = {
+                        "x": nmos_idx * PITCH_UM,
+                        "y": 0.0,
+                        "width": PITCH_UM,
+                        "height": ROW_HEIGHT_UM,
+                        "orientation": "R0",
+                    }
+                    nmos_idx += 1
+
+            electrical = {
+                "l": dev.params.get("l", 1.4e-08),
+                "nf": dev.params.get("nf", 1),
+                "nfin": dev.params.get("nfin", 1),
+            }
+
+            nodes.append({
+                "id": dev_name,
+                "type": dev_type,
+                "electrical": electrical,
+                "geometry": geom,
+            })
+
+            # Build terminal nets
+            if hasattr(dev, 'pins') and dev.pins:
+                terminal_nets[dev_name] = {
+                    "D": dev.pins.get("D", ""),
+                    "G": dev.pins.get("G", ""),
+                    "S": dev.pins.get("S", ""),
+                }
+
+        # 4. Build edges from circuit graph
+        G = build_circuit_graph(netlist)
+        edges = [
+            {"source": u, "target": v, "net": d.get("net", "")}
+            for u, v, d in G.edges(data=True)
+        ]
+
+        return {
+            "nodes": nodes,
+            "edges": edges,
+            "terminal_nets": terminal_nets,
+        }
+
+    @staticmethod
+    def _run_ai_initial_placement(data):
+        """
+        Send the parsed graph to Gemini for AI-based initial placement.
+        Updates x/y coordinates in the nodes and returns the updated data.
+        """
+        import tempfile
+        from ai_agent.gemini_placer import gemini_generate_placement, sanitize_json
+
+        # Write to temp file for the placer
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", delete=False
+        ) as tmp_in:
+            json.dump(data, tmp_in, indent=2)
+            tmp_in_path = tmp_in.name
+
+        tmp_out_path = tmp_in_path.replace(".json", "_placed.json")
+
+        try:
+            gemini_generate_placement(tmp_in_path, tmp_out_path)
+            with open(tmp_out_path) as f:
+                placed = json.load(f)
+            # Merge placed coordinates back into original data
+            if "nodes" in placed:
+                placed_map = {n["id"]: n for n in placed["nodes"] if "id" in n}
+                for node in data["nodes"]:
+                    if node["id"] in placed_map:
+                        placed_node = placed_map[node["id"]]
+                        if "geometry" in placed_node:
+                            node["geometry"].update(placed_node["geometry"])
+        finally:
+            # Clean up temp files
+            for p in (tmp_in_path, tmp_out_path):
+                try:
+                    os.unlink(p)
+                except OSError:
+                    pass
+
+        return data
+
+    def _load_from_data_dict(self, data, file_path):
+        """
+        Load a placement data dict (with nodes, edges, terminal_nets)
+        directly into the GUI without reading from a file.
+        """
+        self._push_undo()
+        self._original_data = data
+        self.nodes = data["nodes"]
+        self._terminal_nets = data.get("terminal_nets", {})
+        self._current_file = file_path
+        self._refresh_panels()
+        self.setWindowTitle(
+            f"Symbolic Layout Editor \u2014 {os.path.basename(file_path)}"
+        )
+        QTimer.singleShot(100, self.editor.fit_to_view)
+
+    # -------------------------------------------------
     # Load / Save / Export
     # -------------------------------------------------
     def _on_load(self):
@@ -1165,7 +1593,7 @@ class MainWindow(QMainWindow):
         self._current_file = file_path
         self._load_data(file_path)
         self._refresh_panels()
-        self.setWindowTitle(f"Symbolic Layout Editor — {os.path.basename(file_path)}")
+        self.setWindowTitle(f"Symbolic Layout Editor \u2014 {os.path.basename(file_path)}")
 
     def _on_save(self):
         """Save to the current file (overwrite)."""
@@ -1791,9 +2219,6 @@ if __name__ == "__main__":
     """)
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
-<<<<<<< Updated upstream
-    placement_path = os.path.join(script_dir, "..", "examples", "xor", "Xor_initial_placement.json")
-=======
     if len(sys.argv) > 1:
         placement_path = sys.argv[1]
         # Resolve relative to current working directory if not absolute
@@ -1801,7 +2226,6 @@ if __name__ == "__main__":
             placement_path = os.path.abspath(placement_path)
     else:
         placement_path = os.path.join(script_dir, "..", "CM_initial_placement.json")
->>>>>>> Stashed changes
 
     window = MainWindow(placement_path)
     window.show()
