@@ -9,11 +9,15 @@
                 "nfin": 5.0
             },
             "geometry": {
-                "x": 0.406,
-                "y": 0.0,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 0.322,
+                "y": 1.0354,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI1",
+                "subckt": "Inverter"
             }
         },
         {
@@ -25,11 +29,15 @@
                 "nfin": 5.0
             },
             "geometry": {
-                "x": 0.406,
-                "y": 1.218,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 0.322,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI1",
+                "subckt": "Inverter"
             }
         },
         {
@@ -42,10 +50,14 @@
             },
             "geometry": {
                 "x": 0.0,
-                "y": 0.0,
+                "y": 1.0354,
                 "width": 0.294,
-                "height": 0.718,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI0",
+                "subckt": "Inverter"
             }
         },
         {
@@ -58,10 +70,14 @@
             },
             "geometry": {
                 "x": 0.0,
-                "y": 1.218,
+                "y": 0.0,
                 "width": 0.294,
-                "height": 0.718,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI0",
+                "subckt": "Inverter"
             }
         },
         {
@@ -73,11 +89,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 5.04,
-                "y": 1.218,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 0.938,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
             }
         },
         {
@@ -89,11 +109,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 5.408,
-                "y": 1.218,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 0.644,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
             }
         },
         {
@@ -105,11 +129,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 5.782,
-                "y": 1.218,
-                "width": 0.368,
-                "height": 0.718,
+                "x": 1.526,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
             }
         },
         {
@@ -121,11 +149,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 6.15,
-                "y": 1.218,
-                "width": 0.368,
-                "height": 0.718,
+                "x": 1.232,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
             }
         },
         {
@@ -137,11 +169,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 6.518,
-                "y": 1.218,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 2.114,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
             }
         },
         {
@@ -153,11 +189,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 6.886,
-                "y": 1.218,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 1.82,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
             }
         },
         {
@@ -169,11 +209,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 7.254,
-                "y": 1.218,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 3.29,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
             }
         },
         {
@@ -185,11 +229,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 7.622,
-                "y": 1.218,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 2.996,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
             }
         },
         {
@@ -201,11 +249,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 7.99,
-                "y": 1.218,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 3.878,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
             }
         },
         {
@@ -217,11 +269,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 3.822,
-                "y": 10.0161,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 3.584,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
             }
         },
         {
@@ -233,11 +289,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 7.35,
-                "y": 10.0161,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 2.702,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
             }
         },
         {
@@ -249,11 +309,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 6.7620000000000005,
-                "y": 10.0161,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 2.408,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
             }
         },
         {
@@ -265,11 +329,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 12.053999999999998,
-                "y": 11.129,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 0.938,
+                "y": 1.0354,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
             }
         },
         {
@@ -281,11 +349,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 12.642,
-                "y": 11.129,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 0.644,
+                "y": 1.0354,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
             }
         },
         {
@@ -297,11 +369,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 0.882,
-                "y": 8.9032,
+                "x": 3.29,
+                "y": 1.0354,
                 "width": 0.294,
-                "height": 0.718,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
             }
         },
         {
@@ -313,11 +389,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 1.176,
-                "y": 8.9032,
+                "x": 2.996,
+                "y": 1.0354,
                 "width": 0.294,
-                "height": 0.718,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
             }
         },
         {
@@ -329,11 +409,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 13.23,
-                "y": 11.129,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 1.526,
+                "y": 1.0354,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
             }
         },
         {
@@ -345,11 +429,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 13.818000000000001,
-                "y": 11.129,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 1.232,
+                "y": 1.0354,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
             }
         },
         {
@@ -361,11 +449,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 14.994,
-                "y": 11.129,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 2.114,
+                "y": 1.0354,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
             }
         },
         {
@@ -377,11 +469,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 14.406,
-                "y": 11.129,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 1.82,
+                "y": 1.0354,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
             }
         },
         {
@@ -393,11 +489,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 16.169999999999998,
-                "y": 11.129,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 2.702,
+                "y": 1.0354,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
             }
         },
         {
@@ -409,11 +509,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 15.581999999999999,
-                "y": 11.129,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 2.408,
+                "y": 1.0354,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
             }
         },
         {
@@ -425,11 +529,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 7.938,
-                "y": 11.129,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 3.878,
+                "y": 1.0354,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
             }
         },
         {
@@ -441,11 +549,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 8.526,
-                "y": 11.129,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 3.584,
+                "y": 1.0354,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
             }
         },
         {
@@ -457,11 +569,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 13.23,
-                "y": 10.0161,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 4.5,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
             }
         },
         {
@@ -473,11 +589,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 12.642,
-                "y": 10.0161,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 4.206,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
             }
         },
         {
@@ -489,11 +609,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 10.29,
-                "y": 10.0161,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 5.088,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
             }
         },
         {
@@ -505,11 +629,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 10.878,
-                "y": 10.0161,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 4.794,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
             }
         },
         {
@@ -521,11 +649,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 9.114,
-                "y": 10.0161,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 5.676,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
             }
         },
         {
@@ -537,11 +669,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 9.702,
-                "y": 10.0161,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 5.382,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
             }
         },
         {
@@ -553,11 +689,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 15.581999999999999,
-                "y": 10.0161,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 6.852,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
             }
         },
         {
@@ -569,11 +709,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 16.169999999999998,
-                "y": 10.0161,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 6.558,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
             }
         },
         {
@@ -585,11 +729,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 14.406,
-                "y": 10.0161,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 7.44,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
             }
         },
         {
@@ -601,11 +749,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 14.994,
-                "y": 10.0161,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 7.146,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
             }
         },
         {
@@ -617,11 +769,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 7.938,
-                "y": 10.0161,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 6.264,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
             }
         },
         {
@@ -633,11 +789,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 8.526,
-                "y": 10.0161,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 5.97,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
             }
         },
         {
@@ -649,11 +809,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 10.878,
-                "y": 11.129,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 4.5,
+                "y": 1.0354,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
             }
         },
         {
@@ -665,11 +829,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 11.466,
-                "y": 11.129,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 4.206,
+                "y": 1.0354,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
             }
         },
         {
@@ -681,11 +849,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 6.7620000000000005,
-                "y": 11.129,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 6.852,
+                "y": 1.0354,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
             }
         },
         {
@@ -697,11 +869,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 7.35,
-                "y": 11.129,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 6.558,
+                "y": 1.0354,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
             }
         },
         {
@@ -713,11 +889,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 5.586,
-                "y": 11.129,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 5.088,
+                "y": 1.0354,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
             }
         },
         {
@@ -729,11 +909,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 6.174,
-                "y": 11.129,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 4.794,
+                "y": 1.0354,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
             }
         },
         {
@@ -745,11 +929,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 4.41,
-                "y": 11.129,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 5.676,
+                "y": 1.0354,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
             }
         },
         {
@@ -761,11 +949,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 4.997999999999999,
-                "y": 11.129,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 5.382,
+                "y": 1.0354,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
             }
         },
         {
@@ -777,11 +969,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 3.2339999999999995,
-                "y": 11.129,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 6.264,
+                "y": 1.0354,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
             }
         },
         {
@@ -793,11 +989,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 3.822,
-                "y": 11.129,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 5.97,
+                "y": 1.0354,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
             }
         },
         {
@@ -809,11 +1009,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 9.702,
-                "y": 11.129,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 7.44,
+                "y": 1.0354,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
             }
         },
         {
@@ -825,11 +1029,15 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 9.114,
-                "y": 11.129,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 7.146,
+                "y": 1.0354,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
             }
         }
     ],

@@ -126,12 +126,20 @@ def build_system_prompt(layout_context):
         "Write the [CMD] block FIRST, then 1-2 sentences confirming.\n\n"
     )
 
-    # ---- Identity (compact) ----
+    # ---- Identity & personality ----
     prompt += (
         "You are an expert Analog IC Layout Engineer in a Symbolic "
         "Layout Editor. Expertise: CMOS matching, symmetry, current "
         "mirrors, diff-pairs, guard rings, dummies, parasitic-aware "
         "placement.\n\n"
+        "PERSONALITY: You are friendly, helpful, and conversational. "
+        "When the user greets you (hi, hello, hey, good morning, etc.), "
+        "respond warmly and naturally — vary your greetings each time, "
+        "and briefly remind them what you can help with. "
+        "When the user says thanks, respond graciously. "
+        "For casual conversation, be personable while gently steering "
+        "toward how you can assist with their layout work. "
+        "Never give the exact same response twice to the same greeting.\n\n"
     )
 
     # ---- Editor features (compact) ----
@@ -339,7 +347,12 @@ def run_llm(chat_messages, full_prompt):
         f"[LLM] All models failed. "
         f"Falling back to prescriptive logic.\n{summary}"
     )
-    return ""
+    return (
+        "I'm having trouble connecting to my AI backend right now. "
+        "Please check your API key in the `.env` file and try again. "
+        "In the meantime, I can still execute direct commands like "
+        "**swap**, **move**, and **add dummy** if you type them!"
+    )
 
 
 def _parse_retry_delay(exc: Exception) -> float:
@@ -408,15 +421,19 @@ class OrchestratorWorker(LLMWorker):
         self.pending_topology       = None
         self.pending_layout_context = None
 
-    @Slot(str, str)
-    def process_orchestrated_request(self, user_message, layout_context_json):
+    @Slot(str, str, list)
+    def process_orchestrated_request(self, user_message, layout_context_json, chat_history=None):
         """Run the full multi-agent pipeline (blocking).
 
         Args:
             user_message (str):          the user's chat message
             layout_context_json (str):   JSON-serialised layout context
+            chat_history (list):         Conversational history
         """
         import json as _json
+
+        if chat_history is None:
+            chat_history = []
 
         try:
             layout_context = _json.loads(layout_context_json)
@@ -465,7 +482,47 @@ class OrchestratorWorker(LLMWorker):
                 else None
             )
 
-            if intent == "question":
+            if intent == "chat":
+                print("[ORCH] CHAT intent -> conversational reply")
+                chat_system = (
+                    "You are a friendly AI assistant for an Analog IC "
+                    "Layout Editor. The user is having a casual "
+                    "conversation. Be warm, personable, and natural. "
+                    "Vary your responses — never repeat the same reply. "
+                    "Briefly mention you can help with layout tasks like "
+                    "swapping devices, optimizing placement, analyzing "
+                    "topology, or answering circuit questions. "
+                    "Keep responses short (2-3 sentences max)."
+                )
+                
+                # Prepend the system prompt to the user's history
+                chat_msgs = [{"role": "system", "content": chat_system}]
+                # We can just take the most recent history entries as provided by the UI
+                for msg in chat_history:
+                    chat_msgs.append(msg)
+                    
+                # The fallback if chat_history didn't contain the current message
+                if not chat_history or chat_history[-1].get("content") != user_message:
+                    chat_msgs.append({"role": "user", "content": user_message})
+
+                # Need a full prompt string for the single API call wrapper
+                # Build conversation-only text (NO system prompt mixed in)
+                history_text = ""
+                for msg in chat_history:
+                    role_label = "User" if msg["role"] == "user" else "Assistant"
+                    history_text += f"{role_label}: {msg['content']}\n"
+                if not chat_history or chat_history[-1].get("content") != user_message:
+                    history_text += f"User: {user_message}\n"
+                    
+                full_prompt = f"{chat_system}\n\nConversation:\n{history_text}"
+                
+                reply = run_llm(
+                    chat_msgs,
+                    full_prompt
+                )
+                self.response_ready.emit(reply)
+
+            elif intent == "question":
                 print("[ORCH] QUESTION intent -> single-agent reply")
                 system_prompt = build_system_prompt(layout_context)
                 chat_msgs = [

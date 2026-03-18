@@ -215,3 +215,142 @@ def flatten_netlist(filename):
             flat_lines.append(line)
 
     return flat_lines
+
+
+# -----------------------------------------------------------------
+# Block-aware flattening
+# -----------------------------------------------------------------
+
+def expand_instance_with_blocks(line, subckts, prefix="",
+                                 top_instance="", top_subckt=""):
+    """Expand a single X-instance and track block membership.
+
+    Returns:
+        expanded: list of flat device line strings
+        block_entries: list of (device_name, instance, subckt_type) tuples
+    """
+    tokens = line.split()
+    inst_name = tokens[0]
+    nets = tokens[1:-1]
+    subckt_name = tokens[-1]
+
+    if subckt_name not in subckts:
+        print(f"[Hierarchy] Warning: subcircuit '{subckt_name}' not found, "
+              f"skipping instance '{inst_name}'")
+        return [], []
+
+    subckt = subckts[subckt_name]
+    port_map = dict(zip(subckt.ports, nets))
+    full_prefix = f"{prefix}{inst_name}_" if prefix else f"{inst_name}_"
+
+    # Track which top-level instance this belongs to
+    # If we're expanding a top-level X-instance, record it as the block root
+    current_instance = top_instance or inst_name
+    current_subckt = top_subckt or subckt_name
+
+    expanded = []
+    block_entries = []
+
+    for internal_line in subckt.lines:
+        parts = internal_line.split()
+        if not parts:
+            continue
+
+        devname = parts[0]
+        if devname.startswith("*") or devname.startswith("."):
+            continue
+
+        if devname[0].upper() == "X":
+            remapped_parts = [f"{full_prefix}{devname}"]
+            for i in range(1, len(parts)):
+                token = parts[i]
+                if token in port_map:
+                    remapped_parts.append(port_map[token])
+                else:
+                    remapped_parts.append(f"{full_prefix}{token}")
+            remapped_line = " ".join(remapped_parts)
+            sub_expanded, sub_blocks = expand_instance_with_blocks(
+                remapped_line, subckts, prefix="",
+                top_instance=current_instance,
+                top_subckt=current_subckt,
+            )
+            expanded.extend(sub_expanded)
+            block_entries.extend(sub_blocks)
+        else:
+            parts[0] = f"{full_prefix}{devname}"
+            for i in range(1, len(parts)):
+                token = parts[i]
+                if token in port_map:
+                    parts[i] = port_map[token]
+                elif "=" not in token:
+                    if i <= 4 or (i == 5 and not token[0].isalpha()):
+                        parts[i] = f"{full_prefix}{token}"
+
+            device_name = parts[0]
+            expanded.append(" ".join(parts))
+            block_entries.append((device_name, current_instance, current_subckt))
+
+    return expanded, block_entries
+
+
+def flatten_netlist_with_blocks(filename):
+    """Flatten a hierarchical SPICE/CDL netlist with block tracking.
+
+    Returns:
+        flat_lines: list of flattened device line strings
+        block_map: {device_name: {"instance": "XI0", "subckt": "Inverter"}}
+    """
+    with open(filename) as f:
+        raw_lines = [l.strip() for l in f if l.strip()]
+
+    subckts = extract_subckts(raw_lines)
+
+    if not subckts:
+        return raw_lines, {}
+
+    top_name = _find_top_subckt(subckts, filename)
+    top = subckts[top_name]
+
+    # Collect preamble
+    preamble = []
+    inside_subckt = False
+    for line in raw_lines:
+        tokens = line.split()
+        if not tokens:
+            continue
+        kw = tokens[0].upper()
+        if kw == ".SUBCKT":
+            inside_subckt = True
+            continue
+        if kw == ".ENDS":
+            inside_subckt = False
+            continue
+        if not inside_subckt:
+            preamble.append(line)
+
+    flat_lines = list(preamble)
+    block_map = {}
+
+    for line in top.lines:
+        tokens = line.split()
+        if not tokens:
+            continue
+
+        devname = tokens[0]
+        if devname.startswith("*") or devname.startswith("."):
+            continue
+
+        if devname[0].upper() == "X":
+            expanded, block_entries = expand_instance_with_blocks(
+                line, subckts
+            )
+            flat_lines.extend(expanded)
+            for dev_name, instance, subckt_type in block_entries:
+                block_map[dev_name] = {
+                    "instance": instance,
+                    "subckt": subckt_type,
+                }
+        else:
+            flat_lines.append(line)
+
+    return flat_lines, block_map

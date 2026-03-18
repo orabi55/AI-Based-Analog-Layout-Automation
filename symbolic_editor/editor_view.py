@@ -12,11 +12,13 @@ from PySide6.QtWidgets import (
     QGraphicsPathItem,
     QGraphicsRectItem,
     QGraphicsItem,
+    QGraphicsSimpleTextItem,
 )
 from PySide6.QtCore import Qt, Signal, QPointF
 from PySide6.QtGui import QPainter, QPen, QPainterPath, QColor, QBrush
 
 from device_item import DeviceItem
+from block_item import BlockItem
 
 
 class SymbolicEditor(QGraphicsView):
@@ -95,6 +97,33 @@ class SymbolicEditor(QGraphicsView):
         # Custom row gap override (None = auto)
         self._custom_row_gap = None
 
+        # Block overlay items
+        self._blocks = {}            # block data: {inst: {subckt, devices}}
+        self._block_overlays = []    # list of QGraphicsItem for overlays
+        self._block_items = []       # list of actual BlockItem instances (symbol view)
+        self._block_overlays_visible = True
+        self._view_level = "symbol"   # 'symbol' or 'transistor'
+        self._block_colors = [
+            QColor(255, 165, 0, 40),    # orange
+            QColor(0, 191, 255, 40),    # deep sky blue
+            QColor(50, 205, 50, 40),    # lime green
+            QColor(255, 105, 180, 40),  # hot pink
+            QColor(138, 43, 226, 40),   # blue violet
+            QColor(255, 215, 0, 40),    # gold
+            QColor(0, 206, 209, 40),    # dark turquoise
+            QColor(255, 99, 71, 40),    # tomato
+        ]
+        self._block_border_colors = [
+            QColor(255, 165, 0, 120),
+            QColor(0, 191, 255, 120),
+            QColor(50, 205, 50, 120),
+            QColor(255, 105, 180, 120),
+            QColor(138, 43, 226, 120),
+            QColor(255, 215, 0, 120),
+            QColor(0, 206, 209, 120),
+            QColor(255, 99, 71, 120),
+        ]
+
         # Completely disable scrollbars (policy is more reliable than CSS)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -128,8 +157,16 @@ class SymbolicEditor(QGraphicsView):
         return QPointF(self._snap_value(x), self._snap_row(y))
 
     def _on_scene_changed(self, _regions):
-        """Keep occupancy guides fresh when devices move/add/remove."""
+        """Keep occupancy guides and block overlays fresh when devices move/add/remove."""
         self.resetCachedContent()
+        
+        # In Transistor view, we redraw overlays around the individual devices
+        if self._view_level == "transistor" and self._block_overlays_visible and self._blocks:
+            self._clear_block_overlays()
+            self._draw_block_overlays()
+            
+        # Optional: could update block item sizes here too, but they maintain size during move
+
 
     def _compute_dummy_candidate(self, scene_pos, snap_to_free=True):
         """Build a preview candidate aligned to nearest NMOS/PMOS row.
@@ -268,6 +305,7 @@ class SymbolicEditor(QGraphicsView):
             widths.append(width)
             heights.append(height)
 
+            nf = node.get("electrical", {}).get("nf", 1)
             item = DeviceItem(
                 node.get("id", "unknown"),
                 node.get("type", "nmos"),
@@ -275,6 +313,7 @@ class SymbolicEditor(QGraphicsView):
                 y,
                 width,
                 height,
+                nf=nf,
             )
 
             self.scene.addItem(item)
@@ -867,6 +906,203 @@ class SymbolicEditor(QGraphicsView):
         item = self.device_items.get(dev_id)
         if item:
             item.setSelected(True)
+        self.scene.blockSignals(False)
+
+    # -------------------------------------------------
+    # Block Overlays
+    # -------------------------------------------------
+    def set_blocks(self, blocks):
+        """Store block data, draw overlays, and create BlockItems.
+
+        Args:
+            blocks: {inst_name: {"subckt": str, "devices": [str, ...]}}
+        """
+        self._blocks = blocks or {}
+        
+        # Clean up existing block items
+        self.scene.blockSignals(True)
+        for bitm in self._block_items:
+            try:
+                if bitm.scene() is self.scene:
+                    self.scene.removeItem(bitm)
+            except RuntimeError:
+                pass
+        self._block_items.clear()
+        self.scene.blockSignals(False)
+        
+        self._clear_block_overlays()
+        
+        # Instantiate BlockItems for symbol view
+        if self._blocks and self.device_items:
+            for idx, (inst_name, info) in enumerate(self._blocks.items()):
+                devices = info.get("devices", [])
+                subckt = info.get("subckt", "?")
+
+                # Collect device items
+                member_items = [
+                    self.device_items[d] for d in devices
+                    if d in self.device_items
+                ]
+                if not member_items:
+                    continue
+                    
+                color_idx = idx % len(self._block_colors)
+                fill_color = self._block_colors[color_idx]
+                border_color = self._block_border_colors[color_idx]
+                
+                # Make fill mostly opaque for block item itself
+                opaque_fill = QColor(fill_color)
+                opaque_fill.setAlpha(200)
+
+                bitm = BlockItem(inst_name, subckt, member_items, opaque_fill, border_color)
+                bitm.set_snap_grid(self._snap_grid, self._row_pitch)
+                self.scene.addItem(bitm)
+                self._block_items.append(bitm)
+        
+        # Apply the correct view state visibility
+        self.set_view_level(self._view_level)
+
+    def set_view_level(self, level):
+        """Toggle between symbol view and transistor view."""
+        self._view_level = level
+        self.scene.blockSignals(True)
+        
+        if level == "symbol":
+            # Show BlockItems, hide block overlays, hide internal DeviceItems
+            for bitm in self._block_items:
+                bitm.show()
+                # Hide devices managed by this block
+                for dev in bitm._device_items:
+                    dev.hide()
+                    
+            self._clear_block_overlays()
+            
+        elif level == "transistor":
+            # Hide BlockItems, show DeviceItems, show block overlays
+            for bitm in self._block_items:
+                bitm.hide()
+                # Re-sync their bounds before showing devices (in case they moved)
+                for dev in bitm._device_items:
+                    dev.show()
+                    
+            if self._block_overlays_visible:
+                self._draw_block_overlays()
+                
+        self.scene.blockSignals(False)
+        # Force a refresh of connections
+        self.resetCachedContent()
+
+
+    def _clear_block_overlays(self):
+        """Remove all block overlay items from the scene."""
+        if self._block_overlays:
+            self.scene.blockSignals(True)
+            for item in self._block_overlays:
+                try:
+                    if item.scene() is self.scene:
+                        self.scene.removeItem(item)
+                except RuntimeError:
+                    pass
+            self._block_overlays.clear()
+            self.scene.blockSignals(False)
+
+    def _draw_block_overlays(self):
+        """Draw semi-transparent colored rectangles around each block's devices."""
+        if not self._blocks or not self.device_items:
+            return
+
+        from PySide6.QtGui import QFont
+        from PySide6.QtCore import QRectF
+
+        self.scene.blockSignals(True)
+        for idx, (inst_name, info) in enumerate(self._blocks.items()):
+            devices = info.get("devices", [])
+            subckt = info.get("subckt", "?")
+
+            # Collect bounding rects of member devices
+            member_items = [
+                self.device_items[d] for d in devices
+                if d in self.device_items
+            ]
+            if not member_items:
+                continue
+
+            # Compute union bounding box
+            union = member_items[0].sceneBoundingRect()
+            for item in member_items[1:]:
+                union = union.united(item.sceneBoundingRect())
+
+            # Add padding
+            padding = 6.0
+            label_height = 16.0
+            padded = QRectF(
+                union.x() - padding,
+                union.y() - padding - label_height,
+                union.width() + padding * 2,
+                union.height() + padding * 2 + label_height,
+            )
+
+            # Pick color
+            color_idx = idx % len(self._block_colors)
+            fill_color = self._block_colors[color_idx]
+            border_color = self._block_border_colors[color_idx]
+
+            # Draw overlay rectangle
+            rect_item = QGraphicsRectItem(padded)
+            rect_item.setBrush(QBrush(fill_color))
+            rect_item.setPen(QPen(border_color, 1.5, Qt.PenStyle.DashLine))
+            rect_item.setZValue(-10)  # behind devices
+            rect_item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
+            rect_item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, False)
+            rect_item.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+            self.scene.addItem(rect_item)
+            self._block_overlays.append(rect_item)
+
+            # Draw label
+            label_text = f"{inst_name}: {subckt}"
+            label_item = QGraphicsSimpleTextItem(label_text)
+            label_item.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
+            label_border = QColor(border_color)
+            label_border.setAlpha(220)
+            label_item.setBrush(QBrush(label_border))
+            label_item.setPos(padded.x() + 4, padded.y() + 2)
+            label_item.setZValue(-9)
+            label_item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
+            label_item.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+            self.scene.addItem(label_item)
+            self._block_overlays.append(label_item)
+
+        self.scene.blockSignals(False)
+
+    def toggle_block_overlays(self, visible=None):
+        """Toggle block overlay visibility.
+
+        Args:
+            visible: if None, toggle; if bool, set explicitly.
+        """
+        if visible is None:
+            self._block_overlays_visible = not self._block_overlays_visible
+        else:
+            self._block_overlays_visible = bool(visible)
+
+        if self._block_overlays_visible:
+            self._clear_block_overlays()
+            self._draw_block_overlays()
+        else:
+            self._clear_block_overlays()
+
+    def highlight_block(self, inst_name):
+        """Select all devices belonging to a block."""
+        info = self._blocks.get(inst_name, {})
+        devices = info.get("devices", [])
+        if not devices:
+            return
+        self.scene.blockSignals(True)
+        self.scene.clearSelection()
+        for dev_id in devices:
+            item = self.device_items.get(dev_id)
+            if item:
+                item.setSelected(True)
         self.scene.blockSignals(False)
 
     # -------------------------------------------------
