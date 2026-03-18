@@ -198,6 +198,30 @@ def _build_device_inventory(nodes: list) -> str:
     return "\n".join(lines)
 
 
+def _build_block_info(nodes: list, graph_data: dict) -> str:
+    """Return a human-readable block grouping summary for the prompt."""
+    # Build blocks from top-level key or per-node block tags
+    blocks = graph_data.get("blocks", {})
+    if not blocks:
+        for n in nodes:
+            b = n.get("block")
+            if b:
+                inst = b.get("instance", "")
+                if inst and inst not in blocks:
+                    blocks[inst] = {"subckt": b.get("subckt", "?"), "devices": []}
+                if inst:
+                    blocks[inst]["devices"].append(n.get("id", ""))
+    if not blocks:
+        return "  (no hierarchical blocks detected)"
+
+    lines = []
+    for inst, info in blocks.items():
+        subckt = info.get("subckt", "?")
+        devs = info.get("devices", [])
+        lines.append(f"  {inst} ({subckt}): {', '.join(devs)}")
+    return "\n".join(lines)
+
+
 # ---------------------------------------------------------------------------
 # Post-placement validation
 # ---------------------------------------------------------------------------
@@ -281,6 +305,11 @@ def gemini_generate_placement(input_json: str, output_json: str):
     nodes = graph_data.get("nodes", [])
     edges = graph_data.get("edges", [])
 
+    # Pre-calculate prompt helpers
+    adjacency_str = _build_net_adjacency(nodes, edges)
+    inventory_str = _build_device_inventory(nodes)
+    block_str = _build_block_info(nodes, graph_data)
+
     # Build structured prompt
     prompt = f"""
 You are an expert VLSI placement engineer.
@@ -288,6 +317,15 @@ You are an expert VLSI placement engineer.
 Given this transistor-level graph:
 
 {json.dumps(graph_data, indent=2)}
+
+DEVICE INVENTORY:
+{inventory_str}
+
+NET ADJACENCY (Critical Routing Requirements):
+{adjacency_str}
+
+BLOCK GROUPING (Hierarchical Structure):
+{block_str}
 
 Generate an initial transistor placement based on the following strict DRC and Floorplanning rules:
 
@@ -312,6 +350,11 @@ Generate an initial transistor placement based on the following strict DRC and F
 - Do not place blocks completely back-to-back.
 - You must reserve dedicated whitespace between blocks for diffusion breaks (SDB/DDB) and dummy fill.
 - Minimize net/wire crossings.
+
+6. Block Grouping:
+- Devices belonging to the same block (listed in BLOCK GROUPING above) MUST be placed adjacent to each other.
+- Within each row (PMOS / NMOS), keep block members contiguous.
+- Place blocks as cohesive groups — do not interleave devices from different blocks.
 
 IMPORTANT:
 You must return the EXACT same JSON structure as the input, keeping all existing keys and arrays intact. 
