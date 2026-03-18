@@ -4,6 +4,7 @@ import os
 import json
 import copy
 import glob
+import re
 
 # ---------------------------------------------------------------------------
 # Ensure the project root is on sys.path so that cross-package imports
@@ -455,9 +456,30 @@ class MainWindow(QMainWindow):
         design_menu.addAction(self._act_ai_placement)
 
         view_menu = mb.addMenu("View")
-        a = QAction("View Placeholder", self)
-        a.setEnabled(False)
-        view_menu.addAction(a)
+        
+        self._act_view_symbol = QAction("Symbol View (Macro Level)", self)
+        self._act_view_symbol.setShortcut(QKeySequence("Ctrl+F"))
+        self._act_view_symbol.triggered.connect(
+            lambda: self.editor.set_view_level("symbol")
+        )
+        view_menu.addAction(self._act_view_symbol)
+
+        self._act_view_transistor = QAction("Transistor View (Micro Level)", self)
+        self._act_view_transistor.setShortcut(QKeySequence("Shift+F"))
+        self._act_view_transistor.triggered.connect(
+            lambda: self.editor.set_view_level("transistor")
+        )
+        view_menu.addAction(self._act_view_transistor)
+        
+        view_menu.addSeparator()
+
+        self._act_toggle_blocks = QAction("Toggle Block Overlays", self)
+        self._act_toggle_blocks.setCheckable(True)
+        self._act_toggle_blocks.setChecked(True)
+        self._act_toggle_blocks.triggered.connect(
+            lambda checked: self.editor.toggle_block_overlays(checked)
+        )
+        view_menu.addAction(self._act_toggle_blocks)
 
         # --- Edit menu (functional) ---
         edit_menu = mb.addMenu("Edit")
@@ -934,12 +956,26 @@ class MainWindow(QMainWindow):
         if not self._original_data:
             return
         edges = self._original_data.get("edges")
+        blocks = self._original_data.get("blocks", {})
+        # Rebuild blocks from per-node block tags if top-level key is missing
+        if not blocks and self.nodes:
+            for node in self.nodes:
+                b = node.get("block")
+                if b:
+                    inst = b.get("instance", "")
+                    if inst and inst not in blocks:
+                        blocks[inst] = {"subckt": b.get("subckt", "?"), "devices": []}
+                    if inst:
+                        blocks[inst]["devices"].append(node.get("id"))
+            if blocks:
+                self._original_data["blocks"] = blocks
         self.device_tree.set_edges(edges)
         self.device_tree.set_terminal_nets(self._terminal_nets)
-        self.device_tree.load_devices(self.nodes)
+        self.device_tree.load_devices(self.nodes, blocks=blocks)
         self.editor.load_placement(self.nodes, compact=compact)
         self.editor.set_edges(edges)
         self.editor.set_terminal_nets(self._terminal_nets)
+        self.editor.set_blocks(blocks)
         self.chat_panel.set_layout_context(
             self.nodes, self._original_data.get("edges"),
             self._terminal_nets,
@@ -1468,18 +1504,18 @@ class MainWindow(QMainWindow):
     def _run_parser_pipeline(sp_path, oas_path=""):
         """
         Run the full parser pipeline:
-          1. Parse SPICE netlist
+          1. Parse SPICE netlist (with block detection)
           2. Parse layout (.oas/.gds) and match devices
           3. Build circuit graph (edges)
-          4. Assemble nodes with geometry + edges
+          4. Assemble nodes with geometry + edges + block info
 
-        Returns: {"nodes": [...], "edges": [...], "terminal_nets": {...}}
+        Returns: {"nodes": [...], "edges": [...], "terminal_nets": {...}, "blocks": {...}}
         """
-        from parser.netlist_reader import read_netlist
+        from parser.netlist_reader import read_netlist_with_blocks
         from parser.circuit_graph import build_circuit_graph
 
-        # 1. Parse netlist
-        netlist = read_netlist(sp_path)
+        # 1. Parse netlist with block tracking
+        netlist, block_map = read_netlist_with_blocks(sp_path)
 
         # 2. Parse layout (optional) and match devices
         layout_instances = []
@@ -1500,13 +1536,13 @@ class MainWindow(QMainWindow):
                 print(f"[Import] Device matching failed ({e}), using grid placement")
                 device_mapping = {}
 
-        # 3. Build nodes
+        # 3. Build nodes (first pass — collect all devices with temp geometry)
         PITCH_UM = 0.294
         ROW_HEIGHT_UM = 0.668
-        nmos_idx = 0
-        pmos_idx = 0
+        BLOCK_GAP_UM = PITCH_UM * 2  # gap between blocks
         nodes = []
         terminal_nets = {}
+        node_by_name = {}  # dev_name -> node_dict for repositioning
 
         for dev_name, dev in netlist.devices.items():
             dev_type = "nmos" if "n" in dev.type.lower() else "pmos"
@@ -1523,25 +1559,14 @@ class MainWindow(QMainWindow):
                     "orientation": inst.get("orientation", "R0"),
                 }
             else:
-                # Grid-based default placement
-                if dev_type == "pmos":
-                    geom = {
-                        "x": pmos_idx * PITCH_UM,
-                        "y": ROW_HEIGHT_UM,
-                        "width": PITCH_UM,
-                        "height": ROW_HEIGHT_UM,
-                        "orientation": "R0",
-                    }
-                    pmos_idx += 1
-                else:
-                    geom = {
-                        "x": nmos_idx * PITCH_UM,
-                        "y": 0.0,
-                        "width": PITCH_UM,
-                        "height": ROW_HEIGHT_UM,
-                        "orientation": "R0",
-                    }
-                    nmos_idx += 1
+                # Placeholder — will be repositioned by block-aware layout below
+                geom = {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "width": PITCH_UM,
+                    "height": ROW_HEIGHT_UM,
+                    "orientation": "R0",
+                }
 
             electrical = {
                 "l": dev.params.get("l", 1.4e-08),
@@ -1549,12 +1574,25 @@ class MainWindow(QMainWindow):
                 "nfin": dev.params.get("nfin", 1),
             }
 
-            nodes.append({
+            node_dict = {
                 "id": dev_name,
                 "type": dev_type,
                 "electrical": electrical,
                 "geometry": geom,
-            })
+            }
+
+            # Attach block membership if available
+            # Also match finger-expanded names (e.g. XI3_MM28_f1 → XI3_MM28)
+            block_info = block_map.get(dev_name)
+            if block_info is None:
+                base = re.sub(r'_f\d+$', '', dev_name)
+                if base != dev_name:
+                    block_info = block_map.get(base)
+            if block_info:
+                node_dict["block"] = block_info
+
+            nodes.append(node_dict)
+            node_by_name[dev_name] = node_dict
 
             # Build terminal nets
             if hasattr(dev, 'pins') and dev.pins:
@@ -1571,10 +1609,82 @@ class MainWindow(QMainWindow):
             for u, v, d in G.edges(data=True)
         ]
 
+        # 5. Build blocks summary (include finger-expanded device names)
+        blocks = {}
+        for node in nodes:
+            b = node.get("block")
+            if b:
+                inst = b.get("instance", "")
+                if inst and inst not in blocks:
+                    blocks[inst] = {"subckt": b.get("subckt", "?"), "devices": []}
+                if inst:
+                    blocks[inst]["devices"].append(node["id"])
+
+        if blocks:
+            block_labels = [f"{k} ({v['subckt']})" for k, v in blocks.items()]
+            print(f"[Import] Detected {len(blocks)} blocks: {', '.join(block_labels)}")
+
+        # 6. Block-aware placement (only when no layout geometry is available)
+        if not device_mapping:
+            # Group devices by block, then by type
+            pmos_y = ROW_HEIGHT_UM    # PMOS row y
+            nmos_y = 0.0              # NMOS row y
+            x_cursor = 0.0            # global x cursor across blocks
+
+            # Determine block order (preserve insertion order)
+            block_order = list(blocks.keys())
+
+            # Collect unblocked devices
+            blocked_ids = set()
+            for info in blocks.values():
+                blocked_ids.update(info["devices"])
+            unblocked = [n for n in nodes if n["id"] not in blocked_ids]
+
+            for block_idx, inst in enumerate(block_order):
+                info = blocks[inst]
+                members = [node_by_name[d] for d in info["devices"]
+                           if d in node_by_name]
+                pmos_members = [n for n in members if n["type"] == "pmos"]
+                nmos_members = [n for n in members if n["type"] == "nmos"]
+
+                # Place PMOS in top row, abutted edge-to-edge
+                local_x = x_cursor
+                for n in pmos_members:
+                    w = n["geometry"]["width"]
+                    n["geometry"]["x"] = local_x
+                    n["geometry"]["y"] = pmos_y
+                    local_x += w
+                pmos_right = local_x
+
+                # Place NMOS in bottom row, abutted edge-to-edge
+                local_x = x_cursor
+                for n in nmos_members:
+                    w = n["geometry"]["width"]
+                    n["geometry"]["x"] = local_x
+                    n["geometry"]["y"] = nmos_y
+                    local_x += w
+                nmos_right = local_x
+
+                # Advance cursor past the widest row + gap
+                block_right = max(pmos_right, nmos_right)
+                x_cursor = block_right + BLOCK_GAP_UM
+
+            # Place unblocked devices after all blocks
+            for n in unblocked:
+                w = n["geometry"]["width"]
+                if n["type"] == "pmos":
+                    n["geometry"]["x"] = x_cursor
+                    n["geometry"]["y"] = pmos_y
+                else:
+                    n["geometry"]["x"] = x_cursor
+                    n["geometry"]["y"] = nmos_y
+                x_cursor += w
+
         return {
             "nodes": nodes,
             "edges": edges,
             "terminal_nets": terminal_nets,
+            "blocks": blocks,
         }
 
     @staticmethod
