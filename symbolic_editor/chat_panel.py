@@ -107,7 +107,7 @@ class ChatPanel(QWidget):
     # Single-agent path (normal chat)
     request_inference = Signal(str, list)
     # Multi-agent path (orchestrator pipeline)
-    request_orchestrated = Signal(str, str)  # (user_message, layout_context_json)
+    request_orchestrated = Signal(str, str, list)  # (user_message, layout_context_json, chat_history)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -556,8 +556,23 @@ class ChatPanel(QWidget):
             ctx_json = json.dumps(ctx, default=str)
         except (TypeError, ValueError):
             ctx_json = "{}"
+            
+        def _clean(content):
+            c = re.sub(r'\[CMD\].*?\[/CMD\]', '', content, flags=re.DOTALL)
+            if c.startswith("⚠️ Error:"):
+                return "(error – skipped)"
+            return c.strip()
+
+        recent = self._chat_history[-4:]
+        chat_messages = []
+        for msg in recent:
+            chat_messages.append({
+                "role": msg["role"],
+                "content": _clean(msg["content"]),
+            })
+
         print(f"[CHAT] → Orchestrator pipeline for: {user_message[:60]!r}")
-        self.request_orchestrated.emit(user_message, ctx_json)
+        self.request_orchestrated.emit(user_message, ctx_json, chat_messages)
 
     def _call_llm(self, user_message):
         """Build prompts and dispatch the request to the single-agent worker thread."""

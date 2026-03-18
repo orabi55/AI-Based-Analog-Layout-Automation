@@ -172,3 +172,39 @@ def read_netlist(filename):
 
     return nl
 
+
+def read_netlist_with_blocks(filename):
+    """Read SPICE/CDL netlist and return FLATTENED netlist + block map.
+
+    Returns:
+        nl: Netlist object with devices and connectivity
+        block_map: {device_name: {"instance": "XI0", "subckt": "Inverter"}}
+    """
+    from .hierarchy import flatten_netlist_with_blocks
+
+    nl = Netlist()
+
+    # STEP 1 — flatten hierarchy with block tracking
+    flat_lines, block_map = flatten_netlist_with_blocks(filename)
+
+    # DEBUG: print flattened lines
+    print("\n--- Flattened Netlist (block-aware) ---")
+    for l in flat_lines:
+        print(l)
+
+    # STEP 2 — parse devices
+    for line in flat_lines:
+        line = line.strip()
+        if not line or line.startswith('*'):
+            continue
+        dev = parse_line(line)
+        if isinstance(dev, list):
+            for d in dev:
+                nl.add_device(d)
+        elif dev:
+            nl.add_device(dev)
+
+    # STEP 3 — build connectivity
+    nl.build_connectivity()
+
+    return nl, block_map

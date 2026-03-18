@@ -16,13 +16,14 @@ class DeviceSignals(QObject):
 
 class DeviceItem(QGraphicsRectItem):
 
-    def __init__(self, name, dev_type, x, y, width, height):
+    def __init__(self, name, dev_type, x, y, width, height, nf=1):
 
         super().__init__(0, 0, width, height)
 
         self.setPos(x, y)
         self.device_name = name
         self.device_type = str(dev_type).strip().lower()
+        self.nf = max(1, int(nf))
         self.signals = DeviceSignals()
 
         self._drag_active = False
@@ -141,7 +142,7 @@ class DeviceItem(QGraphicsRectItem):
         super().mouseReleaseEvent(event)
 
     # --------------------------------------------------
-    # Painting — 3-section MOS layout
+    # Painting — Multi-finger MOS layout
     # --------------------------------------------------
     def paint(self, painter: QPainter, option, widget=None):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -154,14 +155,13 @@ class DeviceItem(QGraphicsRectItem):
         cx = x0 + w / 2.0
         cy = y0 + h / 2.0
 
-        # --- Section geometry (always in local item coords) ---
-        source_w = w * 0.30
-        gate_w = w * 0.40
-        drain_w = w * 0.30
-
-        source_rect = QRectF(x0, y0, source_w, h)
-        gate_rect = QRectF(x0 + source_w, y0, gate_w, h)
-        drain_rect = QRectF(x0 + source_w + gate_w, y0, drain_w, h)
+        num_fingers = self.nf
+        num_sd = num_fingers + 1  # Number of S/D diffusion regions
+        # We assign 40% of the width to the gates collectively, 60% to the diffusions
+        total_gate_w = w * 0.40
+        total_sd_w = w * 0.60
+        gate_w = total_gate_w / num_fingers
+        sd_w = total_sd_w / num_sd
 
         # ── Draw coloured sections WITH flip transform ─────────
         painter.save()
@@ -170,22 +170,30 @@ class DeviceItem(QGraphicsRectItem):
                        -1.0 if self._flip_v else 1.0)
         painter.translate(-cx, -cy)
 
-        # Source (left in unflipped orientation)
+        # Alternating S/D logic:
+        # S D S D ... or D S D S ... (if flipped)
+        # Assuming left-most is Source normally.
+        cursor_x = x0
+
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QBrush(self._source_color))
-        painter.drawRect(source_rect)
+        for i in range(num_sd):
+            is_source = (i % 2 == 0)
+            color = self._source_color if is_source else self._drain_color
+            sd_rect = QRectF(cursor_x, y0, sd_w, h)
+            painter.setBrush(QBrush(color))
+            painter.drawRect(sd_rect)
+            cursor_x += sd_w
 
-        # Gate (centre) — gradient fill
-        gradient = QLinearGradient(gate_rect.topLeft(), gate_rect.bottomLeft())
-        gradient.setColorAt(0.0, self._gate_color.lighter(115))
-        gradient.setColorAt(0.5, self._gate_color)
-        gradient.setColorAt(1.0, self._gate_color.darker(115))
-        painter.setBrush(QBrush(gradient))
-        painter.drawRect(gate_rect)
-
-        # Drain (right in unflipped orientation)
-        painter.setBrush(QBrush(self._drain_color))
-        painter.drawRect(drain_rect)
+            # Draw gate to the right of this diffusion, except for the last diffusion
+            if i < num_fingers:
+                gate_rect = QRectF(cursor_x, y0, gate_w, h)
+                gradient = QLinearGradient(gate_rect.topLeft(), gate_rect.bottomLeft())
+                gradient.setColorAt(0.0, self._gate_color.lighter(115))
+                gradient.setColorAt(0.5, self._gate_color)
+                gradient.setColorAt(1.0, self._gate_color.darker(115))
+                painter.setBrush(QBrush(gradient))
+                painter.drawRect(gate_rect)
+                cursor_x += gate_w
 
         # Outer border
         painter.setPen(QPen(self._border, 1.5))
@@ -195,51 +203,42 @@ class DeviceItem(QGraphicsRectItem):
         # Vertical separator lines
         sep_pen = QPen(self._border.darker(120), 1.0)
         painter.setPen(sep_pen)
-        painter.drawLine(QPointF(x0 + source_w, y0),
-                         QPointF(x0 + source_w, y0 + h))
-        painter.drawLine(QPointF(x0 + source_w + gate_w, y0),
-                         QPointF(x0 + source_w + gate_w, y0 + h))
+        # Draw separators
+        cursor_x = x0
+        for i in range(num_fingers):
+            cursor_x += sd_w
+            painter.drawLine(QPointF(cursor_x, y0), QPointF(cursor_x, y0 + h))
+            cursor_x += gate_w
+            painter.drawLine(QPointF(cursor_x, y0), QPointF(cursor_x, y0 + h))
 
         painter.restore()  # back to un-flipped coordinates
 
         # ── Draw text labels WITHOUT flip (always readable) ────
-        # Visual position of terminals after horizontal flip:
-        #   flip_h  → left=Drain, right=Source
-        #   normal  → left=Source, right=Drain
-        left_rect  = QRectF(x0, y0, source_w, h)
-        center_rect = QRectF(x0 + source_w, y0, gate_w, h)
-        right_rect = QRectF(x0 + source_w + gate_w, y0, drain_w, h)
-
-        left_label  = "D" if self._flip_h else "S"
-        right_label = "S" if self._flip_h else "D"
-
-        term_font_size = max(3, min(9, int(min(source_w, h) / 3)))
+        term_font_size = max(3, min(9, int(min(sd_w, h) / 3)))
         term_font = QFont("Segoe UI", term_font_size, QFont.Weight.Bold)
         painter.setFont(term_font)
 
-        # Left terminal label
+        # In un-flipped coordinates:
+        left_label = "D" if self._flip_h else "S"
+        right_label = "S" if (num_sd % 2 == 0) ^ self._flip_h else "D"
+        # The visual rightmost diffusion type depends on nf:
+        # nf=1 (2 diffusions): left=S, right=D. If flipped: left=D, right=S.
+        # nf=2 (3 diffusions): left=S, right=S. If flipped: left=D, right=D.
+
+        # Draw left and right terminal labels
+        left_rect = QRectF(x0, y0, sd_w, h)
+        right_rect = QRectF(x0 + w - sd_w, y0, sd_w, h)
+        
         painter.setPen(self._label_color)
         painter.drawText(left_rect, Qt.AlignmentFlag.AlignCenter, left_label)
-
-        # G label (lower portion of gate)
-        g_label_rect = QRectF(center_rect.x(),
-                              center_rect.y() + center_rect.height() * 0.45,
-                              center_rect.width(),
-                              center_rect.height() * 0.55)
-        painter.setPen(self._terminal_label_color)
-        painter.drawText(g_label_rect,
-                         Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, "G")
-
-        # Right terminal label
-        painter.setPen(self._label_color)
         painter.drawText(right_rect, Qt.AlignmentFlag.AlignCenter, right_label)
 
-        # Device name — centred over gate area, spanning full width
-        name_font_size = max(3, min(10, int(w / 5)))
+        # Device name — centred
+        name_font_size = max(3, min(10, int(w / max(5, min(w/10, 8)))))
         name_font = QFont("Segoe UI", name_font_size, QFont.Weight.Bold)
         painter.setFont(name_font)
         painter.setPen(QColor("#ffffff"))
-        name_rect = QRectF(x0, center_rect.y() + 2, w, center_rect.height() * 0.50)
+        name_rect = QRectF(x0, y0 + 2, w, min(h, 20))
         painter.drawText(name_rect,
                          Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
                          self.device_name)
@@ -252,32 +251,57 @@ class DeviceItem(QGraphicsRectItem):
             painter.drawRect(rect.adjusted(1, 1, -1, -1))
 
     def terminal_anchors(self):
-        """Return scene positions for S, G, D terminal centers.
-
-        Accounts for horizontal flip so anchors match the visual layout.
-        """
+        """Return scene positions for S, G, D terminal centers."""
         rect = self.rect()
         w = rect.width()
         h = rect.height()
         x0 = rect.x()
         y0 = rect.y()
 
-        source_w = w * 0.30
-        gate_w = w * 0.40
-        drain_w = w * 0.30
+        num_fingers = self.nf
+        num_sd = num_fingers + 1
+        total_gate_w = w * 0.40
+        total_sd_w = w * 0.60
+        gate_w = total_gate_w / num_fingers
+        sd_w = total_sd_w / num_sd
+
+        # We return the geometric centers. If there are multiple S/D/G,
+        # we return the center of the middle-most one for simplicity of routing lines.
+        # Visually:
+        mid_y = y0 + h / 2
 
         if self._flip_h:
-            # Flipped: Source visually on the right, Drain on the left
-            s_local = QPointF(x0 + source_w + gate_w + drain_w / 2, y0 + h / 2)
-            d_local = QPointF(x0 + source_w / 2, y0 + h / 2)
+            # Flipped: Leftmost is D, rightmost is S (if nf=1)
+            left_is_s = False
         else:
-            s_local = QPointF(x0 + source_w / 2, y0 + h / 2)
-            d_local = QPointF(x0 + source_w + gate_w + drain_w / 2, y0 + h / 2)
+            left_is_s = True
 
-        g_local = QPointF(x0 + source_w + gate_w / 2, y0 + h / 2)
+        # Find all S centers and D centers
+        s_centers = []
+        d_centers = []
+        g_centers = []
+
+        cursor_x = x0
+        for i in range(num_sd):
+            cx = cursor_x + sd_w / 2
+            is_source = (i % 2 == 0)
+            if left_is_s == is_source:
+                s_centers.append(QPointF(cx, mid_y))
+            else:
+                d_centers.append(QPointF(cx, mid_y))
+            cursor_x += sd_w
+            
+            if i < num_fingers:
+                g_centers.append(QPointF(cursor_x + gate_w / 2, mid_y))
+                cursor_x += gate_w
+
+        # Pick the most "central" one for the anchor
+        s_anchor = s_centers[len(s_centers)//2] if s_centers else QPointF(x0, mid_y)
+        d_anchor = d_centers[len(d_centers)//2] if d_centers else QPointF(x0+w, mid_y)
+        g_anchor = g_centers[len(g_centers)//2] if g_centers else QPointF(x0+w/2, mid_y)
 
         return {
-            "S": self.mapToScene(s_local),
-            "G": self.mapToScene(g_local),
-            "D": self.mapToScene(d_local),
+            "S": self.mapToScene(s_anchor),
+            "G": self.mapToScene(g_anchor),
+            "D": self.mapToScene(d_anchor),
         }

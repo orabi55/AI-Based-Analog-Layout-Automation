@@ -28,20 +28,25 @@ Classify the user's message into exactly ONE of these categories:
               Examples: 'what is MM3?', 'which net connects M6 and M7?',
               'explain current mirror topology', 'how many PMOS devices?'.
 
-Reply with ONLY one word: CONCRETE, ABSTRACT, or QUESTION.
+  CHAT      - Casual conversation, greetings, thanks, or small talk.
+              No layout analysis or changes needed.
+              Examples: 'hi', 'hello', 'thanks', 'how are you',
+              'good morning', 'bye', 'what can you do?', 'help'.
+
+Reply with ONLY one word: CONCRETE, ABSTRACT, QUESTION, or CHAT.
 Do not explain. Do not add punctuation.
 """
 
 
 def classify_intent(user_message: str, run_llm_fn) -> str:
-    """Classify user intent as 'concrete', 'abstract', or 'question'.
+    """Classify user intent as 'concrete', 'abstract', 'question', or 'chat'.
 
     Args:
         user_message: the raw user text from the chat panel.
         run_llm_fn:   the run_llm callable from llm_worker.py.
 
     Returns:
-        'concrete' | 'abstract' | 'question'
+        'concrete' | 'abstract' | 'question' | 'chat'
         Falls back to 'abstract' on any error so the pipeline always runs.
     """
     msgs = [
@@ -55,8 +60,9 @@ def classify_intent(user_message: str, run_llm_fn) -> str:
             return "abstract"
         # Accept the first word only, upper-cased
         label = result.strip().upper().split()[0].rstrip(".,;:")
-        if label in ("CONCRETE", "ABSTRACT", "QUESTION"):
-            print(f"[CLASSIFIER] '{user_message[:60]}' → {label}")
+        if label in ("CONCRETE", "ABSTRACT", "QUESTION", "CHAT"):
+            preview = user_message[:60]
+            print(f"[CLASSIFIER] '{preview}' → {label}")
             return label.lower()
     except Exception as exc:
         print(f"[CLASSIFIER] Failed: {exc} — defaulting to abstract")

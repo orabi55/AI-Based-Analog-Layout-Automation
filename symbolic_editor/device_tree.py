@@ -24,6 +24,7 @@ class DeviceTreePanel(QWidget):
 
     device_selected = Signal(str)
     connection_selected = Signal(str, str, str)  # (dev_id, net_name, other_dev_id)
+    block_selected = Signal(str)  # (instance_name) — emitted when block group clicked
     toggle_requested = Signal()  # emitted when the user clicks the panel-toggle button
 
     def __init__(self, parent=None):
@@ -158,11 +159,55 @@ class DeviceTreePanel(QWidget):
         """
         self._terminal_nets = terminal_nets or {}
 
-    def load_devices(self, nodes):
-        """Populate tree from the placement JSON nodes."""
+    def load_devices(self, nodes, blocks=None):
+        """Populate tree from the placement JSON nodes.
+
+        Args:
+            nodes: list of node dicts
+            blocks: optional {inst: {"subckt": str, "devices": [str, ...]}}
+        """
         self.tree.clear()
 
-        # Classify devices
+        # ── Block groups (if available) ──
+        if blocks:
+            block_colors = [
+                "#ffa500", "#00bfff", "#32cd32", "#ff69b4",
+                "#8a2be2", "#ffd700", "#00ced1", "#ff6347",
+            ]
+            blocks_root = QTreeWidgetItem(
+                self.tree, [f"🧩 Blocks ({len(blocks)})"]
+            )
+            blocks_root.setFont(0, QFont("Segoe UI", 11, QFont.Weight.Bold))
+            blocks_root.setForeground(0, QColor("#e0c97f"))
+
+            for idx, (inst_name, info) in enumerate(blocks.items()):
+                subckt = info.get("subckt", "?")
+                devices = info.get("devices", [])
+                color = block_colors[idx % len(block_colors)]
+
+                block_item = QTreeWidgetItem(
+                    blocks_root,
+                    [f"📦 {inst_name}: {subckt}  ({len(devices)} devices)"]
+                )
+                block_item.setFont(0, QFont("Segoe UI", 10, QFont.Weight.DemiBold))
+                block_item.setForeground(0, QColor(color))
+                # Store block instance name for click handling
+                block_item.setData(0, Qt.ItemDataRole.UserRole, None)
+                block_item.setData(0, Qt.ItemDataRole.UserRole + 3, inst_name)
+
+                # Add member devices under this block
+                for dev_id in devices:
+                    dev_node = next(
+                        (n for n in nodes if n.get("id") == dev_id), None
+                    )
+                    if dev_node:
+                        self._add_device_item(block_item, dev_node)
+
+                block_item.setExpanded(True)
+
+            blocks_root.setExpanded(True)
+
+        # ── Standard NMOS/PMOS groups ──
         nmos_real, nmos_dummy = [], []
         pmos_real, pmos_dummy = [], []
         for node in nodes:
@@ -279,9 +324,16 @@ class DeviceTreePanel(QWidget):
             # Device item clicked
             self.device_selected.emit(dev_id)
         else:
+            # Check if this is a block group item
+            block_inst = item.data(0, Qt.ItemDataRole.UserRole + 3)
+            if block_inst:
+                self.block_selected.emit(block_inst)
+                return
+
             # Connection sub-item clicked
             parent_dev = item.data(0, Qt.ItemDataRole.UserRole + 1)
             net_name = item.data(0, Qt.ItemDataRole.UserRole + 2)
             if parent_dev and net_name:
                 self.device_selected.emit(parent_dev)
                 self.connection_selected.emit(parent_dev, net_name, "")
+

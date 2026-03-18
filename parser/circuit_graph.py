@@ -132,15 +132,7 @@ def build_circuit_graph(netlist):
     return G
 
 
-def print_graph(G):
 
-    print("\n--- Nodes ---")
-    for n,data in G.nodes(data=True):
-        print(n,data)
-
-    print("\n--- Edges ---")
-    for u,v,data in G.edges(data=True):
-        print(u,"<->",v,data)
 
 
 
