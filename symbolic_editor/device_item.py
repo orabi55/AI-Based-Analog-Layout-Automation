@@ -16,6 +16,33 @@ class DeviceSignals(QObject):
 
 class DeviceItem(QGraphicsRectItem):
 
+    _NAME_COLOR_HEX = (
+        "#ffffff",
+        "#ffe082",
+        "#ffcc80",
+        "#f48fb1",
+        "#b39ddb",
+        "#80cbc4",
+        "#81d4fa",
+        "#a5d6a7",
+        "#ffab91",
+        "#ce93d8",
+    )
+
+    @classmethod
+    def _name_color_for_prefix(cls, name):
+        """Return a deterministic name-label color grouped by prefix before '_'"""
+        prefix = str(name).split("_", 1)[0].strip().upper()
+        if not prefix:
+            prefix = "UNKNOWN"
+
+        # Stable string hash (independent of Python process hash randomization).
+        seed = 0
+        for ch in prefix:
+            seed = (seed * 131 + ord(ch)) & 0xFFFFFFFF
+        color_hex = cls._NAME_COLOR_HEX[seed % len(cls._NAME_COLOR_HEX)]
+        return QColor(color_hex)
+
     def __init__(self, name, dev_type, x, y, width, height, nf=1):
 
         super().__init__(0, 0, width, height)
@@ -25,6 +52,7 @@ class DeviceItem(QGraphicsRectItem):
         self.device_type = str(dev_type).strip().lower()
         self.nf = max(1, int(nf))
         self.signals = DeviceSignals()
+        self._name_color = self._name_color_for_prefix(name)
 
         self._drag_active = False
         self._drag_start_pos = QPointF()
@@ -233,15 +261,40 @@ class DeviceItem(QGraphicsRectItem):
         painter.drawText(left_rect, Qt.AlignmentFlag.AlignCenter, left_label)
         painter.drawText(right_rect, Qt.AlignmentFlag.AlignCenter, right_label)
 
-        # Device name — centred
+        # Device name — centred; split at first '_' onto two lines.
         name_font_size = max(3, min(10, int(w / max(5, min(w/10, 8)))))
+        prefix, sep, suffix = str(self.device_name).partition("_")
+        has_suffix = bool(sep and suffix)
+        if has_suffix:
+            name_font_size = max(3, name_font_size - 1)
         name_font = QFont("Segoe UI", name_font_size, QFont.Weight.Bold)
         painter.setFont(name_font)
-        painter.setPen(QColor("#ffffff"))
-        name_rect = QRectF(x0, y0 + 2, w, min(h, 20))
-        painter.drawText(name_rect,
-                         Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
-                         self.device_name)
+        painter.setPen(self._name_color)
+        name_rect = QRectF(x0, y0 + 2, w, min(h, 22))
+        top_rect = QRectF(name_rect.x(), name_rect.y(), name_rect.width(), name_rect.height() / 2.0)
+        if has_suffix:
+            bottom_rect = QRectF(
+                name_rect.x(),
+                name_rect.y() + name_rect.height() / 2.0 - 1.0,
+                name_rect.width(),
+                name_rect.height() / 2.0,
+            )
+            painter.drawText(
+                top_rect,
+                Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
+                prefix,
+            )
+            painter.drawText(
+                bottom_rect,
+                Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
+                suffix,
+            )
+        else:
+            painter.drawText(
+                top_rect,
+                Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
+                self.device_name,
+            )
 
         # ── Selection highlight (un-flipped) ───────────────────
         if self.isSelected():
