@@ -1678,7 +1678,8 @@ class MainWindow(QMainWindow):
                 else:
                     n["geometry"]["x"] = x_cursor
                     n["geometry"]["y"] = nmos_y
-                x_cursor += w
+                x_cursor += w
+
 
         return {
             "nodes": nodes,
