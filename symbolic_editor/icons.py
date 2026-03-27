@@ -362,3 +362,49 @@ def icon_panel_toggle() -> QIcon:
     icon = _icon_from_painter(pm, p)
     _CACHE["panel_toggle"] = icon
     return icon
+
+
+def icon_tree_toggle() -> QIcon:
+    """Alias for panel_toggle used in toolbar."""
+    return icon_panel_toggle()
+
+
+def icon_realize() -> QIcon:
+    """'Realize' / commit icon — checkmark in a box."""
+    if "realize" in _CACHE:
+        return _CACHE["realize"]
+    pm, p = _make_pixmap()
+    pen = QPen(_GREEN, 2.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+    p.setPen(pen)
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawRoundedRect(QRectF(5, 5, 22, 22), 4, 4)
+    # Checkmark
+    p.setPen(QPen(_GREEN, 2.6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    p.drawLine(QPointF(10, 16), QPointF(14, 22))
+    p.drawLine(QPointF(14, 22), QPointF(22, 10))
+    icon = _icon_from_painter(pm, p)
+    _CACHE["realize"] = icon
+    return icon
+
+
+def icon_optimize_2d() -> QIcon:
+    """Grid / optimize layout icon — arranged squares."""
+    if "optimize_2d" in _CACHE:
+        return _CACHE["optimize_2d"]
+    pm, p = _make_pixmap()
+    pen = QPen(_ACCENT, 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+    p.setPen(pen)
+    p.setBrush(QBrush(QColor(74, 144, 217, 50)))
+    # 2x2 grid of small squares
+    p.drawRoundedRect(QRectF(5, 5, 10, 10), 2, 2)
+    p.drawRoundedRect(QRectF(17, 5, 10, 10), 2, 2)
+    p.drawRoundedRect(QRectF(5, 17, 10, 10), 2, 2)
+    p.drawRoundedRect(QRectF(17, 17, 10, 10), 2, 2)
+    # Arrows suggesting optimization
+    p.setPen(QPen(_GREEN, 1.6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+    p.drawLine(QPointF(15, 10), QPointF(17, 10))
+    p.drawLine(QPointF(15, 22), QPointF(17, 22))
+    icon = _icon_from_painter(pm, p)
+    _CACHE["optimize_2d"] = icon
+    return icon
+
