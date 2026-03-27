@@ -16,43 +16,24 @@ class DeviceSignals(QObject):
 
 class DeviceItem(QGraphicsRectItem):
 
-    _NAME_COLOR_HEX = (
-        "#ffffff",
-        "#ffe082",
-        "#ffcc80",
-        "#f48fb1",
-        "#b39ddb",
-        "#80cbc4",
-        "#81d4fa",
-        "#a5d6a7",
-        "#ffab91",
-        "#ce93d8",
-    )
-
-    @classmethod
-    def _name_color_for_prefix(cls, name):
-        """Return a deterministic name-label color grouped by prefix before '_'"""
-        prefix = str(name).split("_", 1)[0].strip().upper()
-        if not prefix:
-            prefix = "UNKNOWN"
-
-        # Stable string hash (independent of Python process hash randomization).
-        seed = 0
-        for ch in prefix:
-            seed = (seed * 131 + ord(ch)) & 0xFFFFFFFF
-        color_hex = cls._NAME_COLOR_HEX[seed % len(cls._NAME_COLOR_HEX)]
-        return QColor(color_hex)
-
-    def __init__(self, name, dev_type, x, y, width, height, nf=1):
+    def __init__(self, dev_id, name, dev_type, x, y, width, height, is_dummy=False):
 
         super().__init__(0, 0, width, height)
 
         self.setPos(x, y)
-        self.device_name = name
+        self.dev_id = dev_id
         self.device_type = str(dev_type).strip().lower()
-        self.nf = max(1, int(nf))
+        
+        # Abbreviate Dummy Names for cleaner Canvas
+        name_str = str(name)
+        if name_str.upper().startswith("DUMMYP"):
+            self.device_name = name_str.upper().replace("DUMMYP", "DP")
+        elif name_str.upper().startswith("DUMMYN"):
+            self.device_name = name_str.upper().replace("DUMMYN", "DN")
+        else:
+            self.device_name = name_str
+        self.is_dummy = is_dummy  # Track if this is a dummy device
         self.signals = DeviceSignals()
-        self._name_color = self._name_color_for_prefix(name)
 
         self._drag_active = False
         self._drag_start_pos = QPointF()
@@ -60,6 +41,16 @@ class DeviceItem(QGraphicsRectItem):
         self._snap_grid_y = None
         self._flip_h = False
         self._flip_v = False
+        self._hide_left_terminal_label = False
+        self._hide_right_terminal_label = False
+        self._net_labels = {}  # {'S': 'net11', 'G': 'net5', 'D': 'net3'}
+
+        # Abut state: True means this edge is merged with neighbor (shares diffusion)
+        self._abut_left = False
+        self._abut_right = False
+        # Shared net name for abutted edges (for green highlighting)
+        self._shared_net_left = ""
+        self._shared_net_right = ""
 
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
@@ -67,28 +58,32 @@ class DeviceItem(QGraphicsRectItem):
 
         # --- Color palette per device type ---
         dtype = self.device_type
-        if str(name).upper().startswith("DUMMY"):
-            # Keep one consistent dummy color (pink) for both N/P.
-            self._source_color = QColor("#ffd6ea")
-            self._gate_color = QColor("#d14d94")
-            self._drain_color = QColor("#ffd6ea")
-            self._border = QColor("#b83b7c")
-            self._label_color = QColor("#8f2d61")
-            self._terminal_label_color = QColor("#fff1f8")
+        # Check for dummy: either is_dummy flag OR name starts with DUMMY
+        if is_dummy or str(name).upper().startswith("DUMMY"):
+            self.is_dummy = True  # Ensure flag is set
+            self._source_color = QColor("#f8bbd0")  # light pink
+            self._gate_color = QColor("#e91e63")     # pink (material design)
+            self._drain_color = QColor("#f8bbd0")
+            self._border = QColor("#880e4f")         # dark pink
+            self._label_color = QColor("#880e4f")
+            self._terminal_label_color = QColor("#ffffff")
         elif dtype == "nmos":
-            self._source_color = QColor("#d6eaf8")   # soft sky blue
-            self._gate_color = QColor("#1b4f72")      # deep navy blue
-            self._drain_color = QColor("#d6eaf8")     # soft sky blue
-            self._border = QColor("#1a5276")
-            self._label_color = QColor("#1a5276")
-            self._terminal_label_color = QColor("#eaf2f8")
-        else:
-            self._source_color = QColor("#fadbd8")    # soft rose
-            self._gate_color = QColor("#78281f")      # deep burgundy
-            self._drain_color = QColor("#fadbd8")     # soft rose
-            self._border = QColor("#7b241c")
-            self._label_color = QColor("#7b241c")
-            self._terminal_label_color = QColor("#f9ebea")
+            self._source_color = QColor("#cce5ff")   # light blue
+            self._gate_color = QColor("#4a90d9")      # blue
+            self._drain_color = QColor("#cce5ff")
+            self._border = QColor("#2d5986")
+            self._label_color = QColor("#1a365d")
+            self._terminal_label_color = QColor("#ffffff")
+        else:  # pmos
+            self._source_color = QColor("#ffcccc")    # light red/pink
+            self._gate_color = QColor("#d94a4a")      # red
+            self._drain_color = QColor("#ffcccc")
+            self._border = QColor("#8b2d2d")
+            self._label_color = QColor("#5d1a1a")
+            self._terminal_label_color = QColor("#ffffff")
+
+        # Shared diffusion color (green like in reference)
+        self._shared_diff_color = QColor("#4CAF50")  # Material green
 
         # Transparent fill — we paint everything custom
         self.setBrush(QBrush(Qt.BrushStyle.NoBrush))
@@ -136,6 +131,48 @@ class DeviceItem(QGraphicsRectItem):
             return f"{base}_FV"
         return base
 
+    def set_boundary_label_visibility(self, show_left=True, show_right=True):
+        """Control whether left/right terminal labels are drawn."""
+        self._hide_left_terminal_label = not bool(show_left)
+        self._hide_right_terminal_label = not bool(show_right)
+        self.update()
+
+    def set_net_labels(self, net_map):
+        """Set net annotations for terminals: {'S': 'net11', 'G': 'Vg', 'D': 'net3'}."""
+        self._net_labels = dict(net_map) if net_map else {}
+        self.update()
+
+    def set_abut_state(self, left=None, right=None, shared_net_left="", shared_net_right=""):
+        """Set which edges are abutted (merged with neighbor).
+
+        Args:
+            left: True = left edge is merged with neighbor (share diffusion)
+            right: True = right edge is merged with neighbor (share diffusion)
+            shared_net_left: Net name shared on left edge (for green display)
+            shared_net_right: Net name shared on right edge (for green display)
+        """
+        if left is not None:
+            self._abut_left = bool(left)
+        if right is not None:
+            self._abut_right = bool(right)
+        if shared_net_left:
+            self._shared_net_left = shared_net_left
+        if shared_net_right:
+            self._shared_net_right = shared_net_right
+        self.update()
+
+    def is_abut_left(self):
+        """Return True if left edge is abutted (merged with neighbor)."""
+        return self._abut_left
+
+    def is_abut_right(self):
+        """Return True if right edge is abutted (merged with neighbor)."""
+        return self._abut_right
+
+    def get_abut_state(self):
+        """Return current abut state as dict."""
+        return {'left': self._abut_left, 'right': self._abut_right}
+
     def itemChange(self, change, value):
         """Snap dragged positions to grid so devices never float between tracks."""
         if (
@@ -170,7 +207,7 @@ class DeviceItem(QGraphicsRectItem):
         super().mouseReleaseEvent(event)
 
     # --------------------------------------------------
-    # Painting — Multi-finger MOS layout
+    # Painting — Clean professional MOS layout
     # --------------------------------------------------
     def paint(self, painter: QPainter, option, widget=None):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -183,178 +220,459 @@ class DeviceItem(QGraphicsRectItem):
         cx = x0 + w / 2.0
         cy = y0 + h / 2.0
 
-        num_fingers = self.nf
-        num_sd = num_fingers + 1  # Number of S/D diffusion regions
-        # We assign 40% of the width to the gates collectively, 60% to the diffusions
-        total_gate_w = w * 0.40
-        total_sd_w = w * 0.60
-        gate_w = total_gate_w / num_fingers
-        sd_w = total_sd_w / num_sd
+        # Section geometry: S(30%) - G(40%) - D(30%)
+        diff_w = w * 0.30   # diffusion (S or D) width
+        gate_w = w * 0.40   # gate width
 
-        # ── Draw coloured sections WITH flip transform ─────────
+        # Determine visual abut state (flip reverses left/right)
+        visual_abut_left = self._abut_right if self._flip_h else self._abut_left
+        visual_abut_right = self._abut_left if self._flip_h else self._abut_right
+
+        # ── Apply flip transform for drawing ─────────────────────
         painter.save()
         painter.translate(cx, cy)
         painter.scale(-1.0 if self._flip_h else 1.0,
-                       -1.0 if self._flip_v else 1.0)
+                      -1.0 if self._flip_v else 1.0)
         painter.translate(-cx, -cy)
 
-        # Alternating S/D logic:
-        # S D S D ... or D S D S ... (if flipped)
-        # Assuming left-most is Source normally.
-        cursor_x = x0
+        # ── Draw Source (left) section ───────────────────────────
+        source_rect = QRectF(x0, y0, diff_w, h)
+        if visual_abut_left:
+            # Shared diffusion - draw in green
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QBrush(self._shared_diff_color))
+        else:
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QBrush(self._source_color))
+        painter.drawRect(source_rect)
 
-        painter.setPen(Qt.PenStyle.NoPen)
-        for i in range(num_sd):
-            is_source = (i % 2 == 0)
-            color = self._source_color if is_source else self._drain_color
-            sd_rect = QRectF(cursor_x, y0, sd_w, h)
-            painter.setBrush(QBrush(color))
-            painter.drawRect(sd_rect)
-            cursor_x += sd_w
+        # ── Draw Gate (center) section with gradient ─────────────
+        gate_rect = QRectF(x0 + diff_w, y0, gate_w, h)
+        gradient = QLinearGradient(gate_rect.topLeft(), gate_rect.bottomLeft())
+        gradient.setColorAt(0.0, self._gate_color.lighter(110))
+        gradient.setColorAt(0.5, self._gate_color)
+        gradient.setColorAt(1.0, self._gate_color.darker(110))
+        painter.setBrush(QBrush(gradient))
+        painter.drawRect(gate_rect)
 
-            # Draw gate to the right of this diffusion, except for the last diffusion
-            if i < num_fingers:
-                gate_rect = QRectF(cursor_x, y0, gate_w, h)
-                gradient = QLinearGradient(gate_rect.topLeft(), gate_rect.bottomLeft())
-                gradient.setColorAt(0.0, self._gate_color.lighter(115))
-                gradient.setColorAt(0.5, self._gate_color)
-                gradient.setColorAt(1.0, self._gate_color.darker(115))
-                painter.setBrush(QBrush(gradient))
-                painter.drawRect(gate_rect)
-                cursor_x += gate_w
+        # ── Draw Drain (right) section ───────────────────────────
+        drain_rect = QRectF(x0 + diff_w + gate_w, y0, diff_w, h)
+        if visual_abut_right:
+            # Shared diffusion - draw in green
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QBrush(self._shared_diff_color))
+        else:
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QBrush(self._drain_color))
+        painter.drawRect(drain_rect)
 
-        # Outer border
-        painter.setPen(QPen(self._border, 1.5))
+        # ── Draw borders ─────────────────────────────────────────
+        border_pen = QPen(self._border, 1.5)
+        painter.setPen(border_pen)
         painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawRect(rect.adjusted(0.5, 0.5, -0.5, -0.5))
 
-        # Vertical separator lines
-        sep_pen = QPen(self._border.darker(120), 1.0)
+        # Top border
+        painter.drawLine(QPointF(x0, y0 + 0.75), QPointF(x0 + w, y0 + 0.75))
+        # Bottom border
+        painter.drawLine(QPointF(x0, y0 + h - 0.75), QPointF(x0 + w, y0 + h - 0.75))
+
+        # Left border: solid black if NOT abutted (thin)
+        if not visual_abut_left:
+            painter.setPen(QPen(QColor("#1a1a1a"), 0.75))
+            painter.drawLine(QPointF(x0 + 1, y0), QPointF(x0 + 1, y0 + h))
+
+        # Right border: solid black if NOT abutted (thin)
+        if not visual_abut_right:
+            painter.setPen(QPen(QColor("#1a1a1a"), 0.75))
+            painter.drawLine(QPointF(x0 + w - 1, y0), QPointF(x0 + w - 1, y0 + h))
+
+        # Internal separator lines (always drawn)
+        sep_pen = QPen(self._border, 1.0)
         painter.setPen(sep_pen)
-        # Draw separators
-        cursor_x = x0
-        for i in range(num_fingers):
-            cursor_x += sd_w
-            painter.drawLine(QPointF(cursor_x, y0), QPointF(cursor_x, y0 + h))
-            cursor_x += gate_w
-            painter.drawLine(QPointF(cursor_x, y0), QPointF(cursor_x, y0 + h))
+        painter.drawLine(QPointF(x0 + diff_w, y0), QPointF(x0 + diff_w, y0 + h))
+        painter.drawLine(QPointF(x0 + diff_w + gate_w, y0), QPointF(x0 + diff_w + gate_w, y0 + h))
 
         painter.restore()  # back to un-flipped coordinates
 
-        # ── Draw text labels WITHOUT flip (always readable) ────
-        term_font_size = max(3, min(9, int(min(sd_w, h) / 3)))
+        # ── Draw text labels (always readable, no flip) ──────────
+        left_rect = QRectF(x0, y0, diff_w, h)
+        center_rect = QRectF(x0 + diff_w, y0, gate_w, h)
+        right_rect = QRectF(x0 + diff_w + gate_w, y0, diff_w, h)
+
+        # Terminal labels depend on flip state
+        left_term = "D" if self._flip_h else "S"
+        right_term = "S" if self._flip_h else "D"
+        left_net = self._net_labels.get(left_term, "")
+        right_net = self._net_labels.get(right_term, "")
+        gate_net = self._net_labels.get("G", "")
+
+        # Font sizes - very small as requested
+        term_font_size = 3
         term_font = QFont("Segoe UI", term_font_size, QFont.Weight.Bold)
-        painter.setFont(term_font)
 
-        # In un-flipped coordinates:
-        left_label = "D" if self._flip_h else "S"
-        right_label = "S" if (num_sd % 2 == 0) ^ self._flip_h else "D"
-        # The visual rightmost diffusion type depends on nf:
-        # nf=1 (2 diffusions): left=S, right=D. If flipped: left=D, right=S.
-        # nf=2 (3 diffusions): left=S, right=S. If flipped: left=D, right=D.
+        net_font_size = 5
+        net_font = QFont("Segoe UI", net_font_size)
 
-        # Draw left and right terminal labels
-        left_rect = QRectF(x0, y0, sd_w, h)
-        right_rect = QRectF(x0 + w - sd_w, y0, sd_w, h)
-        
-        painter.setPen(self._label_color)
-        painter.drawText(left_rect, Qt.AlignmentFlag.AlignCenter, left_label)
-        painter.drawText(right_rect, Qt.AlignmentFlag.AlignCenter, right_label)
-
-        # Device name — centred; split at first '_' onto two lines.
-        name_font_size = max(3, min(10, int(w / max(5, min(w/10, 8)))))
-        prefix, sep, suffix = str(self.device_name).partition("_")
-        has_suffix = bool(sep and suffix)
-        if has_suffix:
-            name_font_size = max(3, name_font_size - 1)
+        name_font_size = 3
         name_font = QFont("Segoe UI", name_font_size, QFont.Weight.Bold)
-        painter.setFont(name_font)
-        painter.setPen(self._name_color)
-        name_rect = QRectF(x0, y0 + 2, w, min(h, 22))
-        top_rect = QRectF(name_rect.x(), name_rect.y(), name_rect.width(), name_rect.height() / 2.0)
-        if has_suffix:
-            bottom_rect = QRectF(
-                name_rect.x(),
-                name_rect.y() + name_rect.height() / 2.0 - 1.0,
-                name_rect.width(),
-                name_rect.height() / 2.0,
-            )
-            painter.drawText(
-                top_rect,
-                Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
-                prefix,
-            )
-            painter.drawText(
-                bottom_rect,
-                Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
-                suffix,
-            )
-        else:
-            painter.drawText(
-                top_rect,
-                Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
-                self.device_name,
-            )
 
-        # ── Selection highlight (un-flipped) ───────────────────
+        # ── Device name at bottom (centered across entire device) ────
+        painter.setFont(name_font)
+        painter.setPen(self._terminal_label_color)
+        name_rect = QRectF(x0, y0 + h - 8, w, 8)
+        painter.drawText(name_rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom,
+                         self.device_name)
+
+        # ── Left section (S or D) ────────────────────────────────
+        # Terminal letter at bottom - only show if NOT abutted
+        if not self._hide_left_terminal_label and not visual_abut_left:
+            painter.setFont(term_font)
+            painter.setPen(self._label_color)
+            term_rect = QRectF(left_rect.x(), left_rect.y() + h - 10,
+                               left_rect.width(), 8)
+            painter.drawText(term_rect, Qt.AlignmentFlag.AlignCenter, left_term)
+
+        # Net name VERTICAL — skip if left edge is abutted (the left neighbor draws it via its right edge)
+        if left_net and not visual_abut_left:
+            painter.save()
+            # Position at center of left diffusion section
+            text_x = left_rect.x() + left_rect.width() / 2
+            text_y = left_rect.y() + h * 0.50
+            painter.translate(text_x, text_y)
+            painter.rotate(90)  # Rotate 90 degrees clockwise
+            painter.setFont(net_font)
+            # Use black for better visibility on any background
+            painter.setPen(QColor("#000000"))
+            # Draw text centered at origin (after rotation)
+            v_rect = QRectF(-h * 0.30, -left_rect.width() / 2, h * 0.60, left_rect.width())
+            painter.drawText(v_rect, Qt.AlignmentFlag.AlignCenter, left_net)
+            painter.restore()
+
+        # ── Gate section (center) ────────────────────────────────
+        # "G" terminal label at bottom
+        painter.setFont(term_font)
+        painter.setPen(self._terminal_label_color)
+        g_term_rect = QRectF(center_rect.x(), center_rect.y() + h - 10,
+                             center_rect.width(), 8)
+        painter.drawText(g_term_rect, Qt.AlignmentFlag.AlignCenter, "G")
+
+        # Gate net name VERTICAL (rotated 90 degrees clockwise)
+        if gate_net:
+            painter.save()
+            text_x = center_rect.x() + center_rect.width() / 2
+            text_y = center_rect.y() + h * 0.50
+            painter.translate(text_x, text_y)
+            painter.rotate(90)
+            painter.setFont(net_font)
+            # Use black for better visibility
+            painter.setPen(QColor("#000000"))
+            v_rect = QRectF(-h * 0.30, -center_rect.width() / 2, h * 0.60, center_rect.width())
+            painter.drawText(v_rect, Qt.AlignmentFlag.AlignCenter, gate_net)
+            painter.restore()
+
+        # ── Right section (D or S) ───────────────────────────────
+        # Terminal letter at bottom - only show if NOT abutted
+        if not self._hide_right_terminal_label and not visual_abut_right:
+            painter.setFont(term_font)
+            painter.setPen(self._label_color)
+            term_rect = QRectF(right_rect.x(), right_rect.y() + h - 10,
+                               right_rect.width(), 8)
+            painter.drawText(term_rect, Qt.AlignmentFlag.AlignCenter, right_term)
+
+        # Net name VERTICAL - skip if right edge is abutted (we draw it via the left device of the pair)
+        if right_net and not visual_abut_right:
+            painter.save()
+            text_x = right_rect.x() + right_rect.width() / 2
+            text_y = right_rect.y() + h * 0.50
+            painter.translate(text_x, text_y)
+            painter.rotate(90)
+            painter.setFont(net_font)
+            painter.setPen(QColor("#000000"))
+            v_rect = QRectF(-h * 0.30, -right_rect.width() / 2, h * 0.60, right_rect.width())
+            painter.drawText(v_rect, Qt.AlignmentFlag.AlignCenter, right_net)
+            painter.restore()
+            
+        # Draw SHARED net text exactly once, assigned to the left device of an abutment pair
+        if right_net and visual_abut_right:
+            painter.save()
+            # The left device owns the drawing of the shared net.
+            # We want to center it exactly in the middle of the FULL shared overlapping region.
+            # The full shared region starts at the left device's right_rect.x(), and spans
+            # 2 * right_rect.width() minus the overlap amount (which is overlap_val).
+            # But the simplest visual centering is just the very right edge of the left device's right_rect.
+            text_x = right_rect.x() + right_rect.width()
+            text_y = right_rect.y() + h * 0.50
+            painter.translate(text_x, text_y)
+            painter.rotate(90)
+            painter.setFont(net_font)
+            painter.setPen(QColor("#000000"))  # User requested all black shared text
+            v_rect = QRectF(-h * 0.30, -right_rect.width() / 2, h * 0.60, right_rect.width())
+            painter.drawText(v_rect, Qt.AlignmentFlag.AlignCenter, right_net)
+            painter.restore()
+
+        # ── Selection highlight ──────────────────────────────────
         if self.isSelected():
-            sel_pen = QPen(QColor("#4a90d9"), 2.0, Qt.PenStyle.SolidLine)
+            sel_pen = QPen(QColor("#ffcc00"), 2.5, Qt.PenStyle.SolidLine)
             painter.setPen(sel_pen)
-            painter.setBrush(QBrush(QColor(74, 144, 217, 30)))
+            painter.setBrush(QBrush(QColor(255, 204, 0, 40)))
             painter.drawRect(rect.adjusted(1, 1, -1, -1))
 
     def terminal_anchors(self):
-        """Return scene positions for S, G, D terminal centers."""
+        """Return scene positions for S, G, D terminal centers.
+
+        Accounts for horizontal flip so anchors match the visual layout.
+        """
         rect = self.rect()
         w = rect.width()
         h = rect.height()
         x0 = rect.x()
         y0 = rect.y()
 
-        num_fingers = self.nf
-        num_sd = num_fingers + 1
-        total_gate_w = w * 0.40
-        total_sd_w = w * 0.60
-        gate_w = total_gate_w / num_fingers
-        sd_w = total_sd_w / num_sd
-
-        # We return the geometric centers. If there are multiple S/D/G,
-        # we return the center of the middle-most one for simplicity of routing lines.
-        # Visually:
-        mid_y = y0 + h / 2
+        diff_w = w * 0.30
+        gate_w = w * 0.40
 
         if self._flip_h:
-            # Flipped: Leftmost is D, rightmost is S (if nf=1)
-            left_is_s = False
+            # Flipped: Source visually on the right, Drain on the left
+            s_local = QPointF(x0 + diff_w + gate_w + diff_w / 2, y0 + h / 2)
+            d_local = QPointF(x0 + diff_w / 2, y0 + h / 2)
         else:
-            left_is_s = True
+            s_local = QPointF(x0 + diff_w / 2, y0 + h / 2)
+            d_local = QPointF(x0 + diff_w + gate_w + diff_w / 2, y0 + h / 2)
 
-        # Find all S centers and D centers
-        s_centers = []
-        d_centers = []
-        g_centers = []
-
-        cursor_x = x0
-        for i in range(num_sd):
-            cx = cursor_x + sd_w / 2
-            is_source = (i % 2 == 0)
-            if left_is_s == is_source:
-                s_centers.append(QPointF(cx, mid_y))
-            else:
-                d_centers.append(QPointF(cx, mid_y))
-            cursor_x += sd_w
-            
-            if i < num_fingers:
-                g_centers.append(QPointF(cursor_x + gate_w / 2, mid_y))
-                cursor_x += gate_w
-
-        # Pick the most "central" one for the anchor
-        s_anchor = s_centers[len(s_centers)//2] if s_centers else QPointF(x0, mid_y)
-        d_anchor = d_centers[len(d_centers)//2] if d_centers else QPointF(x0+w, mid_y)
-        g_anchor = g_centers[len(g_centers)//2] if g_centers else QPointF(x0+w/2, mid_y)
+        g_local = QPointF(x0 + diff_w + gate_w / 2, y0 + h / 2)
 
         return {
-            "S": self.mapToScene(s_anchor),
-            "G": self.mapToScene(g_anchor),
-            "D": self.mapToScene(d_anchor),
+            "S": self.mapToScene(s_local),
+            "G": self.mapToScene(g_local),
+            "D": self.mapToScene(d_local),
         }
+
+    def terminal_rects(self):
+        """Return scene rectangles for S, G, D terminal areas for partial highlighting.
+
+        Accounts for horizontal flip so rects match the visual layout.
+        """
+        rect = self.rect()
+        w = rect.width()
+        h = rect.height()
+        x0 = rect.x()
+        y0 = rect.y()
+
+        diff_w = w * 0.30
+        gate_w = w * 0.40
+
+        if self._flip_h:
+            # Flipped: Source visually on the right, Drain on the left
+            s_local = QRectF(x0 + diff_w + gate_w, y0, diff_w, h)
+            d_local = QRectF(x0, y0, diff_w, h)
+        else:
+            s_local = QRectF(x0, y0, diff_w, h)
+            d_local = QRectF(x0 + diff_w + gate_w, y0, diff_w, h)
+
+        g_local = QRectF(x0 + diff_w, y0, gate_w, h)
+
+        return {
+            "S": self.mapRectToScene(s_local),
+            "G": self.mapRectToScene(g_local),
+            "D": self.mapRectToScene(d_local),
+        }
+
+
+# ---------------------------------------------------------------------------
+# Abutment Group Overlay (for merged multi-device display)
+# ---------------------------------------------------------------------------
+
+class AbutGroupItem(QGraphicsRectItem):
+    """Merged visual for N abutted devices sharing diffusion nets.
+
+    Draws as one connected shape with shared diffusion in green:
+        [S | gate0 | shared(green) | gate1 | shared(green) | ... | D]
+    """
+
+    def __init__(self, chain_data, unit_w, unit_h):
+        n = len(chain_data)
+        dw = unit_w * 0.30          # diffusion section width
+        gw = unit_w * 0.40          # gate section width
+        total_w = (n + 1) * dw + n * gw
+
+        super().__init__(0, 0, total_w, unit_h)
+
+        self._chain = chain_data
+        self._unit_w = unit_w
+        self._dw = dw
+        self._gw = gw
+
+        # Purely cosmetic — no interaction
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, False)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
+        self.setAcceptHoverEvents(False)
+        self.setZValue(50)
+
+        self.setBrush(QBrush(Qt.BrushStyle.NoBrush))
+        self.setPen(QPen(Qt.PenStyle.NoPen))
+
+    @staticmethod
+    def _colors_for(dev_type, name=""):
+        """Return (diff_c, gate_c, border_c, lbl_c, tlbl_c) for device type."""
+        if str(name).upper().startswith("DUMMY"):
+            return (QColor("#e8e8e8"), QColor("#888888"),
+                    QColor("#666666"), QColor("#444444"), QColor("#333333"))
+        if str(dev_type).strip().lower() == "nmos":
+            return (QColor("#cce5ff"), QColor("#4a90d9"),
+                    QColor("#2d5986"), QColor("#1a365d"), QColor("#ffffff"))
+        return (QColor("#ffcccc"), QColor("#d94a4a"),
+                QColor("#8b2d2d"), QColor("#5d1a1a"), QColor("#ffffff"))
+
+    @staticmethod
+    def _side_net(dev_data, side):
+        """Net at visual 'left' or 'right' side, respecting flip_h."""
+        nets = dev_data.get('nets', {})
+        flip_h = dev_data.get('flip_h', False)
+        term = ('D' if flip_h else 'S') if side == 'left' else ('S' if flip_h else 'D')
+        return nets.get(term, '')
+
+    @staticmethod
+    def _side_term(dev_data, side):
+        """Terminal letter at visual 'left' or 'right' side."""
+        flip_h = dev_data.get('flip_h', False)
+        if side == 'left':
+            return 'D' if flip_h else 'S'
+        return 'S' if flip_h else 'D'
+
+    def paint(self, painter: QPainter, option, widget=None):
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        r = self.rect()
+        h = r.height()
+        x0, y0 = r.x(), r.y()
+        n = len(self._chain)
+        dw, gw = self._dw, self._gw
+        total_w = (n + 1) * dw + n * gw
+
+        shared_color = QColor("#4CAF50")  # Green for shared diffusion
+
+        # ── Draw sections ────────────────────────────────────────
+        x = x0
+        for i, dev in enumerate(self._chain):
+            diff_c, gate_c, *_ = self._colors_for(dev.get('dev_type', ''), dev.get('name', ''))
+
+            # Diffusion section
+            painter.setPen(Qt.PenStyle.NoPen)
+            if i > 0:
+                # Shared diffusion (between devices) - green
+                painter.setBrush(QBrush(shared_color))
+            else:
+                # Outer left diffusion - normal color
+                painter.setBrush(QBrush(diff_c))
+            painter.drawRect(QRectF(x, y0, dw, h))
+            x += dw
+
+            # Gate section with gradient
+            g_rect = QRectF(x, y0, gw, h)
+            grad = QLinearGradient(g_rect.topLeft(), g_rect.bottomLeft())
+            grad.setColorAt(0.0, gate_c.lighter(110))
+            grad.setColorAt(0.5, gate_c)
+            grad.setColorAt(1.0, gate_c.darker(110))
+            painter.setBrush(QBrush(grad))
+            painter.drawRect(g_rect)
+            x += gw
+
+        # Right-most outer diffusion (normal color)
+        last = self._chain[-1]
+        diff_c, *_ = self._colors_for(last.get('dev_type', ''), last.get('name', ''))
+        painter.setBrush(QBrush(diff_c))
+        painter.drawRect(QRectF(x, y0, dw, h))
+
+        # ── Outer border (black) ─────────────────────────────────
+        painter.setPen(QPen(QColor("#1a1a1a"), 2.0))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRect(QRectF(x0, y0, total_w, h).adjusted(1, 1, -1, -1))
+
+        # ── Separator lines ──────────────────────────────────────
+        _, _, b0, *_ = self._colors_for(
+            self._chain[0].get('dev_type', ''), self._chain[0].get('name', ''))
+        painter.setPen(QPen(b0, 1.0))
+        sx = x0
+        for _ in range(n):
+            sx += dw
+            painter.drawLine(QPointF(sx, y0), QPointF(sx, y0 + h))
+            sx += gw
+            painter.drawLine(QPointF(sx, y0), QPointF(sx, y0 + h))
+
+        # ── Text labels ──────────────────────────────────────────
+        term_fs = max(6, min(8, int(h * 0.18)))
+        term_font = QFont("Segoe UI", term_fs, QFont.Weight.Bold)
+        net_fs = max(5, min(7, int(h * 0.14)))
+        net_font = QFont("Segoe UI", net_fs)
+        name_fs = max(6, min(9, int(h * 0.20)))
+        name_font = QFont("Segoe UI", name_fs, QFont.Weight.Bold)
+
+        x = x0
+        for i, dev in enumerate(self._chain):
+            diff_c, gate_c, border_c, lbl_c, tlbl_c = self._colors_for(
+                dev.get('dev_type', ''), dev.get('name', ''))
+            nets = dev.get('nets', {})
+
+            # Diffusion section label
+            dr = QRectF(x, y0, dw, h)
+            l_term = self._side_term(dev, 'left')
+            l_net = self._side_net(dev, 'left')
+
+            # Terminal letter
+            painter.setFont(term_font)
+            if i > 0:
+                painter.setPen(QColor("#ffffff"))  # White on green
+            else:
+                painter.setPen(lbl_c)
+            term_rect = QRectF(dr.x(), dr.y() + 2, dr.width(), dr.height() * 0.35)
+            painter.drawText(term_rect, Qt.AlignmentFlag.AlignCenter, l_term)
+
+            # Net name
+            if l_net:
+                painter.setFont(net_font)
+                net_rect = QRectF(dr.x(), dr.y() + dr.height() * 0.4,
+                                  dr.width(), dr.height() * 0.55)
+                painter.drawText(net_rect, Qt.AlignmentFlag.AlignCenter, l_net)
+            x += dw
+
+            # Gate section
+            painter.setFont(name_font)
+            painter.setPen(tlbl_c)
+            name_rect = QRectF(x, y0 + 2, gw, h * 0.40)
+            painter.drawText(name_rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
+                             dev.get('name', ''))
+
+            painter.setFont(term_font)
+            g_rect = QRectF(x, y0 + h * 0.35, gw, h * 0.30)
+            painter.drawText(g_rect, Qt.AlignmentFlag.AlignCenter, 'G')
+
+            g_net = nets.get('G', '')
+            if g_net:
+                painter.setFont(net_font)
+                g_net_rect = QRectF(x, y0 + h * 0.60, gw, h * 0.35)
+                painter.drawText(g_net_rect, Qt.AlignmentFlag.AlignCenter, g_net)
+            x += gw
+
+        # Right-most diffusion label
+        last = self._chain[-1]
+        diff_c, _, _, lbl_c, _ = self._colors_for(last.get('dev_type', ''), last.get('name', ''))
+        r_term = self._side_term(last, 'right')
+        r_net = self._side_net(last, 'right')
+        dr = QRectF(x, y0, dw, h)
+
+        painter.setFont(term_font)
+        painter.setPen(lbl_c)
+        term_rect = QRectF(dr.x(), dr.y() + 2, dr.width(), dr.height() * 0.35)
+        painter.drawText(term_rect, Qt.AlignmentFlag.AlignCenter, r_term)
+
+        if r_net:
+            painter.setFont(net_font)
+            net_rect = QRectF(dr.x(), dr.y() + dr.height() * 0.4,
+                              dr.width(), dr.height() * 0.55)
+            painter.drawText(net_rect, Qt.AlignmentFlag.AlignCenter, r_net)
+
+        # ── Selection highlight ──────────────────────────────────
+        if self.isSelected():
+            painter.setPen(QPen(QColor("#ffcc00"), 2.5))
+            painter.setBrush(QBrush(QColor(255, 204, 0, 40)))
+            painter.drawRect(QRectF(x0, y0, total_w, h).adjusted(1, 1, -1, -1))
