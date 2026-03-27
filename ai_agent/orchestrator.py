@@ -1091,8 +1091,8 @@ class Orchestrator:
             constraint_text,
             terminal_nets,
             edges,
-            self._gap_px,
-            placement_mode=placement_mode,
+            self._gap_px
+            #placement_mode=placement_mode,
         )
         
         # Check if positions changed
