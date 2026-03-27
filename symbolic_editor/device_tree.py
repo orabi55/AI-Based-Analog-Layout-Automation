@@ -25,6 +25,7 @@ class DeviceTreePanel(QWidget):
     device_selected = Signal(str)
     connection_selected = Signal(str, str, str)  # (dev_id, net_name, other_dev_id)
     net_selected = Signal(str)  # net_name - for highlighting all connections of a net
+    finger_group_selected = Signal(str)  # prefix, e.g. MM0
     toggle_requested = Signal()  # emitted when the user clicks the panel-toggle button
 
     def __init__(self, parent=None):
@@ -266,8 +267,7 @@ class DeviceTreePanel(QWidget):
                 nmos_folder.setForeground(0, QColor("#5dade2"))
                 nmos_folder.setData(0, Qt.ItemDataRole.UserRole, "__nmos__")
 
-                for dev in sorted(nmos_real, key=lambda d: d.get("id", "")):
-                    self._add_instance_item(nmos_folder, dev, "nmos")
+                self._add_grouped_instance_items(nmos_folder, nmos_real, "nmos")
 
                 # NMOS Dummies subfolder
                 if nmos_dummy:
@@ -286,8 +286,7 @@ class DeviceTreePanel(QWidget):
                 pmos_folder.setForeground(0, QColor("#e74c3c"))
                 pmos_folder.setData(0, Qt.ItemDataRole.UserRole, "__pmos__")
 
-                for dev in sorted(pmos_real, key=lambda d: d.get("id", "")):
-                    self._add_instance_item(pmos_folder, dev, "pmos")
+                self._add_grouped_instance_items(pmos_folder, pmos_real, "pmos")
 
                 # PMOS Dummies subfolder
                 if pmos_dummy:
@@ -348,6 +347,45 @@ class DeviceTreePanel(QWidget):
                     for group_name, dev_ids in sorted(auto_groups.items()):
                         self._add_group_item(self.tree, group_name, dev_ids)
 
+    def _split_finger_name(self, dev_id):
+        """Return (base_name, is_finger) where underscore indicates a finger device."""
+        name = str(dev_id or "")
+        base, sep, suffix = name.partition("_")
+        if sep and suffix:
+            return base, True
+        return name, False
+
+    def _add_grouped_instance_items(self, parent, devices, dev_type):
+        """Add instance items, grouping finger devices by prefix."""
+        grouped = {}
+        singles = []
+
+        for dev in devices:
+            dev_id = dev.get("id", "")
+            base_name, is_finger = self._split_finger_name(dev_id)
+            if is_finger:
+                grouped.setdefault(base_name, []).append(dev)
+            else:
+                singles.append(dev)
+
+        for dev in sorted(singles, key=lambda d: d.get("id", "")):
+            self._add_instance_item(parent, dev, dev_type)
+
+        for base_name in sorted(grouped.keys()):
+            fingers = sorted(grouped[base_name], key=lambda d: d.get("id", ""))
+            color = QColor("#5dade2") if dev_type == "nmos" else QColor("#e74c3c")
+            group_item = QTreeWidgetItem(parent, [f"  {base_name}  │  nf={len(fingers)}"])
+            group_item.setFont(0, QFont("Segoe UI", 10, QFont.Weight.DemiBold))
+            group_item.setForeground(0, color)
+            group_item.setData(0, Qt.ItemDataRole.UserRole, "__finger_group__")
+            group_item.setData(0, Qt.ItemDataRole.UserRole + 1, base_name)
+
+            for dev in fingers:
+                self._add_instance_item(group_item, dev, dev_type)
+
+            # Hidden by default; user expands from the branch control.
+            group_item.setExpanded(False)
+
     def _collect_all_nets(self):
         """Collect all nets and which devices connect to them."""
         net_to_devices = {}
@@ -387,6 +425,7 @@ class DeviceTreePanel(QWidget):
         """Add a device instance with its terminal info."""
         dev_id = dev.get("id", "unknown")
         elec = dev.get("electrical", {})
+        in_finger_group = parent.data(0, Qt.ItemDataRole.UserRole) == "__finger_group__"
 
         # Compact display with better formatting
         nf = elec.get('nf', 1)
@@ -394,8 +433,8 @@ class DeviceTreePanel(QWidget):
             text = f"  {dev_id}"
             color = QColor("#999999")
         else:
-            # Show device ID with finger count in a clean format
-            text = f"  {dev_id}  │  nf={nf}"
+            # In finger subgroup, keep row compact by omitting nf text.
+            text = f"  {dev_id}" if in_finger_group else f"  {dev_id}  │  nf={nf}"
             color = QColor("#5dade2") if dev_type == "nmos" else QColor("#e74c3c")
 
         item = QTreeWidgetItem(parent, [text])
@@ -441,7 +480,7 @@ class DeviceTreePanel(QWidget):
 
     def _add_group_item(self, parent, group_name, dev_ids):
         """Add a device group item."""
-        text = f"  {group_name}  │  {len(dev_ids)} fingers"
+        text = f"  {group_name}  │  nf={len(dev_ids)}"
         item = QTreeWidgetItem(parent, [text])
         item.setFont(0, QFont("Segoe UI", 10, QFont.Weight.DemiBold))
         item.setForeground(0, QColor("#dda0dd"))
@@ -487,7 +526,12 @@ class DeviceTreePanel(QWidget):
             net_name = item.data(0, Qt.ItemDataRole.UserRole + 1)
             if net_name:
                 self.net_selected.emit(net_name)
-        elif role in ("__instances__", "__nmos__", "__pmos__", "__nets__", "__groups__", "__group__"):
+        elif role == "__finger_group__":
+            prefix = item.data(0, Qt.ItemDataRole.UserRole + 1)
+            if prefix:
+                self.finger_group_selected.emit(prefix)
+            item.setExpanded(not item.isExpanded())
+        elif role in ("__instances__", "__nmos__", "__pmos__", "__nets__", "__groups__", "__group__", "__finger_group__"):
             # Folder clicked - just expand/collapse
             pass
         elif role is None:

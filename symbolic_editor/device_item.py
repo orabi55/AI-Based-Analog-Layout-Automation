@@ -16,6 +16,19 @@ class DeviceSignals(QObject):
 
 class DeviceItem(QGraphicsRectItem):
 
+    # All possible colors for device-name text. Prefixes are mapped into this list.
+    NAME_COLOR_PALETTE = [
+        "#b6f12d",  # red
+        "#e8972c",  # orange
+        "#eac808",  # yellow
+        "#22c55e",  # green
+        "#21e8c7",  # teal
+        "#f0f0f3",  # indigo
+        "#63385D",  # violet
+        "#000000",  # rose
+        "#84cc16",  # lime
+    ]
+
     def __init__(self, dev_id, name, dev_type, x, y, width, height, is_dummy=False):
 
         super().__init__(0, 0, width, height)
@@ -130,6 +143,20 @@ class DeviceItem(QGraphicsRectItem):
         if self._flip_v:
             return f"{base}_FV"
         return base
+
+    def _name_color_from_prefix(self, prefix: str) -> QColor:
+        """Return a deterministic palette color for a name prefix."""
+        key = (prefix or "").strip().lower()
+        if not key:
+            return self._terminal_label_color
+
+        # Stable string hash to palette index mapping.
+        hash_value = 0
+        for ch in key:
+            hash_value = (hash_value * 131 + ord(ch)) % (2 ** 31 - 1)
+
+        color_index = hash_value % len(self.NAME_COLOR_PALETTE)
+        return QColor(self.NAME_COLOR_PALETTE[color_index])
 
     def set_boundary_label_visibility(self, show_left=True, show_right=True):
         """Control whether left/right terminal labels are drawn."""
@@ -316,12 +343,18 @@ class DeviceItem(QGraphicsRectItem):
         name_font_size = 3
         name_font = QFont("Segoe UI", name_font_size, QFont.Weight.Bold)
 
-        # ── Device name at bottom (centered across entire device) ────
+        # ── Device name at top (centered across entire device) ───────
         painter.setFont(name_font)
-        painter.setPen(self._terminal_label_color)
-        name_rect = QRectF(x0, y0 + h - 8, w, 8)
-        painter.drawText(name_rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom,
-                         self.device_name)
+        prefix, sep, suffix = self.device_name.partition("_")
+        painter.setPen(self._name_color_from_prefix(prefix))
+        name_rect = QRectF(x0, y0, w, 8)
+        painter.drawText(name_rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
+                         prefix)
+
+        if sep and suffix:
+            suffix_rect = QRectF(x0, y0 + 8, w, 8)
+            painter.drawText(suffix_rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
+                             suffix)
 
         # ── Left section (S or D) ────────────────────────────────
         # Terminal letter at bottom - only show if NOT abutted

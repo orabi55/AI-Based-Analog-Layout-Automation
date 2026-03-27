@@ -119,8 +119,8 @@ def generate_strategies(user_message: str, constraint_text: str, run_llm_fn) -> 
         if result and len(result.strip()) > 20:
             llm_text = result.strip()
             # Append mirror placement options if LLM didn't include them
-            if has_mirror and "interdigitated" not in llm_text.lower():
-                llm_text += _mirror_placement_options()
+            #if has_mirror and "interdigitated" not in llm_text.lower():
+            #    llm_text += _mirror_placement_options()
             return llm_text
     except Exception as exc:
         print(f"[STRATEGY] LLM failed: {exc} — using fallback")

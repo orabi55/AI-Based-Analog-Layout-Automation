@@ -1421,6 +1421,21 @@ class SymbolicEditor(QGraphicsView):
             item.setSelected(True)
         self.scene.blockSignals(False)
 
+    def highlight_device_prefix(self, prefix):
+        """Highlight all finger devices whose id prefix matches (e.g., MM0_*)."""
+        key = str(prefix or "").strip()
+        self.scene.blockSignals(True)
+        self.scene.clearSelection()
+        self._clear_connections()
+
+        if key:
+            for dev_id, item in self.device_items.items():
+                base, sep, suffix = str(dev_id).partition("_")
+                if sep and suffix and base == key:
+                    item.setSelected(True)
+
+        self.scene.blockSignals(False)
+
     def highlight_net(self, net_name):
         """Highlight only the specific terminal areas (S/D) connected to a net, not whole devices."""
         if not net_name or not self._terminal_nets:

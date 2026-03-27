@@ -414,6 +414,9 @@ class MainWindow(QMainWindow):
         # Connect tree net click to highlight all devices on that net
         self.device_tree.net_selected.connect(self._on_net_selected)
 
+        # Connect finger-group click to highlight all matching fingers on canvas
+        self.device_tree.finger_group_selected.connect(self._on_finger_group_selected)
+
         # Connect canvas selection to tree highlight
         self.editor.device_clicked.connect(self.device_tree.highlight_device)
         self.editor.device_clicked.connect(self._on_canvas_device_clicked)
@@ -1139,6 +1142,11 @@ class MainWindow(QMainWindow):
     def _on_net_selected(self, net_name):
         """When a net is clicked in the tree, highlight all devices connected to that net."""
         self.editor.highlight_net(net_name)
+
+    def _on_finger_group_selected(self, prefix):
+        """When a finger group is clicked, highlight all devices with that prefix."""
+        self.editor.highlight_device_prefix(prefix)
+        self._on_selection_count_changed()
 
     def _on_canvas_device_clicked(self, dev_id):
         self._update_row_col_for_device(dev_id)
