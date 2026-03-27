@@ -2,7 +2,6 @@
 
 > Symbolic analog layout editor with AI-assisted placement for PMOS/NMOS device-level floorplanning.
 
-![Canvas view — PMOS and NMOS rows with dummy devices](docs/images/editor_canvas.png)
 
 ![Full editor — Device Hierarchy, Canvas, and AI Chat panels](docs/images/editor_full.png)
 
