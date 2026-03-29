@@ -17,14 +17,18 @@ Classify the user's message into exactly ONE of these categories:
               Examples: 'swap MM3 and MM5', 'move MM8 to the left',
               'flip MM12 horizontally', 'add a dummy on the right'.
 
-  ABSTRACT  - A high-level design goal that requires topology analysis:
+  ABSTRACT  - A high-level design goal that requires topology analysis,
+              It usually starts with a verb or command such as:
               improve, optimize, enhance, reduce, fix, better, CMRR,
               matching, symmetry, routing, parasitics, DRC, placement.
               Examples: 'improve the matching', 'optimize placement',
               'reduce routing crossings', 'fix DRC violations',
               'enhance symmetry of differential pair'.
 
-  QUESTION  - An informational query. No layout changes needed.
+  QUESTION  - An informational query. No layout changes needed. It may require analysis to answer,
+              but the user is asking for information, not requesting a change.
+              It often starts with a question word: what, which, how, why,
+              or a verb like explain, count, list.
               Examples: 'what is MM3?', 'which net connects M6 and M7?',
               'explain current mirror topology', 'how many PMOS devices?'.
 
