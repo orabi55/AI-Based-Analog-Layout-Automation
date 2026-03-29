@@ -27,6 +27,7 @@ FIXES APPLIED:
 import os
 import re
 import time
+import json
 from pathlib import Path
 from dotenv import load_dotenv
 from PySide6.QtCore import QObject, Signal, Slot
@@ -246,15 +247,40 @@ def run_llm(chat_messages, full_prompt):
 
                     client   = genai.Client(api_key=gemini_key)
                     sys_text = ""
-                    conv_parts = []
+                    conversation = []
                     for cm in chat_messages:
-                        if cm["role"] == "system":
-                            sys_text = cm["content"]
-                        else:
-                            conv_parts.append(cm["content"])
-                    user_text = (
-                        "\n".join(conv_parts) if conv_parts else full_prompt
-                    )
+                        role = str(cm.get("role", "")).strip().lower()
+                        content = str(cm.get("content", ""))
+
+                        if role == "system":
+                            sys_text = content
+                            continue
+
+                        if role not in ("user", "assistant"):
+                            role = "user"
+
+                        conversation.append(
+                            {
+                                "role": role,
+                                "content": content,
+                            }
+                        )
+
+                    if conversation:
+                        conversation_json = json.dumps(
+                            {"conversation": conversation},
+                            ensure_ascii=False,
+                            indent=2,
+                        )
+                        user_text = (
+                            "Use the following JSON conversation history with "
+                            "explicit speaker roles.\n"
+                            "Respond as the assistant to the final user "
+                            "message.\n\n"
+                            f"{conversation_json}"
+                        )
+                    else:
+                        user_text = full_prompt
 
                     config_kwargs = {
                         "max_output_tokens": 4096,
@@ -274,6 +300,13 @@ def run_llm(chat_messages, full_prompt):
                             **config_kwargs
                         ),
                     )
+
+                    print("################ LLM Prompt ################")
+                    print(user_text)
+                    print("##########################################")
+                    print("################ LLM Response ################")
+                    print(response.text if response else "[No response]")
+                    print("##########################################")
 
                     reply_text = None
                     if response:
@@ -478,8 +511,8 @@ class OrchestratorWorker(LLMWorker):
             is_resuming = self.pending_topology is not None
             intent = (
                 classify_intent(user_message, run_llm)
-                if not is_resuming
-                else None
+                #if not is_resuming
+                #else None
             )
 
             if intent == "chat":
@@ -525,13 +558,36 @@ class OrchestratorWorker(LLMWorker):
             elif intent == "question":
                 print("[ORCH] QUESTION intent -> single-agent reply")
                 system_prompt = build_system_prompt(layout_context)
-                chat_msgs = [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user",   "content": user_message},
-                ]
+                chat_msgs = [{"role": "system", "content": system_prompt}]
+                for msg in chat_history:
+                    role = msg.get("role")
+                    if role in ("user", "assistant"):
+                        chat_msgs.append(msg)
+                if (
+                    not chat_history
+                    or chat_history[-1].get("content") != user_message
+                ):
+                    chat_msgs.append({"role": "user", "content": user_message})
+
+                history_text = ""
+                for msg in chat_history:
+                    role = msg.get("role")
+                    if role not in ("user", "assistant"):
+                        continue
+                    role_label = "User" if role == "user" else "Assistant"
+                    history_text += f"{role_label}: {msg.get('content', '')}\n"
+                if (
+                    not chat_history
+                    or chat_history[-1].get("content") != user_message
+                ):
+                    history_text += f"User: {user_message}\n"
+
+                full_prompt = (
+                    f"{system_prompt}\n\nConversation:\n{history_text}"
+                )
                 reply = run_llm(
                     chat_msgs,
-                    system_prompt + "\n" + user_message
+                    full_prompt
                 )
                 self.response_ready.emit(reply)
 

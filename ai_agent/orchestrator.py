@@ -1086,14 +1086,14 @@ class Orchestrator:
             for n in working_nodes if not n.get("is_dummy")
         }
         
-        working_nodes = apply_deterministic_optimizations(
-            working_nodes,
-            constraint_text,
-            terminal_nets,
-            edges,
-            self._gap_px
-            #placement_mode=placement_mode,
-        )
+        # working_nodes = apply_deterministic_optimizations(
+        #     working_nodes,
+        #     constraint_text,
+        #     terminal_nets,
+        #     edges,
+        #     self._gap_px
+        #     #placement_mode=placement_mode,
+        # )
         
         # Check if positions changed
         post_opt_positions = {

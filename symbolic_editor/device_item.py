@@ -365,8 +365,9 @@ class DeviceItem(QGraphicsRectItem):
                                left_rect.width(), 8)
             painter.drawText(term_rect, Qt.AlignmentFlag.AlignCenter, left_term)
 
-        # Net name VERTICAL — skip if left edge is abutted (the left neighbor draws it via its right edge)
-        if left_net and not visual_abut_left:
+        # Net name VERTICAL — skip if physical left edge is abutted
+        # (the left neighbor owns the shared-net label).
+        if left_net and not self._abut_left:
             painter.save()
             # Position at center of left diffusion section
             text_x = left_rect.x() + left_rect.width() / 2
@@ -412,8 +413,9 @@ class DeviceItem(QGraphicsRectItem):
                                right_rect.width(), 8)
             painter.drawText(term_rect, Qt.AlignmentFlag.AlignCenter, right_term)
 
-        # Net name VERTICAL - skip if right edge is abutted (we draw it via the left device of the pair)
-        if right_net and not visual_abut_right:
+        # Net name VERTICAL — skip if physical right edge is abutted
+        # (this side is represented by the shared-net label).
+        if right_net and not self._abut_right:
             painter.save()
             text_x = right_rect.x() + right_rect.width() / 2
             text_y = right_rect.y() + h * 0.50
@@ -425,22 +427,21 @@ class DeviceItem(QGraphicsRectItem):
             painter.drawText(v_rect, Qt.AlignmentFlag.AlignCenter, right_net)
             painter.restore()
             
-        # Draw SHARED net text exactly once, assigned to the left device of an abutment pair
-        if right_net and visual_abut_right:
+        # Draw SHARED net text exactly once from the LEFT device of the pair.
+        # Ownership is based on logical abut state (self._abut_right), not visual side,
+        # so the right device never draws the shared label.
+        shared_net = self._shared_net_right or right_net
+        if shared_net and self._abut_right:
             painter.save()
-            # The left device owns the drawing of the shared net.
-            # We want to center it exactly in the middle of the FULL shared overlapping region.
-            # The full shared region starts at the left device's right_rect.x(), and spans
-            # 2 * right_rect.width() minus the overlap amount (which is overlap_val).
-            # But the simplest visual centering is just the very right edge of the left device's right_rect.
-            text_x = right_rect.x() + right_rect.width()
+            # Position inside the left device's right diffusion section.
+            text_x = right_rect.x() + right_rect.width() * 0.5
             text_y = right_rect.y() + h * 0.50
             painter.translate(text_x, text_y)
             painter.rotate(90)
             painter.setFont(net_font)
-            painter.setPen(QColor("#000000"))  # User requested all black shared text
+            painter.setPen(QColor("#000000"))
             v_rect = QRectF(-h * 0.30, -right_rect.width() / 2, h * 0.60, right_rect.width())
-            painter.drawText(v_rect, Qt.AlignmentFlag.AlignCenter, right_net)
+            painter.drawText(v_rect, Qt.AlignmentFlag.AlignCenter, shared_net)
             painter.restore()
 
         # ── Selection highlight ──────────────────────────────────
