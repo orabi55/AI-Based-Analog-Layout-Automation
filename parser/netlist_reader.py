@@ -146,9 +146,9 @@ def read_netlist(filename):
     flat_lines = flatten_netlist(filename)
 
     # DEBUG: print flattened lines
-    print("\n--- Flattened Netlist ---")
+    pass # print("\n--- Flattened Netlist ---")
     for l in flat_lines:
-        print(l)
+        pass # print(l)
 
     # STEP 2 — parse devices
     for line in flat_lines:
@@ -188,9 +188,9 @@ def read_netlist_with_blocks(filename):
     flat_lines, block_map = flatten_netlist_with_blocks(filename)
 
     # DEBUG: print flattened lines
-    print("\n--- Flattened Netlist (block-aware) ---")
+    pass # print("\n--- Flattened Netlist (block-aware) ---")
     for l in flat_lines:
-        print(l)
+        pass # print(l)
 
     # STEP 2 — parse devices
     for line in flat_lines:

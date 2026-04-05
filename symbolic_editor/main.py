@@ -16,6 +16,16 @@ _project_root = os.path.normpath(
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
+import tempfile
+from ai_agent.gemini_placer import gemini_generate_placement, sanitize_json
+
+try:
+    from dotenv import load_dotenv
+    _env_path = os.path.join(_project_root, ".env")
+    load_dotenv(_env_path)
+except ImportError:
+    pass
+
 from PySide6.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -1733,13 +1743,14 @@ class MainWindow(QMainWindow):
                 "#e8f4fd", "#1a1a2e",
             )
 
-        self._run_background_task(
-            title="Parsing design files...",
-            work_fn=lambda: self._run_parser_pipeline(sp_path, oas_path),
-            on_success=_on_done,
-            on_error_title="Import Failed",
-            on_error_prefix="Failed to parse design files:",
-        )
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            data = self._run_parser_pipeline(sp_path, oas_path)
+            _on_done(data)
+        except Exception as e:
+            QMessageBox.warning(self, "Import Failed", f"Failed to parse design files:\n\n{e}")
+        finally:
+            QApplication.restoreOverrideCursor()
 
     # -------------------------------------------------
     # Run AI Initial Placement (Design menu)
@@ -1859,8 +1870,8 @@ class MainWindow(QMainWindow):
             _cleanup()
             QMessageBox.warning(self, on_error_title, f"{on_error_prefix}\n\n{msg}")
 
-        worker.finished.connect(_on_finished)
-        worker.failed.connect(_on_failed)
+        worker.finished.connect(_on_finished, Qt.ConnectionType.QueuedConnection)
+        worker.failed.connect(_on_failed, Qt.ConnectionType.QueuedConnection)
         thread.started.connect(worker.run)
         thread.start()
 
@@ -1889,15 +1900,15 @@ class MainWindow(QMainWindow):
                 from parser.layout_reader import extract_layout_instances
                 layout_instances = extract_layout_instances(oas_path)
             except Exception as e:
-                print(f"[Import] Layout parsing failed ({e}), using grid placement")
+                pass # print(f"[Import] Layout parsing failed ({e}), using grid placement")
 
         if layout_instances:
             try:
                 from parser.device_matcher import match_devices
                 device_mapping = match_devices(netlist, layout_instances)
-                print(f"[Import] Matched {len(device_mapping)} devices to layout")
+                pass # print(f"[Import] Matched {len(device_mapping)} devices to layout")
             except Exception as e:
-                print(f"[Import] Device matching failed ({e}), using grid placement")
+                pass # print(f"[Import] Device matching failed ({e}), using grid placement")
                 device_mapping = {}
 
         # 3. Build nodes
@@ -1981,11 +1992,7 @@ class MainWindow(QMainWindow):
     def _run_ai_initial_placement(data):
         """
         Send the parsed graph to Gemini for AI-based initial placement.
-        Updates x/y coordinates in the nodes and returns the updated data.
         """
-        import tempfile
-        from ai_agent.gemini_placer import gemini_generate_placement, sanitize_json
-
         # Write to temp file for the placer
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".json", delete=False
@@ -2223,8 +2230,8 @@ class MainWindow(QMainWindow):
             except RuntimeError:
                 pass
 
-        print(f"[STAGE HL] Stage {stage_index} ({stage_name}): "
-              f"{len(dimmed_ids)} device(s) highlighted")
+        pass # print(f"[STAGE HL] Stage {stage_index} ({stage_name}): "
+             # f"{len(dimmed_ids)} device(s) highlighted")
 
         # ---- Auto-restore after 3 s --- safe: re-lookup items by ID ----
         if self._stage_highlight_timer and self._stage_highlight_timer.isActive():
@@ -2287,7 +2294,7 @@ class MainWindow(QMainWindow):
         self._batch_flush_timer = None
         if not cmds:
             return
-        print(f"[AI BATCH] Executing {len(cmds)} command(s) as one undo group")
+        pass # print(f"[AI BATCH] Executing {len(cmds)} command(s) as one undo group")
         # Push a SINGLE undo snapshot covering all commands
         self._sync_node_positions()
         self._push_undo()
@@ -2334,7 +2341,7 @@ class MainWindow(QMainWindow):
             _skip_undo: if True, do NOT push an undo snapshot (caller
                 already pushed one for the whole batch).
         """
-        print(f"[AI CMD] Received command: {cmd}")
+        pass # print(f"[AI CMD] Received command: {cmd}")
 
         if not isinstance(cmd, dict):
             self.chat_panel._append_message(
@@ -2349,7 +2356,7 @@ class MainWindow(QMainWindow):
                 raw_b = cmd.get("device_b", cmd.get("b"))
                 id_a = self._resolve_device_id(raw_a)
                 id_b = self._resolve_device_id(raw_b)
-                print(f"[AI CMD] Swap: raw=({raw_a},{raw_b}) resolved=({id_a},{id_b})")
+                pass # print(f"[AI CMD] Swap: raw=({raw_a},{raw_b}) resolved=({id_a},{id_b})")
 
                 if not id_a or not id_b:
                     self.chat_panel._append_message(
@@ -2378,7 +2385,7 @@ class MainWindow(QMainWindow):
                     orient_b = geo_b.get("orientation", "R0")
                     geo_a["orientation"] = orient_b
                     geo_b["orientation"] = orient_a
-                    print(f"[AI CMD] Data swap done: {id_a}→({geo_a['x']},{geo_a['y']}), {id_b}→({geo_b['x']},{geo_b['y']})")
+                    pass # print(f"[AI CMD] Data swap done: {id_a}→({geo_a['x']},{geo_a['y']}), {id_b}→({geo_b['x']},{geo_b['y']})")
                     # Rebuild canvas WITHOUT re-compaction so positions stick
                     self._refresh_panels(compact=False)
                     self.chat_panel._append_message(
@@ -2388,7 +2395,7 @@ class MainWindow(QMainWindow):
                         "#1a1a2e",
                     )
                 else:
-                    print(f"[AI CMD] Swap failed: node_a={node_a is not None}, node_b={node_b is not None}")
+                    pass # print(f"[AI CMD] Swap failed: node_a={node_a is not None}, node_b={node_b is not None}")
                     self.chat_panel._append_message(
                         "AI",
                         f"Swap failed for {id_a} and {id_b}.",
@@ -2401,7 +2408,7 @@ class MainWindow(QMainWindow):
                 dev_id = self._resolve_device_id(raw_dev)
                 x = cmd.get("x")
                 y = cmd.get("y")
-                print(f"[AI CMD] Move: raw={raw_dev} resolved={dev_id} x={x} y={y}")
+                pass # print(f"[AI CMD] Move: raw={raw_dev} resolved={dev_id} x={x} y={y}")
 
                 if dev_id is None:
                     self.chat_panel._append_message(
@@ -2429,7 +2436,7 @@ class MainWindow(QMainWindow):
                 if node:
                     node["geometry"]["x"] = float(x)
                     node["geometry"]["y"] = float(y)
-                    print(f"[AI CMD] Data move done: {dev_id}→({x},{y})")
+                    pass # print(f"[AI CMD] Data move done: {dev_id}→({x},{y})")
                     self._refresh_panels(compact=False)
                     self.chat_panel._append_message(
                         "AI",
@@ -2456,7 +2463,7 @@ class MainWindow(QMainWindow):
                         "#a00",
                     )
                     return
-                print(f"[AI CMD] Add dummy: type={dev_type}, count={count}")
+                pass # print(f"[AI CMD] Add dummy: type={dev_type}, count={count}")
                 self._sync_node_positions()
                 if not _skip_undo:
                     self._push_undo()
@@ -2539,7 +2546,7 @@ class MainWindow(QMainWindow):
                 if not hasattr(self, "_routing_annotations"):
                     self._routing_annotations = {}
                 self._routing_annotations.setdefault(net, {})["priority"] = priority
-                print(f"[AI CMD] net_priority: net={net} priority={priority}")
+                pass # print(f"[AI CMD] net_priority: net={net} priority={priority}")
                 self.chat_panel._append_message(
                     "AI",
                     f"📡 Net **{net}** marked as **{priority}** priority for routing.",
@@ -2556,7 +2563,7 @@ class MainWindow(QMainWindow):
                 if not hasattr(self, "_routing_annotations"):
                     self._routing_annotations = {}
                 self._routing_annotations.setdefault(net, {})["wire_width_um"] = float(width_um)
-                print(f"[AI CMD] wire_width: net={net} width={width_um}µm")
+                pass # print(f"[AI CMD] wire_width: net={net} width={width_um}µm")
                 self.chat_panel._append_message(
                     "AI",
                     f"🔌 Wire width for **{net}** set to **{width_um} µm**.",
@@ -2571,7 +2578,7 @@ class MainWindow(QMainWindow):
                     self._routing_annotations = {}
                 key = f"{net_a}|{net_b}"
                 self._routing_annotations.setdefault(key, {})["spacing_um"] = float(spacing_um)
-                print(f"[AI CMD] wire_spacing: {net_a}<>{net_b} spacing={spacing_um}µm")
+                pass # print(f"[AI CMD] wire_spacing: {net_a}<>{net_b} spacing={spacing_um}µm")
                 self.chat_panel._append_message(
                     "AI",
                     f"📏 Minimum spacing between **{net_a}** and **{net_b}** set to **{spacing_um} µm**.",
@@ -2584,7 +2591,7 @@ class MainWindow(QMainWindow):
                 if not hasattr(self, "_routing_annotations"):
                     self._routing_annotations = {}
                 self._routing_annotations.setdefault(net, {})["reroute"] = reason
-                print(f"[AI CMD] net_reroute: net={net} reason={reason!r}")
+                pass # print(f"[AI CMD] net_reroute: net={net} reason={reason!r}")
                 self.chat_panel._append_message(
                     "AI",
                     f"🔀 Net **{net}** flagged for reroute: _{reason}_",
@@ -2604,7 +2611,7 @@ class MainWindow(QMainWindow):
                 )
 
             else:
-                print(f"[AI CMD] Unsupported action: '{action}'")
+                pass # print(f"[AI CMD] Unsupported action: '{action}'")
                 self.chat_panel._append_message(
                     "AI",
                     f"Unsupported AI action: {action or '(empty)'}",
@@ -2613,7 +2620,7 @@ class MainWindow(QMainWindow):
                 )
 
         except (KeyError, TypeError, ValueError) as e:
-            print(f"[AI CMD] Exception: {e}")
+            pass # print(f"[AI CMD] Exception: {e}")
             self.chat_panel._append_message(
                 "AI", f"Could not execute command: {e}", "#fde8e8", "#a00"
             )
