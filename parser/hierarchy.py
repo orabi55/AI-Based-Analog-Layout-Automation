@@ -61,8 +61,8 @@ def expand_instance(line, subckts, prefix=""):
 
     if subckt_name not in subckts:
         # Unknown subcircuit — skip with warning
-        print(f"[Hierarchy] Warning: subcircuit '{subckt_name}' not found, "
-              f"skipping instance '{inst_name}'")
+        pass # print(f"[Hierarchy] Warning: subcircuit '{subckt_name}' not found, "
+             # f"skipping instance '{inst_name}'")
         return []
 
     subckt = subckts[subckt_name]
@@ -235,8 +235,8 @@ def expand_instance_with_blocks(line, subckts, prefix="",
     subckt_name = tokens[-1]
 
     if subckt_name not in subckts:
-        print(f"[Hierarchy] Warning: subcircuit '{subckt_name}' not found, "
-              f"skipping instance '{inst_name}'")
+        pass # print(f"[Hierarchy] Warning: subcircuit '{subckt_name}' not found, "
+             # f"skipping instance '{inst_name}'")
         return [], []
 
     subckt = subckts[subckt_name]

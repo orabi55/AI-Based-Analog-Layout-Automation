@@ -138,10 +138,10 @@ def sanitize_json(text: str) -> dict:
         try:
             result = json.loads(attempt)
             if isinstance(result, dict) and "nodes" in result:
-                print(
-                    f"[sanitize_json] Recovered JSON by trimming "
-                    f"{trim} chars from end"
-                )
+                pass # print(
+                #    f"[sanitize_json] Recovered JSON by trimming "
+                #    f"{trim} chars from end"
+                #)
                 return result
         except json.JSONDecodeError:
             continue
@@ -367,14 +367,14 @@ CRITICAL: Your response MUST be complete valid JSON. Do NOT truncate the output.
     last_error = None
 
     for attempt in range(1, MAX_RETRIES + 1):
-        print(f"[gemini_placer] Attempt {attempt}/{MAX_RETRIES}...")
+        pass # print(f"[gemini_placer] Attempt {attempt}/{MAX_RETRIES}...")
 
         try:
             response = client.models.generate_content(
                 model="gemini-2.5-flash",
                 contents=prompt,
                 config=types.GenerateContentConfig(
-                    max_output_tokens=65536,
+                    max_output_tokens=8192,
                 ),
             )
 
@@ -390,12 +390,12 @@ CRITICAL: Your response MUST be complete valid JSON. Do NOT truncate the output.
             with open(output_json, "w") as f:
                 json.dump(placement, f, indent=4)
 
-            print("Placement saved to:", output_json)
+            pass # print("Placement saved to:", output_json)
             return
 
-        except (json.JSONDecodeError, ValueError) as e:
+        except Exception as e:
             last_error = e
-            print(f"[gemini_placer] Attempt {attempt} failed: {e}")
+            pass # print(f"[gemini_placer] Attempt {attempt} failed: {e}")
             if attempt < MAX_RETRIES:
                 # Add stronger instruction for retry
                 prompt += (
