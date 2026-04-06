@@ -4,6 +4,7 @@ import os
 import json
 import copy
 import glob
+import re
 
 # ---------------------------------------------------------------------------
 # Ensure the project root is on sys.path so that cross-package imports
@@ -16,16 +17,6 @@ _project_root = os.path.normpath(
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
-import tempfile
-from ai_agent.gemini_placer import gemini_generate_placement, sanitize_json
-
-try:
-    from dotenv import load_dotenv
-    _env_path = os.path.join(_project_root, ".env")
-    load_dotenv(_env_path)
-except ImportError:
-    pass
-
 from PySide6.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -35,9 +26,12 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QSpinBox,
     QLabel,
+    QWidgetAction,
     QWidget,
     QHBoxLayout,
     QVBoxLayout,
+    QCheckBox,
+    QDoubleSpinBox,
     QDialog,
     QFormLayout,
     QPushButton,
@@ -47,7 +41,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QLineEdit,
 )
-from PySide6.QtCore import Qt, QTimer, QSize, QObject, Signal, Slot, QThread
+from PySide6.QtCore import Qt, QTimer, QSize
 from PySide6.QtGui import QFont, QAction, QKeySequence, QColor, QPalette
 
 # Local GUI modules (same directory)
@@ -60,8 +54,7 @@ from icons import (
     icon_zoom_in, icon_zoom_out, icon_zoom_reset,
     icon_select_all, icon_delete, icon_swap,
     icon_flip_h, icon_flip_v,
-    icon_merge_ss, icon_merge_dd, icon_add_dummy, icon_realize,
-    icon_tree_toggle, icon_optimize_2d,
+    icon_merge_ss, icon_merge_dd, icon_add_dummy,
 )
 
 
@@ -225,64 +218,6 @@ class ImportDialog(QDialog):
 
 
 # -------------------------------------------------
-# Edit Terminals Dialog
-# -------------------------------------------------
-class TerminalEditDialog(QDialog):
-    """Dialog for editing D, G, S nets of a single device."""
-
-    def __init__(self, dev_name, current_nets, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle(f"Edit Terminals: {dev_name}")
-        self.setMinimumWidth(300)
-        self.setStyleSheet("""
-            QDialog {
-                background-color: #1a1f2b;
-                color: #c8d0dc;
-                font-family: 'Segoe UI';
-            }
-            QLabel { color: #c8d0dc; font-size: 10pt; }
-            QLineEdit {
-                background-color: #232a38; color: #ffffff;
-                border: 1px solid #3d5066; border-radius: 4px;
-                padding: 4px 8px; font-size: 10pt;
-            }
-            QPushButton {
-                background-color: #2d3548; color: #ffffff;
-                border: 1px solid #3d5066; border-radius: 4px;
-                padding: 6px 16px; font-size: 10pt;
-            }
-            QPushButton:hover { background-color: #3d5066; }
-            QPushButton#ok_btn { background-color: #4a90d9; font-weight: bold; }
-            QPushButton#ok_btn:hover { background-color: #5da0e9; }
-        """)
-
-        layout = QVBoxLayout(self)
-        form = QFormLayout()
-        
-        self.d_edit = QLineEdit(current_nets.get("D", ""))
-        self.g_edit = QLineEdit(current_nets.get("G", ""))
-        self.s_edit = QLineEdit(current_nets.get("S", ""))
-        
-        form.addRow("Drain (D):", self.d_edit)
-        form.addRow("Gate (G):", self.g_edit)
-        form.addRow("Source (S):", self.s_edit)
-        layout.addLayout(form)
-
-        btn_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        btn_box.button(QDialogButtonBox.StandardButton.Ok).setObjectName("ok_btn")
-        btn_box.accepted.connect(self.accept)
-        btn_box.rejected.connect(self.reject)
-        layout.addWidget(btn_box)
-
-    def get_nets(self):
-        return {
-            "D": self.d_edit.text().strip(),
-            "G": self.g_edit.text().strip(),
-            "S": self.s_edit.text().strip(),
-        }
-
-
-# -------------------------------------------------
 # Main Window
 # -------------------------------------------------
 class MainWindow(QMainWindow):
@@ -302,7 +237,6 @@ class MainWindow(QMainWindow):
         self._ignore_grid_spin_change = False
         self._original_data = None  # raw loaded JSON (for edges + terminals)
         self.nodes = None
-        self._background_jobs = []
 
 
         # Load placement data
@@ -313,21 +247,19 @@ class MainWindow(QMainWindow):
         self.editor = SymbolicEditor()
         self.chat_panel = ChatPanel()
         self.klayout_panel = KLayoutPanel()
-        self.klayout_panel.setVisible(True)
 
         # --- Toolbar ---
         self._create_menu_bar()
         self._create_toolbar()
 
-        # --- Left Splitter ---
-        self._left_splitter = QSplitter(Qt.Orientation.Vertical)
-        self._left_splitter.addWidget(self.device_tree)
-        self._left_splitter.addWidget(self.klayout_panel)
-        self._left_splitter.setChildrenCollapsible(False)
-        self._left_splitter.setStretchFactor(0, 1)
-        self._left_splitter.setStretchFactor(1, 1)
-        self._left_splitter.setSizes([1, 1])
-        self._left_splitter.setStyleSheet(
+        # --- Right-side vertical splitter (Chat + KLayout Preview) ---
+        self._right_splitter = QSplitter(Qt.Orientation.Vertical)
+        self._right_splitter.addWidget(self.chat_panel)
+        self._right_splitter.addWidget(self.klayout_panel)
+        self._right_splitter.setStretchFactor(0, 1)
+        self._right_splitter.setStretchFactor(1, 1)
+        self._right_splitter.setSizes([480, 380])
+        self._right_splitter.setStyleSheet(
             """
             QSplitter::handle {
                 background-color: #2d3548;
@@ -341,41 +273,24 @@ class MainWindow(QMainWindow):
 
         # --- Splitter layout ---
         self._splitter = QSplitter(Qt.Orientation.Horizontal)
-        self._splitter.addWidget(self._left_splitter)
+        self._splitter.addWidget(self.device_tree)
         self._splitter.addWidget(self.editor)
-        self._splitter.addWidget(self.chat_panel)
+        self._splitter.addWidget(self._right_splitter)
 
-        # Set proportions: left ~260px, center stretches, right ~320px
+        # Set proportions: left ~200px, center stretches, right ~320px
         self._splitter.setStretchFactor(0, 0)
         self._splitter.setStretchFactor(1, 1)
         self._splitter.setStretchFactor(2, 0)
-        self._splitter.setSizes([260, 860, 320])
+        self._splitter.setSizes([220, 860, 320])
 
         # Remember default sizes for restore-after-collapse
-        self._tree_default_width = 260
+        self._tree_default_width = 220
         self._chat_default_width = 320
 
         # --- Collapsed-panel reopen strips ---
-        # Two separate strips for device tree and KLayout, stacked in a vertical widget
-        self._tree_reopen_btn = self._make_reopen_icon_btn(icon_tree_toggle(), "Show Device Hierarchy")
-        self._tree_reopen_btn.clicked.connect(self._toggle_device_tree)
-        self._tree_reopen_btn.setVisible(False)
-
-        self._klayout_reopen_btn = self._make_reopen_icon_btn(icon_realize(), "Show KLayout Viewer")
-        self._klayout_reopen_btn.clicked.connect(self._toggle_klayout_panel)
-        self._klayout_reopen_btn.setVisible(False)
-
-        # Container for the left-side reopen buttons
-        self._left_reopen_strip = QWidget()
-        self._left_reopen_strip.setFixedWidth(26)
-        self._left_reopen_strip.setStyleSheet("background-color: #1a1f2b; border: none;")
-        _reopen_layout = QVBoxLayout(self._left_reopen_strip)
-        _reopen_layout.setContentsMargins(0, 4, 0, 4)
-        _reopen_layout.setSpacing(4)
-        _reopen_layout.addWidget(self._tree_reopen_btn)
-        _reopen_layout.addWidget(self._klayout_reopen_btn)
-        _reopen_layout.addStretch()
-        self._left_reopen_strip.setVisible(False)
+        self._tree_reopen_strip = self._make_reopen_strip("▶", "Show Device Hierarchy")
+        self._tree_reopen_strip.clicked.connect(self._toggle_device_tree)
+        self._tree_reopen_strip.setVisible(False)
 
         self._chat_reopen_strip = self._make_reopen_strip("◀", "Show AI Chat")
         self._chat_reopen_strip.clicked.connect(self._toggle_chat_panel)
@@ -388,7 +303,7 @@ class MainWindow(QMainWindow):
         container_layout = QHBoxLayout(container)
         container_layout.setContentsMargins(0, 0, 0, 0)
         container_layout.setSpacing(0)
-        container_layout.addWidget(self._left_reopen_strip)
+        container_layout.addWidget(self._tree_reopen_strip)
         container_layout.addWidget(self._splitter, 1)
         container_layout.addWidget(self._chat_reopen_strip)
 
@@ -412,20 +327,11 @@ class MainWindow(QMainWindow):
         # Fit view after initial load
         QTimer.singleShot(100, self.editor.fit_to_view)
 
-        # Enforce 50/50 split of the left panel after the window is rendered
-        QTimer.singleShot(150, self._enforce_left_panel_split)
-
         # Connect device tree selection to canvas highlight
         self.device_tree.device_selected.connect(self.editor.highlight_device)
 
         # Connect tree connection click to canvas net highlight
         self.device_tree.connection_selected.connect(self._on_connection_selected)
-
-        # Connect tree net click to highlight all devices on that net
-        self.device_tree.net_selected.connect(self._on_net_selected)
-
-        # Connect finger-group click to highlight all matching fingers on canvas
-        self.device_tree.finger_group_selected.connect(self._on_finger_group_selected)
 
         # Connect canvas selection to tree highlight
         self.editor.device_clicked.connect(self.device_tree.highlight_device)
@@ -442,16 +348,10 @@ class MainWindow(QMainWindow):
         self.chat_panel._llm_worker.stage_completed.connect(self._on_pipeline_stage_completed)
         self._stage_highlight_timer = None  # auto-clear timer
         self.editor.set_dummy_place_callback(self._add_dummy_device)
-        self.editor.optimize_2d_requested.connect(
-            lambda: self._optimize_2d_layout_global(push_undo=True)
-        )
-        self.editor.edit_terminals_requested.connect(self._on_edit_terminals_requested)
 
         # Connect panel toggle buttons (in each panel header)
         self.device_tree.toggle_requested.connect(self._toggle_device_tree)
         self.chat_panel.toggle_requested.connect(self._toggle_chat_panel)
-        if hasattr(self.klayout_panel, 'toggle_requested'):
-            self.klayout_panel.toggle_requested.connect(self._toggle_klayout_panel)
 
     # -------------------------------------------------
     # QThread cleanup on close
@@ -459,13 +359,6 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         """Gracefully shut down the LLM worker thread before closing."""
         self.chat_panel.shutdown()
-        for thread, _worker, _progress in list(self._background_jobs):
-            try:
-                thread.quit()
-                thread.wait(500)
-            except RuntimeError:
-                pass
-        self._background_jobs.clear()
         super().closeEvent(event)
 
     # -------------------------------------------------
@@ -562,34 +455,69 @@ class MainWindow(QMainWindow):
         self._act_ai_placement.triggered.connect(self._on_run_ai_placement)
         design_menu.addAction(self._act_ai_placement)
 
-        self._act_opt_2d = QAction("Optimize Layout", self)
-        self._act_opt_2d.setShortcut(QKeySequence("Ctrl+Shift+O"))
-        self._act_opt_2d.setToolTip("Reorder and abut all devices to maximize S/D diffusion sharing")
-        self._act_opt_2d.triggered.connect(
-            lambda: self._optimize_2d_layout_global(push_undo=True)
-        )
-        design_menu.addAction(self._act_opt_2d)
-
         view_menu = mb.addMenu("View")
+        
+        self._act_view_symbol = QAction("Symbol View (Macro Level)", self)
+        self._act_view_symbol.setShortcut(QKeySequence("Ctrl+F"))
+        self._act_view_symbol.triggered.connect(
+            lambda: self.editor.set_view_level("symbol")
+        )
+        view_menu.addAction(self._act_view_symbol)
 
-        self._act_toggle_klayout_view = QAction("Show KLayout Viewer", self)
-        self._act_toggle_klayout_view.setCheckable(True)
-        self._act_toggle_klayout_view.setChecked(True)
-        self._act_toggle_klayout_view.triggered.connect(self._toggle_klayout_panel)
-        view_menu.addAction(self._act_toggle_klayout_view)
-
+        self._act_view_transistor = QAction("Transistor View (Micro Level)", self)
+        self._act_view_transistor.setShortcut(QKeySequence("Shift+F"))
+        self._act_view_transistor.triggered.connect(
+            lambda: self.editor.set_view_level("transistor")
+        )
+        view_menu.addAction(self._act_view_transistor)
+        
         view_menu.addSeparator()
 
-        act_toggle_tree_view = QAction("Toggle Device Tree", self)
-        act_toggle_tree_view.triggered.connect(self._toggle_device_tree)
-        view_menu.addAction(act_toggle_tree_view)
-
-        act_toggle_chat_view = QAction("Toggle AI Chat", self)
-        act_toggle_chat_view.triggered.connect(self._toggle_chat_panel)
-        view_menu.addAction(act_toggle_chat_view)
+        self._act_toggle_blocks = QAction("Toggle Block Overlays", self)
+        self._act_toggle_blocks.setCheckable(True)
+        self._act_toggle_blocks.setChecked(True)
+        self._act_toggle_blocks.triggered.connect(
+            lambda checked: self.editor.toggle_block_overlays(checked)
+        )
+        view_menu.addAction(self._act_toggle_blocks)
 
         # --- Edit menu (functional) ---
         edit_menu = mb.addMenu("Edit")
+
+        self._act_close_row_gap = QCheckBox("Close PMOS–NMOS gap")
+        self._act_close_row_gap.setStyleSheet(
+            "QCheckBox { color: #c8d0dc; font-family: 'Segoe UI'; font-size: 9pt; padding: 4px 8px; }"
+            "QCheckBox::indicator { width: 14px; height: 14px; }"
+        )
+        self._act_close_row_gap.toggled.connect(self._on_close_row_gap_toggled)
+        wa_gap_check = QWidgetAction(self)
+        wa_gap_check.setDefaultWidget(self._act_close_row_gap)
+        edit_menu.addAction(wa_gap_check)
+
+        # Gap distance spin
+        gap_widget = QWidget()
+        gap_layout = QHBoxLayout(gap_widget)
+        gap_layout.setContentsMargins(24, 4, 8, 4)
+        gap_lbl = QLabel("Gap (px):")
+        gap_lbl.setStyleSheet("color: #8899aa; font-family: 'Segoe UI'; font-size: 9pt;")
+        self._row_gap_spin = QDoubleSpinBox()
+        self._row_gap_spin.setRange(0.0, 200.0)
+        self._row_gap_spin.setSingleStep(1.0)
+        self._row_gap_spin.setValue(0.0)
+        self._row_gap_spin.setSuffix(" px")
+        self._row_gap_spin.setEnabled(False)
+        self._row_gap_spin.setStyleSheet(
+            "QDoubleSpinBox { background: #232a38; color: #c8d0dc; border: 1px solid #2d3548;"
+            " border-radius: 4px; padding: 2px 6px; font-family: 'Segoe UI'; font-size: 9pt; }"
+        )
+        self._row_gap_spin.valueChanged.connect(self._on_row_gap_changed)
+        gap_layout.addWidget(gap_lbl)
+        gap_layout.addWidget(self._row_gap_spin)
+        wa_gap_spin = QWidgetAction(self)
+        wa_gap_spin.setDefaultWidget(gap_widget)
+        edit_menu.addAction(wa_gap_spin)
+
+        edit_menu.addSeparator()
 
         # View panel toggles in Edit too
         act_toggle_tree = QAction("Toggle Device Tree", self)
@@ -599,6 +527,10 @@ class MainWindow(QMainWindow):
         act_toggle_chat = QAction("Toggle AI Chat", self)
         act_toggle_chat.triggered.connect(self._toggle_chat_panel)
         edit_menu.addAction(act_toggle_chat)
+
+        act_toggle_klayout = QAction("Toggle KLayout Preview", self)
+        act_toggle_klayout.triggered.connect(self._toggle_klayout_panel)
+        edit_menu.addAction(act_toggle_klayout)
 
         for name in ["Options", "Window", "Help"]:
             menu = mb.addMenu(name)
@@ -695,22 +627,6 @@ class MainWindow(QMainWindow):
         )
         self.addToolBar(toolbar)
 
-        # Realize (toggle KLayout panel) — leftmost toolbar action
-        self._act_realize = QAction(icon_realize(), "Realize", self)
-        self._act_realize.setCheckable(True)
-        self._act_realize.setChecked(True)
-        self._act_realize.setToolTip("Toggle KLayout Realization Panel")
-        self._act_realize.triggered.connect(self._toggle_klayout_panel)
-        toolbar.addAction(self._act_realize)
-
-        # Device Tree toggle — second toolbar action
-        self._act_tree_toggle = QAction(icon_tree_toggle(), "Tree", self)
-        self._act_tree_toggle.setCheckable(True)
-        self._act_tree_toggle.setChecked(True)
-        self._act_tree_toggle.setToolTip("Toggle Device Hierarchy Panel")
-        self._act_tree_toggle.triggered.connect(self._toggle_device_tree)
-        toolbar.addAction(self._act_tree_toggle)
-
         toolbar.addSeparator()
 
         # Undo
@@ -799,24 +715,20 @@ class MainWindow(QMainWindow):
         act_flip_v.triggered.connect(self._flip_selected_v)
         toolbar.addAction(act_flip_v)
 
-        # Merge helper (auto S/D by shared net)
-        act_merge_ss = QAction(icon_merge_ss(), "Merge", self)
+        # Merge helpers
+        act_merge_ss = QAction(icon_merge_ss(), "Merge S-S", self)
         act_merge_ss.setShortcut(QKeySequence("G"))
-        act_merge_ss.setToolTip("Smart Merge by shared S/D net  (G)")
-        act_merge_ss.triggered.connect(self._merge_selected_auto)
+        act_merge_ss.setToolTip("Merge by S-S  (G)")
+        act_merge_ss.triggered.connect(self._merge_selected_ss)
         toolbar.addAction(act_merge_ss)
 
-        # Optimize Layout
-        self._act_opt_2d_btn = QAction(icon_optimize_2d(), "Optimize", self)
-        self._act_opt_2d_btn.setShortcut(QKeySequence("Ctrl+Shift+O"))
-        self._act_opt_2d_btn.setToolTip(
-            "Optimize Layout (Ctrl+Shift+O)\n"
-            "Reorder & abut devices to maximize S/D diffusion sharing"
-        )
-        self._act_opt_2d_btn.triggered.connect(
-            lambda: self._optimize_2d_layout_global(push_undo=True)
-        )
-        toolbar.addAction(self._act_opt_2d_btn)
+        act_merge_dd = QAction(icon_merge_dd(), "Merge D-D", self)
+        act_merge_dd.setShortcut(QKeySequence("Shift+G"))
+        act_merge_dd.setToolTip("Merge by D-D  (Shift+G)")
+        act_merge_dd.triggered.connect(self._merge_selected_dd)
+        toolbar.addAction(act_merge_dd)
+
+        toolbar.addSeparator()
 
         self._sel_label = QLabel("  Sel: 0  ", self)
         toolbar.addWidget(self._sel_label)
@@ -877,77 +789,17 @@ class MainWindow(QMainWindow):
         )
         return btn
 
-    @staticmethod
-    def _make_reopen_icon_btn(icon, tooltip):
-        """Create a small icon button for the left reopen strip."""
-        btn = QToolButton()
-        btn.setIcon(icon)
-        btn.setToolTip(tooltip)
-        btn.setFixedSize(24, 24)
-        btn.setIconSize(QSize(18, 18))
-        btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn.setStyleSheet(
-            """
-            QToolButton {
-                background-color: #1a1f2b;
-                color: #7b8a9c;
-                border: 1px solid transparent;
-                border-radius: 4px;
-                padding: 2px;
-            }
-            QToolButton:hover {
-                background-color: #2d3f54;
-                border-color: #4a90d9;
-                color: #e0e8f0;
-            }
-            """
-        )
-        return btn
-
-    def _update_left_reopen_strip(self):
-        """Show/hide the individual reopen buttons and their container.
-
-        When both device tree and KLayout are hidden, collapse the left
-        splitter entirely so no empty dark area remains.
-        """
-        tree_hidden = not self.device_tree.isVisible()
-        klayout_hidden = not self.klayout_panel.isVisible()
-        self._tree_reopen_btn.setVisible(tree_hidden)
-        self._klayout_reopen_btn.setVisible(klayout_hidden)
-        self._left_reopen_strip.setVisible(tree_hidden or klayout_hidden)
-
-        # Collapse the left splitter width when both sub-panels are hidden
-        if tree_hidden and klayout_hidden:
-            sizes = self._splitter.sizes()
-            sizes[0] = 0
-            self._splitter.setSizes(sizes)
-
-    def _enforce_left_panel_split(self):
-        """Set 50/50 split between device tree and KLayout in the left splitter."""
-        if self.device_tree.isVisible() and self.klayout_panel.isVisible():
-            total = self._left_splitter.height()
-            half = max(total // 2, 100)
-            self._left_splitter.setSizes([half, half])
-
     def _toggle_device_tree(self):
         """Collapse or expand the device hierarchy panel."""
         if self.device_tree.isVisible():
             self.device_tree.setVisible(False)
+            self._tree_reopen_strip.setVisible(True)
         else:
             self.device_tree.setVisible(True)
-            # Ensure left pane has width in the main splitter
+            self._tree_reopen_strip.setVisible(False)
             sizes = self._splitter.sizes()
-            if sizes[0] < 50:
-                sizes[0] = self._tree_default_width
-                self._splitter.setSizes(sizes)
-            # Re-balance the left splitter if both panels are visible
-            if self.klayout_panel.isVisible():
-                total = self._left_splitter.height()
-                half = max(total // 2, 100)
-                self._left_splitter.setSizes([half, half])
-        self._update_left_reopen_strip()
-        if hasattr(self, "_act_tree_toggle"):
-            self._act_tree_toggle.setChecked(self.device_tree.isVisible())
+            sizes[0] = self._tree_default_width
+            self._splitter.setSizes(sizes)
 
     def _toggle_chat_panel(self):
         """Collapse or expand the AI chat panel."""
@@ -962,28 +814,8 @@ class MainWindow(QMainWindow):
             self._splitter.setSizes(sizes)
 
     def _toggle_klayout_panel(self):
-        """Show or hide the integrated KLayout preview panel on the left."""
-        if self.klayout_panel.isVisible():
-            self.klayout_panel.setVisible(False)
-        else:
-            self.klayout_panel.setVisible(True)
-            # Ensure left pane has width in the main splitter
-            sizes = self._splitter.sizes()
-            if sizes[0] < 50:
-                sizes[0] = self._tree_default_width
-                self._splitter.setSizes(sizes)
-            # Re-balance the left splitter if both panels are visible
-            if self.device_tree.isVisible():
-                total = self._left_splitter.height()
-                half = max(total // 2, 100)
-                self._left_splitter.setSizes([half, half])
-
-        self._update_left_reopen_strip()
-
-        if hasattr(self, "_act_toggle_klayout_view"):
-            self._act_toggle_klayout_view.setChecked(self.klayout_panel.isVisible())
-        if hasattr(self, "_act_realize"):
-            self._act_realize.setChecked(self.klayout_panel.isVisible())
+        """Collapse or expand the KLayout preview panel."""
+        self.klayout_panel.setVisible(not self.klayout_panel.isVisible())
 
     def _on_view_in_klayout(self):
         """Find the sibling OAS file and open it in KLayout."""
@@ -992,8 +824,6 @@ class MainWindow(QMainWindow):
         json_dir = os.path.dirname(os.path.abspath(self._current_file))
         oas_files = glob.glob(os.path.join(json_dir, "*.oas"))
         if oas_files:
-            if not self.klayout_panel.isVisible():
-                self._toggle_klayout_panel()
             self.klayout_panel._oas_path = oas_files[0]
             self.klayout_panel._on_open_klayout()
 
@@ -1126,12 +956,26 @@ class MainWindow(QMainWindow):
         if not self._original_data:
             return
         edges = self._original_data.get("edges")
+        blocks = self._original_data.get("blocks", {})
+        # Rebuild blocks from per-node block tags if top-level key is missing
+        if not blocks and self.nodes:
+            for node in self.nodes:
+                b = node.get("block")
+                if b:
+                    inst = b.get("instance", "")
+                    if inst and inst not in blocks:
+                        blocks[inst] = {"subckt": b.get("subckt", "?"), "devices": []}
+                    if inst:
+                        blocks[inst]["devices"].append(node.get("id"))
+            if blocks:
+                self._original_data["blocks"] = blocks
         self.device_tree.set_edges(edges)
         self.device_tree.set_terminal_nets(self._terminal_nets)
-        self.device_tree.load_devices(self.nodes)
+        self.device_tree.load_devices(self.nodes, blocks=blocks)
         self.editor.load_placement(self.nodes, compact=compact)
         self.editor.set_edges(edges)
         self.editor.set_terminal_nets(self._terminal_nets)
+        self.editor.set_blocks(blocks)
         self.chat_panel.set_layout_context(
             self.nodes, self._original_data.get("edges"),
             self._terminal_nets,
@@ -1148,15 +992,6 @@ class MainWindow(QMainWindow):
         self.editor.highlight_device(dev_id)
         self.editor._show_net_connections(dev_id, net_name)
         self._update_row_col_for_device(dev_id)
-
-    def _on_net_selected(self, net_name):
-        """When a net is clicked in the tree, highlight all devices connected to that net."""
-        self.editor.highlight_net(net_name)
-
-    def _on_finger_group_selected(self, prefix):
-        """When a finger group is clicked, highlight all devices with that prefix."""
-        self.editor.highlight_device_prefix(prefix)
-        self._on_selection_count_changed()
 
     def _on_canvas_device_clicked(self, dev_id):
         self._update_row_col_for_device(dev_id)
@@ -1327,46 +1162,6 @@ class MainWindow(QMainWindow):
         self.editor.swap_devices(selected[0], selected[1])
         self._sync_node_positions()
 
-    def _merge_selected_auto(self):
-        """Netlist-aware abutment action.
-
-        - Requires exactly 2 selected devices.
-        - Uses shared S/D net to select S-S or D-D abutment mode.
-        """
-        selected = self.editor.selected_device_ids()
-        if len(selected) != 2:
-            self.chat_panel._append_message(
-                "AI",
-                "Select exactly 2 devices to merge.",
-                "#fde8e8",
-                "#a00",
-            )
-            return
-
-        id_a, id_b = selected[0], selected[1]
-        nets_a = self._terminal_nets.get(id_a, {})
-        nets_b = self._terminal_nets.get(id_b, {})
-
-        shared_s = bool(nets_a.get("S") and nets_a.get("S") == nets_b.get("S"))
-        shared_d = bool(nets_a.get("D") and nets_a.get("D") == nets_b.get("D"))
-
-        if shared_s and not shared_d:
-            mode = "SS"
-        elif shared_d and not shared_s:
-            mode = "DD"
-        elif shared_s and shared_d:
-            mode = "SS"
-        else:
-            self.chat_panel._append_message(
-                "AI",
-                f"No shared S/D net found between {id_a} and {id_b}.",
-                "#fff4e5",
-                "#7a4b00",
-            )
-            return
-
-        self._merge_selected_devices(mode=mode)
-
     def _merge_selected_ss(self):
         self._merge_selected_devices(mode="SS")
 
@@ -1401,132 +1196,33 @@ class MainWindow(QMainWindow):
         self._sync_node_positions()
         self._push_undo()
 
-        # Keep current relative ordering by x.
-        left_item, right_item = (a, b) if a.pos().x() <= b.pos().x() else (b, a)
-        y = self.editor._snap_row(left_item.pos().y())
-        left_x = self.editor._snap_value(left_item.pos().x())
-        left_w = left_item.rect().width()
-
-        # The shared diffusion region width (S or D section = 30% of device width).
-        # By overlapping this amount, we make {S G D}{S G D} look like {S G D G S}
-        # where the shared terminal is drawn only once.
-        diffusion_w = left_w * 0.30
-        right_x = left_x + left_w - diffusion_w
+        y = self.editor._snap_row((a.pos().y() + b.pos().y()) / 2.0)
+        wa = a.rect().width()
+        wb = b.rect().width()
 
         if mode == "SS":
-            # Shared-S boundary: left=[D|G|S], right=[S|G|D]
-            # left flipped → right side is S; right unflipped → left side is S
-            left_item.set_flip_h(True)
-            right_item.set_flip_h(False)
+            # A keeps S on left. B flips so S is on right, then sits left of A.
+            if hasattr(a, "set_flip_h"):
+                a.set_flip_h(False)
+            if hasattr(b, "set_flip_h"):
+                b.set_flip_h(True)
+            ax = self.editor._snap_value(a.pos().x())
+            bx = self.editor._snap_value(ax - wb)
+            a.setPos(ax, y)
+            b.setPos(bx, y)
         else:
-            # Shared-D boundary: left=[S|G|D], right=[D|G|S]
-            # left unflipped → right side is D; right flipped → left side is D
-            left_item.set_flip_h(False)
-            right_item.set_flip_h(True)
+            # A keeps D on right. B flips so D is on left, then sits right of A.
+            if hasattr(a, "set_flip_h"):
+                a.set_flip_h(False)
+            if hasattr(b, "set_flip_h"):
+                b.set_flip_h(True)
+            ax = self.editor._snap_value(a.pos().x())
+            bx = self.editor._snap_value(ax + wa)
+            a.setPos(ax, y)
+            b.setPos(bx, y)
 
-        left_item.setPos(left_x, y)
-        right_item.setPos(right_x, y)
-
-        # The left device's right terminal and right device's left terminal overlap.
-        # Keep the left device's right label visible (the shared S or D) — it sits on
-        # top thanks to z-ordering.  Hide the right device's duplicate left label.
-        left_item.set_boundary_label_visibility(show_left=True, show_right=True)
-        right_item.set_boundary_label_visibility(show_left=False, show_right=True)
-
-        # Raise the left device above the right so the shared diffusion region
-        # from the left device paints on top, giving one clean shared terminal.
-        left_item.setZValue(right_item.zValue() + 1)
-
+        self.editor.resolve_overlaps(anchor_ids=[id_a, id_b])
         self._sync_node_positions()
-
-    def _optimize_abutment_global(self, push_undo=True):
-        """Reorder/orient all rows for S/D net-aware abutment continuity."""
-        if not self.nodes:
-            return
-        self._sync_node_positions()
-        if push_undo:
-            self._push_undo()
-        self.editor._compact_rows_abutted()
-        self._sync_node_positions()
-
-    def _on_edit_terminals_requested(self, dev_id):
-        """Open the terminal editor for the given device ID."""
-        item = self.editor.device_items.get(dev_id)
-        if not item:
-            return
-
-        current_nets = self._terminal_nets.get(dev_id, {})
-        # If empty, try to get from node data
-        if not current_nets:
-            for node in self.nodes:
-                if node.get("id") == dev_id:
-                    nets = node.get("nets", {})
-                    current_nets = {
-                        "D": nets.get("D", ""),
-                        "G": nets.get("G", ""),
-                        "S": nets.get("S", ""),
-                    }
-                    break
-
-        dialog = TerminalEditDialog(dev_id, current_nets, self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            new_nets = dialog.get_nets()
-            
-            # Save undo state
-            self._sync_node_positions()
-            self._push_undo()
-
-            # Update working data
-            if dev_id not in self._terminal_nets:
-                self._terminal_nets[dev_id] = {}
-            self._terminal_nets[dev_id].update(new_nets)
-
-            # Update base nodes data since _compact_rows uses it
-            if self.nodes:
-                for node in self.nodes:
-                    if node.get("id") == dev_id:
-                        if "nets" not in node:
-                            node["nets"] = {}
-                        node["nets"].update(new_nets)
-                        break
-
-            # Update device item visuals
-            item.set_net_labels({"D": new_nets.get("D", ""), "G": new_nets.get("G", ""), "S": new_nets.get("S", "")})
-
-            # Full recount of abut states and UI matching
-            self.device_tree.set_terminal_nets(self._terminal_nets)
-            if self.nodes:
-                self.device_tree.load_devices(self.nodes)
-            
-            # Recalculate abut states and update canvas connection lines
-            self.editor.set_terminal_nets(self._terminal_nets)
-            self.editor.highlight_net("") # clear highlight to redraw cleanly
-
-    def _optimize_2d_layout_global(self, push_undo=True):
-        """Trigger the full 2D diffusion-sharing optimization on the canvas."""
-        if not self.nodes:
-            return
-        self._sync_node_positions()
-        if push_undo:
-            self._push_undo()
-        status = self.editor.optimize_2d_layout(force_reorder=True)  # User action: force reorder
-        self._sync_node_positions()
-
-        if status == "no_nets":
-            self.chat_panel._append_message(
-                "AI",
-                "No terminal nets available. To enable smart reordering, load a "
-                "SPICE netlist or JSON with terminal_nets data. Devices were "
-                "compacted without net-aware abutment.",
-                "#fff3cd", "#1a1a2e",  # warning yellow
-            )
-        elif status == "ok":
-            self.chat_panel._append_message(
-                "AI",
-                "Applied 2D layout optimization: devices reordered and abutted "
-                "for maximum S/D diffusion sharing.",
-                "#e8f4fd", "#1a1a2e",
-            )
 
     def _flip_selected_h(self):
         selected = self.editor.selected_device_ids()
@@ -1586,7 +1282,7 @@ class MainWindow(QMainWindow):
     def _on_toggle_add_dummy(self, enabled):
         self.editor.set_dummy_mode(enabled)
         msg = (
-            "Dummy mode ON: move mouse and click to place on snapped rows/columns."
+            "Dummy mode ON: move over PMOS/NMOS row and click to place."
             if enabled
             else "Dummy mode OFF."
         )
@@ -1615,8 +1311,7 @@ class MainWindow(QMainWindow):
             electrical = copy.deepcopy(template.get("electrical", electrical))
 
         x = candidate["x"] / self.editor.scale_factor
-        # Negate y back: load_placement uses y = -geom_y * scale, so geom_y = -scene_y / scale
-        y = -candidate["y"] / self.editor.scale_factor
+        y = candidate["y"] / self.editor.scale_factor
         width = candidate["width"] / self.editor.scale_factor
         height = candidate["height"] / self.editor.scale_factor
 
@@ -1635,18 +1330,37 @@ class MainWindow(QMainWindow):
         }
 
     def _add_dummy_device(self, candidate):
-        if not self.nodes:
-            return
         self._sync_node_positions()
         self._push_undo()
         candidate = dict(candidate)
+        candidate["type"] = str(candidate.get("type", "")).strip().lower()
+        candidate["y"] = self.editor._snap_row(candidate["y"])
+        candidate["x"] = self.editor._snap_value(candidate["x"])
+
+        col_capacity = max(1, int(self._col_spin.value())) if hasattr(self, "_col_spin") else 1
+        dev_type = candidate.get("type")
+
+        def row_type_count(row_y):
+            return sum(
+                1
+                for it in self.editor.device_items.values()
+                if self.editor._snap_row(it.pos().y()) == row_y
+                and getattr(it, "device_type", None) == dev_type
+            )
+
+        while row_type_count(candidate["y"]) > col_capacity:
+            candidate["y"] += self.editor._row_pitch
+            candidate["x"] = 0.0
+
+        candidate["x"] = self.editor.find_nearest_free_x(
+            row_y=candidate["y"],
+            width=candidate["width"],
+            target_x=candidate["x"],
+            exclude_id=None,
+        )
         dummy = self._build_dummy_node(candidate)
         self.nodes.append(dummy)
         self._original_data["nodes"] = self.nodes
-
-        # Assign dummy nets from nearest neighbor so it participates in shared diffusion
-        self._assign_dummy_nets(dummy)
-
         self._refresh_panels(compact=False)
         self._sync_node_positions()
         self.chat_panel._append_message(
@@ -1655,62 +1369,6 @@ class MainWindow(QMainWindow):
             "#e8f4fd",
             "#1a1a2e",
         )
-
-    def _assign_dummy_nets(self, dummy_node):
-        """Assign default nets to dummy devices.
-
-        PMOS dummies default to VDD on all terminals.
-        NMOS dummies default to VSS on all terminals.
-        If the dummy has a neighbor, the facing terminal inherits the
-        neighbor's boundary net for proper shared diffusion display.
-        """
-        dummy_id = dummy_node["id"]
-        dummy_x = dummy_node["geometry"]["x"]
-        dummy_y = dummy_node["geometry"]["y"]
-        dummy_type = str(dummy_node.get("type", "")).lower()
-
-        # Default supply net based on device type
-        supply_net = "VDD" if dummy_type == "pmos" else "VSS"
-        dummy_nets = {"S": supply_net, "G": supply_net, "D": supply_net}
-
-        # Find row neighbors to inherit boundary nets
-        row_mates = []
-        for n in self.nodes:
-            if n["id"] == dummy_id:
-                continue
-            if str(n.get("type", "")).lower() != dummy_type:
-                continue
-            ny = n["geometry"]["y"]
-            if abs(ny - dummy_y) < 0.01:
-                row_mates.append(n)
-
-        if row_mates:
-            # Find closest neighbor on the left and right
-            left_neighbor = None
-            right_neighbor = None
-            for n in row_mates:
-                nx = n["geometry"]["x"]
-                if nx < dummy_x:
-                    if left_neighbor is None or nx > left_neighbor["geometry"]["x"]:
-                        left_neighbor = n
-                elif nx > dummy_x:
-                    if right_neighbor is None or nx < right_neighbor["geometry"]["x"]:
-                        right_neighbor = n
-
-            # Inherit boundary nets from neighbors for green shared diffusion
-            if left_neighbor:
-                left_nets = self._terminal_nets.get(left_neighbor["id"], {})
-                left_boundary_net = left_nets.get("D", "") or left_nets.get("S", "")
-                if left_boundary_net:
-                    dummy_nets["S"] = left_boundary_net
-
-            if right_neighbor:
-                right_nets = self._terminal_nets.get(right_neighbor["id"], {})
-                right_boundary_net = right_nets.get("S", "") or right_nets.get("D", "")
-                if right_boundary_net:
-                    dummy_nets["D"] = right_boundary_net
-
-        self._terminal_nets[dummy_id] = dummy_nets
 
     # -------------------------------------------------
     # Import from Netlist + Layout
@@ -1724,33 +1382,53 @@ class MainWindow(QMainWindow):
         sp_path = dlg.sp_path
         oas_path = dlg.oas_path
 
-        def _on_done(data):
-            base_name = os.path.splitext(os.path.basename(sp_path))[0]
-            sp_dir = os.path.dirname(os.path.abspath(sp_path))
-            out_path = os.path.join(sp_dir, f"{base_name}_graph.json")
-            with open(out_path, "w") as f:
-                json.dump(data, f, indent=4)
+        # Show progress
+        progress = QProgressDialog("Parsing design files...", None, 0, 0, self)
+        progress.setWindowTitle("Import")
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setMinimumDuration(0)
+        progress.setStyleSheet("""
+            QProgressDialog {
+                background-color: #1a1f2b;
+                color: #c8d0dc;
+                font-family: 'Segoe UI';
+            }
+            QLabel { color: #c8d0dc; font-size: 10pt; }
+        """)
+        progress.show()
+        QApplication.processEvents()
 
-            self._load_from_data_dict(data, out_path)
-
-            num_nodes = len(data.get('nodes', []))
-            self.chat_panel._append_message(
-                "AI",
-                f"Imported {num_nodes} devices from "
-                f"{os.path.basename(sp_path)}\n"
-                f"Saved graph to: {os.path.basename(out_path)}\n\n"
-                f"To run AI initial placement: Design > Run AI Initial Placement (Ctrl+P)",
-                "#e8f4fd", "#1a1a2e",
-            )
-
-        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
             data = self._run_parser_pipeline(sp_path, oas_path)
-            _on_done(data)
         except Exception as e:
-            QMessageBox.warning(self, "Import Failed", f"Failed to parse design files:\n\n{e}")
-        finally:
-            QApplication.restoreOverrideCursor()
+            progress.close()
+            QMessageBox.critical(
+                self, "Import Failed",
+                f"Failed to parse design files:\n\n{e}",
+            )
+            return
+
+        progress.close()
+
+        # Save the generated graph JSON next to the .sp file
+        base_name = os.path.splitext(os.path.basename(sp_path))[0]
+        sp_dir = os.path.dirname(os.path.abspath(sp_path))
+        out_path = os.path.join(sp_dir, f"{base_name}_graph.json")
+        with open(out_path, "w") as f:
+            json.dump(data, f, indent=4)
+
+        # Load into the GUI
+        self._load_from_data_dict(data, out_path)
+
+        num_nodes = len(data.get('nodes', []))
+        self.chat_panel._append_message(
+            "AI",
+            f"Imported {num_nodes} devices from "
+            f"{os.path.basename(sp_path)}\n"
+            f"Saved graph to: {os.path.basename(out_path)}\n\n"
+            f"To run AI initial placement: Design > Run AI Initial Placement (Ctrl+P)",
+            "#e8f4fd", "#1a1a2e",
+        )
 
     # -------------------------------------------------
     # Run AI Initial Placement (Design menu)
@@ -1770,68 +1448,10 @@ class MainWindow(QMainWindow):
         if "terminal_nets" not in data:
             data["terminal_nets"] = self._terminal_nets
 
-        def _on_done(placed_data):
-            if self._current_file:
-                base = os.path.splitext(self._current_file)[0]
-                if base.endswith("_graph"):
-                    out_path = base.replace("_graph", "_initial_placement") + ".json"
-                else:
-                    out_path = base + "_placed.json"
-            else:
-                out_path = os.path.join(os.getcwd(), "placement.json")
-
-            with open(out_path, "w") as f:
-                json.dump(placed_data, f, indent=4)
-
-            self._load_from_data_dict(placed_data, out_path)
-
-            self.chat_panel._append_message(
-                "AI",
-                f"AI initial placement complete!\n"
-                f"Saved to: {os.path.basename(out_path)}\n"
-                f"You can now edit the layout, swap devices, or chat with the AI.",
-                "#e8f4fd", "#1a1a2e",
-            )
-
-        self._run_background_task(
-            title="Running AI initial placement...",
-            work_fn=lambda: self._run_ai_initial_placement(data),
-            on_success=_on_done,
-            on_error_title="AI Placement Failed",
-            on_error_prefix="AI placement failed:",
-        )
-
-    def _run_background_task(
-        self,
-        title,
-        work_fn,
-        on_success,
-        on_error_title,
-        on_error_prefix,
-    ):
-        """Run a heavy callable in a QThread and return result in UI thread."""
-
-        class _TaskWorker(QObject):
-            finished = Signal(object)
-            failed = Signal(str)
-
-            def __init__(self, fn):
-                super().__init__()
-                self._fn = fn
-
-            @Slot()
-            def run(self):
-                try:
-                    result = self._fn()
-                    self.finished.emit(result)
-                except Exception as exc:
-                    self.failed.emit(str(exc))
-
-        progress = QProgressDialog(title, None, 0, 0, self)
-        progress.setWindowTitle("Working")
+        progress = QProgressDialog("Running AI initial placement...", None, 0, 0, self)
+        progress.setWindowTitle("AI Placement")
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(0)
-        progress.setCancelButton(None)
         progress.setStyleSheet("""
             QProgressDialog {
                 background-color: #1a1f2b;
@@ -1841,56 +1461,61 @@ class MainWindow(QMainWindow):
             QLabel { color: #c8d0dc; font-size: 10pt; }
         """)
         progress.show()
+        QApplication.processEvents()
 
-        thread = QThread(self)
-        worker = _TaskWorker(work_fn)
-        worker.moveToThread(thread)
+        try:
+            data = self._run_ai_initial_placement(data)
+        except Exception as e:
+            progress.close()
+            QMessageBox.warning(
+                self, "AI Placement Failed",
+                f"AI placement failed:\n\n{e}",
+            )
+            return
 
-        job_ref = (thread, worker, progress)
-        self._background_jobs.append(job_ref)
+        progress.close()
 
-        def _cleanup():
-            try:
-                progress.close()
-            except RuntimeError:
-                pass
-            try:
-                thread.quit()
-                thread.wait(500)
-            except RuntimeError:
-                pass
-            if job_ref in self._background_jobs:
-                self._background_jobs.remove(job_ref)
+        # Save the placement JSON
+        if self._current_file:
+            base = os.path.splitext(self._current_file)[0]
+            # Replace _graph with _placement, or append _placement
+            if base.endswith("_graph"):
+                out_path = base.replace("_graph", "_initial_placement") + ".json"
+            else:
+                out_path = base + "_placed.json"
+        else:
+            out_path = os.path.join(os.getcwd(), "placement.json")
 
-        def _on_finished(result):
-            _cleanup()
-            on_success(result)
+        with open(out_path, "w") as f:
+            json.dump(data, f, indent=4)
 
-        def _on_failed(msg):
-            _cleanup()
-            QMessageBox.warning(self, on_error_title, f"{on_error_prefix}\n\n{msg}")
+        # Load the updated placement into the GUI
+        self._load_from_data_dict(data, out_path)
 
-        worker.finished.connect(_on_finished, Qt.ConnectionType.QueuedConnection)
-        worker.failed.connect(_on_failed, Qt.ConnectionType.QueuedConnection)
-        thread.started.connect(worker.run)
-        thread.start()
+        self.chat_panel._append_message(
+            "AI",
+            f"AI initial placement complete!\n"
+            f"Saved to: {os.path.basename(out_path)}\n"
+            f"You can now edit the layout, swap devices, or chat with the AI.",
+            "#e8f4fd", "#1a1a2e",
+        )
 
     @staticmethod
     def _run_parser_pipeline(sp_path, oas_path=""):
         """
         Run the full parser pipeline:
-          1. Parse SPICE netlist
+          1. Parse SPICE netlist (with block detection)
           2. Parse layout (.oas/.gds) and match devices
           3. Build circuit graph (edges)
-          4. Assemble nodes with geometry + edges
+          4. Assemble nodes with geometry + edges + block info
 
-        Returns: {"nodes": [...], "edges": [...], "terminal_nets": {...}}
+        Returns: {"nodes": [...], "edges": [...], "terminal_nets": {...}, "blocks": {...}}
         """
-        from parser.netlist_reader import read_netlist
+        from parser.netlist_reader import read_netlist_with_blocks
         from parser.circuit_graph import build_circuit_graph
 
-        # 1. Parse netlist
-        netlist = read_netlist(sp_path)
+        # 1. Parse netlist with block tracking
+        netlist, block_map = read_netlist_with_blocks(sp_path)
 
         # 2. Parse layout (optional) and match devices
         layout_instances = []
@@ -1900,24 +1525,24 @@ class MainWindow(QMainWindow):
                 from parser.layout_reader import extract_layout_instances
                 layout_instances = extract_layout_instances(oas_path)
             except Exception as e:
-                pass # print(f"[Import] Layout parsing failed ({e}), using grid placement")
+                print(f"[Import] Layout parsing failed ({e}), using grid placement")
 
         if layout_instances:
             try:
                 from parser.device_matcher import match_devices
                 device_mapping = match_devices(netlist, layout_instances)
-                pass # print(f"[Import] Matched {len(device_mapping)} devices to layout")
+                print(f"[Import] Matched {len(device_mapping)} devices to layout")
             except Exception as e:
-                pass # print(f"[Import] Device matching failed ({e}), using grid placement")
+                print(f"[Import] Device matching failed ({e}), using grid placement")
                 device_mapping = {}
 
-        # 3. Build nodes
+        # 3. Build nodes (first pass — collect all devices with temp geometry)
         PITCH_UM = 0.294
         ROW_HEIGHT_UM = 0.668
-        nmos_idx = 0
-        pmos_idx = 0
+        BLOCK_GAP_UM = PITCH_UM * 2  # gap between blocks
         nodes = []
         terminal_nets = {}
+        node_by_name = {}  # dev_name -> node_dict for repositioning
 
         for dev_name, dev in netlist.devices.items():
             dev_type = "nmos" if "n" in dev.type.lower() else "pmos"
@@ -1934,25 +1559,14 @@ class MainWindow(QMainWindow):
                     "orientation": inst.get("orientation", "R0"),
                 }
             else:
-                # Grid-based default placement
-                if dev_type == "pmos":
-                    geom = {
-                        "x": pmos_idx * PITCH_UM,
-                        "y": ROW_HEIGHT_UM,
-                        "width": PITCH_UM,
-                        "height": ROW_HEIGHT_UM,
-                        "orientation": "R0",
-                    }
-                    pmos_idx += 1
-                else:
-                    geom = {
-                        "x": nmos_idx * PITCH_UM,
-                        "y": 0.0,
-                        "width": PITCH_UM,
-                        "height": ROW_HEIGHT_UM,
-                        "orientation": "R0",
-                    }
-                    nmos_idx += 1
+                # Placeholder — will be repositioned by block-aware layout below
+                geom = {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "width": PITCH_UM,
+                    "height": ROW_HEIGHT_UM,
+                    "orientation": "R0",
+                }
 
             electrical = {
                 "l": dev.params.get("l", 1.4e-08),
@@ -1960,12 +1574,25 @@ class MainWindow(QMainWindow):
                 "nfin": dev.params.get("nfin", 1),
             }
 
-            nodes.append({
+            node_dict = {
                 "id": dev_name,
                 "type": dev_type,
                 "electrical": electrical,
                 "geometry": geom,
-            })
+            }
+
+            # Attach block membership if available
+            # Also match finger-expanded names (e.g. XI3_MM28_f1 → XI3_MM28)
+            block_info = block_map.get(dev_name)
+            if block_info is None:
+                base = re.sub(r'_f\d+$', '', dev_name)
+                if base != dev_name:
+                    block_info = block_map.get(base)
+            if block_info:
+                node_dict["block"] = block_info
+
+            nodes.append(node_dict)
+            node_by_name[dev_name] = node_dict
 
             # Build terminal nets
             if hasattr(dev, 'pins') and dev.pins:
@@ -1982,17 +1609,93 @@ class MainWindow(QMainWindow):
             for u, v, d in G.edges(data=True)
         ]
 
+        # 5. Build blocks summary (include finger-expanded device names)
+        blocks = {}
+        for node in nodes:
+            b = node.get("block")
+            if b:
+                inst = b.get("instance", "")
+                if inst and inst not in blocks:
+                    blocks[inst] = {"subckt": b.get("subckt", "?"), "devices": []}
+                if inst:
+                    blocks[inst]["devices"].append(node["id"])
+
+        if blocks:
+            block_labels = [f"{k} ({v['subckt']})" for k, v in blocks.items()]
+            print(f"[Import] Detected {len(blocks)} blocks: {', '.join(block_labels)}")
+
+        # 6. Block-aware placement (only when no layout geometry is available)
+        if not device_mapping:
+            # Group devices by block, then by type
+            pmos_y = ROW_HEIGHT_UM    # PMOS row y
+            nmos_y = 0.0              # NMOS row y
+            x_cursor = 0.0            # global x cursor across blocks
+
+            # Determine block order (preserve insertion order)
+            block_order = list(blocks.keys())
+
+            # Collect unblocked devices
+            blocked_ids = set()
+            for info in blocks.values():
+                blocked_ids.update(info["devices"])
+            unblocked = [n for n in nodes if n["id"] not in blocked_ids]
+
+            for block_idx, inst in enumerate(block_order):
+                info = blocks[inst]
+                members = [node_by_name[d] for d in info["devices"]
+                           if d in node_by_name]
+                pmos_members = [n for n in members if n["type"] == "pmos"]
+                nmos_members = [n for n in members if n["type"] == "nmos"]
+
+                # Place PMOS in top row, abutted edge-to-edge
+                local_x = x_cursor
+                for n in pmos_members:
+                    w = n["geometry"]["width"]
+                    n["geometry"]["x"] = local_x
+                    n["geometry"]["y"] = pmos_y
+                    local_x += w
+                pmos_right = local_x
+
+                # Place NMOS in bottom row, abutted edge-to-edge
+                local_x = x_cursor
+                for n in nmos_members:
+                    w = n["geometry"]["width"]
+                    n["geometry"]["x"] = local_x
+                    n["geometry"]["y"] = nmos_y
+                    local_x += w
+                nmos_right = local_x
+
+                # Advance cursor past the widest row + gap
+                block_right = max(pmos_right, nmos_right)
+                x_cursor = block_right + BLOCK_GAP_UM
+
+            # Place unblocked devices after all blocks
+            for n in unblocked:
+                w = n["geometry"]["width"]
+                if n["type"] == "pmos":
+                    n["geometry"]["x"] = x_cursor
+                    n["geometry"]["y"] = pmos_y
+                else:
+                    n["geometry"]["x"] = x_cursor
+                    n["geometry"]["y"] = nmos_y
+                x_cursor += w
+
         return {
             "nodes": nodes,
             "edges": edges,
             "terminal_nets": terminal_nets,
+            "blocks": blocks,
         }
 
     @staticmethod
     def _run_ai_initial_placement(data):
         """
         Send the parsed graph to Gemini for AI-based initial placement.
+        Updates x/y coordinates in the nodes and returns the updated data.
         """
+        import tempfile
+        from ai_agent.gemini_placer import gemini_generate_placement, sanitize_json
+
         # Write to temp file for the placer
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".json", delete=False
@@ -2005,12 +1708,22 @@ class MainWindow(QMainWindow):
         try:
             gemini_generate_placement(tmp_in_path, tmp_out_path)
             with open(tmp_out_path) as f:
-                placed = json.load(f)
+                raw_placed = json.load(f)
+
+            # Normalise: LLM might save a bare JSON array — wrap it
+            from ai_agent.gemini_placer import _ensure_placement_dict
+            placed = _ensure_placement_dict(raw_placed)
+
             # Merge placed coordinates back into original data
-            if "nodes" in placed:
-                placed_map = {n["id"]: n for n in placed["nodes"] if "id" in n}
+            placed_nodes_list = placed.get("nodes", [])
+            if isinstance(placed_nodes_list, list):
+                placed_map = {
+                    n["id"]: n
+                    for n in placed_nodes_list
+                    if isinstance(n, dict) and "id" in n      # guard against nested lists
+                }
                 for node in data["nodes"]:
-                    if node["id"] in placed_map:
+                    if isinstance(node, dict) and node.get("id") in placed_map:
                         placed_node = placed_map[node["id"]]
                         if "geometry" in placed_node:
                             node["geometry"].update(placed_node["geometry"])
@@ -2230,8 +1943,8 @@ class MainWindow(QMainWindow):
             except RuntimeError:
                 pass
 
-        pass # print(f"[STAGE HL] Stage {stage_index} ({stage_name}): "
-             # f"{len(dimmed_ids)} device(s) highlighted")
+        print(f"[STAGE HL] Stage {stage_index} ({stage_name}): "
+              f"{len(dimmed_ids)} device(s) highlighted")
 
         # ---- Auto-restore after 3 s --- safe: re-lookup items by ID ----
         if self._stage_highlight_timer and self._stage_highlight_timer.isActive():
@@ -2294,7 +2007,7 @@ class MainWindow(QMainWindow):
         self._batch_flush_timer = None
         if not cmds:
             return
-        pass # print(f"[AI BATCH] Executing {len(cmds)} command(s) as one undo group")
+        print(f"[AI BATCH] Executing {len(cmds)} command(s) as one undo group")
         # Push a SINGLE undo snapshot covering all commands
         self._sync_node_positions()
         self._push_undo()
@@ -2341,7 +2054,7 @@ class MainWindow(QMainWindow):
             _skip_undo: if True, do NOT push an undo snapshot (caller
                 already pushed one for the whole batch).
         """
-        pass # print(f"[AI CMD] Received command: {cmd}")
+        print(f"[AI CMD] Received command: {cmd}")
 
         if not isinstance(cmd, dict):
             self.chat_panel._append_message(
@@ -2356,7 +2069,7 @@ class MainWindow(QMainWindow):
                 raw_b = cmd.get("device_b", cmd.get("b"))
                 id_a = self._resolve_device_id(raw_a)
                 id_b = self._resolve_device_id(raw_b)
-                pass # print(f"[AI CMD] Swap: raw=({raw_a},{raw_b}) resolved=({id_a},{id_b})")
+                print(f"[AI CMD] Swap: raw=({raw_a},{raw_b}) resolved=({id_a},{id_b})")
 
                 if not id_a or not id_b:
                     self.chat_panel._append_message(
@@ -2385,7 +2098,7 @@ class MainWindow(QMainWindow):
                     orient_b = geo_b.get("orientation", "R0")
                     geo_a["orientation"] = orient_b
                     geo_b["orientation"] = orient_a
-                    pass # print(f"[AI CMD] Data swap done: {id_a}→({geo_a['x']},{geo_a['y']}), {id_b}→({geo_b['x']},{geo_b['y']})")
+                    print(f"[AI CMD] Data swap done: {id_a}→({geo_a['x']},{geo_a['y']}), {id_b}→({geo_b['x']},{geo_b['y']})")
                     # Rebuild canvas WITHOUT re-compaction so positions stick
                     self._refresh_panels(compact=False)
                     self.chat_panel._append_message(
@@ -2395,7 +2108,7 @@ class MainWindow(QMainWindow):
                         "#1a1a2e",
                     )
                 else:
-                    pass # print(f"[AI CMD] Swap failed: node_a={node_a is not None}, node_b={node_b is not None}")
+                    print(f"[AI CMD] Swap failed: node_a={node_a is not None}, node_b={node_b is not None}")
                     self.chat_panel._append_message(
                         "AI",
                         f"Swap failed for {id_a} and {id_b}.",
@@ -2408,7 +2121,7 @@ class MainWindow(QMainWindow):
                 dev_id = self._resolve_device_id(raw_dev)
                 x = cmd.get("x")
                 y = cmd.get("y")
-                pass # print(f"[AI CMD] Move: raw={raw_dev} resolved={dev_id} x={x} y={y}")
+                print(f"[AI CMD] Move: raw={raw_dev} resolved={dev_id} x={x} y={y}")
 
                 if dev_id is None:
                     self.chat_panel._append_message(
@@ -2436,7 +2149,7 @@ class MainWindow(QMainWindow):
                 if node:
                     node["geometry"]["x"] = float(x)
                     node["geometry"]["y"] = float(y)
-                    pass # print(f"[AI CMD] Data move done: {dev_id}→({x},{y})")
+                    print(f"[AI CMD] Data move done: {dev_id}→({x},{y})")
                     self._refresh_panels(compact=False)
                     self.chat_panel._append_message(
                         "AI",
@@ -2463,7 +2176,7 @@ class MainWindow(QMainWindow):
                         "#a00",
                     )
                     return
-                pass # print(f"[AI CMD] Add dummy: type={dev_type}, count={count}")
+                print(f"[AI CMD] Add dummy: type={dev_type}, count={count}")
                 self._sync_node_positions()
                 if not _skip_undo:
                     self._push_undo()
@@ -2546,7 +2259,7 @@ class MainWindow(QMainWindow):
                 if not hasattr(self, "_routing_annotations"):
                     self._routing_annotations = {}
                 self._routing_annotations.setdefault(net, {})["priority"] = priority
-                pass # print(f"[AI CMD] net_priority: net={net} priority={priority}")
+                print(f"[AI CMD] net_priority: net={net} priority={priority}")
                 self.chat_panel._append_message(
                     "AI",
                     f"📡 Net **{net}** marked as **{priority}** priority for routing.",
@@ -2563,7 +2276,7 @@ class MainWindow(QMainWindow):
                 if not hasattr(self, "_routing_annotations"):
                     self._routing_annotations = {}
                 self._routing_annotations.setdefault(net, {})["wire_width_um"] = float(width_um)
-                pass # print(f"[AI CMD] wire_width: net={net} width={width_um}µm")
+                print(f"[AI CMD] wire_width: net={net} width={width_um}µm")
                 self.chat_panel._append_message(
                     "AI",
                     f"🔌 Wire width for **{net}** set to **{width_um} µm**.",
@@ -2578,7 +2291,7 @@ class MainWindow(QMainWindow):
                     self._routing_annotations = {}
                 key = f"{net_a}|{net_b}"
                 self._routing_annotations.setdefault(key, {})["spacing_um"] = float(spacing_um)
-                pass # print(f"[AI CMD] wire_spacing: {net_a}<>{net_b} spacing={spacing_um}µm")
+                print(f"[AI CMD] wire_spacing: {net_a}<>{net_b} spacing={spacing_um}µm")
                 self.chat_panel._append_message(
                     "AI",
                     f"📏 Minimum spacing between **{net_a}** and **{net_b}** set to **{spacing_um} µm**.",
@@ -2591,7 +2304,7 @@ class MainWindow(QMainWindow):
                 if not hasattr(self, "_routing_annotations"):
                     self._routing_annotations = {}
                 self._routing_annotations.setdefault(net, {})["reroute"] = reason
-                pass # print(f"[AI CMD] net_reroute: net={net} reason={reason!r}")
+                print(f"[AI CMD] net_reroute: net={net} reason={reason!r}")
                 self.chat_panel._append_message(
                     "AI",
                     f"🔀 Net **{net}** flagged for reroute: _{reason}_",
@@ -2601,17 +2314,8 @@ class MainWindow(QMainWindow):
                 if hasattr(self, "editor") and hasattr(self.editor, "highlight_net_by_name"):
                     self.editor.highlight_net_by_name(net, "#f39c12")
 
-            elif action in {"optimize_abutment", "optimize_placement", "abut_opt"}:
-                self._optimize_abutment_global(push_undo=not _skip_undo)
-                self.chat_panel._append_message(
-                    "AI",
-                    "Applied global abutment optimization.",
-                    "#e8f4fd",
-                    "#1a1a2e",
-                )
-
             else:
-                pass # print(f"[AI CMD] Unsupported action: '{action}'")
+                print(f"[AI CMD] Unsupported action: '{action}'")
                 self.chat_panel._append_message(
                     "AI",
                     f"Unsupported AI action: {action or '(empty)'}",
@@ -2620,7 +2324,7 @@ class MainWindow(QMainWindow):
                 )
 
         except (KeyError, TypeError, ValueError) as e:
-            pass # print(f"[AI CMD] Exception: {e}")
+            print(f"[AI CMD] Exception: {e}")
             self.chat_panel._append_message(
                 "AI", f"Could not execute command: {e}", "#fde8e8", "#a00"
             )

@@ -218,14 +218,31 @@ def aggregate_to_logical_devices(nodes: list[dict]) -> list[dict]:
     finger_groups = group_fingers(nodes)
     logical_nodes: list[dict] = []
 
+    # Track which device IDs were already accounted for (via finger_groups).
+    # finger_groups keys are *base_names*, but for bus/non-grouped devices
+    # the base_name == original_id so the id is directly in finger_groups.
+    seen_ids: set[str] = set()
+
     for base_name, finger_nodes in finger_groups.items():
         if len(finger_nodes) == 1:
-            # Single device — pass through unchanged
             logical_nodes.append(finger_nodes[0])
+            seen_ids.add(finger_nodes[0]["id"])
         else:
-            # Multi-finger — aggregate
             logical_node = _create_logical_node(base_name, finger_nodes)
             logical_nodes.append(logical_node)
+            for fn in finger_nodes:
+                seen_ids.add(fn["id"])
+
+    # Re-add bus-notation devices (e.g., MM8<0>, MM8<21>) that were skipped by
+    # group_fingers because _is_bus_notation() returned True.  Without this they
+    # are silently dropped from the logical view, which causes downstream conservation
+    # failures.  Dummies are handled separately below.
+    for node in nodes:
+        if node.get("is_dummy"):
+            continue
+        if node["id"] not in seen_ids:
+            logical_nodes.append(node)
+            seen_ids.add(node["id"])
 
     # Add dummies separately (never grouped)
     for node in nodes:

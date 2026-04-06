@@ -42,3 +42,4 @@ logs/
 # Generated placement files (keep source .sp and .oas, ignore intermediates)
 *_graph.json
 *_placed.json
+.venv/

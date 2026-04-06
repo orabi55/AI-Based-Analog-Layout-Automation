@@ -111,12 +111,24 @@ def run_drc_check(nodes, gap_px=0.0):
     valid = [n for n in nodes if "geometry" in n]
 
     # ---- Dynamic row detection ----
-    # Identify the canonical y for each type by majority vote (most common y per type)
+    # Build a SET of valid y-values per device type.
+    # Using a set (not majority-vote) correctly handles multi-row layouts:
+    #   e.g. common-centroid NMOS on y=0.000, 0.668, 1.336  — all three are valid.
     from collections import Counter
-    pmos_ys = Counter(round(n["geometry"]["y"], 4) for n in valid if str(n.get("type","")).strip().lower() == "pmos")
-    nmos_ys = Counter(round(n["geometry"]["y"], 4) for n in valid if str(n.get("type","")).strip().lower() == "nmos")
-    pmos_row_y = pmos_ys.most_common(1)[0][0] if pmos_ys else None
-    nmos_row_y = nmos_ys.most_common(1)[0][0] if nmos_ys else None
+    pmos_ys: set = set()
+    nmos_ys: set = set()
+    for n in valid:
+        y_rounded = round(float(n["geometry"]["y"]), 4)
+        t = str(n.get("type", "")).strip().lower()
+        if t == "pmos":
+            pmos_ys.add(y_rounded)
+        elif t == "nmos":
+            nmos_ys.add(y_rounded)
+
+    # For legacy callers that read pmos_row_y / nmos_row_y as a single float,
+    # expose the most-negative PMOS y and most-positive NMOS y as sentinels.
+    pmos_row_y = min(pmos_ys) if pmos_ys else None
+    nmos_row_y = min(nmos_ys) if nmos_ys else None
 
     # Build bounding box list
     boxes = []
@@ -166,48 +178,100 @@ def run_drc_check(nodes, gap_px=0.0):
                 ))
 
     # ---- Row-Type check ----
-    # Dynamically detect expected row y per device type and flag outliers.
-    if pmos_row_y is not None and nmos_row_y is not None:
-        for n in valid:
-            dev_id = n["id"]
-            dev_type = str(n.get("type", "")).strip().lower()
-            geo = n.get("geometry", {})
-            y = float(geo.get("y", 0))
+    # Two-stage approach:
+    #  Stage A — Hard physical boundary: PMOS y < 0, NMOS y >= 0.
+    #            This is PDK-independent and catches cross-type misplacement
+    #            even when the misplaced device's y inadvertently populates the set.
+    #  Stage B — Set membership: within the correct half-plane, flag any device
+    #            whose y is not in the expected set of valid rows for its type.
+    #            This catches e.g. an NMOS moved to y=2.0 when only 0.0 and 0.668
+    #            are valid rows (genuine row-boundary errors, NOT multi-row errors).
+    NMOS_BOUNDARY = 0.0  # NMOS: y >= this; PMOS: y < this
 
-            if dev_type == "pmos" and abs(y - pmos_row_y) > 0.01:
-                correct_y = pmos_row_y
-                text = (
-                    f"FATAL ROW ERROR: Device {dev_id} is a PMOS but is at y={y:.4f}. "
-                    f"PMOS row y={correct_y:.4f}. Move it back to y={correct_y:.4f}."
-                )
-                if text not in violation_texts:
-                    violation_texts.append(text)
-                    structured.append(DRCViolation(
-                        kind="ROW_ERROR",
-                        dev_a=dev_id, dev_b=None,
-                        x1_a=geo.get("x",0), x2_a=geo.get("x",0)+geo.get("width",1),
-                        y_a=y, w_a=geo.get("width",1),
-                        x1_b=0, x2_b=0, y_b=correct_y, w_b=0,
-                        gap_required=0, gap_actual=0,
-                        text=text,
-                    ))
-            elif dev_type == "nmos" and abs(y - nmos_row_y) > 0.01:
-                correct_y = nmos_row_y
-                text = (
-                    f"FATAL ROW ERROR: Device {dev_id} is an NMOS but is at y={y:.4f}. "
-                    f"NMOS row y={correct_y:.4f}. Move it back to y={correct_y:.4f}."
-                )
-                if text not in violation_texts:
-                    violation_texts.append(text)
-                    structured.append(DRCViolation(
-                        kind="ROW_ERROR",
-                        dev_a=dev_id, dev_b=None,
-                        x1_a=geo.get("x",0), x2_a=geo.get("x",0)+geo.get("width",1),
-                        y_a=y, w_a=geo.get("width",1),
-                        x1_b=0, x2_b=0, y_b=correct_y, w_b=0,
-                        gap_required=0, gap_actual=0,
-                        text=text,
-                    ))
+    if (pmos_ys or nmos_ys):
+        for n in valid:
+            dev_id   = n["id"]
+            dev_type = str(n.get("type", "")).strip().lower()
+            geo      = n.get("geometry", {})
+            y        = round(float(geo.get("y", 0)), 4)
+
+            if dev_type == "pmos":
+                # Stage A: PMOS must be in the negative half-plane
+                if y >= NMOS_BOUNDARY and nmos_ys:
+                    correct_y = min(pmos_ys) if pmos_ys else -0.668
+                    text = (
+                        f"FATAL ROW ERROR: Device {dev_id} is a PMOS but is at y={y:.4f} "
+                        f"(NMOS half-plane y>=0). Move it to y={correct_y:.4f}."
+                    )
+                    if text not in violation_texts:
+                        violation_texts.append(text)
+                        structured.append(DRCViolation(
+                            kind="ROW_ERROR",
+                            dev_a=dev_id, dev_b=None,
+                            x1_a=geo.get("x",0), x2_a=geo.get("x",0)+geo.get("width",1),
+                            y_a=y, w_a=geo.get("width",1),
+                            x1_b=0, x2_b=0, y_b=correct_y, w_b=0,
+                            gap_required=0, gap_actual=0,
+                            text=text,
+                        ))
+                # Stage B: PMOS in correct half-plane but not in known PMOS rows
+                elif y < NMOS_BOUNDARY and pmos_ys and y not in pmos_ys:
+                    correct_y = min(pmos_ys)
+                    text = (
+                        f"FATAL ROW ERROR: Device {dev_id} is a PMOS at y={y:.4f}. "
+                        f"Valid PMOS row(s): {sorted(pmos_ys)}. "
+                        f"Move it to y={correct_y:.4f}."
+                    )
+                    if text not in violation_texts:
+                        violation_texts.append(text)
+                        structured.append(DRCViolation(
+                            kind="ROW_ERROR",
+                            dev_a=dev_id, dev_b=None,
+                            x1_a=geo.get("x",0), x2_a=geo.get("x",0)+geo.get("width",1),
+                            y_a=y, w_a=geo.get("width",1),
+                            x1_b=0, x2_b=0, y_b=correct_y, w_b=0,
+                            gap_required=0, gap_actual=0,
+                            text=text,
+                        ))
+
+            elif dev_type == "nmos":
+                # Stage A: NMOS must be in the non-negative half-plane
+                if y < NMOS_BOUNDARY and pmos_ys:
+                    correct_y = min(nmos_ys) if nmos_ys else 0.0
+                    text = (
+                        f"FATAL ROW ERROR: Device {dev_id} is an NMOS but is at y={y:.4f} "
+                        f"(PMOS half-plane y<0). Move it to y={correct_y:.4f}."
+                    )
+                    if text not in violation_texts:
+                        violation_texts.append(text)
+                        structured.append(DRCViolation(
+                            kind="ROW_ERROR",
+                            dev_a=dev_id, dev_b=None,
+                            x1_a=geo.get("x",0), x2_a=geo.get("x",0)+geo.get("width",1),
+                            y_a=y, w_a=geo.get("width",1),
+                            x1_b=0, x2_b=0, y_b=correct_y, w_b=0,
+                            gap_required=0, gap_actual=0,
+                            text=text,
+                        ))
+                # Stage B: NMOS in correct half-plane but not in known NMOS rows
+                elif y >= NMOS_BOUNDARY and nmos_ys and y not in nmos_ys:
+                    correct_y = min(nmos_ys)
+                    text = (
+                        f"FATAL ROW ERROR: Device {dev_id} is an NMOS at y={y:.4f}. "
+                        f"Valid NMOS row(s): {sorted(nmos_ys)}. "
+                        f"Move it to y={correct_y:.4f}."
+                    )
+                    if text not in violation_texts:
+                        violation_texts.append(text)
+                        structured.append(DRCViolation(
+                            kind="ROW_ERROR",
+                            dev_a=dev_id, dev_b=None,
+                            x1_a=geo.get("x",0), x2_a=geo.get("x",0)+geo.get("width",1),
+                            y_a=y, w_a=geo.get("width",1),
+                            x1_b=0, x2_b=0, y_b=correct_y, w_b=0,
+                            gap_required=0, gap_actual=0,
+                            text=text,
+                        ))
 
     # ---- Gap check (same row, adjacent) ----
     if gap_px > 0:

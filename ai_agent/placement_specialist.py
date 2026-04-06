@@ -212,10 +212,23 @@ def _build_symmetric_interdig_pattern(
     total = sum(dev_nf_map.values())
     half_total = total // 2
 
-    # Target counts for the first half
-    half_target: Dict[str, int] = {}
-    for dev_id, nf in dev_nf_map.items():
-        half_target[dev_id] = nf // 2
+    # Target counts for the first half — base is nf//2 per device.
+    # When a device has odd nf, nf//2 rounds down, so sum(half_target) may be
+    # less than half_total.  Distribute the deficit to odd-nf devices (largest
+    # first) so the first half is always exactly half_total fingers.
+    half_target: Dict[str, int] = {dev_id: nf // 2 for dev_id, nf in dev_nf_map.items()}
+    half_deficit = half_total - sum(half_target.values())
+    if half_deficit > 0:
+        odd_nf_devs = sorted(
+            [d for d, nf in dev_nf_map.items() if nf % 2 == 1],
+            key=lambda d: dev_nf_map[d],
+            reverse=True,
+        )
+        for dev_id in odd_nf_devs:
+            if half_deficit <= 0:
+                break
+            half_target[dev_id] += 1
+            half_deficit -= 1
 
     # Build half-pattern using proportional round-robin
     half_pattern: List[str] = []
@@ -253,14 +266,19 @@ def _build_symmetric_interdig_pattern(
         half_pattern.append(best_dev)
         cursors[best_dev] += 1
 
-    # Handle odd total: if any device has odd nf, extra finger goes to
-    # the center of the full pattern
-    remainder_total = total - 2 * half_total
+    # Handle odd total: if any device has odd nf, exactly ONE extra finger goes to
+    # the center of the full pattern.  Choose the device with the largest nf (the
+    # reference is usually the biggest device) to keep outputs at the edges.
     center_extras: List[str] = []
-    if remainder_total > 0:
-        for dev_id, nf in dev_nf_map.items():
-            if nf % 2 == 1:
-                center_extras.append(dev_id)
+    if total % 2 == 1:
+        # Pick the device with largest nf that has an odd finger count
+        candidate = max(
+            (dev_id for dev_id, nf in dev_nf_map.items() if nf % 2 == 1),
+            key=lambda d: dev_nf_map[d],
+            default=None,
+        )
+        if candidate:
+            center_extras = [candidate]
 
     # Full pattern = half + center_extras + reversed(half)
     full_pattern = half_pattern + center_extras + list(reversed(half_pattern))

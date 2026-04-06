@@ -73,6 +73,12 @@ DEFAULT_GAP_PX:                float = 0.0
 MAX_DRC_RETRIES:                int   = 2
 MAX_ROUTING_HILL_CLIMB_PASSES:  int   = 3
 
+# GUI canvas pixel-to-µm conversion factor.
+# Typical symbolic-editor canvas: 1 µm = approximately 34 pixels (tunable).
+# This is used to convert gap_px (pixels) → gap_um (µm) for the DRC checker.
+# If gap_px == 0 (default) the conversion produces 0.0, meaning no gap enforcement.
+PIXELS_PER_UM: float = 34.0
+
 # Y-coordinate row convention:
 #   NMOS: y >= NMOS_ROW_Y_MIN
 #   PMOS: y <  NMOS_ROW_Y_MIN
@@ -626,9 +632,28 @@ class Orchestrator:
         )
         _log(f"Topology constraints: {len(self.constraint_text)} chars")
         
-        # Bug #7: Empty constraint_text logs a clear diagnostic
+        # M2 fix: Surface empty constraint_text as an explicit user-visible warning.
+        # An empty constraint means Stage 2 will get no guidance and produce
+        # generic placement. Log clearly and embed the warning in the question.
+        _constraint_warning = ""
         if not self.constraint_text.strip():
-            _log("⚠ Warning: constraint_text is empty!")
+            sp_status = (
+                f"SPICE file not found: {sp_file_path!r}"
+                if sp_file_path
+                else "No SPICE file provided"
+            )
+            _constraint_warning = (
+                f"\n\n⚠️ **WARNING**: No topology constraints could be extracted.\n"
+                f"({sp_status}, and no terminal_nets from layout canvas).\n"
+                f"Please load a SPICE netlist (.sp/.cir) before running AI placement "
+                f"to get topology-aware results."
+            )
+            _log(
+                f"⚠ constraint_text is EMPTY — "
+                f"sp_file_path={sp_file_path!r}, "
+                f"terminal_nets={len(terminal_nets)} entries, "
+                f"nodes={len(nodes)}"
+            )
 
         # Try to get LLM to present constraints conversationally
         analyst_user = (
@@ -667,6 +692,10 @@ class Orchestrator:
                 f"{self.constraint_text}\n\n"
                 f"**Is this correct?** Reply 'Yes' to proceed, or let me know any corrections."
             )
+
+        # Append constraint warning if no topology data was found (M2)
+        if _constraint_warning:
+            question += _constraint_warning
 
         # Stage 1.5: Strategy Selection
         try:
@@ -781,8 +810,12 @@ class Orchestrator:
 
         drc_result = {"pass": True, "violations": [], "summary": ""}
 
+        # C1 fix: gap_px is in GUI pixels; DRC works in µm.  Convert here.
+        # When gap_px == 0, gap_um == 0 (no gap enforcement — only overlap checking).
+        gap_um = self._gap_px / PIXELS_PER_UM if self._gap_px > 0 else 0.0
+
         for attempt in range(self._max_drc_retries):
-            drc_result = run_drc_check(working_nodes, self._gap_px)
+            drc_result = run_drc_check(working_nodes, gap_um)
             n_violations = len(drc_result["violations"])
             
             _log(f"DRC attempt {attempt + 1}/{self._max_drc_retries}: "
@@ -1086,14 +1119,13 @@ class Orchestrator:
             for n in working_nodes if not n.get("is_dummy")
         }
         
-        # working_nodes = apply_deterministic_optimizations(
-        #     working_nodes,
-        #     constraint_text,
-        #     terminal_nets,
-        #     edges,
-        #     self._gap_px
-        #     #placement_mode=placement_mode,
-        # )
+        working_nodes = apply_deterministic_optimizations(
+            working_nodes,
+            constraint_text,
+            terminal_nets,
+            edges,
+            placement_mode=placement_mode,
+        )
         
         # Check if positions changed
         post_opt_positions = {
@@ -1193,21 +1225,37 @@ class Orchestrator:
                     })
 
         # ═══════════════════════════════════════════════════════════════════
-        # SAVE TO RAG
+        # SAVE TO RAG — only when the run produced a high-quality result
         # ═══════════════════════════════════════════════════════════════════
-        try:
-            run_label = f"auto_{len(final_cmds)}cmds_drc{len(drc_result.get('violations', []))}"
-            save_run_as_example(
-                working_nodes,
-                edges,
-                terminal_nets,
-                drc_result,
-                routing_result,
-                label=run_label,
+        # Gate: save only if DRC passed AND routing cost is below a threshold.
+        # This prevents the RAG store from growing unboundedly with mediocre
+        # examples, which would degrade retrieval quality over time (M5 fix).
+        drc_passed   = drc_result.get("pass", False)
+        routing_cost = routing_result.get("placement_cost", 9999)
+        RAG_QUALITY_THRESHOLD = 5.0   # normalized cost units
+        if drc_passed and routing_cost < RAG_QUALITY_THRESHOLD:
+            try:
+                run_label = (
+                    f"quality_drcOK_cost{routing_cost:.2f}_"
+                    f"{len(final_cmds)}cmds"
+                )
+                save_run_as_example(
+                    working_nodes,
+                    edges,
+                    terminal_nets,
+                    drc_result,
+                    routing_result,
+                    label=run_label,
+                )
+                _log(f"[RAG] High-quality run saved as '{run_label}'")
+            except Exception as rag_exc:
+                _log(f"[RAG] Save failed: {rag_exc}")
+        else:
+            _log(
+                f"[RAG] Run NOT saved: drc_pass={drc_passed}, "
+                f"routing_cost={routing_cost:.2f} "
+                f"(threshold={RAG_QUALITY_THRESHOLD})"
             )
-            _log(f"[RAG] Run saved as '{run_label}'")
-        except Exception as rag_exc:
-            _log(f"[RAG] Save failed: {rag_exc}")
 
         # ═══════════════════════════════════════════════════════════════════
         # BUILD FINAL RESPONSE

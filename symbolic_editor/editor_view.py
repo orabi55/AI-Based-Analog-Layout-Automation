@@ -12,19 +12,18 @@ from PySide6.QtWidgets import (
     QGraphicsPathItem,
     QGraphicsRectItem,
     QGraphicsItem,
-    QMenu,
+    QGraphicsSimpleTextItem,
 )
 from PySide6.QtCore import Qt, Signal, QPointF
-from PySide6.QtGui import QPainter, QPen, QPainterPath, QColor, QBrush, QFont
+from PySide6.QtGui import QPainter, QPen, QPainterPath, QColor, QBrush
 
 from device_item import DeviceItem
+from block_item import BlockItem
 
 
 class SymbolicEditor(QGraphicsView):
 
     device_clicked = Signal(str)
-    optimize_2d_requested = Signal()   # emitted from context-menu or auto-load
-    edit_terminals_requested = Signal(str)  # emitted with device ID
 
     def __init__(self):
         super().__init__()
@@ -59,9 +58,6 @@ class SymbolicEditor(QGraphicsView):
         self._conn_map = {}       # device_id -> [(other_id, net_name), ...]
         self._conn_lines = []     # active QGraphicsPathItem items
         self._terminal_nets = {}  # {dev_id: {'D': net, 'G': net, 'S': net}}
-        self._group_items   = []  # Legacy - no longer used (devices render abut states directly)
-        self._shared_net_labels = []  # Text overlays for shared net names between abutted devices
-        self._terminal_highlights = []  # Highlight overlays for specific terminal areas
 
         # Net color palette
         self._net_colors = {
@@ -101,6 +97,33 @@ class SymbolicEditor(QGraphicsView):
         # Custom row gap override (None = auto)
         self._custom_row_gap = None
 
+        # Block overlay items
+        self._blocks = {}            # block data: {inst: {subckt, devices}}
+        self._block_overlays = []    # list of QGraphicsItem for overlays
+        self._block_items = []       # list of actual BlockItem instances (symbol view)
+        self._block_overlays_visible = True
+        self._view_level = "symbol"   # 'symbol' or 'transistor'
+        self._block_colors = [
+            QColor(255, 165, 0, 40),    # orange
+            QColor(0, 191, 255, 40),    # deep sky blue
+            QColor(50, 205, 50, 40),    # lime green
+            QColor(255, 105, 180, 40),  # hot pink
+            QColor(138, 43, 226, 40),   # blue violet
+            QColor(255, 215, 0, 40),    # gold
+            QColor(0, 206, 209, 40),    # dark turquoise
+            QColor(255, 99, 71, 40),    # tomato
+        ]
+        self._block_border_colors = [
+            QColor(255, 165, 0, 120),
+            QColor(0, 191, 255, 120),
+            QColor(50, 205, 50, 120),
+            QColor(255, 105, 180, 120),
+            QColor(138, 43, 226, 120),
+            QColor(255, 215, 0, 120),
+            QColor(0, 206, 209, 120),
+            QColor(255, 99, 71, 120),
+        ]
+
         # Completely disable scrollbars (policy is more reliable than CSS)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -111,106 +134,6 @@ class SymbolicEditor(QGraphicsView):
                 background-color: #0e1219;
             }
         """)
-
-    @staticmethod
-    def _norm_net_name(net):
-        """Normalize net names for robust equality checks."""
-        if net is None:
-            return ""
-        return str(net).strip().upper()
-
-    def _visual_side_net(self, item, side, flip_h=None):
-        """Return net name seen on visual left/right side for an item."""
-        nets = self._terminal_nets.get(item.dev_id, {}) or {}
-        if not nets:
-            return ""
-
-        if flip_h is None:
-            flip_h = bool(getattr(item, "is_flip_h", lambda: False)())
-
-        side = str(side).lower().strip()
-        if side == "left":
-            term = "D" if flip_h else "S"
-        elif side == "right":
-            term = "S" if flip_h else "D"
-        else:
-            return ""
-        return self._norm_net_name(nets.get(term, ""))
-
-    def _pair_interface_score(self, left_item, left_flip, right_item, right_flip):
-        """Score diffusion continuity across one abutted boundary.
-
-        A high score is given when the right terminal net of the left device
-        equals the left terminal net of the right device, regardless of whether
-        that shared net is a supply net or an internal signal.
-        """
-        left_boundary = self._visual_side_net(left_item, "right", flip_h=left_flip)
-        right_boundary = self._visual_side_net(right_item, "left", flip_h=right_flip)
-        if not left_boundary or not right_boundary:
-            return 0
-
-        if left_boundary == right_boundary:
-            # Strongly reward exact boundary continuity.
-            return 40
-
-        # Smaller reward when devices still share some S/D-related connectivity.
-        left_nets = {
-            self._norm_net_name(v)
-            for k, v in (self._terminal_nets.get(left_item.dev_id, {}) or {}).items()
-            if k in ("S", "D") and v
-        }
-        right_nets = {
-            self._norm_net_name(v)
-            for k, v in (self._terminal_nets.get(right_item.dev_id, {}) or {}).items()
-            if k in ("S", "D") and v
-        }
-        return 6 if left_nets & right_nets else 0
-
-    def _optimize_row_flips(self, ordered_items):
-        """Choose horizontal flips that maximize boundary net continuity."""
-        if len(ordered_items) <= 1:
-            return
-        if not self._terminal_nets:
-            return
-
-        # Dynamic programming over binary flip states per device.
-        dp = [{False: (-1e9, None), True: (-1e9, None)} for _ in ordered_items]
-        first = ordered_items[0]
-        cur_first_flip = bool(getattr(first, "is_flip_h", lambda: False)())
-        dp[0][False] = (0.0 if not cur_first_flip else -0.2, None)
-        dp[0][True] = (0.0 if cur_first_flip else -0.2, None)
-
-        for i in range(1, len(ordered_items)):
-            prev = ordered_items[i - 1]
-            cur = ordered_items[i]
-            cur_is_flip = bool(getattr(cur, "is_flip_h", lambda: False)())
-            for cur_flip in (False, True):
-                best_score = -1e9
-                best_prev_flip = None
-                for prev_flip in (False, True):
-                    prev_score = dp[i - 1][prev_flip][0]
-                    pair_score = self._pair_interface_score(
-                        prev, prev_flip, cur, cur_flip
-                    )
-                    # Small penalty for orientation churn.
-                    change_penalty = 0.0 if cur_flip == cur_is_flip else 0.2
-                    score = prev_score + pair_score - change_penalty
-                    if score > best_score:
-                        best_score = score
-                        best_prev_flip = prev_flip
-                dp[i][cur_flip] = (best_score, best_prev_flip)
-
-        # Backtrack best terminal state.
-        last_false = dp[-1][False][0]
-        last_true = dp[-1][True][0]
-        flips = [False] * len(ordered_items)
-        flips[-1] = True if last_true > last_false else False
-        for i in range(len(ordered_items) - 1, 0, -1):
-            flips[i - 1] = dp[i][flips[i]][1]
-
-        for item, flip in zip(ordered_items, flips):
-            if hasattr(item, "set_flip_h"):
-                item.set_flip_h(bool(flip))
 
     def set_dummy_mode(self, enabled):
         """Enable/disable click-to-place dummy mode."""
@@ -234,8 +157,16 @@ class SymbolicEditor(QGraphicsView):
         return QPointF(self._snap_value(x), self._snap_row(y))
 
     def _on_scene_changed(self, _regions):
-        """Keep occupancy guides fresh when devices move/add/remove."""
+        """Keep occupancy guides and block overlays fresh when devices move/add/remove."""
         self.resetCachedContent()
+        
+        # In Transistor view, we redraw overlays around the individual devices
+        if self._view_level == "transistor" and self._block_overlays_visible and self._blocks:
+            self._clear_block_overlays()
+            self._draw_block_overlays()
+            
+        # Optional: could update block item sizes here too, but they maintain size during move
+
 
     def _compute_dummy_candidate(self, scene_pos, snap_to_free=True):
         """Build a preview candidate aligned to nearest NMOS/PMOS row.
@@ -254,7 +185,6 @@ class SymbolicEditor(QGraphicsView):
         if not type_items["nmos"] and not type_items["pmos"]:
             return None
 
-        # Build actual occupied rows with their average Y and dominant type.
         rows = []
         for dev_type, items in type_items.items():
             if not items:
@@ -262,43 +192,15 @@ class SymbolicEditor(QGraphicsView):
             avg_y = sum(it.pos().y() for it in items) / len(items)
             rows.append((dev_type, avg_y))
 
-        # Pick the row closest to cursor Y.
         target_type, target_y = min(rows, key=lambda r: abs(scene_pos.y() - r[1]))
-
         ref_item = type_items[target_type][0]
         width = ref_item.rect().width()
         height = ref_item.rect().height()
         if snap_to_free:
-            # Dummies go at the ROW EDGES only (left or right end)
-            row_items = type_items[target_type]
-            row_y_snap = self._snap_row(target_y)
-
-            # Find current leftmost and rightmost positions in this row
-            row_xs = [it.pos().x() for it in row_items
-                      if self._snap_row(it.pos().y()) == row_y_snap]
-
-            if row_xs:
-                leftmost = min(row_xs)
-                rightmost = max(row_xs)
-                row_center = (leftmost + rightmost) / 2.0
-
-                # Pick nearest edge based on cursor position
-                if scene_pos.x() <= row_center:
-                    # Place at left edge: one slot before the leftmost device
-                    target_x = leftmost - self._snap_grid
-                else:
-                    # Place at right edge: one slot after the rightmost device
-                    ref_rightmost = [it for it in row_items
-                                     if abs(it.pos().x() - rightmost) < 1]
-                    right_w = ref_rightmost[0].rect().width() if ref_rightmost else width
-                    target_x = rightmost + right_w
-            else:
-                target_x = self._snap_value(scene_pos.x())
-
             x = self.find_nearest_free_x(
                 row_y=target_y,
                 width=width,
-                target_x=self._snap_value(target_x),
+                target_x=self._snap_value(scene_pos.x()),
                 exclude_id=None,
             )
         else:
@@ -330,15 +232,14 @@ class SymbolicEditor(QGraphicsView):
 
         # Use a real DeviceItem as preview so it looks identical to final placement
         if self._dummy_preview is None or not isinstance(self._dummy_preview, DeviceItem):
+            self._clear_dummy_preview()
             self._dummy_preview = DeviceItem(
-                "PREVIEW_DUMMY",
                 "DUMMY",
                 candidate["type"],
                 candidate["x"],
                 candidate["y"],
                 candidate["width"],
                 candidate["height"],
-                is_dummy=True,
             )
             self._dummy_preview.setOpacity(0.55)
             self._dummy_preview.setZValue(1000)
@@ -404,32 +305,19 @@ class SymbolicEditor(QGraphicsView):
             widths.append(width)
             heights.append(height)
 
-            # Check if this is a dummy device
-            is_dummy = node.get("is_dummy", False)
-
+            nf = node.get("electrical", {}).get("nf", 1)
             item = DeviceItem(
                 node.get("id", "unknown"),
-                node.get("name", node.get("id", "unknown")),
                 node.get("type", "nmos"),
                 x,
                 y,
                 width,
                 height,
-                is_dummy=is_dummy,
+                nf=nf,
             )
-
-            orientation = str(geom.get("orientation", "R0")).upper()
-            if hasattr(item, "set_flip_h"):
-                item.set_flip_h("FH" in orientation)
-            if hasattr(item, "set_flip_v"):
-                item.set_flip_v("FV" in orientation)
 
             self.scene.addItem(item)
             self.device_items[node.get("id", "unknown")] = item
-
-            # Mark items from 2D grid placement to preserve their order
-            if "grid_row" in node:
-                item._preserve_grid_order = True
 
         # Abutted rows horizontally + visible spacing between rows.
         if widths:
@@ -438,8 +326,10 @@ class SymbolicEditor(QGraphicsView):
             self._snap_grid = max(1.0, min_w + col_gap)
         if heights:
             max_h = max(heights)
-            # Rows are always touching: no vertical gap.
-            row_gap = 0.0
+            if self._custom_row_gap is not None:
+                row_gap = self._custom_row_gap
+            else:
+                row_gap = max(24.0, max_h * 0.55)
             self._row_pitch = max(1.0, max_h + row_gap)
 
         for item in self.device_items.values():
@@ -469,56 +359,42 @@ class SymbolicEditor(QGraphicsView):
 
     def _abut_pair_score(self, left_item, right_item):
         """Score how desirable it is to place left_item immediately before right_item."""
-        left_nets = self._terminal_nets.get(left_item.dev_id, {})
-        right_nets = self._terminal_nets.get(right_item.dev_id, {})
+        left_nets = self._terminal_nets.get(left_item.device_name, {})
+        right_nets = self._terminal_nets.get(right_item.device_name, {})
         if not left_nets or not right_nets:
             return 0
 
-        best = 0
-        for left_flip in (False, True):
-            for right_flip in (False, True):
-                score = self._pair_interface_score(
-                    left_item, left_flip, right_item, right_flip
-                )
-                if score > best:
-                    best = score
-        return best
+        score = 0
+
+        def add_if_equal(term_a, term_b, weight):
+            nonlocal score
+            net_a = left_nets.get(term_a)
+            net_b = right_nets.get(term_b)
+            if net_a and net_b and net_a == net_b:
+                score += weight
+
+        # Strong preference for common drain/source sharing.
+        add_if_equal("D", "D", 9)
+        add_if_equal("S", "S", 7)
+        add_if_equal("D", "S", 4)
+        add_if_equal("S", "D", 4)
+        # Gate commonality is weaker.
+        add_if_equal("G", "G", 1)
+        return score
 
     def _order_row_items(self, items):
-        """Order row items so net-sharing neighbors (especially D-common) abut.
-
-        Dummy devices are always placed at the edges (left/right) of the row,
-        never between real instances.
-        """
+        """Order row items so net-sharing neighbors (especially D-common) abut."""
         ordered_by_x = sorted(items, key=lambda it: it.pos().x())
         if len(ordered_by_x) <= 1 or not self._terminal_nets:
             return ordered_by_x
 
-        # Separate dummies from real devices
-        real_items = [it for it in ordered_by_x if not getattr(it, 'is_dummy', False)]
-        left_dummies = []
-        right_dummies = []
-
-        if real_items:
-            real_center = (min(it.pos().x() for it in real_items) +
-                           max(it.pos().x() for it in real_items)) / 2.0
-            for it in ordered_by_x:
-                if getattr(it, 'is_dummy', False):
-                    if it.pos().x() <= real_center:
-                        left_dummies.append(it)
-                    else:
-                        right_dummies.append(it)
-        else:
-            return ordered_by_x
-
-        # Order only real devices for net optimization
         with_nets = [
-            it for it in real_items if self._terminal_nets.get(it.dev_id)
+            it for it in ordered_by_x if self._terminal_nets.get(it.device_name)
         ]
         if len(with_nets) < 2:
-            return left_dummies + real_items + right_dummies
+            return ordered_by_x
 
-        remaining = list(real_items)
+        remaining = list(ordered_by_x)
 
         def total_score(candidate):
             return sum(
@@ -567,26 +443,17 @@ class SymbolicEditor(QGraphicsView):
                 row.append(best_item)
             remaining.remove(best_item)
 
-        # If no useful net signal exists, keep geometric order for real items.
+        # If no useful net signal exists, keep geometric order.
         adjacency_gain = sum(
             self._abut_pair_score(row[i], row[i + 1])
             for i in range(len(row) - 1)
         )
         if adjacency_gain <= 0:
-            return left_dummies + real_items + right_dummies
-        return left_dummies + row + right_dummies
+            return ordered_by_x
+        return row
 
     def _compact_rows_abutted(self, row_keys=None):
-        """Pack row devices with net-aware diffusion sharing.
-
-        When adjacent devices share a boundary net (right-side net of left
-        device == left-side net of right device), they overlap by the
-        diffusion width (30 % of device width) so the shared terminal
-        appears once in the middle, e.g. {D G S G D}.
-        """
-        # Clear any existing group overlays so DeviceItems are all visible
-        # before positions are read / recomputed.
-        self._clear_abut_groups()
+        """Pack row devices edge-to-edge to emulate abutted placement rows."""
         rows = {}
         for item in self.device_items.values():
             row_y = self._snap_row(item.pos().y())
@@ -598,80 +465,12 @@ class SymbolicEditor(QGraphicsView):
         for (_, row_y), items in rows.items():
             if not items:
                 continue
-            # If items came from 2D grid placement, preserve backend ordering
-            if any(getattr(it, '_preserve_grid_order', False) for it in items):
-                ordered = sorted(items, key=lambda it: it.pos().x())
-            else:
-                ordered = self._order_row_items(items)
-            self._optimize_row_flips(ordered)
-
-            # Reset all boundary labels & z-values before placement
-            base_z = 0.0
-            for it in ordered:
-                it.set_boundary_label_visibility(show_left=True, show_right=True)
-                it.setZValue(base_z)
-
+            ordered = self._order_row_items(items)
             x_cursor = self._snap_value(min(it.pos().x() for it in ordered))
-
-            for idx, it in enumerate(ordered):
-                it.setPos(x_cursor, row_y)
-                dev_w = it.rect().width()
-                diffusion_w = dev_w * 0.30
-                span = max(1, int(math.ceil(dev_w / self._snap_grid)))
-                advance = span * self._snap_grid  # default: full width
-
-                # Check if next device shares a boundary net
-                if idx < len(ordered) - 1:
-                    nxt = ordered[idx + 1]
-                    
-                    # For real devices, we check the actual visual terminal sides
-                    right_net = self._visual_side_net(it, "right")
-                    left_net = self._visual_side_net(nxt, "left")
-
-                    # Dummies always try to abut if their supply net matches
-                    # the facing neighbor's net, even if _visual_side_net returns empty
-                    if getattr(it, 'is_dummy', False) and not right_net:
-                        dummy_nets = self._terminal_nets.get(it.dev_id, {})
-                        right_net = dummy_nets.get("D") or dummy_nets.get("S")
-                    if getattr(nxt, 'is_dummy', False) and not left_net:
-                        dummy_nets = self._terminal_nets.get(nxt.dev_id, {})
-                        left_net = dummy_nets.get("S") or dummy_nets.get("D")
-
-                    if right_net and left_net and right_net == left_net:
-                        # Overlap by diffusion width
-                        advance = dev_w - diffusion_w
-                        # Snap to grid to prevent fractional stacking
-                        advance = max(
-                            self._snap_grid,
-                            round(advance / self._snap_grid) * self._snap_grid,
-                        )
-                        
-                        # Left device keeps its right label (shared terminal)
-                        it.set_boundary_label_visibility(
-                            show_left=not getattr(it, '_abut_hide_left', False),
-                            show_right=True,
-                        )
-                        # Right device hides its left label (duplicate)
-                        nxt._abut_hide_left = True
-                        # Left device paints on top for clean shared terminal
-                        it.setZValue(base_z + len(ordered) - idx)
-
-                        # Set abut states inline for immediate rendering
-                        if hasattr(it, 'set_abut_state'):
-                            it.set_abut_state(right=True, shared_net_right=right_net)
-                        if hasattr(nxt, 'set_abut_state'):
-                            nxt.set_abut_state(left=True, shared_net_left=left_net)
-
-                x_cursor += advance
-
-            # Apply deferred left-hide flags (preserve existing right-side state)
             for it in ordered:
-                if getattr(it, '_abut_hide_left', False):
-                    it._hide_left_terminal_label = True
-                    it.update()
-                    del it._abut_hide_left
-
-        # Abut states were set inline above during compaction
+                it.setPos(x_cursor, row_y)
+                span = max(1, int(math.ceil(it.rect().width() / self._snap_grid)))
+                x_cursor += span * self._snap_grid
 
     def swap_devices(self, id_a, id_b):
         """Swap the positions of two devices on the canvas."""
@@ -770,304 +569,12 @@ class SymbolicEditor(QGraphicsView):
         self.resetCachedContent()
 
     def set_custom_row_gap(self, gap_px):
-        """Deprecated: row spacing is fixed to zero (touching rows)."""
-        self._custom_row_gap = 0.0
-
-    def optimize_2d_layout(self, force_reorder=False):
-        """Analyze all device terminal nets and apply optimal S/D abutment.
-
-        Groups devices within each row that share diffusion boundary nets,
-        reorders them for maximum sharing, then applies overlap abutment so
-        shared terminals appear only once (contiguous diffusion region).
-
-        This is the primary 'smart' action triggered by toolbar / context-menu /
-        auto-on-load.
+        """Override the automatic row gap.
 
         Args:
-            force_reorder: If True, clears _preserve_grid_order flags so devices
-                are reordered for optimal diffusion sharing. Use this when user
-                explicitly triggers optimization via toolbar/menu.
-
-        Returns:
-            str: Status message - "ok" if optimized, "no_devices" if empty,
-                 "no_nets" if terminal nets not available.
+            gap_px: gap in scene pixels between rows, or None for auto.
         """
-        if not self.device_items:
-            return "no_devices"
-
-        if not self._terminal_nets:
-            # Still run compaction for visual cleanup, but no smart reordering
-            self._compact_rows_abutted()
-            self.resetCachedContent()
-            return "no_nets"
-
-        # When force_reorder is requested, clear grid-order preservation flags
-        # so _order_row_items() actually reorders for optimal sharing.
-        if force_reorder:
-            for item in self.device_items.values():
-                if hasattr(item, '_preserve_grid_order'):
-                    delattr(item, '_preserve_grid_order')
-
-        self._compact_rows_abutted()
-        self.resetCachedContent()
-        return "ok"
-
-    # ── Abutment state management (per-device rendering) ─────────────────────
-
-    def _clear_abut_groups(self):
-        """Clear legacy group items list (no longer used in new approach)."""
-        for grp in self._group_items:
-            try:
-                self.scene.removeItem(grp)
-            except RuntimeError:
-                pass
-        self._group_items.clear()
-        for item in self.device_items.values():
-            item.setVisible(True)
-
-    def _update_device_abut_states(self):
-        """Analyze all devices and set their abut states based on neighbor sharing.
-
-        This is the 'smart' auto-detection: for each device, check if its left/right
-        neighbor shares a diffusion net. If so, set the abut state so the device
-        renders with a merged edge appearance (green shared diffusion).
-
-        Also creates text overlays showing shared net names between abutted devices.
-
-        Works for ANY circuit - analyzes actual net labels automatically.
-        """
-        # Clear previous shared net labels
-        for label in self._shared_net_labels:
-            try:
-                self.scene.removeItem(label)
-            except RuntimeError:
-                pass
-        self._shared_net_labels.clear()
-
-        if not self._terminal_nets:
-            # No net info available - reset all abut states
-            for item in self.device_items.values():
-                if hasattr(item, 'set_abut_state'):
-                    item.set_abut_state(left=False, right=False)
-            return
-
-        # Group devices by row
-        rows: dict[float, list] = {}
-        for item in self.device_items.values():
-            row_y = self._snap_row(item.pos().y())
-            rows.setdefault(row_y, []).append(item)
-
-        for row_y, items in rows.items():
-            ordered = sorted(items, key=lambda it: it.pos().x())
-
-            # First pass: reset all abut states
-            for it in ordered:
-                if hasattr(it, 'set_abut_state'):
-                    it.set_abut_state(left=False, right=False,
-                                      shared_net_left="", shared_net_right="")
-
-            # Second pass: detect sharing pairs and create overlays
-            for i in range(len(ordered) - 1):
-                left_dev = ordered[i]
-                right_dev = ordered[i + 1]
-
-                # Check if devices are physically touching or overlapping
-                left_rect = left_dev.sceneBoundingRect()
-                right_rect = right_dev.sceneBoundingRect()
-                gap = right_rect.left() - left_rect.right()
-
-                # Devices are abutted if they touch (gap ≈ 0) or overlap (gap < 0)
-                # Only skip if there's a real visible gap between them (gap > 2)
-                if gap > 2:
-                    continue
-
-                # Get boundary nets
-                left_boundary = self._visual_side_net(left_dev, 'right')
-                right_boundary = self._visual_side_net(right_dev, 'left')
-
-                # Check if they share a net (diffusion continuity)
-                if left_boundary and right_boundary and left_boundary == right_boundary:
-                    shared_net = left_boundary
-                    # Mark both devices as abutted on their shared edge
-                    if hasattr(left_dev, 'set_abut_state'):
-                        left_dev.set_abut_state(right=True, shared_net_right=shared_net)
-                    if hasattr(right_dev, 'set_abut_state'):
-                        right_dev.set_abut_state(left=True, shared_net_left=shared_net)
-
-    def _create_shared_net_label(self, left_dev, right_dev, net_name):
-        """Create a text overlay showing the shared net name between two abutted devices."""
-        from PySide6.QtWidgets import QGraphicsSimpleTextItem, QGraphicsRectItem
-
-        # Calculate position: between the two devices at their shared border
-        left_rect = left_dev.sceneBoundingRect()
-        right_rect = right_dev.sceneBoundingRect()
-
-        # Position at the shared border (right edge of left device = left edge of right device)
-        x_pos = left_rect.right()
-        y_pos = (left_rect.top() + left_rect.bottom()) / 2
-
-        # Create background rectangle first
-        # Estimate text size for background
-        temp_label = QGraphicsSimpleTextItem(net_name)
-        temp_label.setFont(QFont("Segoe UI", 7, QFont.Weight.Bold))
-        text_rect = temp_label.boundingRect()
-
-        # Add padding around text
-        padding = 4
-        bg_width = text_rect.width() + padding * 2
-        bg_height = text_rect.height() + padding
-
-        # Create background centered at the border
-        bg = QGraphicsRectItem(
-            x_pos - bg_width / 2,
-            y_pos - bg_height / 2,
-            bg_width,
-            bg_height
-        )
-        bg.setBrush(QBrush(QColor(76, 175, 80, 220)))  # Green background
-        bg.setPen(QPen(QColor("#2e7d32"), 1.0))  # Darker green border
-        bg.setZValue(99)
-        self.scene.addItem(bg)
-        self._shared_net_labels.append(bg)
-
-        # Create text item on top
-        label = QGraphicsSimpleTextItem(net_name)
-        label.setFont(QFont("Segoe UI", 7, QFont.Weight.Bold))
-        label.setBrush(QBrush(QColor("#ffffff")))  # White text
-
-        # Center the text at the border
-        label.setPos(x_pos - text_rect.width() / 2, y_pos - text_rect.height() / 2)
-        label.setZValue(100)
-
-        self.scene.addItem(label)
-        self._shared_net_labels.append(label)
-
-    def get_abut_analysis(self):
-        """Return abut analysis data for LLM/backend use.
-
-        Returns:
-            dict: {
-                'sharing_pairs': [{'left': dev_id, 'right': dev_id, 'net': shared_net}, ...],
-                'device_states': {dev_id: {'abut_left': bool, 'abut_right': bool}, ...},
-                'rows': [{
-                    'row_y': float,
-                    'devices': [dev_id, ...],
-                    'adjacency_score': int
-                }, ...]
-            }
-        """
-        result = {
-            'sharing_pairs': [],
-            'device_states': {},
-            'rows': []
-        }
-
-        if not self._terminal_nets:
-            return result
-
-        rows: dict[float, list] = {}
-        for item in self.device_items.values():
-            row_y = self._snap_row(item.pos().y())
-            rows.setdefault(row_y, []).append(item)
-
-        for row_y, items in rows.items():
-            ordered = sorted(items, key=lambda it: it.pos().x())
-            row_data = {
-                'row_y': row_y,
-                'devices': [it.device_name for it in ordered],
-                'adjacency_score': 0
-            }
-
-            for i in range(len(ordered) - 1):
-                left_dev = ordered[i]
-                right_dev = ordered[i + 1]
-
-                left_boundary = self._visual_side_net(left_dev, 'right')
-                right_boundary = self._visual_side_net(right_dev, 'left')
-
-                if left_boundary and right_boundary and left_boundary == right_boundary:
-                    result['sharing_pairs'].append({
-                        'left': left_dev.device_name,
-                        'right': right_dev.device_name,
-                        'net': left_boundary
-                    })
-                    row_data['adjacency_score'] += 1
-
-            result['rows'].append(row_data)
-
-        # Device states
-        for item in self.device_items.values():
-            if hasattr(item, 'get_abut_state'):
-                result['device_states'][item.device_name] = item.get_abut_state()
-
-        return result
-
-    def _rebuild_abut_groups(self):
-        """After compaction, update device abut states for smart rendering.
-
-        This replaces the old AbutGroupItem overlay approach with dynamic
-        per-device abut states. Each device now renders its own merged edges
-        based on whether it shares diffusion nets with neighbors.
-        """
-        # Update abut states for all devices
-        self._update_device_abut_states()
-
-        # Keep all devices visible (no overlays needed)
-        for item in self.device_items.values():
-            item.setVisible(True)
-
-    def contextMenuEvent(self, event):
-        """Show a context menu with layout-optimization actions."""
-        menu = QMenu(self.viewport())
-        menu.setStyleSheet("""
-            QMenu {
-                background-color: #1e2636;
-                border: 1px solid #3d5066;
-                border-radius: 6px;
-                padding: 4px;
-                color: #c8d0dc;
-                font-family: 'Segoe UI';
-                font-size: 9pt;
-            }
-            QMenu::item { padding: 6px 24px 6px 12px; border-radius: 4px; }
-            QMenu::item:selected { background-color: #4a90d9; color: #ffffff; }
-            QMenu::separator { height: 1px; background: #2d3548; margin: 4px 8px; }
-        """)
-
-        selected_ids = self.selected_device_ids()
-
-        act_edit_terms = menu.addAction("Edit Terminals...")
-        act_edit_terms.setEnabled(len(selected_ids) == 1)
-
-        menu.addSeparator()
-
-        act_opt2d = menu.addAction("Optimize Layout")
-        act_opt2d.setToolTip("Reorder & abut all devices to maximize S/D sharing")
-
-        menu.addSeparator()
-
-        act_flip_h = menu.addAction("Flip Horizontal")
-        act_flip_v = menu.addAction("Flip Vertical")
-        act_flip_h.setEnabled(bool(selected_ids))
-        act_flip_v.setEnabled(bool(selected_ids))
-
-        chosen = menu.exec(event.globalPos())
-        if chosen == act_opt2d:
-            self.optimize_2d_requested.emit()
-        elif chosen == act_edit_terms:
-            self.edit_terminals_requested.emit(selected_ids[0])
-        elif chosen == act_flip_h:
-            for dev_id in selected_ids:
-                item = self.device_items.get(dev_id)
-                if item and hasattr(item, "flip_horizontal"):
-                    item.flip_horizontal()
-            self._update_device_abut_states()
-        elif chosen == act_flip_v:
-            for dev_id in selected_ids:
-                item = self.device_items.get(dev_id)
-                if item and hasattr(item, "flip_vertical"):
-                    item.flip_vertical()
-            self._update_device_abut_states()
+        self._custom_row_gap = float(gap_px) if gap_px is not None else None
 
     def get_row_col(self, dev_id):
         item = self.device_items.get(dev_id)
@@ -1081,8 +588,8 @@ class SymbolicEditor(QGraphicsView):
         ids = []
         try:
             for it in self.scene.selectedItems():
-                if hasattr(it, "dev_id"):
-                    ids.append(it.dev_id)
+                if hasattr(it, "device_name"):
+                    ids.append(it.device_name)
         except RuntimeError:
             return []
         return ids
@@ -1092,14 +599,12 @@ class SymbolicEditor(QGraphicsView):
             item = self.device_items.get(dev_id)
             if item and hasattr(item, "flip_horizontal"):
                 item.flip_horizontal()
-        self._update_device_abut_states()
 
     def flip_devices_v(self, dev_ids):
         for dev_id in dev_ids:
             item = self.device_items.get(dev_id)
             if item and hasattr(item, "flip_vertical"):
                 item.flip_vertical()
-        self._update_device_abut_states()
 
     def _interval_overlap(self, a_start, a_end, b_start, b_end):
         return not (a_end < b_start or b_end < a_start)
@@ -1109,7 +614,7 @@ class SymbolicEditor(QGraphicsView):
         span = max(1, int(math.ceil(item.rect().width() / self._snap_grid)))
         return start, start + span - 1, span
 
-    def resolve_overlaps(self, anchor_ids=None, compact=True):
+    def resolve_overlaps(self, anchor_ids=None):
         """Resolve overlaps locally around anchors so unaffected devices stay put."""
         anchors = set(anchor_ids or [])
         rows = {}
@@ -1123,11 +628,11 @@ class SymbolicEditor(QGraphicsView):
                 continue
 
             if anchors:
-                row_anchors = [it for it in items if it.dev_id in anchors]
+                row_anchors = [it for it in items if it.device_name in anchors]
                 if not row_anchors:
                     continue
             else:
-                row_anchors = sorted(items, key=lambda it: it.dev_id)
+                row_anchors = sorted(items, key=lambda it: it.device_name)
 
             queue = list(row_anchors)
             seen = set()
@@ -1154,8 +659,7 @@ class SymbolicEditor(QGraphicsView):
                         if other not in seen:
                             queue.append(other)
                 seen.add(current)
-        if compact:
-            self._compact_rows_abutted()
+        self._compact_rows_abutted()
 
     def set_edges(self, edges):
         """Store edge data and build connectivity lookup."""
@@ -1172,21 +676,12 @@ class SymbolicEditor(QGraphicsView):
     def set_terminal_nets(self, terminal_nets):
         """Store terminal-net mapping: {dev_id: {'D': net, 'G': net, 'S': net}}"""
         self._terminal_nets = terminal_nets or {}
-
-        # Push net labels to each device item for visual annotation
-        for dev_id, item in self.device_items.items():
-            nets = self._terminal_nets.get(dev_id, {})
-            if hasattr(item, "set_net_labels"):
-                item.set_net_labels(nets)
-
         # Re-pack with net-aware adjacency — but NOT if compact was suppressed.
         if self._skip_compaction:
             self._skip_compaction = False
-            # Still detect shared diffusion for green rendering (even without recompaction)
-            self._update_device_abut_states()
             return
         if self.device_items:
-            self.optimize_2d_layout()
+            self._compact_rows_abutted()
             self.resetCachedContent()
 
     def _get_terminal_for_net(self, dev_id, net_name):
@@ -1206,21 +701,13 @@ class SymbolicEditor(QGraphicsView):
         return self._net_colors[net_name]
 
     def _clear_connections(self):
-        """Remove all connection lines, labels, and terminal highlights from the scene."""
+        """Remove all connection lines and labels from the scene."""
         if self._conn_lines:
             self.scene.blockSignals(True)
             for item in self._conn_lines:
                 self.scene.removeItem(item)
             self._conn_lines.clear()
             self.scene.blockSignals(False)
-
-        # Also clear terminal highlights
-        for highlight in self._terminal_highlights:
-            try:
-                self.scene.removeItem(highlight)
-            except RuntimeError:
-                pass
-        self._terminal_highlights.clear()
 
     def _show_connections(self, dev_id):
         """Draw curved lines from dev_id terminals to connected device terminals."""
@@ -1421,142 +908,208 @@ class SymbolicEditor(QGraphicsView):
             item.setSelected(True)
         self.scene.blockSignals(False)
 
-    def highlight_device_prefix(self, prefix):
-        """Highlight all finger devices whose id prefix matches (e.g., MM0_*)."""
-        key = str(prefix or "").strip()
+    # -------------------------------------------------
+    # Block Overlays
+    # -------------------------------------------------
+    def set_blocks(self, blocks):
+        """Store block data, draw overlays, and create BlockItems.
+
+        Args:
+            blocks: {inst_name: {"subckt": str, "devices": [str, ...]}}
+        """
+        self._blocks = blocks or {}
+        
+        # Clean up existing block items
         self.scene.blockSignals(True)
-        self.scene.clearSelection()
-        self._clear_connections()
-
-        if key:
-            for dev_id, item in self.device_items.items():
-                base, sep, suffix = str(dev_id).partition("_")
-                if sep and suffix and base == key:
-                    item.setSelected(True)
-
-        self.scene.blockSignals(False)
-
-    def highlight_net(self, net_name):
-        """Highlight only the specific terminal areas (S/D) connected to a net, not whole devices."""
-        if not net_name or not self._terminal_nets:
-            return
-
-        # Clear previous terminal highlights
-        for highlight in self._terminal_highlights:
+        for bitm in self._block_items:
             try:
-                self.scene.removeItem(highlight)
+                if bitm.scene() is self.scene:
+                    self.scene.removeItem(bitm)
             except RuntimeError:
                 pass
-        self._terminal_highlights.clear()
+        self._block_items.clear()
+        self.scene.blockSignals(False)
+        
+        self._clear_block_overlays()
+        
+        # Instantiate BlockItems for symbol view
+        if self._blocks and self.device_items:
+            for idx, (inst_name, info) in enumerate(self._blocks.items()):
+                devices = info.get("devices", [])
+                subckt = info.get("subckt", "?")
 
-        # Find all devices and their specific terminals connected to this net
-        terminals_on_net = []  # [(dev_id, terminal), ...]
-        for dev_id, terminals in self._terminal_nets.items():
-            for term, net in terminals.items():
-                if self._norm_net_name(net) == self._norm_net_name(net_name):
-                    terminals_on_net.append((dev_id, term))
+                # Collect device items
+                member_items = [
+                    self.device_items[d] for d in devices
+                    if d in self.device_items
+                ]
+                if not member_items:
+                    continue
+                    
+                color_idx = idx % len(self._block_colors)
+                fill_color = self._block_colors[color_idx]
+                border_color = self._block_border_colors[color_idx]
+                
+                # Make fill mostly opaque for block item itself
+                opaque_fill = QColor(fill_color)
+                opaque_fill.setAlpha(200)
 
-        if not terminals_on_net:
+                bitm = BlockItem(inst_name, subckt, member_items, opaque_fill, border_color)
+                bitm.set_snap_grid(self._snap_grid, self._row_pitch)
+                self.scene.addItem(bitm)
+                self._block_items.append(bitm)
+        
+        # Apply the correct view state visibility
+        self.set_view_level(self._view_level)
+
+    def set_view_level(self, level):
+        """Toggle between symbol view and transistor view."""
+        self._view_level = level
+        self.scene.blockSignals(True)
+        
+        if level == "symbol":
+            # Show BlockItems, hide block overlays, hide internal DeviceItems
+            for bitm in self._block_items:
+                bitm.show()
+                # Hide devices managed by this block
+                for dev in bitm._device_items:
+                    dev.hide()
+                    
+            self._clear_block_overlays()
+            
+        elif level == "transistor":
+            # Hide BlockItems, show DeviceItems, show block overlays
+            for bitm in self._block_items:
+                bitm.hide()
+                # Re-sync their bounds before showing devices (in case they moved)
+                for dev in bitm._device_items:
+                    dev.show()
+                    
+            if self._block_overlays_visible:
+                self._draw_block_overlays()
+                
+        self.scene.blockSignals(False)
+        # Force a refresh of connections
+        self.resetCachedContent()
+
+
+    def _clear_block_overlays(self):
+        """Remove all block overlay items from the scene."""
+        if self._block_overlays:
+            self.scene.blockSignals(True)
+            for item in self._block_overlays:
+                try:
+                    if item.scene() is self.scene:
+                        self.scene.removeItem(item)
+                except RuntimeError:
+                    pass
+            self._block_overlays.clear()
+            self.scene.blockSignals(False)
+
+    def _draw_block_overlays(self):
+        """Draw semi-transparent colored rectangles around each block's devices."""
+        if not self._blocks or not self.device_items:
             return
 
-        # Clear device selection (we're only highlighting terminals)
+        from PySide6.QtGui import QFont
+        from PySide6.QtCore import QRectF
+
         self.scene.blockSignals(True)
-        self.scene.clearSelection()
+        for idx, (inst_name, info) in enumerate(self._blocks.items()):
+            devices = info.get("devices", [])
+            subckt = info.get("subckt", "?")
+
+            # Collect bounding rects of member devices
+            member_items = [
+                self.device_items[d] for d in devices
+                if d in self.device_items
+            ]
+            if not member_items:
+                continue
+
+            # Compute union bounding box
+            union = member_items[0].sceneBoundingRect()
+            for item in member_items[1:]:
+                union = union.united(item.sceneBoundingRect())
+
+            # Add padding
+            padding = 6.0
+            label_height = 16.0
+            padded = QRectF(
+                union.x() - padding,
+                union.y() - padding - label_height,
+                union.width() + padding * 2,
+                union.height() + padding * 2 + label_height,
+            )
+
+            # Pick color
+            color_idx = idx % len(self._block_colors)
+            fill_color = self._block_colors[color_idx]
+            border_color = self._block_border_colors[color_idx]
+
+            # Draw overlay rectangle
+            rect_item = QGraphicsRectItem(padded)
+            rect_item.setBrush(QBrush(fill_color))
+            rect_item.setPen(QPen(border_color, 1.5, Qt.PenStyle.DashLine))
+            rect_item.setZValue(-10)  # behind devices
+            rect_item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
+            rect_item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, False)
+            rect_item.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+            self.scene.addItem(rect_item)
+            self._block_overlays.append(rect_item)
+
+            # Draw label
+            label_text = f"{inst_name}: {subckt}"
+            label_item = QGraphicsSimpleTextItem(label_text)
+            label_item.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
+            label_border = QColor(border_color)
+            label_border.setAlpha(220)
+            label_item.setBrush(QBrush(label_border))
+            label_item.setPos(padded.x() + 4, padded.y() + 2)
+            label_item.setZValue(-9)
+            label_item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
+            label_item.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+            self.scene.addItem(label_item)
+            self._block_overlays.append(label_item)
+
         self.scene.blockSignals(False)
 
-        # IMPORTANT: clear existing connection paths first, otherwise _show_all_net_connections
-        # will call _clear_connections() and destroy the highlights we're about to make.
-        self._clear_connections()
+    def toggle_block_overlays(self, visible=None):
+        """Toggle block overlay visibility.
 
-        # Create semi-transparent highlight overlays for each terminal
-        for dev_id, term in terminals_on_net:
+        Args:
+            visible: if None, toggle; if bool, set explicitly.
+        """
+        if visible is None:
+            self._block_overlays_visible = not self._block_overlays_visible
+        else:
+            self._block_overlays_visible = bool(visible)
+
+        if self._block_overlays_visible:
+            self._clear_block_overlays()
+            self._draw_block_overlays()
+        else:
+            self._clear_block_overlays()
+
+    def highlight_block(self, inst_name):
+        """Select all devices belonging to a block."""
+        info = self._blocks.get(inst_name, {})
+        devices = info.get("devices", [])
+        if not devices:
+            return
+        self.scene.blockSignals(True)
+        self.scene.clearSelection()
+        for dev_id in devices:
             item = self.device_items.get(dev_id)
-            if not item or not hasattr(item, 'terminal_rects'):
-                continue
-
-            term_rects = item.terminal_rects()
-            term_rect = term_rects.get(term)
-            if not term_rect:
-                continue
-
-            # Create highlight overlay
-            highlight = QGraphicsRectItem(term_rect)
-            highlight.setBrush(QBrush(QColor(255, 204, 0, 80)))  # Semi-transparent golden
-            highlight.setPen(QPen(QColor("#ffcc00"), 2.0, Qt.PenStyle.SolidLine))
-            highlight.setZValue(60)  # Above devices (which are at z=50)
-            self.scene.addItem(highlight)
-            self._terminal_highlights.append(highlight)
-
-        # Show all connections on this net
-        self._show_all_net_connections(net_name, clear_first=False)
-
-    def _show_all_net_connections(self, net_name, clear_first=True):
-        """Show all connections for a specific net between all devices."""
-        if clear_first:
-            self._clear_connections()
-
-        if not self._terminal_nets:
-            return
-
-        # Find all devices connected to this net
-        devices_on_net = []
-        for dev_id, terminals in self._terminal_nets.items():
-            for term, net in terminals.items():
-                if self._norm_net_name(net) == self._norm_net_name(net_name):
-                    devices_on_net.append((dev_id, term))
-                    break
-
-        if len(devices_on_net) < 2:
-            return
-
-        # Draw connections between all pairs of devices on this net
-        color = self._get_net_color(net_name)
-
-        for i, (dev1_id, term1) in enumerate(devices_on_net):
-            item1 = self.device_items.get(dev1_id)
-            if not item1:
-                continue
-
-            anchors1 = item1.terminal_anchors()
-            p1 = anchors1.get(term1)
-            if not p1:
-                continue
-
-            for dev2_id, term2 in devices_on_net[i+1:]:
-                item2 = self.device_items.get(dev2_id)
-                if not item2:
-                    continue
-
-                anchors2 = item2.terminal_anchors()
-                p2 = anchors2.get(term2)
-                if not p2:
-                    continue
-
-                # Draw connection line
-                path = QPainterPath()
-                path.moveTo(p1)
-                dx = p2.x() - p1.x()
-                dy = p2.y() - p1.y()
-
-                # Slight curve for better visibility
-                if abs(dy) < 5:
-                    path.lineTo(p2)
-                else:
-                    cp1 = QPointF(p1.x() + dx * 0.3, p1.y())
-                    cp2 = QPointF(p2.x() - dx * 0.3, p2.y())
-                    path.cubicTo(cp1, cp2, p2)
-
-                path_item = QGraphicsPathItem(path)
-                path_item.setPen(QPen(color, 2.0, Qt.PenStyle.SolidLine))
-                path_item.setZValue(-1)
-                self.scene.addItem(path_item)
-                self._conn_lines.append(path_item)
+            if item:
+                item.setSelected(True)
+        self.scene.blockSignals(False)
 
     # -------------------------------------------------
     # Background Grid
     # -------------------------------------------------
     def drawBackground(self, painter: QPainter, rect):
-        """Draw a symmetric background panel representing the working canvas."""
+        """Draw row track bands — occupied and virtual (empty) rows."""
         super().drawBackground(painter, rect)
 
         has_devices = bool(self.device_items)
@@ -1565,65 +1118,85 @@ class SymbolicEditor(QGraphicsView):
         if not has_devices and not has_virtual:
             return
 
-        # Gather bounds
+        # Gather actual occupied rows
+        rows = {}
+        for it in self.device_items.values():
+            row_y = self._snap_row(it.pos().y())
+            rows.setdefault(row_y, []).append(it)
+
+        actual_row_ys = sorted(rows.keys())
+
+        # Reference metrics from existing devices
         if has_devices:
             all_items = list(self.device_items.values())
             ref_min_x = min(it.pos().x() for it in all_items)
             ref_max_x = max(it.pos().x() + it.rect().width() for it in all_items)
-            ref_min_y = min(self._snap_row(it.pos().y()) for it in all_items)
-            ref_max_y = max(self._snap_row(it.pos().y()) + it.rect().height() for it in all_items)
             ref_max_dev_h = max(it.rect().height() for it in all_items)
         else:
             ref_min_x = 0.0
             ref_max_x = 0.0
-            ref_min_y = 0.0
-            ref_max_y = self._row_pitch
             ref_max_dev_h = self._row_pitch * 0.5
 
-        # Factor in virtual limits
+        # Virtual column right edge
         virtual_right_x = (
             ref_min_x + self._virtual_col_count * self._snap_grid
             if self._virtual_col_count > 0
             else ref_max_x
         )
 
-        virtual_bottom_y = (
-            ref_min_y + self._virtual_row_count * self._row_pitch
-            if self._virtual_row_count > 0
-            else ref_max_y
-        )
+        # Add virtual rows below existing ones
+        all_row_ys = list(actual_row_ys)
+        if self._virtual_row_count > len(actual_row_ys):
+            last_y = actual_row_ys[-1] if actual_row_ys else -self._row_pitch
+            for i in range(self._virtual_row_count - len(actual_row_ys)):
+                all_row_ys.append(last_y + (i + 1) * self._row_pitch)
 
-        # Compute a single symmetric left/right/top/bottom for the canvas
+        # Compute a single symmetric left / right for ALL bands
         global_left = ref_min_x
         global_right = max(ref_max_x, virtual_right_x)
-        global_top = ref_min_y
-        global_bottom = max(ref_max_y, virtual_bottom_y)
 
         # Drawing styles
-        panel_fill = QBrush(QColor("#151c28"))
-        panel_pen = QPen(QColor("#2d3548"), 1.0)
-        
-        # Give it a small symmetric padding
-        pad_x = 16.0
-        pad_y = 10.0
-        
-        panel_x = global_left - pad_x
-        panel_w = (global_right - global_left) + (pad_x * 2)
-        panel_y = global_top - pad_y
-        panel_h = (global_bottom - global_top) + (pad_y * 2)
+        track_fill = QBrush(QColor("#151c28"))
+        empty_fill = QBrush(QColor("#121823"))
+        track_pen = QPen(QColor("#232d3e"), 1.0)
+        slot_pen = QPen(QColor("#1c2535"), 0.5, Qt.PenStyle.DotLine)
 
-        # Only draw if within viewport
-        if (
-            panel_x > rect.right()
-            or panel_x + panel_w < rect.left()
-            or panel_y > rect.bottom()
-            or panel_y + panel_h < rect.top()
-        ):
-            return
+        band_x = global_left - 8.0
+        band_w = (global_right - global_left) + 16.0
 
-        painter.setPen(panel_pen)
-        painter.setBrush(panel_fill)
-        painter.drawRoundedRect(panel_x, panel_y, panel_w, panel_h, 4.0, 4.0)
+        for row_y in sorted(all_row_ys):
+            items = rows.get(row_y, [])
+            is_empty = (len(items) == 0)
+            row_h = (
+                max(it.rect().height() for it in items) if items
+                else ref_max_dev_h
+            )
+
+            band_y = row_y - 6.0
+            band_h = row_h + 12.0
+
+            if (
+                band_x > rect.right()
+                or band_x + band_w < rect.left()
+                or band_y > rect.bottom()
+                or band_y + band_h < rect.top()
+            ):
+                continue
+
+            painter.setPen(track_pen)
+            painter.setBrush(empty_fill if is_empty else track_fill)
+            painter.drawRoundedRect(band_x, band_y, band_w, band_h, 1.5, 1.5)
+
+            # Draw column slot markers in extended / empty regions
+            if self._virtual_col_count > 0:
+                painter.setPen(slot_pen)
+                for c in range(self._virtual_col_count + 1):
+                    col_x = ref_min_x + c * self._snap_grid
+                    if global_left <= col_x <= global_right:
+                        painter.drawLine(
+                            QPointF(col_x, band_y + 2),
+                            QPointF(col_x, band_y + band_h - 2),
+                        )
 
     # -------------------------------------------------
     # Zoom with Mouse Wheel
