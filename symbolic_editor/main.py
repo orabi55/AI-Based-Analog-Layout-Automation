@@ -459,7 +459,7 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         """Gracefully shut down the LLM worker thread before closing."""
         self.chat_panel.shutdown()
-        for thread, _worker, _progress in list(self._background_jobs):
+        for thread, _worker, _progress, _callbacks in list(self._background_jobs):
             try:
                 thread.quit()
                 thread.wait(500)
@@ -1827,6 +1827,25 @@ class MainWindow(QMainWindow):
                 except Exception as exc:
                     self.failed.emit(str(exc))
 
+        class _TaskCallbacks(QObject):
+            """GUI-thread receiver for worker signals."""
+
+            def __init__(self, cleanup_cb, finished_cb, failed_cb):
+                super().__init__()
+                self._cleanup_cb = cleanup_cb
+                self._finished_cb = finished_cb
+                self._failed_cb = failed_cb
+
+            @Slot(object)
+            def handle_finished(self, result):
+                self._cleanup_cb()
+                self._finished_cb(result)
+
+            @Slot(str)
+            def handle_failed(self, msg):
+                self._cleanup_cb()
+                self._failed_cb(msg)
+
         progress = QProgressDialog(title, None, 0, 0, self)
         progress.setWindowTitle("Working")
         progress.setWindowModality(Qt.WindowModality.WindowModal)
@@ -1846,8 +1865,8 @@ class MainWindow(QMainWindow):
         worker = _TaskWorker(work_fn)
         worker.moveToThread(thread)
 
-        job_ref = (thread, worker, progress)
-        self._background_jobs.append(job_ref)
+        callbacks = None
+        job_ref = None
 
         def _cleanup():
             try:
@@ -1856,22 +1875,28 @@ class MainWindow(QMainWindow):
                 pass
             try:
                 thread.quit()
-                thread.wait(500)
+                # Avoid waiting on the same thread, which triggers Qt warnings.
+                if QThread.currentThread() is not thread:
+                    thread.wait(500)
             except RuntimeError:
                 pass
             if job_ref in self._background_jobs:
                 self._background_jobs.remove(job_ref)
 
-        def _on_finished(result):
-            _cleanup()
-            on_success(result)
+        callbacks = _TaskCallbacks(
+            _cleanup,
+            on_success,
+            lambda msg: QMessageBox.warning(
+                self, on_error_title, f"{on_error_prefix}\n\n{msg}"
+            ),
+        )
+        job_ref = (thread, worker, progress, callbacks)
+        self._background_jobs.append(job_ref)
 
-        def _on_failed(msg):
-            _cleanup()
-            QMessageBox.warning(self, on_error_title, f"{on_error_prefix}\n\n{msg}")
-
-        worker.finished.connect(_on_finished, Qt.ConnectionType.QueuedConnection)
-        worker.failed.connect(_on_failed, Qt.ConnectionType.QueuedConnection)
+        worker.finished.connect(callbacks.handle_finished, Qt.ConnectionType.QueuedConnection)
+        worker.failed.connect(callbacks.handle_failed, Qt.ConnectionType.QueuedConnection)
+        thread.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
         thread.started.connect(worker.run)
         thread.start()
 

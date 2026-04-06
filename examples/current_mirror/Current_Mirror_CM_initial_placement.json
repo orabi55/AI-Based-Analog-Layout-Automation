@@ -1,0 +1,862 @@
+{
+    "nodes": [
+        {
+            "id": "MM2_f1",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 2.0
+            },
+            "geometry": {
+                "x": 0.0,
+                "y": -0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            }
+        },
+        {
+            "id": "MM2_f2",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 2.0
+            },
+            "geometry": {
+                "x": 0.294,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0_FH"
+            }
+        },
+        {
+            "id": "MM2_f3",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 2.0
+            },
+            "geometry": {
+                "x": 0.588,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            }
+        },
+        {
+            "id": "MM2_f4",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 2.0
+            },
+            "geometry": {
+                "x": 0.882,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0_FH"
+            }
+        },
+        {
+            "id": "MM1_f1",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 2.0
+            },
+            "geometry": {
+                "x": 1.176,
+                "y": -0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            }
+        },
+        {
+            "id": "MM1_f2",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 2.0
+            },
+            "geometry": {
+                "x": 1.47,
+                "y": -0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0_FH"
+            }
+        },
+        {
+            "id": "MM1_f3",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 2.0
+            },
+            "geometry": {
+                "x": 1.764,
+                "y": -0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            }
+        },
+        {
+            "id": "MM1_f4",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 2.0
+            },
+            "geometry": {
+                "x": 2.058,
+                "y": -0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0_FH"
+            }
+        },
+        {
+            "id": "MM0_f1",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 2.0
+            },
+            "geometry": {
+                "x": 2.352,
+                "y": -0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            }
+        },
+        {
+            "id": "MM0_f2",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 2.0
+            },
+            "geometry": {
+                "x": 2.646,
+                "y": -0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0_FH"
+            }
+        },
+        {
+            "id": "MM0_f3",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 2.0
+            },
+            "geometry": {
+                "x": 2.94,
+                "y": -0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            }
+        },
+        {
+            "id": "MM0_f4",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 2.0
+            },
+            "geometry": {
+                "x": 3.2339999999999995,
+                "y": -0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0_FH"
+            }
+        },
+        {
+            "id": "MM0_f5",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 2.0
+            },
+            "geometry": {
+                "x": 3.528,
+                "y": -0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            }
+        },
+        {
+            "id": "MM0_f6",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 2.0
+            },
+            "geometry": {
+                "x": 3.822,
+                "y": -0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0_FH"
+            }
+        },
+        {
+            "id": "MM0_f7",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 2.0
+            },
+            "geometry": {
+                "x": 4.116,
+                "y": -0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            }
+        },
+        {
+            "id": "MM0_f8",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 2.0
+            },
+            "geometry": {
+                "x": 4.41,
+                "y": -0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0_FH"
+            }
+        }
+    ],
+    "edges": [
+        {
+            "source": "MM2_f1",
+            "target": "MM2_f2",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f1",
+            "target": "MM2_f3",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f1",
+            "target": "MM2_f4",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f1",
+            "target": "MM1_f1",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f1",
+            "target": "MM1_f2",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f1",
+            "target": "MM1_f3",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f1",
+            "target": "MM1_f4",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f1",
+            "target": "MM0_f1",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f1",
+            "target": "MM0_f2",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f1",
+            "target": "MM0_f3",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f1",
+            "target": "MM0_f4",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f1",
+            "target": "MM0_f5",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f1",
+            "target": "MM0_f6",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f1",
+            "target": "MM0_f7",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f1",
+            "target": "MM0_f8",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f2",
+            "target": "MM2_f3",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f2",
+            "target": "MM2_f4",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f2",
+            "target": "MM1_f1",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f2",
+            "target": "MM1_f2",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f2",
+            "target": "MM1_f3",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f2",
+            "target": "MM1_f4",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f2",
+            "target": "MM0_f1",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f2",
+            "target": "MM0_f2",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f2",
+            "target": "MM0_f3",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f2",
+            "target": "MM0_f4",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f2",
+            "target": "MM0_f5",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f2",
+            "target": "MM0_f6",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f2",
+            "target": "MM0_f7",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f2",
+            "target": "MM0_f8",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f3",
+            "target": "MM2_f4",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f3",
+            "target": "MM1_f1",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f3",
+            "target": "MM1_f2",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f3",
+            "target": "MM1_f3",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f3",
+            "target": "MM1_f4",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f3",
+            "target": "MM0_f1",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f3",
+            "target": "MM0_f2",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f3",
+            "target": "MM0_f3",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f3",
+            "target": "MM0_f4",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f3",
+            "target": "MM0_f5",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f3",
+            "target": "MM0_f6",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f3",
+            "target": "MM0_f7",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f3",
+            "target": "MM0_f8",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f4",
+            "target": "MM1_f1",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f4",
+            "target": "MM1_f2",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f4",
+            "target": "MM1_f3",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f4",
+            "target": "MM1_f4",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f4",
+            "target": "MM0_f1",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f4",
+            "target": "MM0_f2",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f4",
+            "target": "MM0_f3",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f4",
+            "target": "MM0_f4",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f4",
+            "target": "MM0_f5",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f4",
+            "target": "MM0_f6",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f4",
+            "target": "MM0_f7",
+            "net": "C"
+        },
+        {
+            "source": "MM2_f4",
+            "target": "MM0_f8",
+            "net": "C"
+        },
+        {
+            "source": "MM1_f1",
+            "target": "MM1_f2",
+            "net": "B"
+        },
+        {
+            "source": "MM1_f1",
+            "target": "MM1_f3",
+            "net": "B"
+        },
+        {
+            "source": "MM1_f1",
+            "target": "MM1_f4",
+            "net": "B"
+        },
+        {
+            "source": "MM1_f1",
+            "target": "MM0_f1",
+            "net": "C"
+        },
+        {
+            "source": "MM1_f1",
+            "target": "MM0_f2",
+            "net": "C"
+        },
+        {
+            "source": "MM1_f1",
+            "target": "MM0_f3",
+            "net": "C"
+        },
+        {
+            "source": "MM1_f1",
+            "target": "MM0_f4",
+            "net": "C"
+        },
+        {
+            "source": "MM1_f1",
+            "target": "MM0_f5",
+            "net": "C"
+        },
+        {
+            "source": "MM1_f1",
+            "target": "MM0_f6",
+            "net": "C"
+        },
+        {
+            "source": "MM1_f1",
+            "target": "MM0_f7",
+            "net": "C"
+        },
+        {
+            "source": "MM1_f1",
+            "target": "MM0_f8",
+            "net": "C"
+        },
+        {
+            "source": "MM1_f2",
+            "target": "MM1_f3",
+            "net": "B"
+        },
+        {
+            "source": "MM1_f2",
+            "target": "MM1_f4",
+            "net": "B"
+        },
+        {
+            "source": "MM1_f2",
+            "target": "MM0_f1",
+            "net": "C"
+        },
+        {
+            "source": "MM1_f2",
+            "target": "MM0_f2",
+            "net": "C"
+        },
+        {
+            "source": "MM1_f2",
+            "target": "MM0_f3",
+            "net": "C"
+        },
+        {
+            "source": "MM1_f2",
+            "target": "MM0_f4",
+            "net": "C"
+        },
+        {
+            "source": "MM1_f2",
+            "target": "MM0_f5",
+            "net": "C"
+        },
+        {
+            "source": "MM1_f2",
+            "target": "MM0_f6",
+            "net": "C"
+        },
+        {
+            "source": "MM1_f2",
+            "target": "MM0_f7",
+            "net": "C"
+        },
+        {
+            "source": "MM1_f2",
+            "target": "MM0_f8",
+            "net": "C"
+        },
+        {
+            "source": "MM1_f3",
+            "target": "MM1_f4",
+            "net": "B"
+        },
+        {
+            "source": "MM1_f3",
+            "target": "MM0_f1",
+            "net": "C"
+        },
+        {
+            "source": "MM1_f3",
+            "target": "MM0_f2",
+            "net": "C"
+        },
+        {
+            "source": "MM1_f3",
+            "target": "MM0_f3",
+            "net": "C"
+        },
+        {
+            "source": "MM1_f3",
+            "target": "MM0_f4",
+            "net": "C"
+        },
+        {
+            "source": "MM1_f3",
+            "target": "MM0_f5",
+            "net": "C"
+        },
+        {
+            "source": "MM1_f3",
+            "target": "MM0_f6",
+            "net": "C"
+        },
+        {
+            "source": "MM1_f3",
+            "target": "MM0_f7",
+            "net": "C"
+        },
+        {
+            "source": "MM1_f3",
+            "target": "MM0_f8",
+            "net": "C"
+        },
+        {
+            "source": "MM1_f4",
+            "target": "MM0_f1",
+            "net": "C"
+        },
+        {
+            "source": "MM1_f4",
+            "target": "MM0_f2",
+            "net": "C"
+        },
+        {
+            "source": "MM1_f4",
+            "target": "MM0_f3",
+            "net": "C"
+        },
+        {
+            "source": "MM1_f4",
+            "target": "MM0_f4",
+            "net": "C"
+        },
+        {
+            "source": "MM1_f4",
+            "target": "MM0_f5",
+            "net": "C"
+        },
+        {
+            "source": "MM1_f4",
+            "target": "MM0_f6",
+            "net": "C"
+        },
+        {
+            "source": "MM1_f4",
+            "target": "MM0_f7",
+            "net": "C"
+        },
+        {
+            "source": "MM1_f4",
+            "target": "MM0_f8",
+            "net": "C"
+        },
+        {
+            "source": "MM0_f1",
+            "target": "MM0_f2",
+            "net": "C"
+        },
+        {
+            "source": "MM0_f1",
+            "target": "MM0_f3",
+            "net": "C"
+        },
+        {
+            "source": "MM0_f1",
+            "target": "MM0_f4",
+            "net": "C"
+        },
+        {
+            "source": "MM0_f1",
+            "target": "MM0_f5",
+            "net": "C"
+        },
+        {
+            "source": "MM0_f1",
+            "target": "MM0_f6",
+            "net": "C"
+        },
+        {
+            "source": "MM0_f1",
+            "target": "MM0_f7",
+            "net": "C"
+        },
+        {
+            "source": "MM0_f1",
+            "target": "MM0_f8",
+            "net": "C"
+        },
+        {
+            "source": "MM0_f2",
+            "target": "MM0_f3",
+            "net": "C"
+        },
+        {
+            "source": "MM0_f2",
+            "target": "MM0_f4",
+            "net": "C"
+        },
+        {
+            "source": "MM0_f2",
+            "target": "MM0_f5",
+            "net": "C"
+        },
+        {
+            "source": "MM0_f2",
+            "target": "MM0_f6",
+            "net": "C"
+        },
+        {
+            "source": "MM0_f2",
+            "target": "MM0_f7",
+            "net": "C"
+        },
+        {
+            "source": "MM0_f2",
+            "target": "MM0_f8",
+            "net": "C"
+        },
+        {
+            "source": "MM0_f3",
+            "target": "MM0_f4",
+            "net": "C"
+        },
+        {
+            "source": "MM0_f3",
+            "target": "MM0_f5",
+            "net": "C"
+        },
+        {
+            "source": "MM0_f3",
+            "target": "MM0_f6",
+            "net": "C"
+        },
+        {
+            "source": "MM0_f3",
+            "target": "MM0_f7",
+            "net": "C"
+        },
+        {
+            "source": "MM0_f3",
+            "target": "MM0_f8",
+            "net": "C"
+        },
+        {
+            "source": "MM0_f4",
+            "target": "MM0_f5",
+            "net": "C"
+        },
+        {
+            "source": "MM0_f4",
+            "target": "MM0_f6",
+            "net": "C"
+        },
+        {
+            "source": "MM0_f4",
+            "target": "MM0_f7",
+            "net": "C"
+        },
+        {
+            "source": "MM0_f4",
+            "target": "MM0_f8",
+            "net": "C"
+        },
+        {
+            "source": "MM0_f5",
+            "target": "MM0_f6",
+            "net": "C"
+        },
+        {
+            "source": "MM0_f5",
+            "target": "MM0_f7",
+            "net": "C"
+        },
+        {
+            "source": "MM0_f5",
+            "target": "MM0_f8",
+            "net": "C"
+        },
+        {
+            "source": "MM0_f6",
+            "target": "MM0_f7",
+            "net": "C"
+        },
+        {
+            "source": "MM0_f6",
+            "target": "MM0_f8",
+            "net": "C"
+        },
+        {
+            "source": "MM0_f7",
+            "target": "MM0_f8",
+            "net": "C"
+        }
+    ]
+}

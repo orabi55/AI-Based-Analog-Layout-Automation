@@ -9,8 +9,8 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 0.532,
-                "y": -0.728,
+                "x": 0.322,
+                "y": -4.012,
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
@@ -25,11 +25,11 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 1.33,
-                "y": -0.728,
+                "x": 1.61,
+                "y": -4.012,
                 "width": 0.294,
                 "height": 0.6680000000000001,
-                "orientation": "R0"
+                "orientation": "R0_FH"
             }
         },
         {
@@ -41,11 +41,11 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 0.266,
-                "y": -0.728,
+                "x": 0.966,
+                "y": -4.012,
                 "width": 0.294,
                 "height": 0.6680000000000001,
-                "orientation": "R0"
+                "orientation": "R0_FH"
             }
         },
         {
@@ -57,11 +57,11 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 0.798,
-                "y": -0.728,
+                "x": 1.288,
+                "y": -4.012,
                 "width": 0.294,
                 "height": 0.6680000000000001,
-                "orientation": "R0"
+                "orientation": "R0_FH"
             }
         },
         {
@@ -73,11 +73,11 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 1.064,
-                "y": -0.728,
+                "x": 0.644,
+                "y": -4.012,
                 "width": 0.294,
                 "height": 0.6680000000000001,
-                "orientation": "R0"
+                "orientation": "R0_FH"
             }
         },
         {
@@ -90,7 +90,7 @@
             },
             "geometry": {
                 "x": 0.0,
-                "y": -0.728,
+                "y": -4.012,
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
@@ -105,8 +105,8 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 0.532,
-                "y": 0.0,
+                "x": 0.322,
+                "y": -3.34,
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
@@ -121,11 +121,11 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 1.064,
-                "y": 0.0,
+                "x": 0.644,
+                "y": -3.34,
                 "width": 0.294,
                 "height": 0.6680000000000001,
-                "orientation": "R0"
+                "orientation": "R0_FH"
             }
         },
         {
@@ -137,11 +137,11 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 1.33,
-                "y": 0.0,
+                "x": 1.61,
+                "y": -3.34,
                 "width": 0.294,
                 "height": 0.6680000000000001,
-                "orientation": "R0"
+                "orientation": "R0_FH"
             }
         },
         {
@@ -153,11 +153,11 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 0.798,
-                "y": 0.0,
+                "x": 1.288,
+                "y": -3.34,
                 "width": 0.294,
                 "height": 0.6680000000000001,
-                "orientation": "R0"
+                "orientation": "R0_FH"
             }
         },
         {
@@ -169,11 +169,11 @@
                 "nfin": 4.0
             },
             "geometry": {
-                "x": 0.266,
-                "y": 0.0,
+                "x": 0.966,
+                "y": -3.34,
                 "width": 0.294,
                 "height": 0.6680000000000001,
-                "orientation": "R0"
+                "orientation": "R0_FH"
             }
         },
         {
@@ -186,7 +186,7 @@
             },
             "geometry": {
                 "x": 0.0,
-                "y": 0.0,
+                "y": -3.34,
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
