@@ -18,21 +18,21 @@ class BlockItem(QGraphicsRectItem):
         # Calculate initial bounding box based on children
         self._device_items = device_items
         
+        # --- Fix 1: Bounding box snaps flush to outermost transistor edges ---
+        # No padding, no label offset. The block rect IS the device union.
         union = QRectF()
         if self._device_items:
             union = self._device_items[0].sceneBoundingRect()
             for it in self._device_items[1:]:
                 union = union.united(it.sceneBoundingRect())
 
-        padding = 8.0
-        label_height = 18.0
-        w = union.width() + padding * 2
-        h = union.height() + padding * 2 + label_height
+        w = union.width()
+        h = union.height()
         
         super().__init__(0, 0, w, h)
         
-        # We set pos to the top-left of the union
-        self.setPos(union.x() - padding, union.y() - padding - label_height)
+        # Position at exact top-left of the union — flush alignment
+        self.setPos(union.x(), union.y())
         
         self.inst_name = inst_name
         self.subckt = subckt
@@ -51,8 +51,8 @@ class BlockItem(QGraphicsRectItem):
         self._fill_color = color
         self._border_color = border_color
         
-        # ZValue positive so it draws over grid
-        self.setZValue(5)
+        # --- Fix 4: Z-value sits above grid but behind device labels ---
+        self.setZValue(2)
 
     def set_snap_grid(self, grid_x, grid_y=None):
         self._snap_grid_x = float(grid_x) if grid_x else None
@@ -110,33 +110,34 @@ class BlockItem(QGraphicsRectItem):
         if is_selected:
             border = border.lighter(150)
             
-        pen = QPen(border, 2.0 if is_selected else 1.5, Qt.PenStyle.SolidLine)
+        # --- Fix 4: Thicker pen on selection for visibility ---
+        pen = QPen(border, 2.5 if is_selected else 1.5, Qt.PenStyle.SolidLine)
         painter.setPen(pen)
         
         # Draw main block background
         painter.drawRoundedRect(rect, 4.0, 4.0)
         
-        # Draw header bar
-        header_height = 20.0
+        # --- Fix 4: Header bar drawn INSIDE the block rect, proportional ---
+        header_height = min(18.0, rect.height() * 0.35)
         header_rect = QRectF(rect.x(), rect.y(), rect.width(), header_height)
         
         painter.setBrush(QBrush(border))
         painter.setPen(Qt.PenStyle.NoPen)
-        # We can just draw a rounded rect for the top overlapping perfectly
         painter.drawRoundedRect(header_rect, 4.0, 4.0)
+        # Square off the bottom corners of header by overdrawing a plain rect
+        if header_height < rect.height():
+            overlap = QRectF(rect.x(), rect.y() + header_height - 4.0,
+                             rect.width(), 4.0)
+            painter.drawRect(overlap)
         
-        # Text
+        # Title text
         painter.setPen(QPen(QColor("#ffffff")))
-        font = QFont("Segoe UI", 9, QFont.Weight.Bold)
+        font_size = max(7, min(9, int(header_height * 0.55)))
+        font = QFont("Segoe UI", font_size, QFont.Weight.Bold)
         painter.setFont(font)
         
         title = f"{self.inst_name}: {self.subckt}"
         painter.drawText(header_rect, Qt.AlignmentFlag.AlignCenter, title)
         
-        # Subtext details
-        text_rect = QRectF(rect.x(), rect.y() + header_height, rect.width(), rect.height() - header_height)
-        subfont = QFont("Segoe UI", 8)
-        painter.setFont(subfont)
-        painter.setPen(QPen(QColor("#e0e0e0")))
-        dev_count = len(self._device_items)
-        painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, f"{dev_count} Devices")
+        # --- Fix 4: Subtext ("N Devices") REMOVED to reduce clutter ---
+        # Differentiation is done via the header label only.

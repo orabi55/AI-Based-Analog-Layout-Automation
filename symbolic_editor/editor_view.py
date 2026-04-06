@@ -103,26 +103,11 @@ class SymbolicEditor(QGraphicsView):
         self._block_items = []       # list of actual BlockItem instances (symbol view)
         self._block_overlays_visible = True
         self._view_level = "symbol"   # 'symbol' or 'transistor'
-        self._block_colors = [
-            QColor(255, 165, 0, 40),    # orange
-            QColor(0, 191, 255, 40),    # deep sky blue
-            QColor(50, 205, 50, 40),    # lime green
-            QColor(255, 105, 180, 40),  # hot pink
-            QColor(138, 43, 226, 40),   # blue violet
-            QColor(255, 215, 0, 40),    # gold
-            QColor(0, 206, 209, 40),    # dark turquoise
-            QColor(255, 99, 71, 40),    # tomato
-        ]
-        self._block_border_colors = [
-            QColor(255, 165, 0, 120),
-            QColor(0, 191, 255, 120),
-            QColor(50, 205, 50, 120),
-            QColor(255, 105, 180, 120),
-            QColor(138, 43, 226, 120),
-            QColor(255, 215, 0, 120),
-            QColor(0, 206, 209, 120),
-            QColor(255, 99, 71, 120),
-        ]
+        # --- Fix 2: Single uniform color for ALL blocks ---
+        self._block_fill_color = QColor(60, 130, 190, 45)      # steel blue, semi-transparent (overlay)
+        self._block_border_color = QColor(80, 160, 220, 130)   # lighter steel border (overlay)
+        self._block_fill_solid = QColor(60, 130, 190, 180)     # opaque fill (symbol view)
+        self._block_border_solid = QColor(80, 160, 220, 220)   # opaque border (symbol view)
 
         # Completely disable scrollbars (policy is more reliable than CSS)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -945,16 +930,42 @@ class SymbolicEditor(QGraphicsView):
                 ]
                 if not member_items:
                     continue
-                    
-                color_idx = idx % len(self._block_colors)
-                fill_color = self._block_colors[color_idx]
-                border_color = self._block_border_colors[color_idx]
-                
-                # Make fill mostly opaque for block item itself
-                opaque_fill = QColor(fill_color)
-                opaque_fill.setAlpha(200)
 
-                bitm = BlockItem(inst_name, subckt, member_items, opaque_fill, border_color)
+                # --- Fix 3: Regroup PMOS above, NMOS below, tightly packed ---
+                pmos_items = [it for it in member_items
+                              if str(getattr(it, 'device_type', '')).strip().lower() == 'pmos']
+                nmos_items = [it for it in member_items
+                              if str(getattr(it, 'device_type', '')).strip().lower() != 'pmos']
+
+                # Determine reference cell dimensions from the actual items
+                ref_w = member_items[0].rect().width()
+                ref_h = member_items[0].rect().height()
+
+                # Pick a starting x from the leftmost current position of ANY
+                # member so the block stays near its original screen location.
+                x_start = min(it.pos().x() for it in member_items)
+                # Use minimum y of PMOS items (or all items) as row top so
+                # block stays near its original vertical position.
+                y_start = min(it.pos().y() for it in member_items)
+
+                # Place PMOS row
+                x_cursor = x_start
+                for it in pmos_items:
+                    it.setPos(x_cursor, y_start)
+                    x_cursor += it.rect().width()  # abutted, no gap
+
+                # Place NMOS row immediately below PMOS (no gap, no overlap)
+                nmos_y = y_start + ref_h
+                x_cursor = x_start
+                for it in nmos_items:
+                    it.setPos(x_cursor, nmos_y)
+                    x_cursor += it.rect().width()  # abutted, no gap
+
+                # --- Fix 2: Uniform color for all blocks ---
+                fill_color = QColor(self._block_fill_solid)
+                border_color = QColor(self._block_border_solid)
+
+                bitm = BlockItem(inst_name, subckt, member_items, fill_color, border_color)
                 bitm.set_snap_grid(self._snap_grid, self._row_pitch)
                 self.scene.addItem(bitm)
                 self._block_items.append(bitm)
@@ -1027,28 +1038,17 @@ class SymbolicEditor(QGraphicsView):
             if not member_items:
                 continue
 
-            # Compute union bounding box
+            # Compute union bounding box — flush, no padding
             union = member_items[0].sceneBoundingRect()
             for item in member_items[1:]:
                 union = union.united(item.sceneBoundingRect())
 
-            # Add padding
-            padding = 6.0
-            label_height = 16.0
-            padded = QRectF(
-                union.x() - padding,
-                union.y() - padding - label_height,
-                union.width() + padding * 2,
-                union.height() + padding * 2 + label_height,
-            )
+            # --- Fix 2: Uniform color for all overlays ---
+            fill_color = self._block_fill_color
+            border_color = self._block_border_color
 
-            # Pick color
-            color_idx = idx % len(self._block_colors)
-            fill_color = self._block_colors[color_idx]
-            border_color = self._block_border_colors[color_idx]
-
-            # Draw overlay rectangle
-            rect_item = QGraphicsRectItem(padded)
+            # Draw overlay rectangle flush around devices
+            rect_item = QGraphicsRectItem(union)
             rect_item.setBrush(QBrush(fill_color))
             rect_item.setPen(QPen(border_color, 1.5, Qt.PenStyle.DashLine))
             rect_item.setZValue(-10)  # behind devices
@@ -1058,19 +1058,31 @@ class SymbolicEditor(QGraphicsView):
             self.scene.addItem(rect_item)
             self._block_overlays.append(rect_item)
 
-            # Draw label
+            # --- Fix 4: Label with subtle pill background for readability ---
             label_text = f"{inst_name}: {subckt}"
             label_item = QGraphicsSimpleTextItem(label_text)
             label_item.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
-            label_border = QColor(border_color)
-            label_border.setAlpha(220)
-            label_item.setBrush(QBrush(label_border))
-            label_item.setPos(padded.x() + 4, padded.y() + 2)
+            label_item.setBrush(QBrush(QColor("#d0e8ff")))
+            label_item.setPos(union.x() + 3, union.y() - 14)
             label_item.setZValue(-9)
             label_item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
             label_item.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
             self.scene.addItem(label_item)
             self._block_overlays.append(label_item)
+
+            # Pill background behind label text
+            lbr = label_item.boundingRect()
+            pill = QGraphicsRectItem(
+                union.x() + 1, union.y() - 15,
+                lbr.width() + 6, lbr.height() + 2,
+            )
+            pill.setBrush(QBrush(QColor(20, 30, 50, 180)))
+            pill.setPen(QPen(Qt.PenStyle.NoPen))
+            pill.setZValue(-9.5)
+            pill.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
+            pill.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+            self.scene.addItem(pill)
+            self._block_overlays.append(pill)
 
         self.scene.blockSignals(False)
 
