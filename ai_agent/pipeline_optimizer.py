@@ -25,9 +25,20 @@ def apply_deterministic_optimizations(
     terminal_nets,
     edges,
     pitch=0.294,
+    placement_mode: str = "auto",
 ):
     """
     Apply deterministic row optimization and symmetry enforcement.
+
+    Args:
+        working_nodes:   List of device node dicts.
+        constraint_text: Topology constraint string from Stage 1.
+        terminal_nets:   Dict of terminal net names → net objects.
+        edges:           List of edge dicts (used by routing scorer).
+        pitch:           Device pitch in µm (default 0.294).
+        placement_mode:  "interdigitated" | "common_centroid" | "auto" —
+                         passed through for callers that need it; the
+                         deterministic optimizer is mode-agnostic.
 
     Returns a NEW node list (does not mutate original input).
     """

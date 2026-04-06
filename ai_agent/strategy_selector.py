@@ -42,35 +42,21 @@ AVAILABLE STRATEGIES (pick the most relevant for this specific circuit):
   any other optimisation step.
 - Optimise Routing Crossings — Reorder devices to reduce net x-span and crossing
   count for the critical differential and output nets.
-
-...
-
-AVAILABLE STRATEGIES (pick the most relevant for this specific circuit):
-
+- Optimise Dummy Placement — Move dummy devices to row edges to free the centre
+  for matched active devices.
+- Minimise DRC Violations — Resolve all overlap and gap violations first before
+  any other optimisation step.
+- Optimise Routing Crossings — Reorder devices to reduce net x-span and crossing
+  count for the critical differential and output nets.
 - **Optimize Current Mirror Matching** — Place ALL mirror devices (shared gate net)
   in consecutive x-slots with identical orientation to minimize systematic mismatch.
   Targets gate resistance, Vth asymmetry, and etch variation.
-
-- Enhance Symmetry — Add symmetry constraints so matched pairs have identical
-  x-distance from the row centre.
-  
-- Improve Matching — Place matched devices (same W/L/nf) adjacent with the
-  same orientation to minimise systematic mismatch.
-  
-...
-
-Rules:
-- **ALWAYS suggest "Optimize Current Mirror Matching" if ANY shared-gate devices exist**
-- Pick strategies relevant to the ACTUAL devices and constraints shown.
-- Do NOT suggest cascode alignment if there are no cascode devices.
-- Do NOT suggest diff-pair centering if there is no diff-pair identified.
-- Be specific: name the actual device IDs in the strategy description.
 
 Example Strategy Output for Circuit with Mirrors:
 ```
 Based on your circuit topology, here are the recommended improvement strategies:
 
-1. **Optimize Current Mirror Matching** — Place MM1 ↔ MM2 (NBIAS mirror) and 
+1. **Optimize Current Mirror Matching** — Place MM1 ↔ MM2 (NBIAS mirror) and
    MM5 ↔ MM6 (PBIAS mirror) in consecutive slots with R0 orientation to achieve
    <0.5% current matching accuracy.
 
@@ -82,8 +68,8 @@ Based on your circuit topology, here are the recommended improvement strategies:
 Type a number (1-3), 'all', or describe a custom approach to proceed.
 ```
 
-
 Rules:
+- **ALWAYS suggest "Optimize Current Mirror Matching" if ANY shared-gate devices exist**
 - Pick strategies relevant to the ACTUAL devices and constraints shown.
 - Do NOT suggest cascode alignment if there are no cascode devices.
 - Do NOT suggest diff-pair centering if there is no diff-pair identified.
@@ -119,8 +105,8 @@ def generate_strategies(user_message: str, constraint_text: str, run_llm_fn) -> 
         if result and len(result.strip()) > 20:
             llm_text = result.strip()
             # Append mirror placement options if LLM didn't include them
-            #if has_mirror and "interdigitated" not in llm_text.lower():
-            #    llm_text += _mirror_placement_options()
+            if has_mirror and "interdigitated" not in llm_text.lower():
+                llm_text += _mirror_placement_options()
             return llm_text
     except Exception as exc:
         print(f"[STRATEGY] LLM failed: {exc} — using fallback")

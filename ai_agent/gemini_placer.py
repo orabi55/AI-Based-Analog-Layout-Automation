@@ -23,9 +23,20 @@ Improvements over previous version:
 import os
 import json
 import re
+from pathlib import Path
 from collections import defaultdict
 from google import genai
 from google.genai import types
+
+# Load .env from project root so GEMINI_API_KEY is available
+# even when this module is imported standalone (e.g. from the Design menu),
+# not through llm_worker which already calls load_dotenv().
+try:
+    from dotenv import load_dotenv as _load_dotenv
+    _env_path = Path(__file__).resolve().parent.parent / ".env"
+    _load_dotenv(_env_path)
+except ImportError:
+    pass  # python-dotenv not installed; rely on shell environment
 
 
 # ---------------------------------------------------------------------------
@@ -138,10 +149,10 @@ def sanitize_json(text: str) -> dict:
         try:
             result = json.loads(attempt)
             if isinstance(result, dict) and "nodes" in result:
-                pass # print(
-                #    f"[sanitize_json] Recovered JSON by trimming "
-                #    f"{trim} chars from end"
-                #)
+                print(
+                    f"[sanitize_json] Recovered JSON by trimming "
+                    f"{trim} chars from end"
+                )
                 return result
         except json.JSONDecodeError:
             continue
@@ -149,6 +160,32 @@ def sanitize_json(text: str) -> dict:
     raise ValueError(
         "Could not parse Gemini output as JSON after all repair attempts.\n"
         f"First 500 chars: {s[:500]}"
+    )
+
+
+def _ensure_placement_dict(parsed) -> dict:
+    """
+    Normalise the result of sanitize_json() to always be a dict with a 'nodes' key.
+
+    Gemini sometimes returns a bare JSON array  [ {...}, {...} ]  instead of
+    { "nodes": [ {...}, {...} ] }.  Without this guard the caller does
+    placement.get("nodes") on a list and crashes with
+    "'list' object has no attribute 'get'".
+    """
+    if isinstance(parsed, list):
+        # Bare array of node dicts — wrap it
+        return {"nodes": parsed}
+    if isinstance(parsed, dict):
+        # Already correct shape — but 'nodes' may be nested under another key
+        if "nodes" not in parsed:
+            # Some models return {"placement": [...]} or {"result": [...]}
+            for key in ("placement", "result", "layout", "devices"):
+                if key in parsed and isinstance(parsed[key], list):
+                    return {"nodes": parsed[key]}
+        return parsed
+    raise ValueError(
+        f"Unexpected JSON type from Gemini: {type(parsed).__name__}. "
+        f"Expected dict or list, got: {str(parsed)[:200]}"
     )
 
 
@@ -225,18 +262,36 @@ def _build_block_info(nodes: list, graph_data: dict) -> str:
 # ---------------------------------------------------------------------------
 # Post-placement validation
 # ---------------------------------------------------------------------------
-def _validate_placement(original_nodes: list, result: dict) -> list[str]:
-    """Run quick sanity checks on the returned placement. Returns list of errors."""
+def _validate_placement(original_nodes: list, result) -> list:
+    """Run quick sanity checks on the returned placement. Returns list of errors.
+
+    Args:
+        original_nodes: list of original node dicts (with 'id', 'type', etc.)
+        result:         EITHER a list of placed node dicts (new call convention)
+                        OR a dict with a 'nodes' key (legacy call convention).
+                        Both forms are handled transparently.
+    """
     errors = []
     orig_ids  = {n["id"] for n in original_nodes}
     orig_type = {n["id"]: n.get("type") for n in original_nodes}
 
-    placed_nodes = result.get("nodes", [])
+    # Accept either a list of nodes or a {"nodes": [...]} dict
+    if isinstance(result, list):
+        placed_nodes = result
+    elif isinstance(result, dict):
+        placed_nodes = result.get("nodes", [])
+    else:
+        errors.append(
+            f"Unexpected placement result type: {type(result).__name__} — "
+            "expected list or dict."
+        )
+        return errors
+
     if not placed_nodes:
         errors.append("Response has no 'nodes' array.")
         return errors
 
-    placed_ids = {n.get("id") for n in placed_nodes if n.get("id")}
+    placed_ids = {n.get("id") for n in placed_nodes if isinstance(n, dict) and n.get("id")}
 
     # 1. Device count
     missing = orig_ids - placed_ids
@@ -249,6 +304,8 @@ def _validate_placement(original_nodes: list, result: dict) -> list[str]:
     # 2. No x-collisions in the same row
     row_slots: dict = defaultdict(list)
     for n in placed_nodes:
+        if not isinstance(n, dict):
+            continue
         dev_id   = n.get("id", "?")
         dev_type = orig_type.get(dev_id, n.get("type", "?"))
         geo      = n.get("geometry", {})
@@ -268,6 +325,8 @@ def _validate_placement(original_nodes: list, result: dict) -> list[str]:
 
     # 3. PMOS/NMOS must not swap rows
     for n in placed_nodes:
+        if not isinstance(n, dict):
+            continue
         dev_id   = n.get("id", "?")
         expected = orig_type.get(dev_id)
         actual   = n.get("type")
@@ -277,6 +336,62 @@ def _validate_placement(original_nodes: list, result: dict) -> list[str]:
             )
 
     return errors
+
+
+
+# ---------------------------------------------------------------------------
+# Coordinate normalisation
+# ---------------------------------------------------------------------------
+def _normalise_coords(nodes: list) -> tuple:
+    """
+    Shift all node Y-coordinates so that min(y) == 0 across all devices.
+
+    This normalises circuits (like XOR) whose graph was extracted in an
+    arbitrary or all-negative coordinate frame.  The LLM prompt already
+    instructs the model to place PMOS at y=0 and NMOS below — so all we
+    need is to bring the data to a sane numeric range before sending it.
+
+    Returns:
+        (normalised_nodes, y_offset)
+    where  original_y = normalised_y - y_offset  (i.e. offset is ADDED to
+    original to produce normalised, and SUBTRACTED to restore).
+    """
+    import copy
+
+    if not nodes:
+        return nodes, 0.0
+
+    all_ys = [n.get("geometry", {}).get("y", 0.0) for n in nodes if "geometry" in n]
+    if not all_ys:
+        return nodes, 0.0
+
+    min_y    = min(all_ys)
+    y_offset = -min_y          # amount to ADD to each y to bring min_y → 0
+
+    if abs(y_offset) < 1e-9:
+        return nodes, 0.0      # already at origin — nothing to do
+
+    normalised = copy.deepcopy(nodes)
+    for n in normalised:
+        geo = n.get("geometry", {})
+        if "y" in geo:
+            geo["y"] = round(geo["y"] + y_offset, 6)
+
+    return normalised, y_offset
+
+
+
+def _restore_coords(placed_nodes: list, y_offset: float) -> list:
+    """Un-shift Y coordinates back to the original frame."""
+    if abs(y_offset) < 1e-9:
+        return placed_nodes
+    import copy
+    restored = copy.deepcopy(placed_nodes)
+    for n in restored:
+        geo = n.get("geometry", {})
+        if "y" in geo:
+            geo["y"] = round(geo["y"] - y_offset, 6)
+    return restored
 
 
 # ---------------------------------------------------------------------------
@@ -305,10 +420,19 @@ def gemini_generate_placement(input_json: str, output_json: str):
     nodes = graph_data.get("nodes", [])
     edges = graph_data.get("edges", [])
 
+    # Normalise coordinates so PMOS sits at y >= 0 and NMOS sits below.
+    # This handles circuits (e.g. XOR) with all-negative Y origins.
+    norm_nodes, y_offset = _normalise_coords(nodes)
+    if abs(y_offset) > 1e-9:
+        print(f"[gemini_placer] Y-coord offset applied: {y_offset:+.4f} µm")
+    # Use normalised nodes for the prompt; restore after placement.
+    prompt_graph = dict(graph_data)
+    prompt_graph["nodes"] = norm_nodes
+
     # Pre-calculate prompt helpers
-    adjacency_str = _build_net_adjacency(nodes, edges)
-    inventory_str = _build_device_inventory(nodes)
-    block_str = _build_block_info(nodes, graph_data)
+    adjacency_str = _build_net_adjacency(norm_nodes, edges)
+    inventory_str = _build_device_inventory(norm_nodes)
+    block_str = _build_block_info(norm_nodes, graph_data)
 
     # Build structured prompt
     prompt = f"""
@@ -316,7 +440,7 @@ You are an expert VLSI placement engineer.
 
 Given this transistor-level graph:
 
-{json.dumps(graph_data, indent=2)}
+{json.dumps(prompt_graph, indent=2)}
 
 DEVICE INVENTORY:
 {inventory_str}
@@ -367,14 +491,14 @@ CRITICAL: Your response MUST be complete valid JSON. Do NOT truncate the output.
     last_error = None
 
     for attempt in range(1, MAX_RETRIES + 1):
-        pass # print(f"[gemini_placer] Attempt {attempt}/{MAX_RETRIES}...")
+        print(f"[gemini_placer] Attempt {attempt}/{MAX_RETRIES}...")
 
         try:
             response = client.models.generate_content(
                 model="gemini-2.5-flash",
                 contents=prompt,
                 config=types.GenerateContentConfig(
-                    max_output_tokens=8192,
+                    max_output_tokens=65536,
                 ),
             )
 
@@ -383,25 +507,57 @@ CRITICAL: Your response MUST be complete valid JSON. Do NOT truncate the output.
 
             raw_output = response.text.strip()
 
-            # Parse safely
-            placement = sanitize_json(raw_output)
+            # Parse safely, then normalise to dict with 'nodes' key.
+            # sanitize_json can return list if LLM emits a raw JSON array.
+            val_errors: list = []   # reset each attempt so it's always defined
+            placement = _ensure_placement_dict(sanitize_json(raw_output))
+            placed_nodes = placement.get("nodes", [])
+
+            if not isinstance(placed_nodes, list) or not placed_nodes:
+                raise ValueError(
+                    f"Placement 'nodes' is empty or not a list "
+                    f"(got {type(placed_nodes).__name__}, len={len(placed_nodes) if isinstance(placed_nodes, list) else 'N/A'})"
+                )
+
+            # ── Validate placement quality BEFORE saving (C7 fix) ──────────
+            # _validate_placement takes (original_nodes, placed_nodes_list).
+            # Catches: device count mismatch, slot collisions, type swaps.
+            val_errors = _validate_placement(norm_nodes, placed_nodes)
+            if val_errors:
+                error_summary = "; ".join(val_errors[:5])
+                raise ValueError(
+                    f"Placement validation failed ({len(val_errors)} error(s)): "
+                    f"{error_summary}"
+                )
+
+            # Restore original Y-coordinate frame before saving
+            placement["nodes"] = _restore_coords(placed_nodes, y_offset)
 
             # Save result
             with open(output_json, "w") as f:
                 json.dump(placement, f, indent=4)
 
-            pass # print("Placement saved to:", output_json)
+            print("Placement saved to:", output_json)
             return
 
-        except Exception as e:
+        except (json.JSONDecodeError, ValueError) as e:
             last_error = e
-            pass # print(f"[gemini_placer] Attempt {attempt} failed: {e}")
+            print(f"[gemini_placer] Attempt {attempt} failed: {e}")
             if attempt < MAX_RETRIES:
-                # Add stronger instruction for retry
+                # Build targeted retry hint from validation errors if available
+                extra = (
+                    f" Specifically: {', '.join(val_errors[:3])}"
+                    if val_errors
+                    else ""
+                )
                 prompt += (
                     "\n\nPREVIOUS ATTEMPT FAILED because your JSON output was "
-                    "truncated or malformed. You MUST output COMPLETE, VALID "
-                    "JSON with ALL devices included. Do not stop mid-output."
+                    "truncated, malformed, or did not pass placement validation."
+                    + extra
+                    + " You MUST output COMPLETE, VALID JSON object with a 'nodes' "
+                    "array containing ALL devices, with no slot collisions. "
+                    "Do NOT return a bare JSON array — always wrap in {\"nodes\": [...]}"
+                    " and do not stop mid-output."
                 )
 
     raise ValueError(
