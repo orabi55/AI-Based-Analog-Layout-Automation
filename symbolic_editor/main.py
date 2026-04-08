@@ -8,7 +8,7 @@ import re
 
 # ---------------------------------------------------------------------------
 # Ensure the project root is on sys.path so that cross-package imports
-# (e.g. ai_agent.llm_worker from symbolic_editor/) work regardless of how
+# (e.g. ai_agent.ai_initial_placement.llm_worker from symbolic_editor/) work regardless of how
 # this script is launched.
 # ---------------------------------------------------------------------------
 _project_root = os.path.normpath(
@@ -1525,15 +1525,13 @@ class MainWindow(QMainWindow):
                 from parser.layout_reader import extract_layout_instances
                 layout_instances = extract_layout_instances(oas_path)
             except Exception as e:
-                print(f"[Import] Layout parsing failed ({e}), using grid placement")
+                pass
 
         if layout_instances:
             try:
                 from parser.device_matcher import match_devices
                 device_mapping = match_devices(netlist, layout_instances)
-                print(f"[Import] Matched {len(device_mapping)} devices to layout")
             except Exception as e:
-                print(f"[Import] Device matching failed ({e}), using grid placement")
                 device_mapping = {}
 
         # 3. Build nodes (first pass — collect all devices with temp geometry)
@@ -1622,13 +1620,12 @@ class MainWindow(QMainWindow):
 
         if blocks:
             block_labels = [f"{k} ({v['subckt']})" for k, v in blocks.items()]
-            print(f"[Import] Detected {len(blocks)} blocks: {', '.join(block_labels)}")
 
         # 6. Block-aware placement (only when no layout geometry is available)
         if not device_mapping:
             # Group devices by block, then by type
-            pmos_y = ROW_HEIGHT_UM    # PMOS row y
-            nmos_y = 0.0              # NMOS row y
+            pmos_y = 0.0              # PMOS row y (Top)
+            nmos_y = ROW_HEIGHT_UM    # NMOS row y (Bottom)
             x_cursor = 0.0            # global x cursor across blocks
 
             # Determine block order (preserve insertion order)
@@ -1678,7 +1675,8 @@ class MainWindow(QMainWindow):
                 else:
                     n["geometry"]["x"] = x_cursor
                     n["geometry"]["y"] = nmos_y
-                x_cursor += w
+                x_cursor += w
+
 
         return {
             "nodes": nodes,
@@ -1694,7 +1692,7 @@ class MainWindow(QMainWindow):
         Updates x/y coordinates in the nodes and returns the updated data.
         """
         import tempfile
-        from ai_agent.gemini_placer import gemini_generate_placement, sanitize_json
+        from ai_agent.ai_initial_placement.gemini_placer import gemini_generate_placement, sanitize_json
 
         # Write to temp file for the placer
         with tempfile.NamedTemporaryFile(
@@ -1711,7 +1709,7 @@ class MainWindow(QMainWindow):
                 raw_placed = json.load(f)
 
             # Normalise: LLM might save a bare JSON array — wrap it
-            from ai_agent.gemini_placer import _ensure_placement_dict
+            from ai_agent.ai_initial_placement.gemini_placer import _ensure_placement_dict
             placed = _ensure_placement_dict(raw_placed)
 
             # Merge placed coordinates back into original data
@@ -1904,7 +1902,7 @@ class MainWindow(QMainWindow):
         # ---- Choose which device IDs to highlight ----
         if stage_index == 2:
             # DRC stage: highlight overlapping pairs only
-            from ai_agent.drc_critic import run_drc_check
+            from ai_agent.ai_initial_placement.drc_critic import run_drc_check
             nodes = []
             for dev_id, item in device_items.items():
                 try:

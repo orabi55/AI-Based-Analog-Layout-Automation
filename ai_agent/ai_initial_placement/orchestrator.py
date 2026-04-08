@@ -30,34 +30,34 @@ from typing import List, Dict, Tuple, Optional, Callable
 # ───────────────────────────────────────────────────────────────────────────
 # Imports - All at module level
 # ───────────────────────────────────────────────────────────────────────────
-from ai_agent.topology_analyst import (
+from ai_agent.ai_initial_placement.topology_analyst import (
     TOPOLOGY_ANALYST_PROMPT,
     analyze_topology,
 )
-from ai_agent.placement_specialist import (
+from ai_agent.ai_initial_placement.placement_specialist import (
     PLACEMENT_SPECIALIST_PROMPT,
     build_placement_context,
 )
-from ai_agent.drc_critic import (
+from ai_agent.ai_initial_placement.drc_critic import (
     DRC_CRITIC_PROMPT,
     run_drc_check,
     format_drc_violations_for_llm,
     compute_prescriptive_fixes,
 )
-from ai_agent.routing_previewer import (
+from ai_agent.ai_initial_placement.routing_previewer import (
     ROUTING_PREVIEWER_PROMPT,
     score_routing,
     format_routing_for_llm,
 )
-from ai_agent.strategy_selector import generate_strategies, parse_placement_mode
-from ai_agent.classifier_agent import classify_intent
-from ai_agent.rag_retriever import build_rag_context, save_run_as_example
-from ai_agent.pipeline_optimizer import apply_deterministic_optimizations
-from ai_agent.tools import (
+from ai_agent.ai_initial_placement.strategy_selector import generate_strategies, parse_placement_mode
+from ai_agent.ai_chat_bot.classifier_agent import classify_intent
+from ai_agent.ai_chat_bot.rag_retriever import build_rag_context, save_run_as_example
+from ai_agent.ai_initial_placement.pipeline_optimizer import apply_deterministic_optimizations
+from ai_agent.ai_initial_placement.tools import (
     tool_validate_device_count,
     tool_resolve_overlaps,
 )
-from ai_agent.finger_grouping import (
+from ai_agent.ai_initial_placement.finger_grouping import (
     aggregate_to_logical_devices,
     expand_logical_to_fingers,
     validate_finger_integrity,
@@ -461,7 +461,7 @@ def _validate_multi_finger_placement(
     Returns:
         dict: {pass, violations, summary}
     """
-    from ai_agent.finger_grouping import extract_base_and_finger
+    from ai_agent.ai_initial_placement.finger_grouping import extract_base_and_finger
     
     finger_groups = group_fingers(physical_nodes)
     violations = []

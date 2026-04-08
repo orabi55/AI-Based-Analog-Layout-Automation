@@ -443,8 +443,8 @@ class OrchestratorWorker(LLMWorker):
             layout_context = {}
 
         try:
-            from ai_agent.orchestrator    import Orchestrator
-            from ai_agent.classifier_agent import classify_intent
+            from ai_agent.ai_initial_placement.orchestrator    import Orchestrator
+            from ai_agent.ai_chat_bot.classifier_agent import classify_intent
 
             project_root = Path(__file__).resolve().parent.parent
 

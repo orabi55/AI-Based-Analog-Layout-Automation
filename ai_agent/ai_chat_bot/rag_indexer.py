@@ -5,7 +5,7 @@ RAG Indexer — seeds the ChromaDB vector store with your existing
 layout JSON files so RAG works from the very first run.
 
 Run this ONCE from your project root:
-    python -m ai_agent.rag_indexer
+    python -m ai_agent.ai_chat_bot.rag_indexer
 
 It will scan for all *_placement.json and *_layout_graph.json files
 and add them to the RAG database as seed examples.
@@ -18,7 +18,7 @@ import json
 import glob
 from pathlib import Path
 
-from ai_agent.rag_store import RAGStore
+from ai_agent.ai_chat_bot.rag_store import RAGStore
 
 
 # ---------------------------------------------------------------------------
