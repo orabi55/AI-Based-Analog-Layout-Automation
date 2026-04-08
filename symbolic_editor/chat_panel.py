@@ -28,29 +28,8 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal, QTimer, QThread
 from PySide6.QtGui import QFont
 
-from ai_agent.ai_initial_placement.llm_worker import LLMWorker, OrchestratorWorker, build_system_prompt
-from ai_agent.ai_initial_placement.orchestrator import _extract_cmd_blocks
+from ai_agent.ai_initial_placement.llm_worker import LLMWorker, build_system_prompt
 from icons import icon_panel_toggle
-
-# ---------------------------------------------------------------------------
-# Keywords that trigger the multi-agent Orchestrator pipeline
-# ---------------------------------------------------------------------------
-_ORCHESTRATOR_KEYWORDS = re.compile(
-    r"\b("
-    r"optimi[sz]e|optimis|improve|auto.?place|auto.?layout|"
-    r"fix.?drc|drc.?fix|reduce.?crossings|reduce.?routing|"
-    r"rearrange|reorder|reorgani[sz]e|minimise|minimize|"
-    r"suggest.?placement|better.?placement|swap.?all|pipeline"
-    r")\b",
-    re.IGNORECASE,
-)
-
-_ORCHESTRATOR_STAGES = [
-    ("Topology Analyst",     "🔬 Stage 1/4 — Analysing circuit topology..."),
-    ("Placement Specialist", "📐 Stage 2/4 — Computing optimal placement..."),
-    ("DRC Critic",           "🔍 Stage 3/4 — Checking DRC violations..."),
-    ("Routing Pre-Viewer",   "🔀 Stage 4/4 — Previewing routing & crossings..."),
-]
 
 
 # -------------------------------------------------
@@ -106,8 +85,6 @@ class ChatPanel(QWidget):
 
     # Single-agent path (normal chat)
     request_inference = Signal(str, list)
-    # Multi-agent path (orchestrator pipeline)
-    request_orchestrated = Signal(str, str, list)  # (user_message, layout_context_json, chat_history)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -116,24 +93,17 @@ class ChatPanel(QWidget):
         self._chat_history = []  # multi-turn: list of {"role", "content"}
         self._thinking_timer = None
         self._thinking_dots = 0
-        self._thinking_stage = 0          # which pipeline stage label to show
-        self._is_orchestrated = False     # True when orchestrator path is active
 
-        # --- Worker-Object Pattern: QThread + OrchestratorWorker ---
+        # --- Worker-Object Pattern: QThread + LLMWorker ---
         self._worker_thread = QThread()
-        self._llm_worker = OrchestratorWorker()   # superset of LLMWorker
+        self._llm_worker = LLMWorker()
         self._llm_worker.moveToThread(self._worker_thread)
 
         # Single-agent path
         self.request_inference.connect(self._llm_worker.process_request)
-        # Multi-agent (orchestrator) path
-        self.request_orchestrated.connect(self._llm_worker.process_orchestrated_request)
         # Shared response signals back to GUI
         self._llm_worker.response_ready.connect(self._on_llm_response)
         self._llm_worker.error_occurred.connect(self._on_llm_error)
-        
-        # Human-in-the-loop pause signal
-        self._llm_worker.topology_ready_for_review.connect(self._on_topology_review)
 
         # Start the worker thread's event loop
         self._worker_thread.start()
@@ -463,21 +433,8 @@ class ChatPanel(QWidget):
         else:
             self._user_cmds_executed = False
 
-        # --- Route to orchestrator or single-agent ----------------------
-        # If we have a pending topology, ANY message goes to the Orchestrator
-        # to resume the pipeline, regardless of keywords.
-        # If a layout is loaded, always use the Orchestrator — it contains the
-        # Classifier Agent which does fine-grained intent routing internally.
-        is_resuming = getattr(self._llm_worker, "pending_topology", None) is not None
-
-        if self._layout_context:
-            # Layout loaded → always orchestrate (classifier handles routing)
-            self._is_orchestrated = True
-            self._call_orchestrator(text)
-        else:
-            # No layout loaded → single-agent mode
-            self._is_orchestrated = False
-            self._call_llm(text)
+        # --- Route to single-agent ----------------------
+        self._call_llm(text)
 
 
     def _clear_chat(self):
@@ -496,46 +453,22 @@ class ChatPanel(QWidget):
     # -----------------------------------------
     def _start_thinking(self):
         self._thinking_dots = 0
-        self._thinking_stage = 0
-        if self._is_orchestrated:
-            label = _ORCHESTRATOR_STAGES[0][1]
-        else:
-            label = "Thinking"
-        self._append_bubble("ai", label)
+        self._append_bubble("ai", "Thinking")
         self._thinking_timer = QTimer(self)
         self._thinking_timer.timeout.connect(self._animate_thinking)
-        # Slower tick for orchestrator (stage labels change every ~4 s)
-        interval = 3800 if self._is_orchestrated else 400
-        self._thinking_timer.start(interval)
+        self._thinking_timer.start(400)
 
     def _animate_thinking(self):
-        if self._is_orchestrated:
-            # Cycle through pipeline stage labels
-            self._thinking_stage = (self._thinking_stage + 1) % len(_ORCHESTRATOR_STAGES)
-            label = _ORCHESTRATOR_STAGES[self._thinking_stage][1]
-            html = self.chat_display.toHtml()
-            # replace the last stage label with the next one
-            for _, stage_text in _ORCHESTRATOR_STAGES:
-                idx = html.rfind(stage_text.split("—")[0].strip())
-                if idx != -1:
-                    # find enclosing tag boundary
-                    end = html.find("<", idx + 1)
-                    if end == -1:
-                        end = idx + len(stage_text)
-                    html = html[:idx] + label + html[end:]
-                    break
-            self.chat_display.setHtml(html)
-        else:
-            # Original dot animation
-            self._thinking_dots = (self._thinking_dots + 1) % 4
-            dots = "." * self._thinking_dots
-            html = self.chat_display.toHtml()
-            idx = html.rfind("Thinking")
-            if idx != -1:
-                end = html.find("<", idx)
-                if end != -1:
-                    html = html[:idx] + "Thinking" + dots + html[end:]
-                    self.chat_display.setHtml(html)
+        # Original dot animation
+        self._thinking_dots = (self._thinking_dots + 1) % 4
+        dots = "." * self._thinking_dots
+        html = self.chat_display.toHtml()
+        idx = html.rfind("Thinking")
+        if idx != -1:
+            end = html.find("<", idx)
+            if end != -1:
+                html = html[:idx] + "Thinking" + dots + html[end:]
+                self.chat_display.setHtml(html)
         self.chat_display.verticalScrollBar().setValue(
             self.chat_display.verticalScrollBar().maximum()
         )
@@ -548,31 +481,7 @@ class ChatPanel(QWidget):
     # -----------------------------------------
     # LLM dispatch helpers
     # -----------------------------------------
-    def _call_orchestrator(self, user_message):
-        """Serialize layout context and dispatch to OrchestratorWorker."""
-        self._start_thinking()
-        ctx = self._layout_context or {}
-        try:
-            ctx_json = json.dumps(ctx, default=str)
-        except (TypeError, ValueError):
-            ctx_json = "{}"
-            
-        def _clean(content):
-            c = re.sub(r'\[CMD\].*?\[/CMD\]', '', content, flags=re.DOTALL)
-            if c.startswith("⚠️ Error:"):
-                return "(error – skipped)"
-            return c.strip()
 
-        recent = self._chat_history[-4:]
-        chat_messages = []
-        for msg in recent:
-            chat_messages.append({
-                "role": msg["role"],
-                "content": _clean(msg["content"]),
-            })
-
-        print(f"[CHAT] → Orchestrator pipeline for: {user_message[:60]!r}")
-        self.request_orchestrated.emit(user_message, ctx_json, chat_messages)
 
     def _call_llm(self, user_message):
         """Build prompts and dispatch the request to the single-agent worker thread."""
@@ -783,12 +692,28 @@ class ChatPanel(QWidget):
 
     def _parse_commands(self, text):
         """Extract [CMD]...[/CMD] blocks, return (display_text, list_of_cmds)."""
-        # Strip all commands from display text using the original pattern
         pattern = r'\[CMD\].*?\[/CMD\]'
         display_text = re.sub(pattern, '', text, flags=re.DOTALL | re.IGNORECASE)
         
-        # Use orchestrator's hardened parser to harvest robust command dicts
-        commands = _extract_cmd_blocks(text)
+        commands = []
+        for match in re.finditer(pattern, text, flags=re.DOTALL | re.IGNORECASE):
+            # Clean up the matched block
+            block = match.group(0)
+            # Remove tags (case-insensitive)
+            block = re.sub(r'\[/?CMD\]', '', block, flags=re.IGNORECASE).strip()
+            if not block:
+                continue
+
+            try:
+                import json
+                parsed = json.loads(block)
+                if isinstance(parsed, dict):
+                    commands.append(parsed)
+                elif isinstance(parsed, list):
+                    commands.extend([c for c in parsed if isinstance(c, dict)])
+            except Exception as e:
+                print(f"[CHAT] Failed to parse command block: {block[:50]}... Error: {e}")
+
         return display_text, commands
 
     def _on_llm_error(self, error_text):
