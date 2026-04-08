@@ -25,7 +25,7 @@ def tool_build_circuit_graph(sp_file_path):
         return None
     try:
         project_root = os.path.normpath(
-            os.path.join(os.path.dirname(__file__), "..")
+            os.path.join(os.path.dirname(__file__), "..", "..")
         )
         if project_root not in sys.path:
             sys.path.insert(0, project_root)

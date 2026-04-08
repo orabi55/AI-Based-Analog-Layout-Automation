@@ -707,7 +707,7 @@ def _try_graph_analysis(
 
     try:
         project_root = os.path.normpath(
-            os.path.join(os.path.dirname(__file__), "..")
+            os.path.join(os.path.dirname(__file__), "..", "..")
         )
         if project_root not in sys.path:
             sys.path.insert(0, project_root)
