@@ -24,7 +24,7 @@ from ai_agent.ai_chat_bot.rag_store import RAGStore
 # ---------------------------------------------------------------------------
 # Seed files config — add more patterns here as you collect examples
 # ---------------------------------------------------------------------------
-_PROJECT_ROOT = Path(__file__).resolve().parent
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _SEED_PATTERNS = [
     str(_PROJECT_ROOT / "*_placement.json"),
     str(_PROJECT_ROOT / "*initial*.json"),

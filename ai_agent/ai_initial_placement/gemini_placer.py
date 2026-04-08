@@ -33,7 +33,7 @@ from google.genai import types
 # not through llm_worker which already calls load_dotenv().
 try:
     from dotenv import load_dotenv as _load_dotenv
-    _env_path = Path(__file__).resolve().parent.parent / ".env"
+    _env_path = Path(__file__).resolve().parent.parent.parent / ".env"
     _load_dotenv(_env_path)
 except ImportError:
     pass  # python-dotenv not installed; rely on shell environment

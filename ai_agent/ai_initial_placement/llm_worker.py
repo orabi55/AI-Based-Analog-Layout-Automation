@@ -32,7 +32,7 @@ from dotenv import load_dotenv
 from PySide6.QtCore import QObject, Signal, Slot
 
 # Load .env from the project root so API keys are available
-_env_path = Path(__file__).resolve().parent.parent / ".env"
+_env_path = Path(__file__).resolve().parent.parent.parent / ".env"
 load_dotenv(_env_path)
 
 
@@ -446,7 +446,7 @@ class OrchestratorWorker(LLMWorker):
             from ai_agent.ai_initial_placement.orchestrator    import Orchestrator
             from ai_agent.ai_chat_bot.classifier_agent import classify_intent
 
-            project_root = Path(__file__).resolve().parent.parent
+            project_root = Path(__file__).resolve().parent.parent.parent
 
             # ── FIX: resolve correct .sp file ─────────────────────────
             sp_file = _resolve_sp_file(layout_context, project_root)
