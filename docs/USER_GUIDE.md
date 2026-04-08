@@ -400,7 +400,7 @@ mapping   = match_devices(netlist, instances)
 # ... build nodes and edges ...
 
 # Stage 2: AI placement
-from ai_agent.gemini_placer import gemini_generate_placement
+from ai_agent.ai_initial_placement.gemini_placer import gemini_generate_placement
 gemini_generate_placement("graph.json", "placement.json")
 
 # Stage 3: Open in GUI

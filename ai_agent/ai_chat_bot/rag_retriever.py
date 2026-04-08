@@ -5,12 +5,12 @@ RAG Retriever — formats retrieved examples as few-shot context
 to inject into the Placement Specialist prompt.
 
 Usage (called inside orchestrator.py at Stage 2):
-    from ai_agent.rag_retriever import build_rag_context
+    from ai_agent.ai_chat_bot.rag_retriever import build_rag_context
     rag_context = build_rag_context(nodes, edges, terminal_nets)
     # then inject rag_context into specialist_user string
 """
 
-from ai_agent.rag_store import RAGStore
+from ai_agent.ai_chat_bot.rag_store import RAGStore
 
 # Singleton store — loaded once, reused across all runs
 _store: RAGStore | None = None

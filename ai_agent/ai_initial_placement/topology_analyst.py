@@ -26,7 +26,7 @@ from collections import defaultdict
 from math import gcd
 from typing import Dict, List, Optional, Tuple
 
-from ai_agent.analog_kb import ANALOG_LAYOUT_RULES
+from ai_agent.ai_chat_bot.analog_kb import ANALOG_LAYOUT_RULES
 
 
 # ---------------------------------------------------------------------------
@@ -859,7 +859,7 @@ def analyze_topology(
       PATH B - Graph analysis (networkx)                    structural
       PATH B - terminal_nets from layout canvas             may be stale
     """
-    from ai_agent.finger_grouping import (
+    from ai_agent.ai_initial_placement.finger_grouping import (
         group_fingers,
         aggregate_to_logical_devices,
     )

@@ -13,7 +13,7 @@ Responsibilities:
 import copy
 import re
 from collections import defaultdict
-from ai_agent.routing_previewer import score_routing
+from ai_agent.ai_initial_placement.routing_previewer import score_routing
 
 
 # -----------------------------------------------------------------------------

@@ -9,7 +9,7 @@ Enhanced with prescriptive geometry hints and a pure-Python fix generator
 (compute_prescriptive_fixes) for closed-loop self-correction without LLM.
 """
 
-from ai_agent.analog_kb import ANALOG_LAYOUT_RULES
+from ai_agent.ai_chat_bot.analog_kb import ANALOG_LAYOUT_RULES
 
 
 # ---------------------------------------------------------------------------
