@@ -1810,26 +1810,52 @@ class MainWindow(QMainWindow):
                 device_mapping = {}
 
         # 3. Build nodes (first pass — collect all devices with temp geometry)
-        PITCH_UM = 0.294
+        PITCH_UM      = 0.294
         ROW_HEIGHT_UM = 0.668
-        BLOCK_GAP_UM = PITCH_UM * 2  # gap between blocks
+        BLOCK_GAP_UM  = PITCH_UM * 2
+        PASSIVE_ROW_GAP = PITCH_UM  # gap between NMOS row and passive row
         nodes = []
         terminal_nets = {}
-        node_by_name = {}  # dev_name -> node_dict for repositioning
+        node_by_name = {}
 
         for dev_name, dev in netlist.devices.items():
-            dev_type = "nmos" if "n" in dev.type.lower() else "pmos"
+            # Exact type — do NOT collapse to nmos/pmos
+            dev_type = dev.type  # "nmos" | "pmos" | "res" | "cap"
+            is_passive = dev_type in ("res", "cap")
 
-            # Try to get geometry from layout via device matcher
+            # Geometry: from layout matcher or from params
             layout_idx = device_mapping.get(dev_name)
             if layout_idx is not None and layout_idx < len(layout_instances):
                 inst = layout_instances[layout_idx]
                 geom = {
-                    "x": inst.get("x", 0.0),
-                    "y": inst.get("y", 0.0),
-                    "width": inst.get("width", PITCH_UM),
-                    "height": inst.get("height", ROW_HEIGHT_UM),
+                    "x":           inst.get("x", 0.0),
+                    "y":           inst.get("y", 0.0),
+                    "width":       inst.get("width",  PITCH_UM),
+                    "height":      inst.get("height", ROW_HEIGHT_UM),
                     "orientation": inst.get("orientation", "R0"),
+                }
+            elif is_passive:
+                # Compute passive geometry from params
+                prm = dev.params
+                raw_w = prm.get("w", PITCH_UM)
+                raw_l = prm.get("l", ROW_HEIGHT_UM)
+                nf_p  = max(1, int(prm.get("nf", 1)))
+                m_p   = max(1, int(prm.get("m",  1)))
+                if dev_type == "res":
+                    # Resistor: length is the long axis, width is the narrow axis
+                    width_um  = max(raw_l * nf_p, PITCH_UM)
+                    height_um = max(raw_w, 0.1)
+                else:
+                    # Capacitor: width scaled by fingers/stacks
+                    stm = max(1, int(prm.get("stm", 1)))
+                    spm = max(1, int(prm.get("spm", 1)))
+                    width_um  = max(raw_w * max(nf_p, 1), PITCH_UM)
+                    height_um = max(raw_l * max(stm * spm, 1), ROW_HEIGHT_UM) \
+                                if raw_l > 0.1 else ROW_HEIGHT_UM
+                geom = {
+                    "x": 0.0, "y": 0.0,
+                    "width": width_um, "height": height_um,
+                    "orientation": "R0",
                 }
             else:
                 # Placeholder — will be repositioned by block-aware layout below
@@ -1842,20 +1868,22 @@ class MainWindow(QMainWindow):
                 }
 
             electrical = {
-                "l": dev.params.get("l", 1.4e-08),
-                "nf": dev.params.get("nf", 1),
+                "l":    dev.params.get("l",    1.4e-08),
+                "nf":   dev.params.get("nf",   1),
                 "nfin": dev.params.get("nfin", 1),
+                "w":    dev.params.get("w",    0),
             }
+            if dev_type == "cap":
+                electrical["cval"] = dev.params.get("cval", 0.0)
 
             node_dict = {
-                "id": dev_name,
-                "type": dev_type,
+                "id":         dev_name,
+                "type":       dev_type,
                 "electrical": electrical,
-                "geometry": geom,
+                "geometry":   geom,
             }
 
-            # Attach block membership if available
-            # Also match finger-expanded names (e.g. XI3_MM28_f1 → XI3_MM28)
+            # Block membership
             block_info = block_map.get(dev_name)
             if block_info is None:
                 base = re.sub(r'_f\d+$', '', dev_name)
@@ -1867,13 +1895,19 @@ class MainWindow(QMainWindow):
             nodes.append(node_dict)
             node_by_name[dev_name] = node_dict
 
-            # Build terminal nets
+            # Terminal nets — passives use pin1/pin2; transistors use D/G/S
             if hasattr(dev, 'pins') and dev.pins:
-                terminal_nets[dev_name] = {
-                    "D": dev.pins.get("D", ""),
-                    "G": dev.pins.get("G", ""),
-                    "S": dev.pins.get("S", ""),
-                }
+                if is_passive:
+                    terminal_nets[dev_name] = {
+                        "1": dev.pins.get("1", ""),
+                        "2": dev.pins.get("2", ""),
+                    }
+                else:
+                    terminal_nets[dev_name] = {
+                        "D": dev.pins.get("D", ""),
+                        "G": dev.pins.get("G", ""),
+                        "S": dev.pins.get("S", ""),
+                    }
 
         # 4. Build edges from circuit graph
         G = build_circuit_graph(netlist)
@@ -1898,15 +1932,14 @@ class MainWindow(QMainWindow):
 
         # 6. Block-aware placement (only when no layout geometry is available)
         if not device_mapping:
-            # Group devices by block, then by type
-            pmos_y = 0.0              # PMOS row y (Top)
-            nmos_y = ROW_HEIGHT_UM    # NMOS row y (Bottom)
-            x_cursor = 0.0            # global x cursor across blocks
+            pmos_y    = 0.0                                       # PMOS row y (Top)
+            nmos_y    = ROW_HEIGHT_UM                             # NMOS row y (Middle)
+            passive_y = nmos_y + ROW_HEIGHT_UM + PASSIVE_ROW_GAP  # Passive row y (Bottom)
+            x_cursor  = 0.0
+            passive_x_cursor = 0.0
 
-            # Determine block order (preserve insertion order)
             block_order = list(blocks.keys())
 
-            # Collect unblocked devices
             blocked_ids = set()
             for info in blocks.values():
                 blocked_ids.update(info["devices"])
@@ -1916,10 +1949,11 @@ class MainWindow(QMainWindow):
                 info = blocks[inst]
                 members = [node_by_name[d] for d in info["devices"]
                            if d in node_by_name]
-                pmos_members = [n for n in members if n["type"] == "pmos"]
-                nmos_members = [n for n in members if n["type"] == "nmos"]
+                pmos_members    = [n for n in members if n["type"] == "pmos"]
+                nmos_members    = [n for n in members if n["type"] == "nmos"]
+                passive_members = [n for n in members if n["type"] in ("res", "cap")]
 
-                # Place PMOS in top row, abutted edge-to-edge
+                # Place PMOS in top row
                 local_x = x_cursor
                 for n in pmos_members:
                     w = n["geometry"]["width"]
@@ -1928,7 +1962,7 @@ class MainWindow(QMainWindow):
                     local_x += w
                 pmos_right = local_x
 
-                # Place NMOS in bottom row, abutted edge-to-edge
+                # Place NMOS in middle row
                 local_x = x_cursor
                 for n in nmos_members:
                     w = n["geometry"]["width"]
@@ -1937,20 +1971,32 @@ class MainWindow(QMainWindow):
                     local_x += w
                 nmos_right = local_x
 
-                # Advance cursor past the widest row + gap
+                # Place passives right in the passive row (shared x cursor)
+                for n in passive_members:
+                    w = n["geometry"]["width"]
+                    n["geometry"]["x"] = passive_x_cursor
+                    n["geometry"]["y"] = passive_y
+                    passive_x_cursor += w + PITCH_UM
+
                 block_right = max(pmos_right, nmos_right)
                 x_cursor = block_right + BLOCK_GAP_UM
 
-            # Place unblocked devices after all blocks
+            # Place unblocked devices
             for n in unblocked:
                 w = n["geometry"]["width"]
                 if n["type"] == "pmos":
                     n["geometry"]["x"] = x_cursor
                     n["geometry"]["y"] = pmos_y
-                else:
+                    x_cursor += w
+                elif n["type"] == "nmos":
                     n["geometry"]["x"] = x_cursor
                     n["geometry"]["y"] = nmos_y
-                x_cursor += w
+                    x_cursor += w
+                else:
+                    # Passive device — goes in passive row
+                    n["geometry"]["x"] = passive_x_cursor
+                    n["geometry"]["y"] = passive_y
+                    passive_x_cursor += w + PITCH_UM
 
 
         return {

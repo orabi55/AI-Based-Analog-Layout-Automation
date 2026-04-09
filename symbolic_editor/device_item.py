@@ -148,107 +148,120 @@ class DeviceItem(QGraphicsRectItem):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         rect = self.rect()
-        w = rect.width()
-        h = rect.height()
-        x0 = rect.x()
-        y0 = rect.y()
-        cx = x0 + w / 2.0
-        cy = y0 + h / 2.0
+        w    = rect.width()
+        h    = rect.height()
+        x0   = rect.x()
+        y0   = rect.y()
+        cx   = x0 + w / 2.0
+        cy   = y0 + h / 2.0
 
         num_fingers = self.nf
-        num_sd = num_fingers + 1  # Number of S/D diffusion regions
-        # We assign 40% of the width to the gates collectively, 60% to the diffusions
-        total_gate_w = w * 0.40
-        total_sd_w = w * 0.60
-        gate_w = total_gate_w / num_fingers
-        sd_w = total_sd_w / num_sd
+        num_sd      = num_fingers + 1   # S/D diffusion regions
 
-        # ── Draw coloured sections WITH flip transform ─────────
+        # Layout proportions: 35% gates, 65% diffusions
+        total_gate_w = w * 0.35
+        total_sd_w   = w * 0.65
+        gate_w = total_gate_w / num_fingers
+        sd_w   = total_sd_w   / num_sd
+
+        # S/D identity per column (before flip)
+        # Column 0,2,4... = Source;  1,3,5... = Drain
+        def _is_source_col(col):
+            return (col % 2 == 0) ^ self._flip_h
+
+        # ── Draw filled sections (with flip transform) ─────────────
         painter.save()
         painter.translate(cx, cy)
         painter.scale(-1.0 if self._flip_h else 1.0,
                        -1.0 if self._flip_v else 1.0)
         painter.translate(-cx, -cy)
 
-        # Alternating S/D logic:
-        # S D S D ... or D S D S ... (if flipped)
-        # Assuming left-most is Source normally.
-        cursor_x = x0
-
         painter.setPen(Qt.PenStyle.NoPen)
+        cursor_x = x0
         for i in range(num_sd):
-            is_source = (i % 2 == 0)
-            color = self._source_color if is_source else self._drain_color
-            sd_rect = QRectF(cursor_x, y0, sd_w, h)
+            color = self._source_color if _is_source_col(i) else self._drain_color
             painter.setBrush(QBrush(color))
-            painter.drawRect(sd_rect)
+            painter.drawRect(QRectF(cursor_x, y0, sd_w, h))
             cursor_x += sd_w
 
-            # Draw gate to the right of this diffusion, except for the last diffusion
             if i < num_fingers:
+                # Gate strip gradient
                 gate_rect = QRectF(cursor_x, y0, gate_w, h)
-                gradient = QLinearGradient(gate_rect.topLeft(), gate_rect.bottomLeft())
-                gradient.setColorAt(0.0, self._gate_color.lighter(115))
-                gradient.setColorAt(0.5, self._gate_color)
-                gradient.setColorAt(1.0, self._gate_color.darker(115))
-                painter.setBrush(QBrush(gradient))
+                grad = QLinearGradient(gate_rect.topLeft(), gate_rect.bottomLeft())
+                grad.setColorAt(0.0, self._gate_color.lighter(130))
+                grad.setColorAt(0.4, self._gate_color)
+                grad.setColorAt(1.0, self._gate_color.darker(130))
+                painter.setBrush(QBrush(grad))
                 painter.drawRect(gate_rect)
                 cursor_x += gate_w
 
         # Outer border
         painter.setPen(QPen(self._border, 1.5))
         painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawRect(rect.adjusted(0.5, 0.5, -0.5, -0.5))
+        painter.drawRoundedRect(rect.adjusted(0.75, 0.75, -0.75, -0.75), 2, 2)
 
-        # Vertical separator lines
-        sep_pen = QPen(self._border.darker(120), 1.0)
+        # Separator lines
+        sep_pen = QPen(self._border.darker(130), 0.8)
         painter.setPen(sep_pen)
-        # Draw separators
         cursor_x = x0
         for i in range(num_fingers):
             cursor_x += sd_w
-            painter.drawLine(QPointF(cursor_x, y0), QPointF(cursor_x, y0 + h))
+            painter.drawLine(QPointF(cursor_x, y0 + 2), QPointF(cursor_x, y0 + h - 2))
             cursor_x += gate_w
-            painter.drawLine(QPointF(cursor_x, y0), QPointF(cursor_x, y0 + h))
+            painter.drawLine(QPointF(cursor_x, y0 + 2), QPointF(cursor_x, y0 + h - 2))
 
-        painter.restore()  # back to un-flipped coordinates
+        painter.restore()   # back to un-flipped for text
 
-        # ── Draw text labels WITHOUT flip (always readable) ────
-        term_font_size = max(3, min(9, int(min(sd_w, h) / 3)))
-        term_font = QFont("Segoe UI", term_font_size, QFont.Weight.Bold)
-        painter.setFont(term_font)
+        # ── Text labels (always readable, no flip) ──────────────────
+        # Font sizes scaled to available area
+        sd_font_size   = max(4, min(9,  int(min(sd_w * 0.45, h * 0.28))))
+        gate_font_size = max(4, min(9,  int(min(gate_w * 0.55, h * 0.28))))
+        name_font_size = max(5, min(11, int(w * 0.085)))
 
-        # In un-flipped coordinates:
-        left_label = "D" if self._flip_h else "S"
-        right_label = "S" if (num_sd % 2 == 0) ^ self._flip_h else "D"
-        # The visual rightmost diffusion type depends on nf:
-        # nf=1 (2 diffusions): left=S, right=D. If flipped: left=D, right=S.
-        # nf=2 (3 diffusions): left=S, right=S. If flipped: left=D, right=D.
+        # ── S / D labels on each diffusion column ───────────────────
+        sd_font = QFont("Segoe UI", sd_font_size, QFont.Weight.Bold)
+        painter.setFont(sd_font)
 
-        # Draw left and right terminal labels
-        left_rect = QRectF(x0, y0, sd_w, h)
-        right_rect = QRectF(x0 + w - sd_w, y0, sd_w, h)
-        
-        painter.setPen(self._label_color)
-        painter.drawText(left_rect, Qt.AlignmentFlag.AlignCenter, left_label)
-        painter.drawText(right_rect, Qt.AlignmentFlag.AlignCenter, right_label)
+        cursor_x = x0
+        for i in range(num_sd):
+            label = "S" if _is_source_col(i) else "D"
+            col_rect = QRectF(cursor_x, y0, sd_w, h)
+            painter.setPen(self._label_color)
+            painter.drawText(col_rect,
+                             Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom,
+                             label)
+            cursor_x += sd_w
+            if i < num_fingers:
+                cursor_x += gate_w
 
-        # Device name — centred
-        name_font_size = max(3, min(10, int(w / max(5, min(w/10, 8)))))
+        # ── G labels on each gate strip ─────────────────────────────
+        g_font = QFont("Segoe UI", gate_font_size, QFont.Weight.Bold)
+        painter.setFont(g_font)
+        painter.setPen(self._terminal_label_color)
+
+        cursor_x = x0 + sd_w        # first gate starts after first S/D
+        for _ in range(num_fingers):
+            gate_col_rect = QRectF(cursor_x, y0, gate_w, h)
+            painter.drawText(gate_col_rect,
+                             Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom,
+                             "G")
+            cursor_x += gate_w + sd_w
+
+        # ── Device name centred in upper half ───────────────────────
         name_font = QFont("Segoe UI", name_font_size, QFont.Weight.Bold)
         painter.setFont(name_font)
         painter.setPen(QColor("#ffffff"))
-        name_rect = QRectF(x0, y0 + 2, w, min(h, 20))
+        name_rect = QRectF(x0 + 1, y0 + 1, w - 2, h * 0.52)
         painter.drawText(name_rect,
-                         Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
+                         Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
                          self.device_name)
 
-        # ── Selection highlight (un-flipped) ───────────────────
+        # ── Selection highlight ──────────────────────────────────────
         if self.isSelected():
             sel_pen = QPen(QColor("#4a90d9"), 2.0, Qt.PenStyle.SolidLine)
             painter.setPen(sel_pen)
-            painter.setBrush(QBrush(QColor(74, 144, 217, 30)))
-            painter.drawRect(rect.adjusted(1, 1, -1, -1))
+            painter.setBrush(QBrush(QColor(74, 144, 217, 35)))
+            painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 2, 2)
 
     def terminal_anchors(self):
         """Return scene positions for S, G, D terminal centers."""

@@ -518,24 +518,74 @@ def parse_mos(tokens):
 
 def parse_cap(tokens):
     """
-    Cname node1 node2 value
+    Parse a capacitor line.
+
+    Handles both simple and CDL-style formats:
+      Simple:  Cname n+ n- value
+      CDL:     Cname n+ n- model cval=X w=X l=X nf=X ...
     """
     name = tokens[0]
-    n1, n2, val = tokens[1], tokens[2], tokens[3]
+    n1, n2 = tokens[1], tokens[2]
 
-    return Device(name, "cap", {"1": n1, "2": n2},
-                  {"value": parse_value(val)})
+    params = {}
+    value = 0.0
+
+    # Remaining tokens after the two nets
+    rest = tokens[3:]
+    for tok in rest:
+        if '=' in tok:
+            k, v = tok.split('=', 1)
+            k = k.lower()
+            try:
+                params[k] = parse_value(v)
+            except Exception:
+                params[k] = v
+        else:
+            # Could be a plain value or the model name
+            try:
+                value = parse_value(tok)
+            except Exception:
+                params['model'] = tok  # store model name
+
+    # cval is the preferred capacitance key; fall back to plain value
+    if 'cval' in params:
+        value = params['cval']
+    params.setdefault('value', value)
+
+    return Device(name, "cap", {"1": n1, "2": n2}, params)
 
 
 def parse_res(tokens):
     """
-    Rname node1 node2 value
+    Parse a resistor line.
+
+    Handles both simple and CDL-style formats:
+      Simple:  Rname n+ n- value
+      CDL:     Rname n+ n- model w=X l=X m=X ...
     """
     name = tokens[0]
-    n1, n2, val = tokens[1], tokens[2], tokens[3]
+    n1, n2 = tokens[1], tokens[2]
 
-    return Device(name, "res", {"1": n1, "2": n2},
-                  {"value": parse_value(val)})
+    params = {}
+    value = 0.0
+
+    rest = tokens[3:]
+    for tok in rest:
+        if '=' in tok:
+            k, v = tok.split('=', 1)
+            k = k.lower()
+            try:
+                params[k] = parse_value(v)
+            except Exception:
+                params[k] = v
+        else:
+            try:
+                value = parse_value(tok)
+            except Exception:
+                params['model'] = tok
+
+    params.setdefault('value', value)
+    return Device(name, "res", {"1": n1, "2": n2}, params)
 
 
 # -------------------------------------------------

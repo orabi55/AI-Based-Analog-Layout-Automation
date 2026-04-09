@@ -293,18 +293,18 @@ NET ADJACENCY (Critical Routing Requirements):
 BLOCK GROUPING (Hierarchical Structure):
 {block_str}
 
-Generate an initial transistor placement based on the following strict DRC and Floorplanning rules:
+Generate an initial placement based on the following strict DRC and Floorplanning rules:
 
 1. Device Types & Y-Axis Placement:
 - Place NMOS devices exactly at y = 0.
-- Place PMOS devices exactly at y = 0.668 (which computationally places them directly above the NMOS devices).
+- Place PMOS devices exactly at y = 0.668 (directly above NMOS row).
 
 2. Fin Quantization & Grid:
 - Placement coordinates must snap to a discrete Fin Grid.
 - The Fin pitch is 0.014 um. Continuous (fractional) coordinate placement is strictly forbidden.
 
 3. Spacing and Overlap Limits:
-- Side-by-side overlap between any devices (NMOS/NMOS, PMOS/PMOS, or NMOS/PMOS) must not exceed 0.028 um.
+- Side-by-side overlap between any devices must not exceed 0.028 um.
 - Vertical (up/down) overlap is strictly forbidden.
 - Both devices in any pair must be aligned on the same boundary.
 
@@ -314,16 +314,23 @@ Generate an initial transistor placement based on the following strict DRC and F
 
 5. Diffusion & Routing:
 - Do not place blocks completely back-to-back.
-- You must reserve dedicated whitespace between blocks for diffusion breaks (SDB/DDB) and dummy fill.
+- Reserve dedicated whitespace between blocks for diffusion breaks and dummy fill.
 - Minimize net/wire crossings.
 
 6. Block Grouping:
-- Devices belonging to the same block (listed in BLOCK GROUPING above) MUST be placed adjacent to each other.
-- Within each row (PMOS / NMOS), keep block members contiguous.
-- Place blocks as cohesive groups — do not interleave devices from different blocks.
+- Devices belonging to the same block MUST be placed adjacent to each other.
+- Within each row (PMOS / NMOS / Passive), keep block members contiguous.
+- Do not interleave devices from different blocks.
+
+7. Passive Devices (Resistors & Capacitors):
+- Devices with type="res" or type="cap" are PASSIVE COMPONENTS.
+- Place ALL passive devices in a dedicated PASSIVE ROW at y = 1.630.
+- NEVER place passives in the PMOS row (y=0.668) or NMOS row (y=0).
+- Passives are placed left-to-right in the passive row with a minimum gap of 0.294 um between them.
+- The passive row height is independent of transistor geometry.
 
 IMPORTANT:
-You must return the EXACT same JSON structure as the input, keeping all existing keys and arrays intact. 
+You must return the EXACT same JSON structure as the input, keeping all existing keys and arrays intact.
 Your only task is to add or update the "x", "y", and "orientation" (default "R0") keys inside every object within the "nodes" array.
 
 Return ONLY raw JSON. Do not include explanations, markdown, or text outside the JSON object.

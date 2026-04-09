@@ -18,6 +18,7 @@ from PySide6.QtCore import Qt, Signal, QPointF
 from PySide6.QtGui import QPainter, QPen, QPainterPath, QColor, QBrush
 
 from device_item import DeviceItem
+from passive_item import ResistorItem, CapacitorItem
 from block_item import BlockItem
 
 
@@ -290,16 +291,20 @@ class SymbolicEditor(QGraphicsView):
             widths.append(width)
             heights.append(height)
 
-            nf = node.get("electrical", {}).get("nf", 1)
-            item = DeviceItem(
-                node.get("id", "unknown"),
-                node.get("type", "nmos"),
-                x,
-                y,
-                width,
-                height,
-                nf=nf,
-            )
+            nf   = node.get("electrical", {}).get("nf", 1)
+            dtype = node.get("type", "nmos")
+
+            if dtype == "res":
+                item = ResistorItem(node.get("id", "unknown"), x, y, width, height)
+            elif dtype == "cap":
+                item = CapacitorItem(node.get("id", "unknown"), x, y, width, height)
+            else:
+                item = DeviceItem(
+                    node.get("id", "unknown"),
+                    dtype,
+                    x, y, width, height,
+                    nf=nf,
+                )
 
             self.scene.addItem(item)
             self.device_items[node.get("id", "unknown")] = item
