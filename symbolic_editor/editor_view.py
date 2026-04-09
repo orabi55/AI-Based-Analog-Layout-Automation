@@ -13,6 +13,8 @@ from PySide6.QtWidgets import (
     QGraphicsRectItem,
     QGraphicsItem,
     QGraphicsSimpleTextItem,
+    QMenu,
+    QAction,
 )
 from PySide6.QtCore import Qt, Signal, QPointF
 from PySide6.QtGui import QPainter, QPen, QPainterPath, QColor, QBrush
@@ -310,9 +312,22 @@ class SymbolicEditor(QGraphicsView):
                     x, y, width, height,
                     nf=nf,
                 )
+                # Restore abutment state from OAS / saved data
+                abut = node.get("abutment", {})
+                if abut:
+                    item.set_abut_left(abut.get("abut_left", False))
+                    item.set_abut_right(abut.get("abut_right", False))
+
+                # Restore orientation (flip)
+                orient = geom.get("orientation", "R0")
+                if "FH" in orient:
+                    item.set_flip_h(True)
+                if "FV" in orient:
+                    item.set_flip_v(True)
 
             self.scene.addItem(item)
             self.device_items[node.get("id", "unknown")] = item
+
 
         # Abutted rows horizontally + visible spacing between rows.
         if widths:
@@ -1339,3 +1354,113 @@ class SymbolicEditor(QGraphicsView):
         if self._dummy_mode:
             self._update_dummy_preview(self.mapToScene(event.pos()))
         super().mouseMoveEvent(event)
+
+    # -------------------------------------------------
+    # Right-click context menu — per-device abutment
+    # -------------------------------------------------
+    def contextMenuEvent(self, event):
+        """Show a right-click menu to manually toggle abutment on a device."""
+        scene_pos = self.mapToScene(event.pos())
+        items = self.scene.items(scene_pos)
+
+        # Find the topmost DeviceItem under the cursor
+        target_item = None
+        target_id   = None
+        for it in items:
+            if isinstance(it, DeviceItem):
+                target_item = it
+                # Reverse-lookup device id
+                for dev_id, item in self.device_items.items():
+                    if item is target_item:
+                        target_id = dev_id
+                        break
+                break
+
+        if target_item is None or target_id is None:
+            super().contextMenuEvent(event)
+            return
+
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: #1e2130;
+                color: #e0e0e0;
+                border: 1px solid #3a3f55;
+                border-radius: 6px;
+                padding: 4px;
+                font-family: 'Segoe UI';
+            }
+            QMenu::item {
+                padding: 5px 18px;
+                border-radius: 4px;
+            }
+            QMenu::item:selected {
+                background-color: #3a3f55;
+            }
+            QMenu::separator {
+                height: 1px;
+                background: #3a3f55;
+                margin: 3px 8px;
+            }
+        """)
+
+        # Title (non-interactive label)
+        title_act = QAction(f"Device: {target_id}", self)
+        title_act.setEnabled(False)
+        menu.addAction(title_act)
+        menu.addSeparator()
+
+        # Left abutment toggle
+        act_left = QAction("Left Abutment", self)
+        act_left.setCheckable(True)
+        act_left.setChecked(target_item.get_abut_left())
+        act_left.setToolTip(
+            "Enable leftAbut on this device.\n"
+            "The left diffusion strip will be shared with the left neighbour."
+        )
+        menu.addAction(act_left)
+
+        # Right abutment toggle
+        act_right = QAction("Right Abutment", self)
+        act_right.setCheckable(True)
+        act_right.setChecked(target_item.get_abut_right())
+        act_right.setToolTip(
+            "Enable rightAbut on this device.\n"
+            "The right diffusion strip will be shared with the right neighbour."
+        )
+        menu.addAction(act_right)
+
+        menu.addSeparator()
+
+        act_clear = QAction("Clear Both", self)
+        menu.addAction(act_clear)
+
+        chosen = menu.exec(event.globalPos())
+
+        if chosen == act_left:
+            target_item.toggle_abut_left()
+        elif chosen == act_right:
+            target_item.toggle_abut_right()
+        elif chosen == act_clear:
+            target_item.set_abut_left(False)
+            target_item.set_abut_right(False)
+
+    # -------------------------------------------------
+    # Export helper — abutment state for OAS writer
+    # -------------------------------------------------
+    def get_device_abutment_states(self) -> dict:
+        """Return per-device abutment flags for all transistors.
+
+        Returns:
+            {dev_id: {"abut_left": bool, "abut_right": bool}}
+        Only entries where at least one flag is True are included.
+        """
+        result = {}
+        for dev_id, item in self.device_items.items():
+            if not isinstance(item, DeviceItem):
+                continue
+            al = item.get_abut_left()
+            ar = item.get_abut_right()
+            if al or ar:
+                result[dev_id] = {"abut_left": al, "abut_right": ar}
+        return result
