@@ -3,30 +3,10 @@ LLM Worker using the Worker-Object Pattern (QThread + QObject).
 
 Handles all LLM API calls in a dedicated QThread, communicating
 with the GUI exclusively via Qt Signals and Slots.
-
-Cascading fallback order:
-    1. Gemini   (best models down to 2.5-flash)
-    2. Groq     (free tier, fast)
-    3. OpenAI   (gpt-4o-mini, gpt-3.5-turbo)
-    4. DeepSeek
-    5. Ollama   (local fallback)
-
-Multi-Agent additions:
-    - run_llm(chat_messages, full_prompt) -> str  (module-level, no Qt)
-    - OrchestratorWorker subclass with process_orchestrated_request slot
-
-FIXES APPLIED:
-    - Bug #CRITICAL: sp_candidates[0] was always comp_fortest_comparator.sp
-      (alphabetical sort). Now matches sp file to layout_context["cell_name"]
-      or falls back to most recently modified .sp file.
-    - Bug #2: sp_file_path now passed into layout_context so orchestrator
-      always knows which file was used.
-    - Bug #3: pending_layout_context now stores sp_file_path for Stage 2 resume.
 """
 
 import os
 import re
-import time
 from pathlib import Path
 from dotenv import load_dotenv
 from PySide6.QtCore import QObject, Signal, Slot
@@ -40,64 +20,23 @@ load_dotenv(_env_path)
 # Utility: resolve the correct .sp file for a given layout context
 # -----------------------------------------------------------------
 def _resolve_sp_file(layout_context: dict, project_root: Path) -> str | None:
-    """
-    Resolve the correct SPICE file for the current layout.
-
-    Priority order:
-      1. Explicit path in layout_context["sp_file_path"]  (most reliable)
-      2. Match layout_context["cell_name"] to a .sp filename
-      3. Most recently modified .sp file in project root   (last resort)
-
-    Args:
-        layout_context: dict from the UI canvas
-        project_root:   Path to project root directory
-
-    Returns:
-        Absolute path string to .sp file, or None if not found
-    """
-    # Priority 1: explicit path already set
+    """Resolve the correct SPICE file for the current layout."""
     explicit = layout_context.get("sp_file_path", "")
     if explicit and Path(explicit).is_file():
-        print(f"[LLM] sp_file: using explicit path: {explicit!r}")
         return explicit
 
-    # Priority 2: match cell_name to filename
     cell_name = layout_context.get("cell_name", "")
     if cell_name:
-        # Try exact match first: "CM" -> "Current_Mirror_CM.sp"
-        # then partial match
         all_sp = list(project_root.glob("*.sp"))
-        
-        # Exact cell name in filename (case-insensitive)
         for sp in all_sp:
             if cell_name.lower() in sp.stem.lower():
-                print(
-                    f"[LLM] sp_file: matched cell_name={cell_name!r} "
-                    f"to {sp.name!r}"
-                )
                 return str(sp)
 
-    # Priority 3: most recently modified .sp file
     all_sp = list(project_root.glob("*.sp"))
     if all_sp:
-        # Sort by modification time descending (newest first)
         all_sp_sorted = sorted(all_sp, key=lambda p: p.stat().st_mtime, reverse=True)
-        chosen = all_sp_sorted[0]
+        return str(all_sp_sorted[0])
 
-        if len(all_sp_sorted) > 1:
-            print(
-                f"[LLM] WARNING: {len(all_sp_sorted)} .sp files found. "
-                f"Using most recent: {chosen.name!r}\n"
-                f"  All files: {[p.name for p in all_sp_sorted]}\n"
-                f"  To fix: set layout_context['sp_file_path'] explicitly "
-                f"or layout_context['cell_name'] = 'CM'"
-            )
-        else:
-            print(f"[LLM] sp_file: only one .sp found: {chosen.name!r}")
-
-        return str(chosen)
-
-    print("[LLM] WARNING: no .sp files found in project root")
     return None
 
 
@@ -105,15 +44,7 @@ def _resolve_sp_file(layout_context: dict, project_root: Path) -> str | None:
 # Utility: build the system prompt that tells the LLM how to behave
 # -----------------------------------------------------------------
 def build_system_prompt(layout_context):
-    """Build a system prompt that includes layout context.
-
-    Args:
-        layout_context: dict with 'nodes', optionally 'edges' and
-                        'terminal_nets', or None if no layout loaded.
-    Returns:
-        A string suitable for the system / preamble role.
-    """
-    # ---- CMD protocol FIRST (most important) ----
+    """Build a system prompt that includes layout context."""
     prompt = (
         "RULE #1: For ANY action (swap/move/dummy), you MUST output a "
         "[CMD]{...}[/CMD] block. Without it nothing happens.\n"
@@ -126,40 +57,27 @@ def build_system_prompt(layout_context):
         "Write the [CMD] block FIRST, then 1-2 sentences confirming.\n\n"
     )
 
-    # ---- Identity & personality ----
     prompt += (
         "You are an expert Analog IC Layout Engineer in a Symbolic "
         "Layout Editor. Expertise: CMOS matching, symmetry, current "
         "mirrors, diff-pairs, guard rings, dummies, parasitic-aware "
         "placement.\n\n"
         "PERSONALITY: You are friendly, helpful, and conversational. "
-        "When the user greets you (hi, hello, hey, good morning, etc.), "
-        "respond warmly and naturally — vary your greetings each time, "
-        "and briefly remind them what you can help with. "
-        "When the user says thanks, respond graciously. "
-        "For casual conversation, be personable while gently steering "
-        "toward how you can assist with their layout work. "
-        "Never give the exact same response twice to the same greeting.\n\n"
+        "When the user greets you, respond warmly and remind them what you can help with.\n\n"
     )
 
-    # ---- Editor features (compact) ----
     prompt += (
         "Editor: Rows (PMOS top, NMOS bottom), auto-compacted by net "
-        "adjacency. Toolbar: Undo/Redo, Swap(2 sel), Flip H/V, "
-        "Merge SS/DD, Dummy mode(D), Delete, Zoom, Fit.\n"
-        "Orientations: R0, R0_FH, R0_FV, R0_FH_FV.\n"
-        "Dummies: edge devices for etch uniformity (is_dummy=true).\n\n"
+        "adjacency. Toolbar: Undo/Redo, Swap, Dummy mode(D), Delete, Grid snapping.\n"
+        "Orientations: R0, R0_FH, R0_FV, R0_FH_FV.\n\n"
     )
 
-    # ---- Advice style (compact) ----
     prompt += (
         "Advice style: SHORT (1-3 sentences), actionable. "
-        "Prioritise matched pairs, minimise routing via abutment, "
-        "recommend dummies at row edges, ensure symmetry. "
-        "Use markdown. NEVER dump full JSON.\n\n"
+        "Prioritise matched pairs and symmetry. "
+        "NEVER dump full JSON.\n\n"
     )
 
-    # ---- Live layout data ----
     if layout_context:
         nodes         = layout_context.get("nodes",         [])
         edges         = layout_context.get("edges",         [])
@@ -208,178 +126,90 @@ def build_system_prompt(layout_context):
 
 
 # -----------------------------------------------------------------
-# Module-level helper — pure Python, no Qt, reusable by Orchestrator
+# Module-level helper — pure Python, no Qt
 # -----------------------------------------------------------------
-def run_llm(chat_messages, full_prompt):
-    """Execute the cascading LLM request and return the reply text.
+def run_llm(chat_messages, full_prompt, selected_model):
+    """Execute the chosen LLM request and return the reply text."""
+    
+    print(f"[LLM] run_llm: model={selected_model}, msgs={len(chat_messages)}, prompt={len(full_prompt)}")
 
-    Args:
-        chat_messages: list of {"role": ..., "content": ...} dicts
-        full_prompt:   complete prompt string for single-turn APIs
+    if selected_model == "Gemini":
+        gemini_key = os.environ.get("GEMINI_API_KEY", "")
+        if not gemini_key:
+            return "Error: GEMINI_API_KEY not set. Please update the API key in the Model Selection tool."
+            
+        try:
+            from google import genai
+            from google.genai import types as genai_types
+            
+            client = genai.Client(api_key=gemini_key)
+            sys_text = ""
+            conv_parts = []
+            for cm in chat_messages:
+                if cm["role"] == "system":
+                    sys_text = cm["content"]
+                else:
+                    conv_parts.append(cm["content"])
+            user_text = "\n".join(conv_parts) if conv_parts else full_prompt
 
-    Returns:
-        str: the LLM reply text
+            config_kwargs = {
+                "max_output_tokens": 4096,
+                "temperature": 0.4,
+                "system_instruction": sys_text or None
+            }
 
-    Raises:
-        RuntimeError: if all backends fail
-    """
-    errors = []
-    print(
-        f"[LLM] run_llm: {len(chat_messages)} msgs, "
-        f"prompt={len(full_prompt)} chars"
-    )
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=user_text,
+                config=genai_types.GenerateContentConfig(**config_kwargs),
+            )
+            
+            if response and response.text:
+                return response.text.strip()
+            return "Error: Gemini returned an empty response."
+        except Exception as e:
+            err_str = str(e)
+            if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
+                return "Gemini Error: Rate Limited (429). Please wait a minute before trying again."
+            return f"Gemini Error: {err_str}"
+            
+    elif selected_model == "OpenAI":
+        openai_key = os.environ.get("OPENAI_API_KEY", "")
+        if not openai_key:
+            return "Error: OPENAI_API_KEY not set. Please update the API key in the Model Selection tool."
 
-    # ---- 1. Gemini ----
-    gemini_key = os.environ.get("GEMINI_API_KEY", "")
-    if gemini_key:
-        gemini_models = [
-            "gemini-2.0-flash",
-            "gemini-2.5-flash",
-            "gemini-1.5-flash",
-        ]
-        _gemini_key_invalid = False
-        for model_name in gemini_models:
-            if _gemini_key_invalid:
-                break
-            for attempt in range(3):
-                try:
-                    from google import genai
-                    from google.genai import types as genai_types
+        try:
+            from openai import OpenAI
+            client = OpenAI(api_key=openai_key)
+            
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=chat_messages,
+                temperature=0.4,
+                max_tokens=4096
+            )
+            
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            return f"OpenAI Error: {str(e)}"
+            
+    elif selected_model == "Ollama":
+        try:
+            import requests
+            response = requests.post(
+                "http://localhost:11434/api/chat",
+                json={
+                    "model": "llama3.2",
+                    "messages": chat_messages,
+                    "stream": False
+                }
+            )
+            response.raise_for_status()
+            return response.json().get("message", {}).get("content", "").strip()
+        except Exception as e:
+            return f"Ollama Error: Could not connect or generate response. ({str(e)})\nEnsure 'ollama serve' is running locally on port 11434."
 
-                    client   = genai.Client(api_key=gemini_key)
-                    sys_text = ""
-                    conv_parts = []
-                    for cm in chat_messages:
-                        if cm["role"] == "system":
-                            sys_text = cm["content"]
-                        else:
-                            conv_parts.append(cm["content"])
-                    user_text = (
-                        "\n".join(conv_parts) if conv_parts else full_prompt
-                    )
-
-                    config_kwargs = {
-                        "max_output_tokens": 4096,
-                        "temperature":       0.4,
-                    }
-
-                    if "gemma" in model_name.lower():
-                        if sys_text:
-                            user_text = f"{sys_text}\n\n{user_text}"
-                    else:
-                        config_kwargs["system_instruction"] = sys_text or None
-
-                    response = client.models.generate_content(
-                        model    = model_name,
-                        contents = user_text,
-                        config   = genai_types.GenerateContentConfig(
-                            **config_kwargs
-                        ),
-                    )
-
-                    reply_text = None
-                    if response:
-                        try:
-                            reply_text = response.text
-                        except Exception:
-                            if (
-                                hasattr(response, "candidates")
-                                and response.candidates
-                            ):
-                                parts = (
-                                    response.candidates[0].content.parts
-                                )
-                                if parts:
-                                    reply_text = "".join(
-                                        p.text
-                                        for p in parts
-                                        if hasattr(p, "text")
-                                    )
-
-                    if reply_text and reply_text.strip():
-                        print(f"[LLM] Gemini/{model_name}")
-                        return reply_text.strip()
-                    else:
-                        errors.append(
-                            f"Gemini/{model_name}: empty response"
-                        )
-                        break
-
-                except Exception as e:
-                    import traceback
-                    e_str   = str(e)
-                    err_str = (
-                        f"[{type(e).__name__}] {e}\n"
-                        f"{traceback.format_exc()}"
-                    )
-                    if any(
-                        k in e_str
-                        for k in (
-                            "API_KEY_INVALID",
-                            "API key not valid",
-                            "401",
-                            "403",
-                            "PERMISSION_DENIED",
-                            "invalid api key",
-                            "could not validate",
-                        )
-                    ):
-                        errors.append(f"Gemini: API key invalid – {e}")
-                        _gemini_key_invalid = True
-                        break
-                    if "429" in e_str or "RESOURCE_EXHAUSTED" in e_str:
-                        retry_s = _parse_retry_delay(e)
-                        wait    = min(retry_s + 2.0, 120.0)
-                        if attempt < 2:
-                            print(
-                                f"[LLM] Gemini/{model_name} rate-limited "
-                                f"(retry in {retry_s:.1f}s). "
-                                f"Waiting {wait:.1f}s..."
-                            )
-                            time.sleep(wait)
-                            continue
-                    errors.append(f"Gemini/{model_name}: {err_str}")
-                    break
-    else:
-        errors.append("Gemini: GEMINI_API_KEY not set")
-
-    # ---- All models failed ----
-    summary = "\n".join(f"  * {e}" for e in errors)
-    print(
-        f"[LLM] All models failed. "
-        f"Falling back to prescriptive logic.\n{summary}"
-    )
-    return (
-        "I'm having trouble connecting to my AI backend right now. "
-        "Please check your API key in the `.env` file and try again. "
-        "In the meantime, I can still execute direct commands like "
-        "**swap**, **move**, and **add dummy** if you type them!"
-    )
-
-
-def _parse_retry_delay(exc: Exception) -> float:
-    """Extract retryDelay seconds from a 429 ClientError response body."""
-    try:
-        if (
-            hasattr(exc, "args")
-            and len(exc.args) > 0
-            and isinstance(exc.args[0], dict)
-        ):
-            details = exc.args[0].get("error", {}).get("details", [])
-            for detail in details:
-                if detail.get("@type", "").endswith("RetryInfo"):
-                    delay_str = detail.get("retryDelay", "2s")
-                    return float(re.sub(r"[^0-9.]", "", delay_str))
-    except Exception:
-        pass
-
-    delay_match = re.search(
-        r"retry in ([\d.]+)s", str(exc), re.IGNORECASE
-    )
-    if delay_match:
-        return float(delay_match.group(1))
-
-    return 2.0
+    return f"Error: Unknown model selected ('{selected_model}')."
 
 
 # -----------------------------------------------------------------
@@ -391,16 +221,11 @@ class LLMWorker(QObject):
     response_ready = Signal(str)
     error_occurred = Signal(str)
 
-    @Slot(str, list)
-    def process_request(self, full_prompt, chat_messages):
-        """Execute a cascading LLM request (blocking) via run_llm()."""
+    @Slot(str, list, str)
+    def process_request(self, full_prompt, chat_messages, selected_model):
+        """Execute the LLM request via run_llm()."""
         try:
-            reply = run_llm(chat_messages, full_prompt)
+            reply = run_llm(chat_messages, full_prompt, selected_model)
             self.response_ready.emit(reply)
-        except RuntimeError as exc:
-            self.error_occurred.emit(str(exc))
         except Exception as exc:
             self.error_occurred.emit(f"Unexpected error: {exc}")
-
-
-

@@ -40,8 +40,12 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QDialogButtonBox,
     QLineEdit,
+    QFrame,
+    QComboBox,
+    QRadioButton,
+    QButtonGroup,
 )
-from PySide6.QtCore import Qt, QTimer, QSize
+from PySide6.QtCore import Qt, QTimer, QSize, QThread, Signal
 from PySide6.QtGui import QFont, QAction, QKeySequence, QColor, QPalette
 
 # Local GUI modules (same directory)
@@ -57,6 +61,93 @@ from icons import (
     icon_merge_ss, icon_merge_dd, icon_add_dummy,
 )
 
+
+# -------------------------------------------------
+# Async Background Worker
+# -------------------------------------------------
+class GenericWorker(QThread):
+    finished = Signal(object)
+    error = Signal(str)
+
+    def __init__(self, target, *args, **kwargs):
+        super().__init__()
+        self.target = target
+        self.args = args
+        self.kwargs = kwargs
+
+    def run(self):
+        try:
+            result = self.target(*self.args, **self.kwargs)
+            self.finished.emit(result)
+        except Exception as e:
+            self.error.emit(str(e))
+
+# -------------------------------------------------
+# Modern Loading Overlay
+# -------------------------------------------------
+class LoadingOverlay(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setStyleSheet("background-color: rgba(20, 24, 34, 180);")
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
+
+        layout = QVBoxLayout(self)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        self.card = QFrame()
+        self.card.setStyleSheet("""
+            QFrame {
+                background-color: #1e2636;
+                border: 1px solid #3d5066;
+                border-radius: 12px;
+                padding: 30px;
+            }
+            QLabel#spinner {
+                font-size: 32px;
+                color: #4a90d9;
+            }
+            QLabel#message {
+                font-size: 14px;
+                font-family: 'Segoe UI';
+                color: #e0e8f0;
+                margin-top: 10px;
+            }
+        """)
+        
+        card_layout = QVBoxLayout(self.card)
+        card_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        self.spinner = QLabel("⠋")
+        self.spinner.setObjectName("spinner")
+        self.spinner.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        self.message_label = QLabel("Loading...")
+        self.message_label.setObjectName("message")
+        self.message_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        card_layout.addWidget(self.spinner)
+        card_layout.addWidget(self.message_label)
+        
+        layout.addWidget(self.card)
+
+        self._dots = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+        self._dot_index = 0
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._animate)
+
+    def _animate(self):
+        self._dot_index = (self._dot_index + 1) % len(self._dots)
+        self.spinner.setText(self._dots[self._dot_index])
+
+    def show_message(self, text):
+        self.message_label.setText(text)
+        self._timer.start(100)
+        self.show()
+        self.raise_()
+
+    def hide_overlay(self):
+        self._timer.stop()
+        self.hide()
 
 # -------------------------------------------------
 # Import Dialog — select .sp + .oas and parse
@@ -216,6 +307,195 @@ class ImportDialog(QDialog):
         self.oas_path = self._oas_edit.text().strip()
         self.accept()
 
+# -------------------------------------------------
+# AI Model Selection Dialog
+# -------------------------------------------------
+class AIModelSelectionDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Select AI Model")
+        self.setMinimumWidth(450)
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #1a1f2b;
+                color: #c8d0dc;
+                font-family: 'Segoe UI';
+            }
+            QLabel {
+                color: #c8d0dc;
+                font-size: 10pt;
+            }
+            QLineEdit {
+                background-color: #232a38;
+                color: #c8d0dc;
+                border: 1px solid #2d3548;
+                border-radius: 6px;
+                padding: 6px 10px;
+                font-size: 10pt;
+            }
+            QPushButton {
+                background-color: #2a3345;
+                color: #c8d0dc;
+                border: 1px solid #3d5066;
+                border-radius: 6px;
+                padding: 6px 16px;
+                font-size: 10pt;
+            }
+            QPushButton:hover {
+                background-color: #3d5066;
+                color: #ffffff;
+            }
+            QPushButton#run_btn {
+                background-color: #4a90d9;
+                border-color: #4a90d9;
+                color: #ffffff;
+                font-weight: bold;
+            }
+            QPushButton#run_btn:hover {
+                background-color: #5da0e9;
+            }
+            QGroupBox {
+                background-color: #1e2636;
+                border: 1px solid #3d5066;
+                border-radius: 8px;
+                margin-top: 14px;
+                padding-top: 16px;
+                font-size: 11pt;
+                font-weight: bold;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 12px;
+                padding: 0 6px;
+            }
+            QCheckBox {
+                color: #c8d0dc;
+                font-size: 11pt;
+                font-weight: bold;
+                spacing: 10px;
+            }
+            QCheckBox::indicator {
+                width: 18px; height: 18px;
+            }
+        """)
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(16)
+        layout.setContentsMargins(24, 24, 24, 24)
+
+        # Title
+        title = QLabel("AI Initial Placement")
+        title.setStyleSheet("font-size: 15pt; font-weight: bold; color: #ffffff;")
+        layout.addWidget(title)
+
+        subtitle = QLabel("Select an AI model and configure its constraints to proceed.")
+        subtitle.setStyleSheet("font-size: 10pt; color: #8899aa; margin-bottom: 8px;")
+        subtitle.setWordWrap(True)
+        layout.addWidget(subtitle)
+
+        # Button group for exclusivity natively with checkpoints
+        self.model_group = QButtonGroup(self)
+        self.model_group.setExclusive(True)
+
+        # 1. Gemini
+        gemini_group = QGroupBox()
+        gemini_layout = QVBoxLayout(gemini_group)
+        self.check_gemini = QCheckBox("Gemini Pro (Cloud)")
+        self.check_gemini.setChecked(True)
+        self.model_group.addButton(self.check_gemini)
+        gemini_layout.addWidget(self.check_gemini)
+
+        gemini_desc = QLabel("Fast and efficient layout reasoning.")
+        gemini_desc.setStyleSheet("color: #8899aa; font-size: 9pt; margin-left: 30px;")
+        gemini_layout.addWidget(gemini_desc)
+
+        gemini_form = QFormLayout()
+        gemini_form.setContentsMargins(30, 4, 0, 4)
+        self.gemini_api_key = QLineEdit()
+        self.gemini_api_key.setPlaceholderText("Enter Gemini API Key")
+        self.gemini_api_key.setText(os.environ.get("GEMINI_API_KEY", "******"))
+        gemini_form.addRow("Default API Key:", self.gemini_api_key)
+        gemini_layout.addLayout(gemini_form)
+
+        layout.addWidget(gemini_group)
+
+        # 2. OpenAI
+        openai_group = QGroupBox()
+        openai_layout = QVBoxLayout(openai_group)
+        self.check_openai = QCheckBox("OpenAI GPT-4 (Cloud)")
+        self.model_group.addButton(self.check_openai)
+        openai_layout.addWidget(self.check_openai)
+
+        openai_desc = QLabel("High precision spatial understanding.")
+        openai_desc.setStyleSheet("color: #8899aa; font-size: 9pt; margin-left: 30px;")
+        openai_layout.addWidget(openai_desc)
+
+        openai_form = QFormLayout()
+        openai_form.setContentsMargins(30, 4, 0, 4)
+        self.openai_api_key = QLineEdit()
+        self.openai_api_key.setPlaceholderText("Enter OpenAI API Key")
+        self.openai_api_key.setText(os.environ.get("OPENAI_API_KEY", "******"))
+        openai_form.addRow("Default API Key:", self.openai_api_key)
+        openai_layout.addLayout(openai_form)
+
+        layout.addWidget(openai_group)
+
+        # 3. Ollama
+        ollama_group = QGroupBox()
+        ollama_layout = QVBoxLayout(ollama_group)
+        self.check_ollama = QCheckBox("Ollama (Local)")
+        self.model_group.addButton(self.check_ollama)
+        ollama_layout.addWidget(self.check_ollama)
+
+        ollama_desc = QLabel("Private execution. <b>Note: Requires Ollama installed & running.</b>")
+        ollama_desc.setStyleSheet("color: #8899aa; font-size: 9pt; margin-left: 30px;")
+        ollama_desc.setWordWrap(True)
+        ollama_layout.addWidget(ollama_desc)
+
+        layout.addWidget(ollama_group)
+
+        # Connect toggles to enable/disable inputs
+        self.check_gemini.toggled.connect(self._on_model_changed)
+        self.check_openai.toggled.connect(self._on_model_changed)
+        self.check_ollama.toggled.connect(self._on_model_changed)
+        self._on_model_changed()
+
+        # Buttons
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+        
+        self.run_btn = QPushButton("Run Placement")
+        self.run_btn.setObjectName("run_btn")
+        self.run_btn.clicked.connect(self.accept)
+        
+        btn_layout.addWidget(cancel_btn)
+        btn_layout.addWidget(self.run_btn)
+        
+        layout.addLayout(btn_layout)
+
+    def _on_model_changed(self):
+        self.gemini_api_key.setEnabled(self.check_gemini.isChecked())
+        self.openai_api_key.setEnabled(self.check_openai.isChecked())
+
+    def get_selected_model(self):
+        if self.check_gemini.isChecked():
+            return "Gemini"
+        elif self.check_openai.isChecked():
+            return "OpenAI"
+        elif self.check_ollama.isChecked():
+            return "Ollama"
+
+    def apply_api_keys(self):
+        # Update environment variables based on user changes if they didn't leave them empty/starred out
+        gemini_key = self.gemini_api_key.text().strip().strip('\'"')
+        if gemini_key and gemini_key != "******":
+            os.environ["GEMINI_API_KEY"] = gemini_key
+            
+        openai_key = self.openai_api_key.text().strip().strip('\'"')
+        if openai_key and openai_key != "******":
+            os.environ["OPENAI_API_KEY"] = openai_key
 
 # -------------------------------------------------
 # Main Window
@@ -344,14 +624,20 @@ class MainWindow(QMainWindow):
         self._pending_cmds = []           # collects commands in the same Qt event-loop turn
         self._batch_flush_timer = None    # fires after all cmds arrive this turn
         self.chat_panel.command_requested.connect(self._enqueue_ai_command)
-        # Wire orchestrator stage events → canvas highlight
-        self.chat_panel._llm_worker.stage_completed.connect(self._on_pipeline_stage_completed)
-        self._stage_highlight_timer = None  # auto-clear timer
         self.editor.set_dummy_place_callback(self._add_dummy_device)
 
         # Connect panel toggle buttons (in each panel header)
         self.device_tree.toggle_requested.connect(self._toggle_device_tree)
         self.chat_panel.toggle_requested.connect(self._toggle_chat_panel)
+
+        # Loading Overlay
+        self.overlay = LoadingOverlay(self)
+        self.overlay.hide()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, 'overlay'):
+            self.overlay.resize(self.size())
 
     # -------------------------------------------------
     # QThread cleanup on close
@@ -751,6 +1037,8 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(self._col_spin)
 
         toolbar.addSeparator()
+
+
 
         # Add Dummy mode
         self._act_add_dummy = QAction(icon_add_dummy(), "Dummy", self)
@@ -1382,34 +1670,16 @@ class MainWindow(QMainWindow):
         sp_path = dlg.sp_path
         oas_path = dlg.oas_path
 
-        # Show progress
-        progress = QProgressDialog("Parsing design files...", None, 0, 0, self)
-        progress.setWindowTitle("Import")
-        progress.setWindowModality(Qt.WindowModality.WindowModal)
-        progress.setMinimumDuration(0)
-        progress.setStyleSheet("""
-            QProgressDialog {
-                background-color: #1a1f2b;
-                color: #c8d0dc;
-                font-family: 'Segoe UI';
-            }
-            QLabel { color: #c8d0dc; font-size: 10pt; }
-        """)
-        progress.show()
-        QApplication.processEvents()
+        self.overlay.show_message("Parsing design files...")
+        
+        self._import_worker = GenericWorker(self._run_parser_pipeline, sp_path, oas_path)
+        self._import_worker.finished.connect(lambda data: self._on_import_completed(data, sp_path))
+        self._import_worker.error.connect(self._on_import_error)
+        self._import_worker.start()
 
-        try:
-            data = self._run_parser_pipeline(sp_path, oas_path)
-        except Exception as e:
-            progress.close()
-            QMessageBox.critical(
-                self, "Import Failed",
-                f"Failed to parse design files:\n\n{e}",
-            )
-            return
-
-        progress.close()
-
+    def _on_import_completed(self, data, sp_path):
+        self.overlay.hide_overlay()
+        
         # Save the generated graph JSON next to the .sp file
         base_name = os.path.splitext(os.path.basename(sp_path))[0]
         sp_dir = os.path.dirname(os.path.abspath(sp_path))
@@ -1430,6 +1700,13 @@ class MainWindow(QMainWindow):
             "#e8f4fd", "#1a1a2e",
         )
 
+    def _on_import_error(self, err_msg):
+        self.overlay.hide_overlay()
+        QMessageBox.critical(
+            self, "Import Failed",
+            f"Failed to parse design files:\n\n{err_msg}",
+        )
+
     # -------------------------------------------------
     # Run AI Initial Placement (Design menu)
     # -------------------------------------------------
@@ -1442,39 +1719,30 @@ class MainWindow(QMainWindow):
             )
             return
 
+        # Show the AI model selection dialog first
+        dialog = AIModelSelectionDialog(self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+            
+        model_choice = dialog.get_selected_model()
+        dialog.apply_api_keys()
+
         # Build the data dict from current state
         self._sync_node_positions()
         data = copy.deepcopy(self._build_output_data())
         if "terminal_nets" not in data:
             data["terminal_nets"] = self._terminal_nets
 
-        progress = QProgressDialog("Running AI initial placement...", None, 0, 0, self)
-        progress.setWindowTitle("AI Placement")
-        progress.setWindowModality(Qt.WindowModality.WindowModal)
-        progress.setMinimumDuration(0)
-        progress.setStyleSheet("""
-            QProgressDialog {
-                background-color: #1a1f2b;
-                color: #c8d0dc;
-                font-family: 'Segoe UI';
-            }
-            QLabel { color: #c8d0dc; font-size: 10pt; }
-        """)
-        progress.show()
-        QApplication.processEvents()
+        self.overlay.show_message(f"Running AI initial placement ({model_choice})...")
 
-        try:
-            data = self._run_ai_initial_placement(data)
-        except Exception as e:
-            progress.close()
-            QMessageBox.warning(
-                self, "AI Placement Failed",
-                f"AI placement failed:\n\n{e}",
-            )
-            return
+        self._ai_worker = GenericWorker(self._run_ai_initial_placement, data, model_choice)
+        self._ai_worker.finished.connect(self._on_ai_placement_completed)
+        self._ai_worker.error.connect(self._on_ai_placement_error)
+        self._ai_worker.start()
 
-        progress.close()
-
+    def _on_ai_placement_completed(self, data):
+        self.overlay.hide_overlay()
+        
         # Save the placement JSON
         if self._current_file:
             base = os.path.splitext(self._current_file)[0]
@@ -1498,6 +1766,13 @@ class MainWindow(QMainWindow):
             f"Saved to: {os.path.basename(out_path)}\n"
             f"You can now edit the layout, swap devices, or chat with the AI.",
             "#e8f4fd", "#1a1a2e",
+        )
+
+    def _on_ai_placement_error(self, err_msg):
+        self.overlay.hide_overlay()
+        QMessageBox.warning(
+            self, "AI Placement Failed",
+            f"AI placement failed:\n\n{err_msg}",
         )
 
     @staticmethod
@@ -1686,13 +1961,12 @@ class MainWindow(QMainWindow):
         }
 
     @staticmethod
-    def _run_ai_initial_placement(data):
+    def _run_ai_initial_placement(data, model_choice="Gemini"):
         """
-        Send the parsed graph to Gemini for AI-based initial placement.
+        Send the parsed graph to the selected AI model for initial placement.
         Updates x/y coordinates in the nodes and returns the updated data.
         """
         import tempfile
-        from ai_agent.ai_initial_placement.gemini_placer import gemini_generate_placement, sanitize_json
 
         # Write to temp file for the placer
         with tempfile.NamedTemporaryFile(
@@ -1704,7 +1978,85 @@ class MainWindow(QMainWindow):
         tmp_out_path = tmp_in_path.replace(".json", "_placed.json")
 
         try:
-            gemini_generate_placement(tmp_in_path, tmp_out_path)
+            if model_choice == "OpenAI":
+                try:
+                    from ai_agent.ai_initial_placement.openai_placer import llm_generate_placement
+                    llm_generate_placement(tmp_in_path, tmp_out_path)
+                except Exception as e:
+                    err_str = str(e)
+                    if "401" in err_str or "Incorrect API key" in err_str:
+                        raise RuntimeError(
+                            "Invalid OpenAI API Key.\n\n"
+                            "The API key provided is completely incorrect, expired, or rejected by OpenAI.\n\n"
+                            "Please enter a fresh, valid OpenAI secret key in the dialog."
+                        )
+                    raise
+
+            elif model_choice == "Ollama":
+                import shutil
+                import subprocess
+                import urllib.request
+                import time
+
+                # 1. Check if Ollama is installed
+                if not shutil.which("ollama"):
+                    raise RuntimeError(
+                        "Ollama executable not found.\n"
+                        "Please download and install it from https://ollama.com/\n\n"
+                        "(Restart your terminal/PC if already installed)."
+                    )
+
+                # 2. Check if it's already running, if not start it
+                ollama_running = False
+                try:
+                    urllib.request.urlopen("http://localhost:11434", timeout=1)
+                    ollama_running = True
+                except Exception:
+                    pass
+                
+                if not ollama_running:
+                    try:
+                        kwargs = {}
+                        # Hide the console window on Windows
+                        if os.name == 'nt':
+                            kwargs['creationflags'] = 0x08000000 # CREATE_NO_WINDOW
+                        
+                        # Start in background
+                        subprocess.Popen(["ollama", "serve"], **kwargs)
+                        
+                        # Wait up to 8 seconds for it to start
+                        for _ in range(8):
+                            time.sleep(1)
+                            try:
+                                urllib.request.urlopen("http://localhost:11434", timeout=1)
+                                ollama_running = True
+                                break
+                            except Exception:
+                                pass
+                                
+                        if not ollama_running:
+                            raise RuntimeError("Tried to start Ollama automatically, but it didn't respond within 8 seconds. Please run 'ollama serve' manually.")
+                    except Exception as e:
+                        if isinstance(e, RuntimeError):
+                            raise
+                        raise RuntimeError(f"Failed to start Ollama serve automatically: {e}")
+
+                from ai_agent.ai_initial_placement.ollama_placer import ollama_generate_placement
+                ollama_generate_placement(tmp_in_path, tmp_out_path)
+            else:
+                try:
+                    from ai_agent.ai_initial_placement.gemini_placer import gemini_generate_placement
+                    gemini_generate_placement(tmp_in_path, tmp_out_path)
+                except Exception as e:
+                    err_str = str(e)
+                    if "API key not valid" in err_str or "400" in err_str or "API_KEY_INVALID" in err_str or "403" in err_str:
+                        raise RuntimeError(
+                            "Invalid Gemini API Key.\n\n"
+                            "The API key provided is rejected by Google.\n\n"
+                            "Please enter a fresh, valid Gemini secret key in the dialog."
+                        )
+                    raise
+
             with open(tmp_out_path) as f:
                 raw_placed = json.load(f)
 
