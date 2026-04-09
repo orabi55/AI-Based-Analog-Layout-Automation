@@ -1888,6 +1888,12 @@ class MainWindow(QMainWindow):
                     "height":      inst.get("height", ROW_HEIGHT_UM),
                     "orientation": inst.get("orientation", "R0"),
                 }
+                # Carry OAS abutment state into the node
+                abut_l = inst.get("abut_left",  False)
+                abut_r = inst.get("abut_right", False)
+                if abut_l or abut_r:
+                    node["abutment"] = {"abut_left": abut_l, "abut_right": abut_r}
+
             elif is_passive:
                 # Compute passive geometry from params
                 prm = dev.params
@@ -2306,12 +2312,24 @@ class MainWindow(QMainWindow):
 
         try:
             from export.oas_writer import update_oas_placement
+
+            # Collect per-device manual abutment states from the canvas
+            abut_states = self.editor.get_device_abutment_states()
+            # Inject into node dicts so the writer can pick them up
+            for node in self.nodes:
+                dev_id = node.get("id")
+                if dev_id in abut_states:
+                    node["abutment"] = abut_states[dev_id]
+                else:
+                    node.pop("abutment", None)   # clear any old value
+
             update_oas_placement(
                 oas_path=oas_path,
                 sp_path=sp_path,
                 nodes=self.nodes,
                 output_path=output_path,
             )
+
             self.chat_panel._append_message(
                 "AI",
                 f"Layout exported to **{os.path.basename(output_path)}**",

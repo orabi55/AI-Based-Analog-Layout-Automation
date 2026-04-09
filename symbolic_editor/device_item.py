@@ -32,9 +32,12 @@ class DeviceItem(QGraphicsRectItem):
         self._snap_grid_y = None
         self._flip_h = False
         self._flip_v = False
-        # Abutment candidate highlight (net string or None for each edge)
+        # Candidate highlight (auto-detected, green glow)
         self._hl_left  = None   # net name on the left  edge that can abut, or None
         self._hl_right = None   # net name on the right edge that can abut, or None
+        # Manual abutment override (user-set, amber stripe)
+        self._manual_abut_left  = False
+        self._manual_abut_right = False
 
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
@@ -92,9 +95,36 @@ class DeviceItem(QGraphicsRectItem):
         self._hl_right = None
         self.update()
 
-    # Keep backward-compat stub
+    # ── Manual abutment control ──────────────────────────────────────
+    def toggle_abut_left(self):
+        """Toggle the left-edge manual abutment flag and redraw."""
+        self._manual_abut_left = not self._manual_abut_left
+        self.update()
+
+    def toggle_abut_right(self):
+        """Toggle the right-edge manual abutment flag and redraw."""
+        self._manual_abut_right = not self._manual_abut_right
+        self.update()
+
+    def set_abut_left(self, value: bool):
+        self._manual_abut_left = bool(value)
+        self.update()
+
+    def set_abut_right(self, value: bool):
+        self._manual_abut_right = bool(value)
+        self.update()
+
+    def get_abut_left(self) -> bool:
+        return self._manual_abut_left
+
+    def get_abut_right(self) -> bool:
+        return self._manual_abut_right
+
+    # Keep compat
     def set_abutment(self, left: bool, right: bool):
-        pass
+        self._manual_abut_left  = bool(left)
+        self._manual_abut_right = bool(right)
+        self.update()
 
     def flip_horizontal(self):
         """Mirror device left/right."""
@@ -276,6 +306,46 @@ class DeviceItem(QGraphicsRectItem):
                                  QPointF(x0 + w - glow_w - 6, mid))
                 painter.drawLine(QPointF(x0 + w - glow_w, mid + 4),
                                  QPointF(x0 + w - glow_w - 6, mid))
+
+        # ── Manual abutment state (amber solid stripe) ────────────────────
+        # When the user manually sets leftAbut / rightAbut via right-click
+        # menu, draw a distinct solid amber stripe on that edge.
+        if self._manual_abut_left or self._manual_abut_right:
+            ABUT_COLOR = QColor("#f39c12")    # amber
+            ABUT_FILL  = QColor("#f39c12")
+            ABUT_FILL.setAlpha(50)
+            abut_w = max(3.5, sd_w * 0.20)
+
+            if self._manual_abut_left:
+                painter.setBrush(QBrush(ABUT_FILL))
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.drawRect(QRectF(x0, y0, abut_w, h))
+                painter.setPen(QPen(ABUT_COLOR, 3.0, Qt.PenStyle.SolidLine,
+                                    Qt.PenCapStyle.FlatCap))
+                painter.drawLine(QPointF(x0 + 1.5, y0 + 3),
+                                 QPointF(x0 + 1.5, y0 + h - 3))
+                # Double-tick mark → indicates shared diffusion
+                mid = y0 + h * 0.4
+                painter.drawLine(QPointF(x0 + abut_w + 1, mid),
+                                 QPointF(x0 + abut_w + 6, mid))
+                mid2 = y0 + h * 0.6
+                painter.drawLine(QPointF(x0 + abut_w + 1, mid2),
+                                 QPointF(x0 + abut_w + 6, mid2))
+
+            if self._manual_abut_right:
+                painter.setBrush(QBrush(ABUT_FILL))
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.drawRect(QRectF(x0 + w - abut_w, y0, abut_w, h))
+                painter.setPen(QPen(ABUT_COLOR, 3.0, Qt.PenStyle.SolidLine,
+                                    Qt.PenCapStyle.FlatCap))
+                painter.drawLine(QPointF(x0 + w - 1.5, y0 + 3),
+                                 QPointF(x0 + w - 1.5, y0 + h - 3))
+                mid = y0 + h * 0.4
+                painter.drawLine(QPointF(x0 + w - abut_w - 1, mid),
+                                 QPointF(x0 + w - abut_w - 6, mid))
+                mid2 = y0 + h * 0.6
+                painter.drawLine(QPointF(x0 + w - abut_w - 1, mid2),
+                                 QPointF(x0 + w - abut_w - 6, mid2))
 
         # ── Text labels (always readable, no flip) ──────────────────
         # Font sizes scaled to available area
