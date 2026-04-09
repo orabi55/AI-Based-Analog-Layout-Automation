@@ -41,6 +41,41 @@ def _is_via_or_utility(cell_name):
             "boundary" in name_lower)
 
 
+def _parse_abut_flags(ref_cell):
+    """Parse leftAbut / rightAbut flags from a PCell's property list.
+
+    The SAED PDK encodes these as bytes in a 'pcell' property entry, e.g.:
+        [b'pcell', b'SAED_PDK_14', b'nfet', b'layout',
+         b'leftAbut##32##5##32##1', b'rightAbut##32##5##32##0', ...]
+    The last token after '##32##' is '1' (active) or '0' (inactive).
+
+    Returns:
+        dict with keys 'abut_left' (bool) and 'abut_right' (bool).
+    """
+    result = {"abut_left": False, "abut_right": False}
+    try:
+        for prop in ref_cell.properties:
+            if not prop or prop[0] != "pcell":
+                continue
+            for entry in prop[1:]:
+                if isinstance(entry, (bytes, bytearray)):
+                    s = entry.decode("utf-8", errors="ignore")
+                elif isinstance(entry, str):
+                    s = entry
+                else:
+                    continue
+                if "leftAbut" in s:
+                    val = s.split("##32##")[-1].strip()
+                    result["abut_left"] = (val == "1")
+                elif "rightAbut" in s:
+                    val = s.split("##32##")[-1].strip()
+                    result["abut_right"] = (val == "1")
+    except Exception:
+        pass
+    return result
+
+
+
 def _ref_origin_rotation(ref):
     """Extract origin, rotation, and orientation string from a reference."""
     x, y = ref.origin
@@ -104,6 +139,7 @@ def _extract_recursive(cell, lib, offset_x=0.0, offset_y=0.0,
                 width = 0
                 height = 0
 
+            abut_flags = _parse_abut_flags(ref_cell)
             devices.append({
                 "cell": cell_name,
                 "x": abs_x,
@@ -112,6 +148,8 @@ def _extract_recursive(cell, lib, offset_x=0.0, offset_y=0.0,
                 "height": height,
                 "orientation": orientation,
                 "hier_prefix": prefix,
+                "abut_left":  abut_flags["abut_left"],
+                "abut_right": abut_flags["abut_right"],
             })
 
         elif _is_resistor_cell(cell_name) or _is_capacitor_cell(cell_name):
@@ -222,6 +260,13 @@ def extract_layout_instances(layout_file):
                 entry["passive_type"] = "res"
             elif _is_capacitor_cell(cell_name):
                 entry["passive_type"] = "cap"
+
+            # Parse abutment flags from PCell properties
+            ref_cell_obj = ref.cell if hasattr(ref.cell, 'bounding_box') else None
+            if ref_cell_obj is not None and _is_transistor_cell(cell_name):
+                abut_flags = _parse_abut_flags(ref_cell_obj)
+                entry["abut_left"]  = abut_flags["abut_left"]
+                entry["abut_right"] = abut_flags["abut_right"]
 
             devices.append(entry)
         return devices

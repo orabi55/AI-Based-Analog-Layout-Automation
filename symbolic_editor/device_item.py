@@ -32,6 +32,9 @@ class DeviceItem(QGraphicsRectItem):
         self._snap_grid_y = None
         self._flip_h = False
         self._flip_v = False
+        # Abutment flags — set by apply_abutment() in editor_view
+        self._abut_left  = False
+        self._abut_right = False
 
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
@@ -72,6 +75,12 @@ class DeviceItem(QGraphicsRectItem):
         self._snap_grid_y = (
             float(grid_y) if grid_y else self._snap_grid_x
         )
+
+    def set_abutment(self, left: bool, right: bool):
+        """Set left/right abutment flags and redraw."""
+        self._abut_left  = bool(left)
+        self._abut_right = bool(right)
+        self.update()
 
     def flip_horizontal(self):
         """Mirror device left/right."""
@@ -211,6 +220,44 @@ class DeviceItem(QGraphicsRectItem):
             painter.drawLine(QPointF(cursor_x, y0 + 2), QPointF(cursor_x, y0 + h - 2))
 
         painter.restore()   # back to un-flipped for text
+
+        # ── Abutment edge indicators ─────────────────────────────────
+        # When abutted, draw a thick hatched stripe on the shared edge
+        # to show that the diffusion is merged with the neighbor.
+        abut_color = QColor("#f39c12") if self.device_type == "nmos" else QColor("#e74c3c")
+        abut_color.setAlpha(180)
+        stripe_w = max(3.0, sd_w * 0.18)
+
+        abut_pen = QPen(abut_color, stripe_w, Qt.PenStyle.SolidLine,
+                        Qt.PenCapStyle.FlatCap)
+        painter.setPen(abut_pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+
+        if self._abut_left:
+            # Thick stripe on left edge
+            painter.drawLine(QPointF(x0 + stripe_w / 2, y0 + 2),
+                             QPointF(x0 + stripe_w / 2, y0 + h - 2))
+            # Small triangular arrow pointing inward
+            mid_y_a = y0 + h / 2
+            arrow_pen = QPen(abut_color, 1.5)
+            painter.setPen(arrow_pen)
+            painter.drawLine(QPointF(x0 + stripe_w, mid_y_a - 4),
+                             QPointF(x0 + stripe_w * 2, mid_y_a))
+            painter.drawLine(QPointF(x0 + stripe_w, mid_y_a + 4),
+                             QPointF(x0 + stripe_w * 2, mid_y_a))
+            painter.setPen(abut_pen)
+
+        if self._abut_right:
+            # Thick stripe on right edge
+            painter.drawLine(QPointF(x0 + w - stripe_w / 2, y0 + 2),
+                             QPointF(x0 + w - stripe_w / 2, y0 + h - 2))
+            mid_y_a = y0 + h / 2
+            arrow_pen = QPen(abut_color, 1.5)
+            painter.setPen(arrow_pen)
+            painter.drawLine(QPointF(x0 + w - stripe_w, mid_y_a - 4),
+                             QPointF(x0 + w - stripe_w * 2, mid_y_a))
+            painter.drawLine(QPointF(x0 + w - stripe_w, mid_y_a + 4),
+                             QPointF(x0 + w - stripe_w * 2, mid_y_a))
 
         # ── Text labels (always readable, no flip) ──────────────────
         # Font sizes scaled to available area

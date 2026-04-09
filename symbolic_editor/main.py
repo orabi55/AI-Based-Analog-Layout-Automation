@@ -1050,6 +1050,21 @@ class MainWindow(QMainWindow):
         self._act_add_dummy.toggled.connect(self._on_toggle_add_dummy)
         toolbar.addAction(self._act_add_dummy)
 
+        toolbar.addSeparator()
+
+        # Transistor Abutment toggle
+        self._act_abutment = QAction("⊞ Abut", self)
+        self._act_abutment.setCheckable(True)
+        self._act_abutment.setShortcut(QKeySequence("A"))
+        self._act_abutment.setToolTip(
+            "Toggle Transistor Abutment (A)\n"
+            "Detects shared S/D nets between adjacent transistors\n"
+            "and marks them as abutted (diffusion sharing)."
+        )
+        self._act_abutment.toggled.connect(self._on_toggle_abutment)
+        toolbar.addAction(self._act_abutment)
+
+
     # -------------------------------------------------
     # Panel collapse / expand
     # -------------------------------------------------
@@ -1574,6 +1589,20 @@ class MainWindow(QMainWindow):
             if enabled
             else "Dummy mode OFF."
         )
+        self.chat_panel._append_message("AI", msg, "#e8f4fd", "#1a1a2e")
+
+    def _on_toggle_abutment(self, enabled):
+        """Apply or clear transistor abutment based on toggle state."""
+        if enabled:
+            self.editor.apply_abutment()
+            msg = (
+                "✅ Abutment ON — Adjacent transistors sharing Source/Drain nets "
+                "are now marked as abutted (diffusion sharing active).\n"
+                "Orange stripes = NMOS abutted edge | Red stripes = PMOS abutted edge."
+            )
+        else:
+            self.editor.clear_abutment()
+            msg = "Abutment OFF — all abutment markers cleared."
         self.chat_panel._append_message("AI", msg, "#e8f4fd", "#1a1a2e")
 
     def _next_dummy_id(self, dev_type):
