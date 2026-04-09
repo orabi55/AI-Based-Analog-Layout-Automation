@@ -20,6 +20,11 @@ from PySide6.QtGui import QPainter, QPen, QPainterPath, QColor, QBrush
 from device_item import DeviceItem
 from passive_item import ResistorItem, CapacitorItem
 from block_item import BlockItem
+try:
+    from abutment_engine import solve_abutment, split_into_rows
+except ImportError:
+    solve_abutment = None
+    split_into_rows = None
 
 
 class SymbolicEditor(QGraphicsView):
@@ -673,6 +678,63 @@ class SymbolicEditor(QGraphicsView):
         if self.device_items:
             self._compact_rows_abutted()
             self.resetCachedContent()
+
+    # ------------------------------------------------------------------
+    # Abutment
+    # ------------------------------------------------------------------
+    def apply_abutment(self):
+        """Compute and apply transistor abutment for all rows.
+
+        For each same-type row (NMOS or PMOS), the abutment engine finds
+        adjacent pairs that share a terminal net, sets their abut flags,
+        and flips devices where necessary so the shared net is on the
+        correct edge. The result is visualised immediately via
+        DeviceItem.set_abutment().
+        """
+        if solve_abutment is None or not self._terminal_nets:
+            return
+
+        # Build node list from current item positions
+        nodes = []
+        for dev_id, item in self.device_items.items():
+            if isinstance(item, (ResistorItem, CapacitorItem)):
+                continue          # passives are not abutted
+            nodes.append({
+                "id":   dev_id,
+                "type": item.device_type,
+                "geometry": {
+                    "x": item.pos().x(),
+                    "y": item.pos().y(),
+                },
+            })
+
+        rows = split_into_rows(nodes, snap_tolerance=self._snap_grid * 0.5)
+
+        for _row_y, row_nodes in rows.items():
+            abut_result = solve_abutment(row_nodes, self._terminal_nets)
+            for dev_id, flags in abut_result.items():
+                item = self.device_items.get(dev_id)
+                if item is None:
+                    continue
+                # Apply flip if required
+                if flags["flip_h"] != item.is_flip_h():
+                    item.set_flip_h(flags["flip_h"])
+                # Apply visual abutment markers
+                item.set_abutment(flags["abut_left"], flags["abut_right"])
+
+        self._abutment_active = True
+        self.scene.update()
+
+    def clear_abutment(self):
+        """Remove all abutment markings and flip states."""
+        for item in self.device_items.values():
+            if hasattr(item, 'set_abutment'):
+                item.set_abutment(False, False)
+        self._abutment_active = False
+        self.scene.update()
+
+    def is_abutment_active(self):
+        return getattr(self, '_abutment_active', False)
 
     def _get_terminal_for_net(self, dev_id, net_name):
         """Return which terminal ('S','G','D') of dev_id connects to net_name."""

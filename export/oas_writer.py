@@ -51,6 +51,53 @@ def _orient_to_gdstk(orient_str):
     return math.radians(deg), mirror
 
 
+def _update_pcell_abut_flags(ref_cell, abut_left: bool, abut_right: bool):
+    """Rewrite leftAbut / rightAbut values in the PCell property list.
+
+    The SAED PDK stores these as byte strings in the 'pcell' property:
+      b'leftAbut##32##5##32##0'  (0=off, 1=on)
+    We update the existing entry if found; otherwise add it.
+    """
+    LEFT_KEY  = "leftAbut"
+    RIGHT_KEY = "rightAbut"
+
+    def _make_entry(key, val):
+        return f"{key}##32##5##32##{'1' if val else '0'}".encode()
+
+    try:
+        new_props = []
+        for prop in ref_cell.properties:
+            if not prop or prop[0] != "pcell":
+                new_props.append(prop)
+                continue
+            # Rebuild the entries, updating abut flags
+            new_entries = []
+            found_left  = False
+            found_right = False
+            for entry in prop[1:]:
+                if isinstance(entry, (bytes, bytearray)):
+                    s = entry.decode("utf-8", errors="ignore")
+                else:
+                    s = str(entry)
+                if LEFT_KEY in s:
+                    new_entries.append(_make_entry(LEFT_KEY,  abut_left))
+                    found_left = True
+                elif RIGHT_KEY in s:
+                    new_entries.append(_make_entry(RIGHT_KEY, abut_right))
+                    found_right = True
+                else:
+                    new_entries.append(entry)
+            # Add missing keys if not already present
+            if not found_left and abut_left:
+                new_entries.insert(0, _make_entry(LEFT_KEY, True))
+            if not found_right and abut_right:
+                new_entries.insert(0, _make_entry(RIGHT_KEY, True))
+            new_props.append([prop[0]] + new_entries)
+        ref_cell.properties = new_props
+    except Exception as exc:
+        print(f"[OAS Writer] Warning: could not update abut flags: {exc}")
+
+
 # ------------------------------------------------------------------
 # Main API
 # ------------------------------------------------------------------
@@ -124,6 +171,17 @@ def update_oas_placement(oas_path, sp_path, nodes, output_path,
         ref.rotation = rotation_rad
         ref.x_reflection = x_reflection
 
+        # ---- Update PCell abutment flags if present in the node --------
+        abutment = node.get("abutment")   # {"abut_left": bool, "abut_right": bool}
+        if abutment is not None:
+            ref_cell = ref.cell if hasattr(ref.cell, 'properties') else None
+            if ref_cell is not None:
+                _update_pcell_abut_flags(
+                    ref_cell,
+                    abut_left=bool(abutment.get("abut_left", False)),
+                    abut_right=bool(abutment.get("abut_right", False)),
+                )
+
         updated_count += 1
         if old_origin != (new_x, new_y):
             print(f"[OAS Writer] {dev_id}: "
@@ -131,6 +189,7 @@ def update_oas_placement(oas_path, sp_path, nodes, output_path,
                   f"({new_x:.4f}, {new_y:.4f})  orient={orient}")
 
     print(f"[OAS Writer] Updated {updated_count}/{len(mapping)} devices.")
+
 
     # ---- determine output format ----------------------------------------
     if output_format is None:
