@@ -10,7 +10,8 @@ import requests
 from ai_agent.ai_initial_placement.placer_utils import (
     sanitize_json, _ensure_placement_dict, _build_net_adjacency,
     _build_device_inventory, _build_block_info, _validate_placement,
-    _normalise_coords, _restore_coords, generate_vlsi_prompt
+    _normalise_coords, _restore_coords, generate_vlsi_prompt,
+    _format_abutment_candidates
 )
 
 MAX_RETRIES = 2
@@ -33,7 +34,13 @@ def ollama_generate_placement(input_json: str, output_json: str, model="llama3.2
     inventory_str = _build_device_inventory(norm_nodes)
     block_str = _build_block_info(norm_nodes, graph_data)
 
-    prompt = generate_vlsi_prompt(prompt_graph, inventory_str, adjacency_str, block_str)
+    # Build abutment constraint string if candidates were provided
+    abutment_str = _format_abutment_candidates(
+        graph_data.get("abutment_candidates", [])
+    )
+
+    prompt = generate_vlsi_prompt(prompt_graph, inventory_str, adjacency_str,
+                                  block_str, abutment_str=abutment_str)
 
     last_error = None
     for attempt in range(1, MAX_RETRIES + 1):

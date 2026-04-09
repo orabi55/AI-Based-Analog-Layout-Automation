@@ -32,9 +32,9 @@ class DeviceItem(QGraphicsRectItem):
         self._snap_grid_y = None
         self._flip_h = False
         self._flip_v = False
-        # Abutment flags — set by apply_abutment() in editor_view
-        self._abut_left  = False
-        self._abut_right = False
+        # Abutment candidate highlight (net string or None for each edge)
+        self._hl_left  = None   # net name on the left  edge that can abut, or None
+        self._hl_right = None   # net name on the right edge that can abut, or None
 
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
@@ -76,11 +76,25 @@ class DeviceItem(QGraphicsRectItem):
             float(grid_y) if grid_y else self._snap_grid_x
         )
 
-    def set_abutment(self, left: bool, right: bool):
-        """Set left/right abutment flags and redraw."""
-        self._abut_left  = bool(left)
-        self._abut_right = bool(right)
+    def set_candidate_highlight(self, left_net=None, right_net=None):
+        """Highlight terminal edges that can participate in diffusion sharing.
+
+        Args:
+            left_net:  net name for the left  S/D edge, or None to clear.
+            right_net: net name for the right S/D edge, or None to clear.
+        """
+        self._hl_left  = left_net  or None
+        self._hl_right = right_net or None
         self.update()
+
+    def clear_candidate_highlight(self):
+        self._hl_left  = None
+        self._hl_right = None
+        self.update()
+
+    # Keep backward-compat stub
+    def set_abutment(self, left: bool, right: bool):
+        pass
 
     def flip_horizontal(self):
         """Mirror device left/right."""
@@ -221,43 +235,47 @@ class DeviceItem(QGraphicsRectItem):
 
         painter.restore()   # back to un-flipped for text
 
-        # ── Abutment edge indicators ─────────────────────────────────
-        # When abutted, draw a thick hatched stripe on the shared edge
-        # to show that the diffusion is merged with the neighbor.
-        abut_color = QColor("#f39c12") if self.device_type == "nmos" else QColor("#e74c3c")
-        abut_color.setAlpha(180)
-        stripe_w = max(3.0, sd_w * 0.18)
+        # ── Abutment candidate highlights ──────────────────────────────
+        # Draw a bright green glow on each edge where diffusion can be shared.
+        if self._hl_left or self._hl_right:
+            HL_COLOR = QColor("#00e676")   # vivid green
+            HL_ALPHA = QColor("#00e676")
+            HL_ALPHA.setAlpha(55)
+            glow_w = max(4.0, sd_w * 0.22)
 
-        abut_pen = QPen(abut_color, stripe_w, Qt.PenStyle.SolidLine,
-                        Qt.PenCapStyle.FlatCap)
-        painter.setPen(abut_pen)
-        painter.setBrush(Qt.BrushStyle.NoBrush)
+            if self._hl_left:
+                # Filled semi-transparent strip on left
+                painter.setBrush(QBrush(HL_ALPHA))
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.drawRect(QRectF(x0, y0, glow_w, h))
+                # Bright border line
+                painter.setPen(QPen(HL_COLOR, 2.5, Qt.PenStyle.SolidLine,
+                                    Qt.PenCapStyle.FlatCap))
+                painter.drawLine(QPointF(x0 + 1, y0 + 2),
+                                 QPointF(x0 + 1, y0 + h - 2))
+                # Arrow pointing right into device
+                mid = y0 + h * 0.5
+                painter.drawLine(QPointF(x0 + glow_w, mid - 4),
+                                 QPointF(x0 + glow_w + 6, mid))
+                painter.drawLine(QPointF(x0 + glow_w, mid + 4),
+                                 QPointF(x0 + glow_w + 6, mid))
 
-        if self._abut_left:
-            # Thick stripe on left edge
-            painter.drawLine(QPointF(x0 + stripe_w / 2, y0 + 2),
-                             QPointF(x0 + stripe_w / 2, y0 + h - 2))
-            # Small triangular arrow pointing inward
-            mid_y_a = y0 + h / 2
-            arrow_pen = QPen(abut_color, 1.5)
-            painter.setPen(arrow_pen)
-            painter.drawLine(QPointF(x0 + stripe_w, mid_y_a - 4),
-                             QPointF(x0 + stripe_w * 2, mid_y_a))
-            painter.drawLine(QPointF(x0 + stripe_w, mid_y_a + 4),
-                             QPointF(x0 + stripe_w * 2, mid_y_a))
-            painter.setPen(abut_pen)
-
-        if self._abut_right:
-            # Thick stripe on right edge
-            painter.drawLine(QPointF(x0 + w - stripe_w / 2, y0 + 2),
-                             QPointF(x0 + w - stripe_w / 2, y0 + h - 2))
-            mid_y_a = y0 + h / 2
-            arrow_pen = QPen(abut_color, 1.5)
-            painter.setPen(arrow_pen)
-            painter.drawLine(QPointF(x0 + w - stripe_w, mid_y_a - 4),
-                             QPointF(x0 + w - stripe_w * 2, mid_y_a))
-            painter.drawLine(QPointF(x0 + w - stripe_w, mid_y_a + 4),
-                             QPointF(x0 + w - stripe_w * 2, mid_y_a))
+            if self._hl_right:
+                # Filled semi-transparent strip on right
+                painter.setBrush(QBrush(HL_ALPHA))
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.drawRect(QRectF(x0 + w - glow_w, y0, glow_w, h))
+                # Bright border line
+                painter.setPen(QPen(HL_COLOR, 2.5, Qt.PenStyle.SolidLine,
+                                    Qt.PenCapStyle.FlatCap))
+                painter.drawLine(QPointF(x0 + w - 1, y0 + 2),
+                                 QPointF(x0 + w - 1, y0 + h - 2))
+                # Arrow pointing left into device
+                mid = y0 + h * 0.5
+                painter.drawLine(QPointF(x0 + w - glow_w, mid - 4),
+                                 QPointF(x0 + w - glow_w - 6, mid))
+                painter.drawLine(QPointF(x0 + w - glow_w, mid + 4),
+                                 QPointF(x0 + w - glow_w - 6, mid))
 
         # ── Text labels (always readable, no flip) ──────────────────
         # Font sizes scaled to available area
