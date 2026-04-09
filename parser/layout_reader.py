@@ -18,6 +18,21 @@ def _is_transistor_cell(cell_name):
             "nmos" in name_lower or "pmos" in name_lower)
 
 
+def _is_resistor_cell(cell_name):
+    """Check if a cell name looks like a resistor PCell."""
+    name_lower = cell_name.lower()
+    return ("rppoly" in name_lower or "rnwell" in name_lower or
+            "rpoly" in name_lower or name_lower.startswith("res_"))
+
+
+def _is_capacitor_cell(cell_name):
+    """Check if a cell name looks like a capacitor PCell."""
+    name_lower = cell_name.lower()
+    return ("ccap" in name_lower or "mimcap" in name_lower or
+            "mim" in name_lower or "vncap" in name_lower or
+            name_lower.startswith("cap_"))
+
+
 def _is_via_or_utility(cell_name):
     """Check if a cell name is a VIA or other non-transistor utility cell."""
     name_lower = cell_name.lower()
@@ -99,6 +114,35 @@ def _extract_recursive(cell, lib, offset_x=0.0, offset_y=0.0,
                 "hier_prefix": prefix,
             })
 
+        elif _is_resistor_cell(cell_name) or _is_capacitor_cell(cell_name):
+            # Passive PCell — record it with passive_type tag
+            passive_type = "res" if _is_resistor_cell(cell_name) else "cap"
+            if mirrored:
+                orientation = "MX"
+            else:
+                deg = round(math.degrees(rotation)) % 360
+                orientation = f"R{deg}"
+
+            bbox = ref_cell.bounding_box() if hasattr(ref_cell, 'bounding_box') else None
+            if bbox is not None:
+                (xmin, ymin), (xmax, ymax) = bbox
+                width = xmax - xmin
+                height = ymax - ymin
+            else:
+                width = 0
+                height = 0
+
+            devices.append({
+                "cell": cell_name,
+                "x": abs_x,
+                "y": abs_y,
+                "width": width,
+                "height": height,
+                "orientation": orientation,
+                "hier_prefix": prefix,
+                "passive_type": passive_type,
+            })
+
         elif _is_via_or_utility(cell_name):
             # Skip vias and utility cells
             continue
@@ -122,12 +166,8 @@ def _extract_recursive(cell, lib, offset_x=0.0, offset_y=0.0,
 def extract_layout_instances(layout_file):
     """Extract device instances from an OAS/GDS layout file.
 
-    For flat layouts (top cell directly contains nfet/pfet PCells),
-    returns them as before.
-
-    For hierarchical layouts (top cell contains sub-cells like Inverter, Xor),
-    recursively descends to find leaf transistor PCells and accumulates
-    their absolute positions.
+    Handles flat layouts (transistors and/or passives directly in top cell)
+    and hierarchical layouts (sub-cells contain the leaf PCells).
     """
     if layout_file.endswith(".gds"):
         lib = gdstk.read_gds(layout_file)
@@ -138,18 +178,23 @@ def extract_layout_instances(layout_file):
 
     top_cell = lib.top_level()[0]
 
-    # Check if the top cell directly contains transistor PCells (flat layout)
-    has_direct_transistors = any(
-        _is_transistor_cell(ref.cell.name if hasattr(ref.cell, 'name') else str(ref.cell))
+    def _is_known_device(cell_name):
+        return (_is_transistor_cell(cell_name) or
+                _is_resistor_cell(cell_name) or
+                _is_capacitor_cell(cell_name))
+
+    # Check if the top cell directly contains any known device PCells (flat layout)
+    has_direct_devices = any(
+        _is_known_device(ref.cell.name if hasattr(ref.cell, 'name') else str(ref.cell))
         for ref in top_cell.references
     )
 
-    if has_direct_transistors:
-        # Flat layout — original behavior (backward compatible)
+    if has_direct_devices:
+        # Flat layout — extract all known device types directly
         devices = []
         for ref in top_cell.references:
             cell_name = ref.cell.name if hasattr(ref.cell, 'name') else str(ref.cell)
-            if not _is_transistor_cell(cell_name):
+            if not _is_known_device(cell_name):
                 continue
 
             x, y, rotation, mirrored, orientation = _ref_origin_rotation(ref)
@@ -164,14 +209,21 @@ def extract_layout_instances(layout_file):
                 width = 0
                 height = 0
 
-            devices.append({
+            entry = {
                 "cell": cell_name,
                 "x": x,
                 "y": y,
                 "width": width,
                 "height": height,
                 "orientation": orientation,
-            })
+            }
+            # Tag passives
+            if _is_resistor_cell(cell_name):
+                entry["passive_type"] = "res"
+            elif _is_capacitor_cell(cell_name):
+                entry["passive_type"] = "cap"
+
+            devices.append(entry)
         return devices
 
     # Hierarchical layout — recursive extraction
