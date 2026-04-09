@@ -14,10 +14,9 @@ from PySide6.QtWidgets import (
     QGraphicsItem,
     QGraphicsSimpleTextItem,
     QMenu,
-    QAction,
 )
 from PySide6.QtCore import Qt, Signal, QPointF
-from PySide6.QtGui import QPainter, QPen, QPainterPath, QColor, QBrush
+from PySide6.QtGui import QPainter, QPen, QPainterPath, QColor, QBrush, QAction
 
 from device_item import DeviceItem
 from passive_item import ResistorItem, CapacitorItem
