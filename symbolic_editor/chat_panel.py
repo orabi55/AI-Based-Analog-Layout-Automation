@@ -2,14 +2,8 @@
 Chat Panel — GUI widget for the AI assistant sidebar.
 
 Uses the Worker-Object Pattern: LLM inference runs on a dedicated
-QThread via ``OrchestratorWorker`` (multi-agent) or ``LLMWorker``
-(single-agent fallback); the ChatPanel communicates with them
+QThread via ``LLMWorker``; the ChatPanel communicates with them
 exclusively through Qt Signals/Slots.
-
-Keyword routing:
-  Words like "optimize", "improve", "auto-place", "fix drc", "reduce"
-  trigger the 4-stage OrchestratorWorker pipeline.
-  All other queries use the standard single-agent LLMWorker path.
 """
 
 import re
@@ -24,11 +18,12 @@ from PySide6.QtWidgets import (
     QPushButton,
     QLabel,
     QFrame,
+    QComboBox,
 )
 from PySide6.QtCore import Qt, Signal, QTimer, QThread
 from PySide6.QtGui import QFont
 
-from ai_agent.ai_initial_placement.llm_worker import LLMWorker, build_system_prompt
+from ai_agent.ai_chat_bot.llm_worker import LLMWorker, build_system_prompt
 from icons import icon_panel_toggle
 
 
@@ -74,17 +69,14 @@ class ChatPanel(QWidget):
     Signals:
         command_requested(dict): emitted when the AI response contains
             a [CMD]...[/CMD] block that was successfully parsed.
-        request_inference(str, list): single-agent path — dispatches to
-            LLM worker thread for normal chat.
-        request_orchestrated(str, str): multi-agent path — dispatches to
-            OrchestratorWorker with (user_message, layout_context_json).
+        request_inference(str, list, str): dispatches to
+            LLM worker thread for chat.
     """
 
     command_requested = Signal(dict)  # emits parsed command dicts
     toggle_requested = Signal()        # emitted when the user clicks the panel-toggle button
 
-    # Single-agent path (normal chat)
-    request_inference = Signal(str, list)
+    request_inference = Signal(str, list, str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -154,6 +146,28 @@ class ChatPanel(QWidget):
         title.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
         title.setStyleSheet("color: #e0e8f0;")
         header_layout.addWidget(title)
+
+        # Model selector dropdown
+        self.model_combo = QComboBox()
+        self.model_combo.addItems(["Gemini", "OpenAI", "Ollama"])
+        self.model_combo.setToolTip("Select AI Model for Chat")
+        self.model_combo.setStyleSheet(
+            """
+            QComboBox {
+                background-color: #2d3548;
+                color: #e0e8f0;
+                border: 1px solid #4a90d9;
+                border-radius: 4px;
+                padding: 2px 5px;
+                font-size: 11px;
+            }
+            QComboBox::drop-down {
+                border: none;
+            }
+            """
+        )
+        self.model_combo.setFixedWidth(80)
+        header_layout.addWidget(self.model_combo)
 
         header_layout.addStretch()
 
@@ -516,7 +530,8 @@ class ChatPanel(QWidget):
             })
 
         # Emit signal → crosses thread boundary → runs on worker thread
-        self.request_inference.emit(full_prompt, chat_messages)
+        selected_model = self.model_combo.currentText()
+        self.request_inference.emit(full_prompt, chat_messages, selected_model)
 
     # -----------------------------------------
     # Response handling (GUI thread)
@@ -724,15 +739,6 @@ class ChatPanel(QWidget):
         self._chat_history.append({"role": "assistant", "content": err_msg})
         self._append_bubble("ai", err_msg)
         
-    def _on_topology_review(self, question):
-        """Handler for when Stage 1 completes and asks for confirmation."""
-        self._stop_thinking()
-        self._remove_last_message()
-        
-        # Don't reset user cmds here since we are pausing
-        self._chat_history.append({"role": "assistant", "content": question})
-        self._append_bubble("ai", question)
-
     def _remove_last_message(self):
         """Remove the last appended message (the thinking bubble)."""
         html = self.chat_display.toHtml()
