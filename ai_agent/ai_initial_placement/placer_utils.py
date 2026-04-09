@@ -273,10 +273,47 @@ def _restore_coords(placed_nodes: list, y_offset: float) -> list:
     return restored
 
 # ---------------------------------------------------------------------------
+# Abutment candidate formatter
+# ---------------------------------------------------------------------------
+def _format_abutment_candidates(candidates: list) -> str:
+    """Format abutment candidate list into a human-readable prompt section."""
+    if not candidates:
+        return ""
+    lines = []
+    for c in candidates:
+        flip_note = " (flip needed — use R0_FH orientation)" if c.get("needs_flip") else ""
+        lines.append(
+            f"  - {c['dev_a']}.{c['term_a']} MUST abut {c['dev_b']}.{c['term_b']}"
+            f"  [shared net: '{c['shared_net']}', type: {c['type']}]{flip_note}"
+        )
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
 # Core Structured Prompt
 # ---------------------------------------------------------------------------
-def generate_vlsi_prompt(prompt_graph, inventory_str, adjacency_str, block_str) -> str:
-    """Returns the perfectly structured core VLSI formatting string for LLMs"""
+def generate_vlsi_prompt(prompt_graph, inventory_str, adjacency_str, block_str,
+                         abutment_str: str = "") -> str:
+    """Returns the perfectly structured core VLSI formatting string for LLMs."""
+
+    abut_section = ""
+    if abutment_str and abutment_str.strip() not in ("", "None detected."):
+        abut_section = f"""
+8. Transistor Abutment (Diffusion Sharing — HIGHEST PRIORITY):
+The following transistor pairs MUST be placed directly adjacent (touching, no gap)
+so their diffusion regions can be shared (leftAbut / rightAbut = 1).
+This saves area and reduces parasitics. VIOLATION of these constraints is NOT acceptable.
+
+ABUTMENT PAIRS:
+{abutment_str}
+
+Placement rules for abutment pairs:
+- The two devices in each pair MUST be in the same row (same y-coordinate).
+- They MUST be placed side-by-side with NO gap between them.
+- If "flip needed" is noted: the second device must use orientation "R0_FH" (horizontal flip).
+- Priority: abutment constraints override block grouping order when they conflict.
+"""
+
     return f"""
 You are an expert VLSI placement engineer.
 
@@ -328,7 +365,7 @@ Generate an initial placement based on the following strict DRC and Floorplannin
 - NEVER place passives in the PMOS row (y=0.668) or NMOS row (y=0).
 - Passives are placed left-to-right in the passive row with a minimum gap of 0.294 um between them.
 - The passive row height is independent of transistor geometry.
-
+{abut_section}
 IMPORTANT:
 You must return the EXACT same JSON structure as the input, keeping all existing keys and arrays intact.
 Your only task is to add or update the "x", "y", and "orientation" (default "R0") keys inside every object within the "nodes" array.

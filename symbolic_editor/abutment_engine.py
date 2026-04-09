@@ -1,146 +1,198 @@
 """
-abutment_engine.py — Transistor abutment solver.
+abutment_engine.py — Transistor abutment candidate finder.
 
-When two same-type transistors in the same row share a net on their
-adjacent terminals, they can "abut" — physically sharing one diffusion
-strip, saving area and reducing parasitics.
+Purpose
+-------
+When the user presses the "Abut" button, this engine:
+  1.  Scans ALL transistor pairs in the netlist (regardless of position).
+  2.  Finds pairs that share the same Source or Drain net (same-type only:
+      NMOS-NMOS or PMOS-PMOS).
+  3.  Reports each candidate pair with the matching terminal on each side,
+      and whether the right device needs to be H-flipped so the matching
+      terminal faces the shared edge.
 
-PDK representation (SAED 14nm):
-  Each device PCell has a 'leftAbut' and 'rightAbut' parameter (0 or 1).
-  Setting them to 1 tells the PCell generator to remove the end-cap
-  diffusion on that side so it merges with the neighbour's diffusion.
+The candidates are then used for:
+  - Visual highlighting (green glow on compatible terminal edges in the GUI).
+  - AI placement constraints (the AI is told to place abutment candidates
+    adjacent to each other so diffusion can be shared).
 
-This engine:
-  1. Takes an ordered list of node dicts (already sorted by x in a row).
-  2. Uses terminal_nets to determine which adjacent pairs can share a terminal.
-  3. Decides per-device whether it needs to be horizontally flipped to make
-     the shared net land on the correct edge.
-  4. Returns an `abutment_result` dict:
-       {dev_id: {"abut_left":bool, "abut_right":bool, "flip_h":bool}}
+PDK note (SAED 14nm)
+---------------------
+Abutment is encoded as leftAbut / rightAbut flags on the PCell — the x/y
+positions do NOT change.  The PCell internally removes the end-cap diffusion
+on the flagged side so two adjacent cells share one diffusion strip.
 
-Shared terminal rules (for an adjacent (left_dev, right_dev) pair):
-  - left_dev.right_terminal_net == right_dev.left_terminal_net  → direct abut (no flip)
-  - left_dev.right_terminal_net == right_dev.right_terminal_net → flip right_dev, then abut
-  Otherwise: no abutment for this pair.
-
-Terminal polarity for a single-finger (nf=1) R0 device:
-  - Left column  = Source  (column 0, even index)
-  - Right column = Drain   (column 1, odd index)
-For a flipped (flip_h) device the polarity reverses.
+Candidate data format
+---------------------
+Each candidate is a dict:
+{
+    "dev_a":        str,        # device id
+    "term_a":       "S"|"D",   # which terminal of dev_a is shared
+    "dev_b":        str,        # device id
+    "term_b":       "S"|"D",   # which terminal of dev_b is shared
+    "shared_net":   str,        # the net name connecting them
+    "type":         "nmos"|"pmos",
+    "needs_flip":   bool,       # True => dev_b should be H-flipped to align
+}
 """
 
 from __future__ import annotations
+from itertools import combinations
 
 
-def _left_right_nets(dev_id: str, terminal_nets: dict, flip_h: bool):
-    """Return (left_net, right_net) for a device based on its polarity.
+# ──────────────────────────────────────────────────────────────────────────────
+# Helpers
+# ──────────────────────────────────────────────────────────────────────────────
 
-    For nf=1 (most common):
-      R0:      left=S, right=D
-      flipped: left=D, right=S
-    For nf>1 (e.g. nf=2, 3 diffusion columns S-D-S):
-      R0:      left=S, right=S  (both outer cols are source)
-      flipped: left=D, right=D
-    We use 'nf' from dev_id's node data but since we don't have it here
-    we parametrise via the inferred outer cols from terminal_nets directly.
-    """
+def _sd_nets(dev_id: str, terminal_nets: dict) -> tuple[str | None, str | None]:
+    """Return (source_net, drain_net) for dev_id."""
     nets = terminal_nets.get(dev_id, {})
-    if not nets:
-        return None, None
-
-    if flip_h:
-        # mirrored: the old Drain side is now on the left
-        left_net  = nets.get("D", "")
-        right_net = nets.get("S", "")
-    else:
-        left_net  = nets.get("S", "")
-        right_net = nets.get("D", "")
-
-    return left_net or None, right_net or None
+    return nets.get("S") or None, nets.get("D") or None
 
 
-def solve_abutment(ordered_row: list, terminal_nets: dict) -> dict:
-    """Compute per-device abutment flags and required flips for one row.
+# ──────────────────────────────────────────────────────────────────────────────
+# Main API
+# ──────────────────────────────────────────────────────────────────────────────
+
+def find_abutment_candidates(nodes: list, terminal_nets: dict) -> list:
+    """Find all transistor pairs that can share a diffusion (abutment candidates).
+
+    Checks every same-type (NMOS-NMOS or PMOS-PMOS) pair for a shared S/D net.
+
+    Shared terminal cases:
+      dev_a.S == dev_b.S  → flip dev_b  (both Sources align if dev_b mirrored)
+      dev_a.S == dev_b.D  → no flip     (dev_a.S left edge ↔ dev_b.D right edge)
+      dev_a.D == dev_b.S  → no flip     (dev_a.D right edge ↔ dev_b.S left edge)
+      dev_a.D == dev_b.D  → flip dev_b  (Drains align if dev_b mirrored)
 
     Args:
-        ordered_row: list of node dicts in left-to-right order.
-                     Each dict must have at least {"id": str, "type": str}.
-        terminal_nets: {dev_id: {"S": net, "D": net, "G": net}}
+        nodes:         list of node dicts [{\"id\", \"type\", ...}, ...]
+        terminal_nets: {dev_id: {\"S\": net, \"D\": net, \"G\": net}}
 
     Returns:
-        {dev_id: {"abut_left": bool, "abut_right": bool, "flip_h": bool}}
+        list of candidate dicts (see module docstring).
     """
-    n = len(ordered_row)
-    result = {
-        node["id"]: {"abut_left": False, "abut_right": False, "flip_h": False}
-        for node in ordered_row
-    }
+    candidates = []
 
-    if n < 2:
-        return result
+    transistors = [n for n in nodes
+                   if n.get("type") in ("nmos", "pmos")]
 
-    # Running flip state — once a device is flipped, its neighbours respond
-    flip_states = {node["id"]: False for node in ordered_row}
+    for node_a, node_b in combinations(transistors, 2):
+        id_a = node_a["id"]
+        id_b = node_b["id"]
+        type_a = node_a["type"]
+        type_b = node_b["type"]
 
-    for i in range(n - 1):
-        left_node  = ordered_row[i]
-        right_node = ordered_row[i + 1]
-
-        left_id  = left_node["id"]
-        right_id = right_node["id"]
-
-        # Passives cannot abut with transistors, or with each other via this engine
-        if left_node["type"] in ("res", "cap") or right_node["type"] in ("res", "cap"):
+        # Only same-type pairs can share diffusion
+        if type_a != type_b:
             continue
 
-        # Mixed NMOS/PMOS cannot abut
-        if left_node["type"] != right_node["type"]:
-            continue
+        s_a, d_a = _sd_nets(id_a, terminal_nets)
+        s_b, d_b = _sd_nets(id_b, terminal_nets)
 
-        left_flip  = flip_states[left_id]
-        right_flip = flip_states[right_id]
+        if not (s_a or d_a) or not (s_b or d_b):
+            continue  # missing net info
 
-        l_left, l_right = _left_right_nets(left_id,  terminal_nets, left_flip)
-        r_left, r_right = _left_right_nets(right_id, terminal_nets, right_flip)
+        found = []
 
-        if l_right is None or r_left is None:
-            continue  # No net info — skip
+        # Case 1: dev_a.S == dev_b.S  → flip dev_b
+        if s_a and s_b and s_a == s_b:
+            # After flip: dev_b left becomes Drain, right becomes Source
+            # So dev_a's left Source can abut with dev_b's flipped right Source
+            found.append({
+                "dev_a": id_a, "term_a": "S",
+                "dev_b": id_b, "term_b": "S",
+                "shared_net": s_a,
+                "type": type_a,
+                "needs_flip": True,
+            })
 
-        if l_right == r_left and l_right != "":
-            # Direct abutment — shared net already on correct edges
-            result[left_id]["abut_right"]  = True
-            result[right_id]["abut_left"]  = True
+        # Case 2: dev_a.S == dev_b.D  → no flip
+        if s_a and d_b and s_a == d_b:
+            # dev_b's Drain (right) abuts dev_a's Source (left)
+            # In layout: place dev_b LEFT of dev_a
+            found.append({
+                "dev_a": id_b, "term_a": "D",
+                "dev_b": id_a, "term_b": "S",
+                "shared_net": s_a,
+                "type": type_a,
+                "needs_flip": False,
+            })
 
-        elif r_right is not None and l_right == r_right and l_right != "":
-            # Right device needs H-flip before it can abut
-            flip_states[right_id] = not right_flip
-            result[right_id]["flip_h"]   = flip_states[right_id]
-            result[left_id]["abut_right"] = True
-            result[right_id]["abut_left"] = True
+        # Case 3: dev_a.D == dev_b.S  → no flip
+        if d_a and s_b and d_a == s_b:
+            # dev_a's Drain (right) abuts dev_b's Source (left)
+            # In layout: place dev_a LEFT of dev_b
+            found.append({
+                "dev_a": id_a, "term_a": "D",
+                "dev_b": id_b, "term_b": "S",
+                "shared_net": d_a,
+                "type": type_a,
+                "needs_flip": False,
+            })
 
-    return result
+        # Case 4: dev_a.D == dev_b.D  → flip dev_b
+        if d_a and d_b and d_a == d_b:
+            found.append({
+                "dev_a": id_a, "term_a": "D",
+                "dev_b": id_b, "term_b": "D",
+                "shared_net": d_a,
+                "type": type_a,
+                "needs_flip": True,
+            })
+
+        # Deduplicate (same pair, same net can appear in multiple cases)
+        for c in found:
+            duplicate = any(
+                e["dev_a"] == c["dev_a"] and e["dev_b"] == c["dev_b"]
+                and e["shared_net"] == c["shared_net"]
+                for e in candidates
+            )
+            if not duplicate:
+                candidates.append(c)
+
+    return candidates
 
 
-def split_into_rows(nodes: list, snap_tolerance: float = 0.05) -> dict:
-    """Group node dicts into rows by similar y-coordinate.
+def format_candidates_for_prompt(candidates: list) -> str:
+    """Format abutment candidates as a human-readable block for the AI prompt."""
+    if not candidates:
+        return "None detected."
 
-    Returns:
-        {row_y: [node, ...]} sorted by x within each row.
+    lines = []
+    for c in candidates:
+        flip_note = " [flip B]" if c["needs_flip"] else ""
+        lines.append(
+            f"  - {c['dev_a']} ({c['term_a']}) abutts {c['dev_b']} ({c['term_b']})"
+            f"  via net '{c['shared_net']}'{flip_note}"
+        )
+    return "\n".join(lines)
+
+
+def build_edge_highlight_map(candidates: list) -> dict:
+    """Build a per-device highlight map: {dev_id: {side: net}} where side is
+    'left' or 'right'.
+
+    Used by the editor to know which edge of each device to glow.
+
+    Convention:
+      - term 'S' on a normal device maps to left edge
+      - term 'D' on a normal device maps to right edge
+      - If needs_flip=True, the edges are reversed for dev_b
     """
-    rows: dict = {}
-    for node in nodes:
-        y = node.get("geometry", {}).get("y", 0.0)
-        # Find existing row within tolerance
-        matched_y = None
-        for ry in rows:
-            if abs(ry - y) <= snap_tolerance:
-                matched_y = ry
-                break
-        key = matched_y if matched_y is not None else y
-        rows.setdefault(key, []).append(node)
+    highlights: dict = {}   # {dev_id: {"left": net, "right": net}}
 
-    # Sort each row by x
-    for ry in rows:
-        rows[ry].sort(key=lambda n: n.get("geometry", {}).get("x", 0.0))
+    for c in candidates:
+        def _add(dev_id, term, flipped, net):
+            # Determine which physical edge this terminal is on
+            if not flipped:
+                edge = "left" if term == "S" else "right"
+            else:
+                edge = "right" if term == "S" else "left"
+            highlights.setdefault(dev_id, {})
+            highlights[dev_id][edge] = net
 
-    return rows
+        _add(c["dev_a"], c["term_a"], False,             c["shared_net"])
+        _add(c["dev_b"], c["term_b"], c["needs_flip"],   c["shared_net"])
+
+    return highlights

@@ -21,10 +21,10 @@ from device_item import DeviceItem
 from passive_item import ResistorItem, CapacitorItem
 from block_item import BlockItem
 try:
-    from abutment_engine import solve_abutment, split_into_rows
+    from abutment_engine import find_abutment_candidates, build_edge_highlight_map
 except ImportError:
-    solve_abutment = None
-    split_into_rows = None
+    find_abutment_candidates = None
+    build_edge_highlight_map = None
 
 
 class SymbolicEditor(QGraphicsView):
@@ -680,61 +680,64 @@ class SymbolicEditor(QGraphicsView):
             self.resetCachedContent()
 
     # ------------------------------------------------------------------
-    # Abutment
+    # Abutment candidate highlighting
     # ------------------------------------------------------------------
-    def apply_abutment(self):
-        """Compute and apply transistor abutment for all rows.
+    def apply_abutment(self) -> list:
+        """Detect abutment candidates and highlight their terminal edges.
 
-        For each same-type row (NMOS or PMOS), the abutment engine finds
-        adjacent pairs that share a terminal net, sets their abut flags,
-        and flips devices where necessary so the shared net is on the
-        correct edge. The result is visualised immediately via
-        DeviceItem.set_abutment().
+        Scans ALL transistor pairs (regardless of current position) for shared
+        Source/Drain nets.  Highlights the matching edge of each device with a
+        bright green glow so the user can see which terminals can be shared.
+
+        Returns:
+            list of candidate dicts (see abutment_engine for schema).
         """
-        if solve_abutment is None or not self._terminal_nets:
-            return
+        if find_abutment_candidates is None or not self._terminal_nets:
+            return []
 
-        # Build node list from current item positions
+        # Build nodes from current items (type info only — position not needed)
         nodes = []
         for dev_id, item in self.device_items.items():
             if isinstance(item, (ResistorItem, CapacitorItem)):
-                continue          # passives are not abutted
+                continue
             nodes.append({
                 "id":   dev_id,
-                "type": item.device_type,
-                "geometry": {
-                    "x": item.pos().x(),
-                    "y": item.pos().y(),
-                },
+                "type": getattr(item, "device_type", "nmos"),
             })
 
-        rows = split_into_rows(nodes, snap_tolerance=self._snap_grid * 0.5)
+        candidates = find_abutment_candidates(nodes, self._terminal_nets)
+        edge_map   = build_edge_highlight_map(candidates)   # {dev_id: {left: net, right: net}}
 
-        for _row_y, row_nodes in rows.items():
-            abut_result = solve_abutment(row_nodes, self._terminal_nets)
-            for dev_id, flags in abut_result.items():
-                item = self.device_items.get(dev_id)
-                if item is None:
-                    continue
-                # Apply flip if required
-                if flags["flip_h"] != item.is_flip_h():
-                    item.set_flip_h(flags["flip_h"])
-                # Apply visual abutment markers
-                item.set_abutment(flags["abut_left"], flags["abut_right"])
+        # Apply highlights to each item
+        for dev_id, item in self.device_items.items():
+            if not hasattr(item, "set_candidate_highlight"):
+                continue
+            edges = edge_map.get(dev_id, {})
+            item.set_candidate_highlight(
+                left_net  = edges.get("left"),
+                right_net = edges.get("right"),
+            )
 
-        self._abutment_active = True
+        self._abutment_candidates = candidates
+        self._abutment_active     = True
         self.scene.update()
+        return candidates
 
     def clear_abutment(self):
-        """Remove all abutment markings and flip states."""
+        """Remove all abutment candidate highlights."""
         for item in self.device_items.values():
-            if hasattr(item, 'set_abutment'):
-                item.set_abutment(False, False)
-        self._abutment_active = False
+            if hasattr(item, "clear_candidate_highlight"):
+                item.clear_candidate_highlight()
+        self._abutment_candidates = []
+        self._abutment_active     = False
         self.scene.update()
 
     def is_abutment_active(self):
-        return getattr(self, '_abutment_active', False)
+        return getattr(self, "_abutment_active", False)
+
+    def get_abutment_candidates(self) -> list:
+        """Return the last computed abutment candidate list."""
+        return getattr(self, "_abutment_candidates", [])
 
     def _get_terminal_for_net(self, dev_id, net_name):
         """Return which terminal ('S','G','D') of dev_id connects to net_name."""

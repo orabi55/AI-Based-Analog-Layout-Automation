@@ -1592,17 +1592,38 @@ class MainWindow(QMainWindow):
         self.chat_panel._append_message("AI", msg, "#e8f4fd", "#1a1a2e")
 
     def _on_toggle_abutment(self, enabled):
-        """Apply or clear transistor abutment based on toggle state."""
+        """Analyse and highlight abutment candidates, or clear them."""
         if enabled:
-            self.editor.apply_abutment()
-            msg = (
-                "✅ Abutment ON — Adjacent transistors sharing Source/Drain nets "
-                "are now marked as abutted (diffusion sharing active).\n"
-                "Orange stripes = NMOS abutted edge | Red stripes = PMOS abutted edge."
-            )
+            candidates = self.editor.apply_abutment()
+            self._abutment_candidates = candidates   # stored for AI placer
+            n = len(candidates)
+            if n == 0:
+                msg = (
+                    "⚠️ No abutment candidates found.\n"
+                    "This happens when no two same-type transistors share a "
+                    "Source or Drain net."
+                )
+            else:
+                lines = [
+                    f"✅ Found {n} abutment candidate(s) — terminal edges that "
+                    "can share diffusion are highlighted in 🟢 green:\n"
+                ]
+                for c in candidates:
+                    flip_note = " (flip needed)" if c["needs_flip"] else ""
+                    lines.append(
+                        f"  • {c['dev_a']}.{c['term_a']} ↔ "
+                        f"{c['dev_b']}.{c['term_b']}  "
+                        f"[net: {c['shared_net']}]{flip_note}"
+                    )
+                lines.append(
+                    "\nWhen you run AI Placement, these constraints will be "
+                    "injected so the AI places candidates adjacent to each other."
+                )
+                msg = "\n".join(lines)
         else:
             self.editor.clear_abutment()
-            msg = "Abutment OFF — all abutment markers cleared."
+            self._abutment_candidates = []
+            msg = "Abutment analysis cleared."
         self.chat_panel._append_message("AI", msg, "#e8f4fd", "#1a1a2e")
 
     def _next_dummy_id(self, dev_type):
@@ -1762,12 +1783,16 @@ class MainWindow(QMainWindow):
         if "terminal_nets" not in data:
             data["terminal_nets"] = self._terminal_nets
 
+        # Inject abutment candidates if the user has activated abutment analysis
+        data["abutment_candidates"] = getattr(self, "_abutment_candidates", [])
+
         self.overlay.show_message(f"Running AI initial placement ({model_choice})...")
 
         self._ai_worker = GenericWorker(self._run_ai_initial_placement, data, model_choice)
         self._ai_worker.finished.connect(self._on_ai_placement_completed)
         self._ai_worker.error.connect(self._on_ai_placement_error)
         self._ai_worker.start()
+
 
     def _on_ai_placement_completed(self, data):
         self.overlay.hide_overlay()
