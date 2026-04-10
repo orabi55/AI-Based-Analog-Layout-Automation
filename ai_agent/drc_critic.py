@@ -62,7 +62,7 @@ Max [CMD] blocks = 2 × number of violations.
 Do NOT ask the user for confirmation.
 
 ### VII. EXTERNAL KNOWLEDGE
-PMOS row y < NMOS row y in this editor.
+PMOS row y > NMOS row y in this editor.
 Never assign a PMOS device to NMOS row y, or vice versa.
 """ + "\n\n" + ANALOG_LAYOUT_RULES
 
@@ -126,8 +126,8 @@ def run_drc_check(nodes, gap_px=0.0):
             nmos_ys.add(y_rounded)
 
     # For legacy callers that read pmos_row_y / nmos_row_y as a single float,
-    # expose the most-negative PMOS y and most-positive NMOS y as sentinels.
-    pmos_row_y = min(pmos_ys) if pmos_ys else None
+    # expose representative sentinels under the convention PMOS y > NMOS y.
+    pmos_row_y = max(pmos_ys) if pmos_ys else None
     nmos_row_y = min(nmos_ys) if nmos_ys else None
 
     # Build bounding box list
@@ -179,14 +179,12 @@ def run_drc_check(nodes, gap_px=0.0):
 
     # ---- Row-Type check ----
     # Two-stage approach:
-    #  Stage A — Hard physical boundary: PMOS y < 0, NMOS y >= 0.
-    #            This is PDK-independent and catches cross-type misplacement
-    #            even when the misplaced device's y inadvertently populates the set.
-    #  Stage B — Set membership: within the correct half-plane, flag any device
-    #            whose y is not in the expected set of valid rows for its type.
-    #            This catches e.g. an NMOS moved to y=2.0 when only 0.0 and 0.668
-    #            are valid rows (genuine row-boundary errors, NOT multi-row errors).
-    NMOS_BOUNDARY = 0.0  # NMOS: y >= this; PMOS: y < this
+    #  Stage A — Cross-type ordering: PMOS rows must be above NMOS rows,
+    #            i.e. PMOS y > NMOS y in this editor.
+    #  Stage B — Set membership: within a valid side of the ordering, flag any
+    #            device y that does not match known rows of that device type.
+    nmos_top_y = max(nmos_ys) if nmos_ys else None
+    pmos_bottom_y = min(pmos_ys) if pmos_ys else None
 
     if (pmos_ys or nmos_ys):
         for n in valid:
@@ -196,12 +194,13 @@ def run_drc_check(nodes, gap_px=0.0):
             y        = round(float(geo.get("y", 0)), 4)
 
             if dev_type == "pmos":
-                # Stage A: PMOS must be in the negative half-plane
-                if y >= NMOS_BOUNDARY and nmos_ys:
-                    correct_y = min(pmos_ys) if pmos_ys else -0.668
+                # Stage A: PMOS must be above the NMOS band (larger y)
+                if nmos_top_y is not None and y <= nmos_top_y:
+                    correct_y = max(pmos_ys) if pmos_ys else round(nmos_top_y + 0.668, 4)
                     text = (
                         f"FATAL ROW ERROR: Device {dev_id} is a PMOS but is at y={y:.4f} "
-                        f"(NMOS half-plane y>=0). Move it to y={correct_y:.4f}."
+                        f"(must be above NMOS rows, y>{nmos_top_y:.4f}). "
+                        f"Move it to y={correct_y:.4f}."
                     )
                     if text not in violation_texts:
                         violation_texts.append(text)
@@ -214,9 +213,9 @@ def run_drc_check(nodes, gap_px=0.0):
                             gap_required=0, gap_actual=0,
                             text=text,
                         ))
-                # Stage B: PMOS in correct half-plane but not in known PMOS rows
-                elif y < NMOS_BOUNDARY and pmos_ys and y not in pmos_ys:
-                    correct_y = min(pmos_ys)
+                # Stage B: PMOS on valid side but not in known PMOS rows
+                elif nmos_top_y is not None and y > nmos_top_y and pmos_ys and y not in pmos_ys:
+                    correct_y = max(pmos_ys)
                     text = (
                         f"FATAL ROW ERROR: Device {dev_id} is a PMOS at y={y:.4f}. "
                         f"Valid PMOS row(s): {sorted(pmos_ys)}. "
@@ -235,12 +234,13 @@ def run_drc_check(nodes, gap_px=0.0):
                         ))
 
             elif dev_type == "nmos":
-                # Stage A: NMOS must be in the non-negative half-plane
-                if y < NMOS_BOUNDARY and pmos_ys:
-                    correct_y = min(nmos_ys) if nmos_ys else 0.0
+                # Stage A: NMOS must be below the PMOS band (smaller y)
+                if pmos_bottom_y is not None and y >= pmos_bottom_y:
+                    correct_y = min(nmos_ys) if nmos_ys else round(pmos_bottom_y - 0.668, 4)
                     text = (
                         f"FATAL ROW ERROR: Device {dev_id} is an NMOS but is at y={y:.4f} "
-                        f"(PMOS half-plane y<0). Move it to y={correct_y:.4f}."
+                        f"(must be below PMOS rows, y<{pmos_bottom_y:.4f}). "
+                        f"Move it to y={correct_y:.4f}."
                     )
                     if text not in violation_texts:
                         violation_texts.append(text)
@@ -253,8 +253,8 @@ def run_drc_check(nodes, gap_px=0.0):
                             gap_required=0, gap_actual=0,
                             text=text,
                         ))
-                # Stage B: NMOS in correct half-plane but not in known NMOS rows
-                elif y >= NMOS_BOUNDARY and nmos_ys and y not in nmos_ys:
+                # Stage B: NMOS on valid side but not in known NMOS rows
+                elif pmos_bottom_y is not None and y < pmos_bottom_y and nmos_ys and y not in nmos_ys:
                     correct_y = min(nmos_ys)
                     text = (
                         f"FATAL ROW ERROR: Device {dev_id} is an NMOS at y={y:.4f}. "

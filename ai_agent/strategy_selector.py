@@ -77,13 +77,31 @@ Rules:
 """
 
 
-def generate_strategies(user_message: str, constraint_text: str, run_llm_fn) -> str:
+def _normalize_chat_history(chat_history):
+  normalized = []
+  if not isinstance(chat_history, list):
+    return normalized
+
+  for msg in chat_history:
+    if not isinstance(msg, dict):
+      continue
+    role = str(msg.get("role", "")).strip()
+    content = str(msg.get("content", "")).strip()
+    if not role or not content:
+      continue
+    normalized.append({"role": role, "content": content})
+
+  return normalized
+
+
+def generate_strategies(user_message: str, constraint_text: str, run_llm_fn, chat_history=None) -> str:
     """Ask the LLM to generate strategy options for this circuit.
 
     Args:
         user_message:    the user's original request.
         constraint_text: topology constraint summary from Stage 1.
         run_llm_fn:      the run_llm callable from llm_worker.py.
+        chat_history:    optional prior role/content messages.
 
     Returns:
         A formatted strategy selection string for the user.
@@ -96,10 +114,9 @@ def generate_strategies(user_message: str, constraint_text: str, run_llm_fn) -> 
         f"Circuit topology:\n{constraint_text}\n\n"
         f"Generate 3-5 strategies tailored to the devices and nets shown above."
     )
-    msgs = [
-        {"role": "system", "content": STRATEGY_SELECTOR_PROMPT},
-        {"role": "user",   "content": user_content},
-    ]
+    msgs = [{"role": "system", "content": STRATEGY_SELECTOR_PROMPT}]
+    msgs.extend(_normalize_chat_history(chat_history)[-8:])
+    msgs.append({"role": "user", "content": user_content})
     try:
         result = run_llm_fn(msgs, user_content)
         if result and len(result.strip()) > 20:

@@ -92,7 +92,7 @@ SINGLE-ROW INTERDIGITATED (total fingers <= 16):
   For MM0[REF](nf=8) <-> MM1(nf=4) <-> MM2(nf=4), total=16 fingers:
 
   Common-centroid symmetric pattern:
-    MM2 MM0 MM1 MM0 MM0 MM1 MM0 MM2 MM2 MM0 MM1 MM0 MM0 MM1 MM0 MM2
+    MM2_f1 MM0_f1 MM1_f1 MM0_f2 MM0_f3 MM1_f2 MM0_f4 MM2_f2 MM2_f3 MM0_f5 MM1_f3 MM0_f6 MM0_f7 MM1_f4 MM0_f8 MM2_f4
     <———————————— symmetric about center ————————————>
 
   This ensures MM1 and MM2 have identical centroid positions.
@@ -172,6 +172,8 @@ Output [CMD] blocks FIRST — ALL of them — then one sentence of explanation.
 Supported actions:
   [CMD]{"action":"swap","device_a":"MM1","device_b":"MM2"}[/CMD]
   [CMD]{"action":"move","device":"MM3","x":1.176,"y":0.000}[/CMD]
+
+Prioritize swap actions over move actions when possible to reduce routing disruption.
 
 Only use device IDs from the IMMUTABLE TRANSISTORS list.
 """ + "\n### EXTERNAL KNOWLEDGE\n" + ANALOG_LAYOUT_RULES

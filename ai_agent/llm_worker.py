@@ -24,12 +24,15 @@ FIXES APPLIED:
     - Bug #3: pending_layout_context now stores sp_file_path for Stage 2 resume.
 """
 
-import os
-import re
-import time
 from pathlib import Path
+import uuid
+from typing import cast
+from langgraph.types import Command
+from ai_agent.graph import app as langgraph_app
 from dotenv import load_dotenv
 from PySide6.QtCore import QObject, Signal, Slot
+from langchain_core.runnables import RunnableConfig
+from ai_agent.run_llm import run_llm
 
 # Load .env from the project root so API keys are available
 _env_path = Path(__file__).resolve().parent.parent / ".env"
@@ -208,181 +211,6 @@ def build_system_prompt(layout_context):
 
 
 # -----------------------------------------------------------------
-# Module-level helper — pure Python, no Qt, reusable by Orchestrator
-# -----------------------------------------------------------------
-def run_llm(chat_messages, full_prompt):
-    """Execute the cascading LLM request and return the reply text.
-
-    Args:
-        chat_messages: list of {"role": ..., "content": ...} dicts
-        full_prompt:   complete prompt string for single-turn APIs
-
-    Returns:
-        str: the LLM reply text
-
-    Raises:
-        RuntimeError: if all backends fail
-    """
-    errors = []
-    print(
-        f"[LLM] run_llm: {len(chat_messages)} msgs, "
-        f"prompt={len(full_prompt)} chars"
-    )
-
-    # ---- 1. Gemini ----
-    gemini_key = os.environ.get("GEMINI_API_KEY", "")
-    if gemini_key:
-        gemini_models = [
-            "gemini-2.0-flash",
-            "gemini-2.5-flash",
-            "gemini-1.5-flash",
-        ]
-        _gemini_key_invalid = False
-        for model_name in gemini_models:
-            if _gemini_key_invalid:
-                break
-            for attempt in range(3):
-                try:
-                    from google import genai
-                    from google.genai import types as genai_types
-
-                    client   = genai.Client(api_key=gemini_key)
-                    sys_text = ""
-                    conv_parts = []
-                    for cm in chat_messages:
-                        if cm["role"] == "system":
-                            sys_text = cm["content"]
-                        else:
-                            conv_parts.append(cm["content"])
-                    user_text = (
-                        "\n".join(conv_parts) if conv_parts else full_prompt
-                    )
-
-                    config_kwargs = {
-                        "max_output_tokens": 4096,
-                        "temperature":       0.4,
-                    }
-
-                    if "gemma" in model_name.lower():
-                        if sys_text:
-                            user_text = f"{sys_text}\n\n{user_text}"
-                    else:
-                        config_kwargs["system_instruction"] = sys_text or None
-
-                    response = client.models.generate_content(
-                        model    = model_name,
-                        contents = user_text,
-                        config   = genai_types.GenerateContentConfig(
-                            **config_kwargs
-                        ),
-                    )
-
-                    reply_text = None
-                    if response:
-                        try:
-                            reply_text = response.text
-                        except Exception:
-                            if (
-                                hasattr(response, "candidates")
-                                and response.candidates
-                            ):
-                                parts = (
-                                    response.candidates[0].content.parts
-                                )
-                                if parts:
-                                    reply_text = "".join(
-                                        p.text
-                                        for p in parts
-                                        if hasattr(p, "text")
-                                    )
-
-                    if reply_text and reply_text.strip():
-                        print(f"[LLM] Gemini/{model_name}")
-                        return reply_text.strip()
-                    else:
-                        errors.append(
-                            f"Gemini/{model_name}: empty response"
-                        )
-                        break
-
-                except Exception as e:
-                    import traceback
-                    e_str   = str(e)
-                    err_str = (
-                        f"[{type(e).__name__}] {e}\n"
-                        f"{traceback.format_exc()}"
-                    )
-                    if any(
-                        k in e_str
-                        for k in (
-                            "API_KEY_INVALID",
-                            "API key not valid",
-                            "401",
-                            "403",
-                            "PERMISSION_DENIED",
-                            "invalid api key",
-                            "could not validate",
-                        )
-                    ):
-                        errors.append(f"Gemini: API key invalid – {e}")
-                        _gemini_key_invalid = True
-                        break
-                    if "429" in e_str or "RESOURCE_EXHAUSTED" in e_str:
-                        retry_s = _parse_retry_delay(e)
-                        wait    = min(retry_s + 2.0, 120.0)
-                        if attempt < 2:
-                            print(
-                                f"[LLM] Gemini/{model_name} rate-limited "
-                                f"(retry in {retry_s:.1f}s). "
-                                f"Waiting {wait:.1f}s..."
-                            )
-                            time.sleep(wait)
-                            continue
-                    errors.append(f"Gemini/{model_name}: {err_str}")
-                    break
-    else:
-        errors.append("Gemini: GEMINI_API_KEY not set")
-
-    # ---- All models failed ----
-    summary = "\n".join(f"  * {e}" for e in errors)
-    print(
-        f"[LLM] All models failed. "
-        f"Falling back to prescriptive logic.\n{summary}"
-    )
-    return (
-        "I'm having trouble connecting to my AI backend right now. "
-        "Please check your API key in the `.env` file and try again. "
-        "In the meantime, I can still execute direct commands like "
-        "**swap**, **move**, and **add dummy** if you type them!"
-    )
-
-
-def _parse_retry_delay(exc: Exception) -> float:
-    """Extract retryDelay seconds from a 429 ClientError response body."""
-    try:
-        if (
-            hasattr(exc, "args")
-            and len(exc.args) > 0
-            and isinstance(exc.args[0], dict)
-        ):
-            details = exc.args[0].get("error", {}).get("details", [])
-            for detail in details:
-                if detail.get("@type", "").endswith("RetryInfo"):
-                    delay_str = detail.get("retryDelay", "2s")
-                    return float(re.sub(r"[^0-9.]", "", delay_str))
-    except Exception:
-        pass
-
-    delay_match = re.search(
-        r"retry in ([\d.]+)s", str(exc), re.IGNORECASE
-    )
-    if delay_match:
-        return float(delay_match.group(1))
-
-    return 2.0
-
-
-# -----------------------------------------------------------------
 # Worker QObject
 # -----------------------------------------------------------------
 class LLMWorker(QObject):
@@ -404,220 +232,236 @@ class LLMWorker(QObject):
 
 
 # -----------------------------------------------------------------
-# OrchestratorWorker
 # -----------------------------------------------------------------
 class OrchestratorWorker(LLMWorker):
-    """Drives the 4-stage multi-agent pipeline.
+    """Drives the multi-agent pipeline using LangGraph."""
 
-    FIXES:
-      - sp_file resolved via _resolve_sp_file() instead of sorted()[0]
-      - sp_file_path injected into layout_context before every stage
-      - pending_layout_context preserved with sp_file_path for Stage 2 resume
-    """
-
-    stage_completed          = Signal(int, str)
+    stage_completed = Signal(int, str)
     topology_ready_for_review = Signal(str)
+    visual_viewer_signal = Signal(dict)
 
     def __init__(self):
         super().__init__()
-        self.pending_topology       = None
-        self.pending_layout_context = None
-
+        self.thread_config = cast(RunnableConfig, {
+             "configurable": {
+                   "thread_id": str(uuid.uuid4())
+              }
+         })
     @Slot(str, str, list)
     def process_orchestrated_request(self, user_message, layout_context_json, chat_history=None):
-        """Run the full multi-agent pipeline (blocking).
-
-        Args:
-            user_message (str):          the user's chat message
-            layout_context_json (str):   JSON-serialised layout context
-            chat_history (list):         Conversational history
-        """
         import json as _json
 
         if chat_history is None:
             chat_history = []
-
+        
         try:
             layout_context = _json.loads(layout_context_json)
         except (_json.JSONDecodeError, ValueError):
             layout_context = {}
 
         try:
-            from ai_agent.orchestrator    import Orchestrator
             from ai_agent.classifier_agent import classify_intent
-
             project_root = Path(__file__).resolve().parent.parent
 
-            # ── FIX: resolve correct .sp file ─────────────────────────
             sp_file = _resolve_sp_file(layout_context, project_root)
-
-            # ── FIX: inject sp_file_path into layout_context ──────────
-            # This ensures EVERY stage (1, 2, 3, 4) sees the same file.
-            # Orchestrator reads it via layout_context["sp_file_path"].
             layout_context["sp_file_path"] = sp_file or ""
 
-            print(
-                f"[ORCH] Resolved sp_file = {sp_file!r}\n"
-                f"[ORCH] layout_context keys = {list(layout_context.keys())}"
-            )
-
-            # Stage callback
-            def _on_stage(idx, name, data):
-                try:
-                    self.stage_completed.emit(idx, name)
-                except Exception:
-                    pass
-
-            orch = Orchestrator(
-                run_llm_fn     = run_llm,
-                sp_file_path   = sp_file,          # default fallback
-                gap_px         = layout_context.get("gap_px", 0.0),
-                max_drc_retries= 2,
-                stage_callback = _on_stage,
-            )
-
-            # ── Classifier routing ─────────────────────────────────────
-            is_resuming = self.pending_topology is not None
-            intent = (
-                classify_intent(user_message, run_llm)
-                if not is_resuming
-                else None
-            )
+            # ── Intent Classification ──────────────────────────────────
+            intent = classify_intent(user_message, run_llm)
 
             if intent == "chat":
                 print("[ORCH] CHAT intent -> conversational reply")
                 chat_system = (
-                    "You are a friendly AI assistant for an Analog IC "
-                    "Layout Editor. The user is having a casual "
-                    "conversation. Be warm, personable, and natural. "
-                    "Vary your responses — never repeat the same reply. "
-                    "Briefly mention you can help with layout tasks like "
-                    "swapping devices, optimizing placement, analyzing "
-                    "topology, or answering circuit questions. "
-                    "Keep responses short (2-3 sentences max)."
+                    build_system_prompt(layout_context)
+                    + "\n\n"
+                    + "For this turn, the user requested general conversation. "
+                    + "Reply conversationally and do not emit [CMD] blocks unless "
+                    + "the user explicitly asks for an edit action."
                 )
-                
-                # Prepend the system prompt to the user's history
-                chat_msgs = [{"role": "system", "content": chat_system}]
-                # We can just take the most recent history entries as provided by the UI
-                for msg in chat_history:
-                    chat_msgs.append(msg)
-                    
-                # The fallback if chat_history didn't contain the current message
+                chat_msgs = [{"role": "system", "content": chat_system}] + chat_history
                 if not chat_history or chat_history[-1].get("content") != user_message:
                     chat_msgs.append({"role": "user", "content": user_message})
-
-                # Need a full prompt string for the single API call wrapper
-                # Build conversation-only text (NO system prompt mixed in)
-                history_text = ""
-                for msg in chat_history:
-                    role_label = "User" if msg["role"] == "user" else "Assistant"
-                    history_text += f"{role_label}: {msg['content']}\n"
-                if not chat_history or chat_history[-1].get("content") != user_message:
-                    history_text += f"User: {user_message}\n"
-                    
-                full_prompt = f"{chat_system}\n\nConversation:\n{history_text}"
-                
-                reply = run_llm(
-                    chat_msgs,
-                    full_prompt
-                )
+                reply = run_llm(chat_msgs, f"{chat_system}\n\nUser: {user_message}")
                 self.response_ready.emit(reply)
 
             elif intent == "question":
                 print("[ORCH] QUESTION intent -> single-agent reply")
                 system_prompt = build_system_prompt(layout_context)
-                chat_msgs = [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user",   "content": user_message},
-                ]
-                reply = run_llm(
-                    chat_msgs,
-                    system_prompt + "\n" + user_message
-                )
+                chat_msgs = [{"role": "system", "content": system_prompt}] + chat_history
+                if not chat_history or chat_history[-1].get("content") != user_message:
+                    chat_msgs.append({"role": "user", "content": user_message})
+                reply = run_llm(chat_msgs, f"{system_prompt}\n\nUser: {user_message}")
                 self.response_ready.emit(reply)
 
             elif intent == "concrete":
-                print("[ORCH] CONCRETE intent -> skipping to Stage 2")
-                result = orch.continue_placement(
-                    user_message,
-                    layout_context,
-                    constraint_text=(
-                        "[Direct command — no topology analysis needed]"
-                    ),
+                print("[ORCH] CONCRETE intent -> Directly editing layout")
+                system_prompt = (
+                    build_system_prompt(layout_context)
+                    + "\n\n"
+                    + "For this turn, return ONLY a JSON list of command dicts "
+                    + "(no markdown, no prose)."
                 )
-                self.response_ready.emit(result)
-
-            elif is_resuming:
-                # Resume from Stage 1
-                constraint_text         = self.pending_topology
-                saved_context           = self.pending_layout_context or {}
-
-                # ── FIX: restore sp_file_path from saved context ───────
-                # When user replies "Yes" the new layout_context from UI
-                # may not have sp_file_path set — restore it from Stage 1.
-                if not layout_context.get("sp_file_path"):
-                    layout_context["sp_file_path"] = saved_context.get(
-                        "sp_file_path", sp_file or ""
-                    )
-
-                print(
-                    f"[ORCH] Resuming Stage 2, "
-                    f"sp_file={layout_context['sp_file_path']!r}"
-                )
-
-                # Append user corrections to constraint text
-                skip_words = {
-                    "yes", "y", "correct", "looks good",
-                    "ok", "okay", "go", "proceed", "continue"
-                }
-                if user_message.strip().lower() not in skip_words:
-                    constraint_text += (
-                        f"\n[User Feedback/Corrections]\n{user_message}"
-                    )
-
-                self.pending_topology       = None
-                self.pending_layout_context = None
-
-                result = orch.continue_placement(
-                    user_message, layout_context, constraint_text
-                )
-                self.response_ready.emit(result)
+                reply = run_llm([{"role": "system", "content": system_prompt}, {"role": "user", "content": user_message}], system_prompt)
+                
+                try:
+                    # Clean up markdown if LLM wrapped in ```json
+                    clean_reply = reply.replace("```json", "").replace("```", "").strip()
+                    edits = _json.loads(clean_reply)
+                    if isinstance(edits, dict):
+                        edits = [edits]
+                    elif not isinstance(edits, list):
+                        edits = []
+                    edits = [c for c in edits if isinstance(c, dict)]
+                    # Directly inject edits into the viewer, skipping Stage 1 & 2
+                    self.visual_viewer_signal.emit({"type": "visual_review", "placement": edits, "routing": {}})
+                except Exception as e:
+                    self.error_occurred.emit(f"Failed to parse concrete command: {str(e)}")
 
             else:
-                # ABSTRACT (default): full 4-stage pipeline
-                print("[ORCH] ABSTRACT intent -> full pipeline Stage 1")
-                question, constraint_text = orch.run_topology_analysis(
-                    user_message, layout_context
-                )
+                print("[ORCH] ABSTRACT intent -> Starting LangGraph Pipeline")
+                initial_state = {
+                    "user_message": user_message,
+                    "chat_history": chat_history,
+                    "nodes": layout_context.get("nodes", []),
+                    "sp_file_path": layout_context.get("sp_file_path", ""),
+                    "pending_cmds": [],
+                    "constraints": [],
+                    "constraint_text": "",
+                    "strategy_question": "",
+                    "edges": [],
+                    "terminal_nets": layout_context.get("terminal_nets", {}),
+                    "placement_nodes": layout_context.get("nodes", []),
+                    "drc_flags": [],
+                    "drc_pass": False,
+                    "approved": False,
+                    "routing_result": {},
+                    "selected_strategy": "auto",
+                    "gap_px": layout_context.get("gap_px", 0.0),
+                    "drc_retry_count": 0,
+                    "routing_pass_count": 0,
+                    
+                }
 
-                # ── FIX: save sp_file_path with pending context ────────
-                self.pending_topology       = constraint_text
-                self.pending_layout_context = dict(layout_context)  # deep copy
+                if isinstance(layout_context.get("edges"), list):
+                    initial_state["edges"] = layout_context.get("edges", [])
 
-                self.topology_ready_for_review.emit(question)
+                self.thread_config = cast(RunnableConfig, {
+                    "configurable": {
+                        "thread_id": str(uuid.uuid4())
+                    }
+                })
+                self._stream_graph(initial_state)
 
         except Exception as exc:
             import traceback
-            tb = traceback.format_exc()
-            print(f"[ORCH] Pipeline error:\n{tb}")
-            self.error_occurred.emit(
-                f"Orchestrator error: {exc}\n"
-                "Falling back to single-agent mode."
-            )
-            fallback_system = (
-                "You are an expert analog IC layout engineer. "
-                "Suggest improvements using [CMD] blocks."
-            )
-            fallback_msgs = [
-                {"role": "system", "content": fallback_system},
-                {"role": "user",   "content": user_message},
-            ]
+            print(f"[ORCH] Pipeline error:\n{traceback.format_exc()}")
+            self.error_occurred.emit(f"Orchestrator error: {exc}")
+
+    def _stream_graph(self, input_data):
+        try:
+            interrupted = False
+            for event in langgraph_app.stream(input_data, self.thread_config, stream_mode="updates"):
+                if "__interrupt__" in event:
+                    interrupt_data = event["__interrupt__"][0].value
+
+                    if interrupt_data["type"] == "strategy_selection":
+                        self.topology_ready_for_review.emit(interrupt_data["question"])
+                    elif interrupt_data["type"] == "visual_review":
+                        # Signal is declared as dict, so wrap placement/routing
+                        # into a structured payload instead of emitting a raw list.
+                        placement = interrupt_data.get("placement", [])
+                        if not isinstance(placement, list):
+                            placement = []
+                        routing = interrupt_data.get("routing", {})
+                        if not isinstance(routing, dict):
+                            routing = {}
+
+                        self.visual_viewer_signal.emit({
+                            "type": "visual_review",
+                            "placement": placement,
+                            "routing": routing,
+                        })
+
+                    interrupted = True
+                    return
+            if not interrupted:
+                self._finalize_pipeline()
+
+        except Exception as e:
+            self.error_occurred.emit(f"Graph Execution Error: {str(e)}")
+
+    def _finalize_pipeline(self):
+        final_state = langgraph_app.get_state(self.thread_config).values
+
+        # ── Collect final placement commands ─────────────────────────────────────
+        placement_nodes = final_state.get("placement_nodes", [])
+        pending_cmds    = final_state.get("pending_cmds", [])
+
+        # Build the authoritative final command list from placement_nodes,
+        # pending_cmds may be stale/partial after loops, so we recompile from state.
+        final_cmds = []
+        for n in placement_nodes:
+            if n.get("is_dummy"):
+                continue
             try:
-                reply = run_llm(
-                    fallback_msgs,
-                    f"{fallback_system}\n{user_message}"
-                )
-                self.response_ready.emit(reply)
-            except RuntimeError as inner_exc:
-                self.error_occurred.emit(str(inner_exc))
+                x = round(float(n["geometry"]["x"]), 3)
+                y = round(float(n["geometry"]["y"]), 3)
+            except (TypeError, KeyError, ValueError) as exc:
+                print(f"[FINALIZE] ⚠ Skipping device {n.get('id', '?')}: bad geometry ({exc})")
+                continue
+            final_cmds.append({
+                "action": "move",
+                "device": n["id"],
+                "x": x,
+                "y": y,
+            })
+
+        # Fallback: if placement_nodes was empty, use pending_cmds as-is.
+        if not final_cmds and pending_cmds:
+            print("[FINALIZE] ⚠ placement_nodes empty — falling back to pending_cmds")
+            final_cmds = pending_cmds
+
+        if not final_cmds:
+            print("[FINALIZE] ⚠ CRITICAL: no commands to emit. Canvas will not update.")
+
+        # ── Build summary header──
+        drc_pass    = final_state.get("drc_pass", False)
+        drc_flags   = final_state.get("drc_flags", [])
+        drc_status  = "✅ Pass" if drc_pass else f"⚠ {len(drc_flags)} violation(s)"
+
+        routing_result  = final_state.get("routing_result", {})
+        routing_score   = routing_result.get("score", "N/A")
+        routing_cost    = routing_result.get("placement_cost", None)
+        constraint_count = len(final_state.get("constraints", []))
+
+        summary_header = (
+            f"**[Multi-Agent Pipeline Complete]**\n\n"
+            f"• Topology: {constraint_count} constraint lines\n"
+            f"• DRC: {drc_status}\n"
+            f"• Routing Score: {routing_score}"
+            + (f" (cost: {routing_cost:.2f})" if routing_cost is not None else "")
+            + f"\n• Commands: {len(final_cmds)} emitted\n\n"
+        )
+
+        # ── Emit commands to the canvas, then the summary to the chat ────────────
+        # visual_viewer_signal sends the placement to the canvas widget,
+        # exactly as node_human_viewer does mid-pipeline via interrupt.
+        # response_ready emits the text summary to the chat window.
+        if final_cmds:
+            self.visual_viewer_signal.emit({
+                "type": "final_layout",
+                "placement": final_cmds,
+                "routing": routing_result,
+            })
+
+        self.response_ready.emit(summary_header)
+
+    @Slot(str)
+    def resume_with_strategy(self, user_choice: str):
+        print(f"[ORCH] Resuming graph with strategy: {user_choice}")
+        self._stream_graph(Command(resume=user_choice))
+
+    @Slot(dict)
+    def resume_from_viewer(self, viewer_response: dict):
+        print(f"[ORCH] Resuming graph from visual viewer. Approved: {viewer_response.get('approved')}")
+        self._stream_graph(Command(resume=viewer_response))
