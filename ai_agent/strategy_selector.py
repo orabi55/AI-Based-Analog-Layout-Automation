@@ -121,9 +121,6 @@ def generate_strategies(user_message: str, constraint_text: str, run_llm_fn, cha
         result = run_llm_fn(msgs, user_content)
         if result and len(result.strip()) > 20:
             llm_text = result.strip()
-            # Append mirror placement options if LLM didn't include them
-            if has_mirror and "interdigitated" not in llm_text.lower():
-                llm_text += _mirror_placement_options()
             return llm_text
     except Exception as exc:
         print(f"[STRATEGY] LLM failed: {exc} — using fallback")
@@ -159,17 +156,6 @@ def _mirror_fallback_strategies() -> str:
         "Type **1** for interdigitated, **2** for common centroid, "
         "**3** for auto, or describe a custom approach."
     )
-
-
-def _mirror_placement_options() -> str:
-    """Extra options to append to LLM strategies when mirrors exist."""
-    return (
-        "\n\n---\n\n"
-        "**Mirror Placement Options:**\n"
-        "- Type **'interdigitated'** for single-row ABAB pattern (1D matching)\n"
-        "- Type **'common centroid'** for multi-row 2D symmetric placement (best matching)\n"
-    )
-
 
 def parse_placement_mode(user_message: str, constraint_text: str = "") -> str:
     """Parse the user's strategy choice into a placement mode.

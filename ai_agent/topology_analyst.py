@@ -62,29 +62,27 @@ Your output feeds directly into Stage 2. Errors here propagate - be accurate.
 A transistor with nf (number of fingers) > 1 is split into parallel fingers
 to reduce gate resistance and improve current density.
 
-**Physical Representation Patterns:**
-  - MM0_F1, MM0_F2, MM0_F3  -> logical device MM0 with nf=3
-  - MM0_f1, MM0_f2, MM0_f3  -> logical device MM0 with nf=3
-  - MM0_0,  MM0_1,  MM0_2   -> logical device MM0 with nf=3
-  - MM0F1,  MM0F2,  MM0F3   -> logical device MM0 with nf=3
+**Physical Representation Pattern of Multi-Finger Devices:**
+    MM0_f1, MM0_f2, MM0_f3  -> logical device MM0 with nf=3
+
 
 **CRITICAL RULE:**
-When you see devices with pattern BASE_FN or BASE_N:
+When you see devices with pattern BASE_fN:
   1. Group them by BASE name (strip suffix)
   2. Count how many fingers (e.g., MM0 has 3 fingers)
   3. Treat as ONE logical device for topology analysis
   4. Report as: MM0 (nf=3) <-> MM1 (nf=3)
 
 **Example - WRONG Analysis:**
-  Input: MM0_F1, MM0_F2, MM0_F3, MM1_F1, MM1_F2, MM1_F3
-  Wrong: No mirrors detected - all devices have unique IDs
+  Input: MM0_f1, MM0_f2, MM0_f3, MM1_f1, MM1_f2, MM1_f3
+  Wrong Output: No mirrors detected - all devices have unique IDs
 
 **Example - CORRECT Analysis:**
-  Input: MM0_F1, MM0_F2, MM0_F3, MM1_F1, MM1_F2, MM1_F3
+  Input: MM0_f1, MM0_f2, MM0_f3, MM1_f1, MM1_f2, MM1_f3
 
   Step 0: Detect finger pattern
-    MM0_F1, MM0_F2, MM0_F3 -> base=MM0, nf=3
-    MM1_F1, MM1_F2, MM1_F3 -> base=MM1, nf=3
+    MM0_f1, MM0_f2, MM0_f3 -> base=MM0, nf=3
+    MM1_f1, MM1_f2, MM1_f3 -> base=MM1, nf=3
 
   Step 1: Group by gate net (both share NBIAS):
     MM0 (nf=3): gate=NBIAS
@@ -103,12 +101,13 @@ Your PRIMARY task is identifying CURRENT MIRRORS with 100% accuracy.
 A current mirror consists of:
   1. Two or more devices of the SAME TYPE (both NMOS or both PMOS)
   2. Sharing the SAME GATE NET (electrically connected gates)
-  3. At least one device is diode-connected (gate = drain on same net)
+  3. Sharing the SAME SOURCE NET (current reference connection)
+  4. At least one device is diode-connected (gate = drain on same net)
 
 CRITICAL RULES FOR CURRENT MIRROR DETECTION:
-  - If devices MM1 and MM2 both have gate=net8  -> THEY ARE A MIRROR
-  - If devices MM5 and MM6 both have gate=PBIAS -> THEY ARE A MIRROR
-  - Check EVERY pair of devices with matching gate nets
+  - If devices MM1 and MM2 both have gate=net8 and source=net1 -> THEY ARE A MIRROR
+  - If devices MM5 and MM6 both have gate=PBIAS and source=net2 -> THEY ARE A MIRROR
+  - Check EVERY pair of devices with matching gate and source nets
   - Report even if W/L differs (designer may want ratio mirrors)
   - Diode connection is NOT required for all mirror legs (only reference)
   - nf DIFFERENCE means ratio mirror (e.g., nf=4 : nf=8 = 1:2 ratio)
@@ -126,8 +125,8 @@ RATIO CONVENTION (standard analog):
     meaning MM2 carries HALF the current of the reference MM0
 
 STEP-BY-STEP CURRENT MIRROR DETECTION:
-  1. Group all NMOS devices by their gate net name
-  2. Group all PMOS devices by their gate net name
+  1. Group all NMOS devices that share the same gate net and source net
+  2. Group all PMOS devices that share the same gate net and source net
   3. For EACH group with >= 2 devices -> DECLARE AS CURRENT MIRROR
   4. Use arrow notation: MM1 <-> MM2 <-> MM3 (if 3+ devices share gate)
   5. Note which device is reference (diode-connected): MM1[REF] <-> MM2
@@ -841,6 +840,143 @@ def _report_spice_devices(
         )
 
     constraints.append("")
+
+
+def analyze_json(nodes: List[dict], terminal_nets: dict) -> str:
+    """
+    Convert raw layout JSON structures (nodes + terminal_nets) into a clear,
+    prompt-ready text snapshot.
+
+    IMPORTANT: This function intentionally parses inputs directly and does
+    not call helper functions from this module.
+
+    Args:
+        nodes: Device list from layout JSON/canvas.
+        terminal_nets: Mapping device_id -> {"D": ..., "G": ..., "S": ...}.
+
+    Returns:
+        Multi-line string suitable for LLM/system prompts.
+    """
+    safe_terminal_nets = terminal_nets if isinstance(terminal_nets, dict) else {}
+    safe_nodes = nodes if isinstance(nodes, list) else []
+
+    lines: List[str] = []
+    lines.append("=== LAYOUT JSON SUMMARY ===")
+    lines.append(
+        f"Devices: physical={len(safe_nodes)}, "
+        f"terminal_nets={len(safe_terminal_nets)}"
+    )
+
+    pmos_count = sum(
+        1 for n in safe_nodes
+        if str(n.get("type", "")).lower().startswith("p") and not n.get("is_dummy")
+    )
+    nmos_count = sum(
+        1 for n in safe_nodes
+        if str(n.get("type", "")).lower().startswith("n") and not n.get("is_dummy")
+    )
+    dummy_count = sum(1 for n in safe_nodes if n.get("is_dummy"))
+    lines.append(f"Types: PMOS={pmos_count}, NMOS={nmos_count}, DUMMY={dummy_count}")
+    lines.append("")
+
+    lines.append("=== DEVICES ===")
+    for node in safe_nodes:
+        dev_id = str(node.get("id", "?"))
+        dev_type = str(node.get("type", "unknown"))
+        geo = node.get("geometry", {}) if isinstance(node.get("geometry", {}), dict) else {}
+        elec = node.get("electrical", {}) if isinstance(node.get("electrical", {}), dict) else {}
+
+        x_val = geo.get("x", "?")
+        y_val = geo.get("y", "?")
+        try:
+            x_text = f"{float(x_val):.3f}"
+        except (TypeError, ValueError):
+            x_text = str(x_val)
+        try:
+            y_text = f"{float(y_val):.3f}"
+        except (TypeError, ValueError):
+            y_text = str(y_val)
+
+        nf = elec.get("nf", "?")
+        nfin = elec.get("nfin", "?")
+
+        # Resolve terminal nets by trying common key variants directly.
+        nets = {}
+        for key in (dev_id, dev_id.upper(), dev_id.lower()):
+            value = safe_terminal_nets.get(key)
+            if isinstance(value, dict):
+                nets = value
+                break
+        g_net = nets.get("G", "?")
+        d_net = nets.get("D", "?")
+        s_net = nets.get("S", "?")
+
+        dummy_tag = " dummy" if node.get("is_dummy") else ""
+
+        lines.append(
+            f"- {dev_id} ({dev_type}{dummy_tag}) "
+            f"pos=({x_text},{y_text}) nf={nf} nfin={nfin} "
+            f"D={d_net} G={g_net} S={s_net}"
+        )
+
+    if not safe_nodes:
+        lines.append("- No devices found")
+
+    lines.append("")
+    lines.append("=== CONNECTIVITY GROUPS ===")
+
+    gate_groups: Dict[str, List[str]] = defaultdict(list)
+    drain_groups: Dict[str, List[str]] = defaultdict(list)
+    source_groups: Dict[str, List[str]] = defaultdict(list)
+
+    supply_nets = {
+        "VDD", "VSS", "GND", "AVDD", "AVSS",
+        "DVDD", "DVSS", "VCC", "AGND", "DGND"
+    }
+
+    for node in safe_nodes:
+        dev_id = str(node.get("id", ""))
+        if not dev_id:
+            continue
+
+        nets = {}
+        for key in (dev_id, dev_id.upper(), dev_id.lower()):
+            value = safe_terminal_nets.get(key)
+            if isinstance(value, dict):
+                nets = value
+                break
+
+        g_net = str(nets.get("G", "")).upper()
+        d_net = str(nets.get("D", "")).upper()
+        s_net = str(nets.get("S", "")).upper()
+
+        if g_net and g_net not in supply_nets:
+            gate_groups[g_net].append(dev_id)
+        if d_net and d_net not in supply_nets:
+            drain_groups[d_net].append(dev_id)
+        if s_net and s_net not in supply_nets:
+            source_groups[s_net].append(dev_id)
+
+    any_group = False
+    for net, devs in sorted(gate_groups.items()):
+        if len(devs) >= 2:
+            any_group = True
+            lines.append(f"- shared-gate {net}: " + " <-> ".join(devs))
+
+    for net, devs in sorted(drain_groups.items()):
+        if len(devs) >= 2:
+            any_group = True
+            lines.append(f"- shared-drain {net}: " + " <-> ".join(devs))
+
+    for net, devs in sorted(source_groups.items()):
+        if len(devs) >= 2:
+            any_group = True
+            lines.append(f"- shared-source {net}: " + " <-> ".join(devs))
+
+    if not any_group:
+        lines.append("- No shared gate/drain/source groups found")
+
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------

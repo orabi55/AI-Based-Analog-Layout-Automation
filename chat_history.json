@@ -1,38 +1,10 @@
 [
   {
     "role": "user",
-    "content": "analyze and optimize this layout"
+    "content": "analyze this layout"
   },
   {
     "role": "Analyzer Asssistant",
-    "content": "Okay, I have analyzed the provided layout information and identified the following constraints:\n\n**CURRENT MIRRORS IDENTIFIED:**\n\n1.  NMOS Mirror: MM4 <-> MM25 <-> MM6 <-> MM24 - gate net: A\n2.  NMOS Mirror: MM28 <-> MM3 <-> MM29 <-> MM7 - gate net: B\n3.  PMOS Mirror: MM2 <-> MM9 - gate net: AB\n4.  PMOS Mirror: MM5 <-> MM8 - gate net: BB\n\n**DIFFERENTIAL PAIRS IDENTIFIED:**\n\n1.  NMOS Diff-Pair: MM25 <-> MM24 - shared drain\n2.  NMOS Diff-Pair: MM28 <-> MM29 - shared drain\n3.  NMOS Diff-Pair: MM3 <-> MM2 - shared drain, shared source (PDN)\n4.  NMOS Diff-Pair: MM7 <-> MM6 - shared drain, shared source (PUN)\n5.  NMOS Diff-Pair: MM5 <-> MM4 - shared drain\n6.  PMOS Diff-Pair: MM9 <-> MM8 - shared drain\n\nThese constraints appear to accurately represent the topology based on the provided netlist and layout information. I have grouped devices by shared gate nets to identify current mirrors and by shared drain/source nets to identify differential pairs.\n\nDo you confirm these pairings are correct? Reply Yes to proceed, or describe any corrections.\n\n---\n\nBased on your circuit topology, here are the recommended improvement strategies:\n\n1. **Optimize Current Mirror Matching** — Place MM4 ↔ MM25, MM6 ↔ MM24, MM2 ↔ MM9, MM28 ↔ MM3, MM29 ↔ MM7, and MM5 ↔ MM8 in consecutive x-slots with identical orientation to minimize systematic mismatch across all current mirrors.\n2. **Align Differential Pair** — Centre the differential pair MM3 ↔ MM2 with tail current source MM7 directly below, and MM6 ↔ MM7 symmetrically.\n3. **Enhance Symmetry** — Center the differential pair MM25 ↔ MM24 about the row centre with a shared drain, and MM28 ↔ MM29 about the row centre with a shared drain.\n4. **Optimise Routing Crossings** — Reorder devices to reduce net x-span and crossing count for the critical differential nets: MM3 <-> MM2, MM7 <-> MM6, MM25 <-> MM24, and MM28 <-> MM29.\n\nType a number (1-4), 'all', or describe a custom approach to proceed.\n\n---\n\n**Mirror Placement Options:**\n- Type **'interdigitated'** for single-row ABAB pattern (1D matching)\n- Type **'common centroid'** for multi-row 2D symmetric placement (best matching)"
-  },
-  {
-    "role": "user",
-    "content": "optimize routing crossings, for example bring MM7 and MM29 closer to each other."
-  },
-  {
-    "role": "user",
-    "content": "analyze and optimize this layout"
-  },
-  {
-    "role": "Placement Specialist Assistant",
-    "content": "Okay, let's prioritize bringing MM7 and MM29 closer together while respecting all constraints. Given the existing layout and the goal of minimizing routing crossings, I will swap MM7 and MM6. This will bring MM7 closer to MM29, reducing the x-span for net 'B' and 'OUT'.\n\n```\n[CMD]{\\\"action\\\":\\\"swap\\\",\\\"device_a\\\":\\\"MM7\\\",\\\"device_b\\\":\\\"MM6\\\"}[/CMD]\n```\n\nThis single swap addresses the request to bring MM7 and MM29 closer, improving routing for critical nets. All other devices remain in their current positions, preserving the existing topology and adhering to all layout rules."
-  },
-  {
-    "role": "DRC Critic Assistant",
-    "content": "Clean placement. No DRC violations found."
-  },
-  {
-    "role": "Routing Previewer Assistant",
-    "content": "```\n[CMD]{\\\"action\\\":\\\"swap\\\",\\\"device_a\\\":\\\"MM29\\\",\\\"device_b\\\":\\\"MM8\\\"}[/CMD]\n[CMD]{\\\"action\\\":\\\"swap\\\",\\\"device_a\\\":\\\"MM2\\\",\\\"device_b\\\":\\\"MM3\\\"}[/CMD]\n```\n\nThese swaps target the worst nets (Bb and OUT) by bringing closer devices connected by those nets. Swapping MM29 and MM8 reduces the span of net Bb, and swapping MM2 and MM3 reduces the span of net OUT. Both swaps involve same-type devices (PMOS and NMOS respectively) and do not separate matched pairs."
-  },
-  {
-    "role": "Routing Previewer Assistant",
-    "content": "```\n[CMD]{\\\"action\\\":\\\"swap\\\",\\\"device_a\\\":\\\"MM29\\\",\\\"device_b\\\":\\\"MM8\\\"}[/CMD]\n[CMD]{\\\"action\\\":\\\"swap\\\",\\\"device_a\\\":\\\"MM2\\\",\\\"device_b\\\":\\\"MM3\\\"}[/CMD]\n[CMD]{\\\"action\\\":\\\"swap\\\",\\\"device_a\\\":\\\"MM7\\\",\\\"device_b\\\":\\\"MM6\\\"}[/CMD]\n```\n\nThese swaps address the worst nets (Bb, OUT, and B) by bringing closer devices connected by those nets. Swapping MM29 and MM8 reduces the span of net Bb, swapping MM2 and MM3 reduces the span of net OUT, and swapping MM7 and MM6 reduces the span of net B. All swaps involve same-type devices and do not separate matched pairs."
-  },
-  {
-    "role": "Routing Previewer Assistant",
-    "content": "```\n[CMD]{\\\"action\\\":\\\"swap\\\",\\\"device_a\\\":\\\"MM2\\\",\\\"device_b\\\":\\\"MM3\\\"}[/CMD]\n[CMD]{\\\"action\\\":\\\"swap\\\",\\\"device_a\\\":\\\"MM8\\\",\\\"device_b\\\":\\\"MM9\\\"}[/CMD]\n[CMD]{\\\"action\\\":\\\"swap\\\",\\\"device_a\\\":\\\"MM24\\\",\\\"device_b\\\":\\\"MM25\\\"}[/CMD]\n```\n\nThese swaps target the worst nets (OUT, Ab, and Bb) by bringing closer devices connected by those nets. Swapping MM2 and MM3 reduces the span of net OUT, swapping MM8 and MM9 reduces the span of net Ab, and swapping MM24 and MM25 reduces the span of net Bb. All swaps involve same-type devices and do not separate matched pairs."
+    "content": "Okay, I have analyzed the provided layout data. Here's a summary of my findings:\n\n**MULTI-FINGER DEVICE DETECTION:**\n\n*   MM2 (nf=4)\n*   MM1 (nf=4)\n*   MM0 (nf=8)\n\n**CURRENT MIRROR CANDIDATES:**\n\n*   Currently, no current mirrors are detected. There are no shared gate, drain, or source nets among the devices.\n\n**OTHER OBSERVATIONS:**\n\n*   All devices are NMOS.\n*   The 'nfin' parameter is present but does not affect the finger count (nf) for topology analysis.\n\nDo you confirm these pairings are correct? Reply Yes to proceed, or describe any corrections.\n\n---\n\nBased on your circuit topology, here are the recommended improvement strategies:\n\n1. **Reduce Parasitics** — Move MM2_f1-f4, MM1_f1-f4, MM0_f1-f8 closer together to minimise wire length and coupling capacitance on signal nets, as they are all in series.\n2. **Optimise Dummy Placement** — Add dummy devices to the left and right edges of the layout to improve density and reduce edge effects.\n3. **Minimise DRC Violations** — Resolve any existing DRC violations before proceeding with further optimisation steps to ensure a manufacturable layout.\n\nType a number (1-3), 'all', or describe a custom approach to proceed."
   }
 ]
