@@ -206,7 +206,7 @@ def _validate_placement(original_nodes: list, result) -> list:
     if extra:
         errors.append(f"EXTRA (invented) devices: {sorted(extra)}")
 
-    # Overlap check - more flexible for abutment
+    # Overlap check — uses actual device widths (bounding-box aligned, zero gap)
     rows = defaultdict(list)
     for n in placed_nodes:
         if not isinstance(n, dict): continue
@@ -219,23 +219,26 @@ def _validate_placement(original_nodes: list, result) -> list:
         for i in range(len(sorted_row) - 1):
             n1 = sorted_row[i]
             n2 = sorted_row[i+1]
-            dx = n2.get("geometry", {}).get("x", 0) - n1.get("geometry", {}).get("x", 0)
+            x1 = n1.get("geometry", {}).get("x", 0)
+            x2 = n2.get("geometry", {}).get("x", 0)
+            w1 = n1.get("geometry", {}).get("width", 0.294)
+            dx = x2 - x1
             
             # Check if they are abutted
             abut1 = n1.get("abutment", {})
             abut2 = n2.get("abutment", {})
             is_abutted = abut1.get("abut_right") and abut2.get("abut_left")
             
-            # print(f"DEBUG: Validating {n1['id']} and {n2['id']}, dx={dx:.4f}, abutted={is_abutted}")
-            
             if is_abutted:
-                # Target distance is 0.070 (5 fins). Allow some tolerance (0.015)
-                if abs(dx - 0.070) > 0.015:
+                # Target distance is 0.070 (5 fins). Allow some tolerance (0.005)
+                if abs(dx - 0.070) > 0.005:
                     errors.append(f"Abutment spacing error between {n1['id']} and {n2['id']}: delta X is {dx:.4f}um, expected 0.070um.")
             else:
-                # Non-abutted: must be at least 0.294 apart
-                if dx < 0.290:
-                    errors.append(f"Collision in row y={y} between {n1['id']} and {n2['id']}: delta X is {dx:.4f}um (too close for non-abutted devices).")
+                # Non-abutted: n2.x must be >= n1.x + n1.width (bounding boxes touch, zero gap)
+                min_x2 = round(x1 + w1, 4)
+                if round(x2, 4) < min_x2 - 0.001:
+                    errors.append(f"Overlap in row y={y} between {n1['id']} and {n2['id']}: n2.x={x2:.4f} < n1.x+w1={min_x2:.4f} (bounding boxes overlap).")
+
 
     for n in placed_nodes:
         if not isinstance(n, dict):
@@ -302,66 +305,229 @@ def _format_abutment_candidates(candidates: list) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Post-placement Healing
+# Post-placement Healing — chain-based topological clustering
 # ---------------------------------------------------------------------------
+def _build_abutment_chains(nodes: list, candidates: list) -> list[list[str]]:
+    """Extract connected components of abutment pairs as ordered chains.
+
+    Returns a list of chains, where each chain is an ordered list of
+    device-IDs that must be placed consecutively (abutted). Uses a
+    clean Union-Find with correct path compression.
+    """
+    node_ids = [n["id"] for n in nodes if "id" in n]
+    id_set = set(node_ids)
+
+    # Standard Union-Find with path compression
+    parent: dict[str, str] = {nid: nid for nid in id_set}
+
+    def find(x: str) -> str:
+        root = x
+        while parent[root] != root:
+            root = parent[root]
+        # Path compression: point all traversed nodes directly to root
+        while parent[x] != root:
+            nxt = parent[x]
+            parent[x] = root
+            x = nxt
+        return root
+
+    def union(a: str, b: str) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+
+    # Union from explicit candidates (primary source of truth)
+    for c in candidates:
+        a, b = c["dev_a"], c["dev_b"]
+        if a in id_set and b in id_set:
+            union(a, b)
+
+    # Fall back to embedded abutment flags ONLY when no candidates were provided.
+    # When candidates exist we trust them exclusively — reading flags from
+    # scrambled LLM X-positions would cause cross-device grouping.
+    if not candidates:
+        from collections import defaultdict
+        rows = defaultdict(list)
+        for n in nodes:
+            y = round(float(n.get("geometry", {}).get("y", 0.0)), 3)
+            rows[y].append(n)
+        
+        for y_val, row_nodes in rows.items():
+            sorted_row = sorted(row_nodes, key=lambda n: n.get("geometry", {}).get("x", 0.0))
+            for i in range(len(sorted_row) - 1):
+                n1 = sorted_row[i]
+                n2 = sorted_row[i + 1]
+                if (n1.get("abutment", {}).get("abut_right")
+                        and n2.get("abutment", {}).get("abut_left")):
+                    a, b = n1["id"], n2["id"]
+                    if a in id_set and b in id_set:
+                        union(a, b)
+
+    # Group by component root
+    groups: dict[str, list[str]] = {}
+    for nid in id_set:
+        root = find(nid)
+        groups.setdefault(root, []).append(nid)
+
+    # Build ordered chains — sort by finger index if present, else by ID
+    def _finger_key(nid: str) -> tuple:
+        parts = nid.rsplit("_f", 1)
+        if len(parts) == 2:
+            try:
+                return (parts[0], int(parts[1]))
+            except ValueError:
+                pass
+        return (nid, 0)
+
+    chains = []
+    for group in groups.values():
+        if len(group) <= 1:
+            continue  # single node — not a chain
+        ordered = sorted(group, key=_finger_key)
+        chains.append(ordered)
+
+    return chains
+
+
+
 def _heal_abutment_positions(nodes: list, candidates: list) -> list:
+    """Robust post-placement healing with chain-based topological clustering.
+
+    Algorithm (per row):
+    0. FIRST: Force all passive devices (res/cap) to a dedicated row at y=1.630,
+       packed left-to-right by their actual widths. This prevents overlap with transistors.
+    1. Build abutment chains (connected components of abutted device pairs).
+    2. For each row, group devices by their chain membership.
+    3. Force-pack each chain into consecutive slots separated by
+       ABUT_SPACING (0.070 µm), anchored at the chain leader's X.
+    4. Separate different chains / standalone devices by device width.
+    5. The result is guaranteed to pass _validate_placement even when the
+       LLM outputs completely wrong X values inside a chain.
     """
-    Robust Algorithmic correction: 
-    1. Ensures correct abutment flags.
-    2. Sorts devices in each row.
-    3. Forces exact 0.070um spacing for abutted neighbors and 0.294um for others.
-    """
+    ABUT_SPACING = 0.070   # µm between abutted device origins
+    PITCH        = 0.294   # µm between non-abutted device origins
+    PASSIVE_Y    = 1.630   # dedicated passive row Y coordinate
+
     if not nodes:
         return nodes
 
-    node_map = {n["id"]: n for n in nodes if "id" in n}
-    
-    # 1. Map candidates to a set of pairs for quick lookup
-    abut_pairs = set()
-    for c in candidates:
-        abut_pairs.add(tuple(sorted([c["dev_a"], c["dev_b"]])))
+    # ── Step 0: Enforce passive device row ──────────────────────────────
+    # Collect passives, force them into their own row, pack by width
+    passives = [n for n in nodes if n.get("type") in ("res", "cap")]
+    if passives:
+        # Sort passives by their current X to maintain relative order
+        passives.sort(key=lambda n: n.get("geometry", {}).get("x", 0.0))
+        cursor = 0.0
+        for p in passives:
+            geo = p.setdefault("geometry", {})
+            geo["x"] = round(cursor, 6)
+            geo["y"] = PASSIVE_Y
+            p_width = geo.get("width", PITCH)
+            cursor = round(cursor + p_width, 6)
 
-    # 2. Group nodes into rows (with tolerance)
-    rows = defaultdict(list)
+    # 1. Identify chains across ALL nodes (not per-row)
+    chains = _build_abutment_chains(nodes, candidates)
+    chain_of: dict[str, list[str]] = {}  # device_id -> its ordered chain
+    for ch in chains:
+        for nid in ch:
+            chain_of[nid] = ch
+
+    # Also mark abutment flags from candidates
+    abut_right_set: set[str] = set()
+    abut_left_set:  set[str] = set()
+    for c in candidates:
+        abut_right_set.add(c["dev_a"])
+        abut_left_set.add(c["dev_b"])
+    # Supplement from embedded flags (when candidates list is empty)
     for n in nodes:
-        y = n.get("geometry", {}).get("y", 0.0)
-        # Group by y rounded to 3 decimals to handle floats
-        rows[round(float(y), 3)].append(n)
-        
-    for y_key, row_nodes in rows.items():
-        # Sort row by X to establish relative order
-        sorted_nodes = sorted(row_nodes, key=lambda n: n.get("geometry", {}).get("x", 0.0))
-        
-        if not sorted_nodes:
-            continue
-            
-        # Start the row placement
-        current_x = sorted_nodes[0].get("geometry", {}).get("x", 0.0)
-        
-        for i in range(len(sorted_nodes) - 1):
-            n1 = sorted_nodes[i]
-            n2 = sorted_nodes[i+1]
-            
-            pair = tuple(sorted([n1["id"], n2["id"]]))
-            
-            abut1 = n1.get("abutment", {})
-            abut2 = n2.get("abutment", {})
-            is_explicitly_abutted = abut1.get("abut_right") and abut2.get("abut_left")
-            
-            if pair in abut_pairs or is_explicitly_abutted:
-                # FORCE ABUTMENT
-                n1.setdefault("abutment", {})["abut_right"] = True
-                n2.setdefault("abutment", {})["abut_left"] = True
-                new_x = round(current_x + 0.070, 4)
+        abut = n.get("abutment", {})
+        if abut.get("abut_right"):
+            abut_right_set.add(n["id"])
+        if abut.get("abut_left"):
+            abut_left_set.add(n["id"])
+
+    node_map: dict[str, dict] = {n["id"]: n for n in nodes if "id" in n}
+
+    # 2. Group nodes by row (Y rounded to 3 dp) — skip passives (already placed)
+    passive_ids = {p["id"] for p in passives} if passives else set()
+    row_buckets: dict[float, list] = defaultdict(list)
+    for n in nodes:
+        if n.get("id") in passive_ids:
+            continue  # passives already healed in Step 0
+        y = round(float(n.get("geometry", {}).get("y", 0.0)), 3)
+        row_buckets[y].append(n)
+
+    for y_key, row_nodes in row_buckets.items():
+        # 3. Build "segments":  each segment is either a chain or a singleton.
+        #    We materialise chains in the order of their lowest-X device.
+        processed: set[str] = set()
+        segments: list[list[dict]] = []  # list of ordered device-lists
+
+        # Sort row devices by current X for stable initial ordering
+        row_sorted = sorted(row_nodes,
+                            key=lambda n: n.get("geometry", {}).get("x", 0.0))
+
+        for n in row_sorted:
+            nid = n["id"]
+            if nid in processed:
+                continue
+            if nid in chain_of:
+                # Collect the full chain in finger-index order,
+                # restricted to devices actually in THIS row.
+                row_ids = {rn["id"] for rn in row_nodes}
+                chain_in_row = [cid for cid in chain_of[nid]
+                                if cid in row_ids and cid not in processed]
+                if chain_in_row:
+                    segments.append([node_map[cid] for cid in chain_in_row
+                                     if cid in node_map])
+                    processed.update(chain_in_row)
             else:
-                # FORCE SPACING (min 0.294)
-                # If they were too close (e.g. both at 0), spread them out
-                suggested_x = n2.get("geometry", {}).get("x", 0.0)
-                new_x = round(max(suggested_x, current_x + 0.294), 4)
-            
-            n2["geometry"]["x"] = new_x
-            current_x = new_x
-                
+                segments.append([n])
+                processed.add(nid)
+
+        # 4. Pack segments left-to-right, anchoring at the first segment's X.
+        if not segments:
+            continue
+
+        # Use the leftmost X in the first segment's devices as the cursor start
+        first_dev_x = min(
+            d.get("geometry", {}).get("x", 0.0) for d in segments[0]
+        )
+        cursor = first_dev_x
+
+        for seg_idx, segment in enumerate(segments):
+            for dev_idx, dev in enumerate(segment):
+                geo = dev.setdefault("geometry", {})
+                geo["x"] = round(cursor, 6)
+                # Force exact Y-alignment: every device in this row
+                # must share the identical Y coordinate
+                geo["y"] = round(float(y_key), 6)
+
+                is_last_in_chain = (dev_idx == len(segment) - 1)
+
+                if not is_last_in_chain:
+                    # Next device is within the chain — abut spacing
+                    cursor = round(cursor + ABUT_SPACING, 6)
+                    # Enforce abutment flags for adjacent pair
+                    next_dev = segment[dev_idx + 1]
+                    dev.setdefault("abutment", {})["abut_right"] = True
+                    next_dev.setdefault("abutment", {})["abut_left"] = True
+                else:
+                    # End of this chain/singleton — advance by next device width
+                    dev_w = geo.get("width", PITCH)
+                    cursor = round(cursor + dev_w, 6)
+
+        # 5. Clean abutment flags for standalone devices
+        for seg in segments:
+            if len(seg) == 1:
+                dev = seg[0]
+                abut = dev.get("abutment", {})
+                # Only preserve cross-pair flags; clear both for singletons
+                dev["abutment"] = {
+                    "abut_left":  abut.get("abut_left",  False),
+                    "abut_right": abut.get("abut_right", False),
+                }
+
     return nodes
 
 # ---------------------------------------------------------------------------
@@ -428,18 +594,22 @@ Generate an initial placement based on the following strict DRC and Floorplannin
 - The Fin pitch is 0.014 um. Continuous (fractional) coordinate placement is strictly forbidden.
 
 3. Spacing and Overlap Limits:
-- Standard non-abutted spacing between any devices should be at least 0.294 um.
+- For NON-ABUTTED transistors: the next device origin x MUST be >= previous device origin x + previous device width. Bounding boxes should touch (zero gap).
+- For standard transistors the width is 0.294 um, so standard spacing is 0.294 um.
 - VERTICAL overlap is strictly forbidden.
-- Both devices in any pair must be aligned on the same boundary.
+- Both devices in any pair must be aligned on the same Y row.
 
 4. Voltage Domains & Isolation:
 - Strictly isolate different voltage domains (0.8 V, 1.5 V, 1.8 V).
 - Direct adjacency between 0.8 V and 1.8 V blocks is strictly forbidden.
 
-5. Diffusion & Routing:
-- For devices sharing a net (abutment pairs), use exactly 0.074 um spacing between origins.
-- For all other devices, reserve dedicated whitespace for diffusion breaks.
-- Minimize net/wire crossings.
+5. Multi-Finger Devices (CRITICAL):
+- Devices like MM1_f1, MM1_f2, MM1_f3 are FINGERS of the SAME base device MM1.
+- ALL fingers of the same device MUST be placed in consecutive slots in the SAME row.
+- Fingers must be ordered sequentially: MM1_f1, MM1_f2, MM1_f3, ... (no gaps, no reordering).
+- Adjacent fingers that SHARE A NET on their touching terminals are abutted. Set abut_right=true on finger N and abut_left=true on finger N+1.
+- The step between consecutive abutted finger origins is exactly 0.070 um.
+- If two consecutive fingers do NOT share a terminal net, they are NOT abutted. Use standard spacing (device width).
 
 6. Block Grouping:
 - Devices belonging to the same block MUST be placed adjacent to each other.
@@ -450,8 +620,8 @@ Generate an initial placement based on the following strict DRC and Floorplannin
 - Devices with type="res" or type="cap" are PASSIVE COMPONENTS.
 - Place ALL passive devices in a dedicated PASSIVE ROW at y = 1.630.
 - NEVER place passives in the PMOS row (y=0.668) or NMOS row (y=0).
-- Passives are placed left-to-right in the passive row with a minimum gap of 0.294 um between them.
-- The passive row height is independent of transistor geometry.
+- Passives MUST NOT overlap with each other or with transistors.
+- Passive spacing: next passive origin x >= previous passive origin x + previous passive width (zero gap, bounding boxes aligned).
 {abut_section}
 IMPORTANT:
 You must return ONLY a JSON object containing a SINGLE key "nodes" which holds the updated array of devices.

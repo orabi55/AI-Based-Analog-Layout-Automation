@@ -10,10 +10,10 @@
                 "w": 0
             },
             "geometry": {
-                "x": 1.876,
+                "x": 1.288,
                 "y": -1.441,
                 "width": 0.294,
-                "height": 0.568,
+                "height": 0.5680000000000001,
                 "orientation": "R0"
             },
             "abutment": {
@@ -31,11 +31,11 @@
                 "w": 0
             },
             "geometry": {
-                "x": 1.946,
+                "x": 1.358,
                 "y": -1.441,
                 "width": 0.294,
-                "height": 0.568,
-                "orientation": "R0"
+                "height": 0.5680000000000001,
+                "orientation": "R0_FH"
             },
             "abutment": {
                 "abut_left": true,
@@ -52,11 +52,11 @@
                 "w": 0
             },
             "geometry": {
-                "x": 2.016,
+                "x": 1.428,
                 "y": -1.441,
                 "width": 0.294,
-                "height": 0.568,
-                "orientation": "R0"
+                "height": 0.5680000000000001,
+                "orientation": "R0_FH"
             },
             "abutment": {
                 "abut_left": true,
@@ -73,11 +73,11 @@
                 "w": 0
             },
             "geometry": {
-                "x": 2.086,
+                "x": 1.498,
                 "y": -1.441,
                 "width": 0.294,
-                "height": 0.568,
-                "orientation": "R0"
+                "height": 0.5680000000000001,
+                "orientation": "R0_FH"
             },
             "abutment": {
                 "abut_left": true,
@@ -94,10 +94,10 @@
                 "w": 0
             },
             "geometry": {
-                "x": 1.078,
+                "x": 0.784,
                 "y": -1.441,
                 "width": 0.294,
-                "height": 0.568,
+                "height": 0.5680000000000001,
                 "orientation": "R0"
             },
             "abutment": {
@@ -115,11 +115,11 @@
                 "w": 0
             },
             "geometry": {
-                "x": 1.148,
+                "x": 0.854,
                 "y": -1.441,
                 "width": 0.294,
-                "height": 0.568,
-                "orientation": "R0"
+                "height": 0.5680000000000001,
+                "orientation": "R0_FH"
             },
             "abutment": {
                 "abut_left": true,
@@ -136,11 +136,11 @@
                 "w": 0
             },
             "geometry": {
-                "x": 1.218,
+                "x": 0.924,
                 "y": -1.441,
                 "width": 0.294,
-                "height": 0.568,
-                "orientation": "R0"
+                "height": 0.5680000000000001,
+                "orientation": "R0_FH"
             },
             "abutment": {
                 "abut_left": true,
@@ -157,11 +157,11 @@
                 "w": 0
             },
             "geometry": {
-                "x": 1.288,
+                "x": 0.994,
                 "y": -1.441,
                 "width": 0.294,
-                "height": 0.568,
-                "orientation": "R0"
+                "height": 0.5680000000000001,
+                "orientation": "R0_FH"
             },
             "abutment": {
                 "abut_left": false,
@@ -181,7 +181,7 @@
                 "x": 0.0,
                 "y": -1.441,
                 "width": 0.294,
-                "height": 0.568,
+                "height": 0.5680000000000001,
                 "orientation": "R0"
             },
             "abutment": {
@@ -202,8 +202,8 @@
                 "x": 0.07,
                 "y": -1.441,
                 "width": 0.294,
-                "height": 0.568,
-                "orientation": "R0"
+                "height": 0.5680000000000001,
+                "orientation": "R0_FH"
             },
             "abutment": {
                 "abut_left": true,
@@ -223,8 +223,8 @@
                 "x": 0.14,
                 "y": -1.441,
                 "width": 0.294,
-                "height": 0.568,
-                "orientation": "R0"
+                "height": 0.5680000000000001,
+                "orientation": "R0_FH"
             },
             "abutment": {
                 "abut_left": true,
@@ -244,8 +244,8 @@
                 "x": 0.21,
                 "y": -1.441,
                 "width": 0.294,
-                "height": 0.568,
-                "orientation": "R0"
+                "height": 0.5680000000000001,
+                "orientation": "R0_FH"
             },
             "abutment": {
                 "abut_left": true,
@@ -265,8 +265,8 @@
                 "x": 0.28,
                 "y": -1.441,
                 "width": 0.294,
-                "height": 0.568,
-                "orientation": "R0"
+                "height": 0.5680000000000001,
+                "orientation": "R0_FH"
             },
             "abutment": {
                 "abut_left": true,
@@ -286,8 +286,8 @@
                 "x": 0.35,
                 "y": -1.441,
                 "width": 0.294,
-                "height": 0.568,
-                "orientation": "R0"
+                "height": 0.5680000000000001,
+                "orientation": "R0_FH"
             },
             "abutment": {
                 "abut_left": true,
@@ -307,8 +307,8 @@
                 "x": 0.42,
                 "y": -1.441,
                 "width": 0.294,
-                "height": 0.568,
-                "orientation": "R0"
+                "height": 0.5680000000000001,
+                "orientation": "R0_FH"
             },
             "abutment": {
                 "abut_left": false,
@@ -328,8 +328,8 @@
                 "x": 0.49,
                 "y": -1.441,
                 "width": 0.294,
-                "height": 0.568,
-                "orientation": "R0"
+                "height": 0.5680000000000001,
+                "orientation": "R0_FH"
             },
             "abutment": {
                 "abut_left": true,
@@ -1021,5 +1021,123 @@
             "S": "gnd"
         }
     },
-    "abutment_candidates": []
+    "abutment_candidates": [
+        {
+            "dev_a": "MM2_f1",
+            "term_a": "S",
+            "dev_b": "MM2_f2",
+            "term_b": "S",
+            "shared_net": "gnd",
+            "type": "nmos",
+            "needs_flip": true
+        },
+        {
+            "dev_a": "MM2_f2",
+            "term_a": "D",
+            "dev_b": "MM2_f3",
+            "term_b": "D",
+            "shared_net": "A",
+            "type": "nmos",
+            "needs_flip": true
+        },
+        {
+            "dev_a": "MM2_f3",
+            "term_a": "S",
+            "dev_b": "MM2_f4",
+            "term_b": "S",
+            "shared_net": "gnd",
+            "type": "nmos",
+            "needs_flip": true
+        },
+        {
+            "dev_a": "MM1_f1",
+            "term_a": "S",
+            "dev_b": "MM1_f2",
+            "term_b": "S",
+            "shared_net": "gnd",
+            "type": "nmos",
+            "needs_flip": true
+        },
+        {
+            "dev_a": "MM1_f2",
+            "term_a": "D",
+            "dev_b": "MM1_f3",
+            "term_b": "D",
+            "shared_net": "B",
+            "type": "nmos",
+            "needs_flip": true
+        },
+        {
+            "dev_a": "MM1_f3",
+            "term_a": "S",
+            "dev_b": "MM1_f4",
+            "term_b": "S",
+            "shared_net": "gnd",
+            "type": "nmos",
+            "needs_flip": true
+        },
+        {
+            "dev_a": "MM0_f1",
+            "term_a": "S",
+            "dev_b": "MM0_f2",
+            "term_b": "S",
+            "shared_net": "gnd",
+            "type": "nmos",
+            "needs_flip": true
+        },
+        {
+            "dev_a": "MM0_f2",
+            "term_a": "D",
+            "dev_b": "MM0_f3",
+            "term_b": "D",
+            "shared_net": "C",
+            "type": "nmos",
+            "needs_flip": true
+        },
+        {
+            "dev_a": "MM0_f3",
+            "term_a": "S",
+            "dev_b": "MM0_f4",
+            "term_b": "S",
+            "shared_net": "gnd",
+            "type": "nmos",
+            "needs_flip": true
+        },
+        {
+            "dev_a": "MM0_f4",
+            "term_a": "D",
+            "dev_b": "MM0_f5",
+            "term_b": "D",
+            "shared_net": "C",
+            "type": "nmos",
+            "needs_flip": true
+        },
+        {
+            "dev_a": "MM0_f5",
+            "term_a": "S",
+            "dev_b": "MM0_f6",
+            "term_b": "S",
+            "shared_net": "gnd",
+            "type": "nmos",
+            "needs_flip": true
+        },
+        {
+            "dev_a": "MM0_f6",
+            "term_a": "D",
+            "dev_b": "MM0_f7",
+            "term_b": "D",
+            "shared_net": "C",
+            "type": "nmos",
+            "needs_flip": true
+        },
+        {
+            "dev_a": "MM0_f7",
+            "term_a": "S",
+            "dev_b": "MM0_f8",
+            "term_b": "S",
+            "shared_net": "gnd",
+            "type": "nmos",
+            "needs_flip": true
+        }
+    ]
 }

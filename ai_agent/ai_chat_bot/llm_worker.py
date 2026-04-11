@@ -64,10 +64,44 @@ def build_system_prompt(layout_context):
 # -----------------------------------------------------------------
 # Module-level helper — pure Python, no Qt
 # -----------------------------------------------------------------
-def run_llm(chat_messages, full_prompt, selected_model):
-    """Execute the chosen LLM request and return the reply text."""
+def run_llm(chat_messages, full_prompt, selected_model, ollama_model="llama3.2"):
+    """Execute the chosen LLM request and return the reply text.
+
+    Includes automatic retry with exponential backoff for transient
+    API errors (429 RESOURCE_EXHAUSTED, 503 UNAVAILABLE) so that a
+    single hiccup does not crash the multi-agent pipeline.
+    """
+    import time as _time
+
+    MAX_RETRIES = 3
+    BACKOFF_BASE = 2  # seconds
 
     print(f"[LLM] run_llm: model={selected_model}, msgs={len(chat_messages)}, prompt={len(full_prompt)}")
+
+    for attempt in range(1, MAX_RETRIES + 1):
+        result = _run_llm_once(chat_messages, full_prompt, selected_model, ollama_model)
+
+        # Check for transient errors worth retrying
+        is_transient = (
+            result.startswith("Gemini Error: Rate Limited")
+            or "429" in result and "RESOURCE_EXHAUSTED" in result
+            or "503" in result and "UNAVAILABLE" in result
+            or "503" in result and "high demand" in result.lower()
+        )
+        if is_transient and attempt < MAX_RETRIES:
+            wait = BACKOFF_BASE ** attempt
+            print(f"[LLM] Transient error on attempt {attempt}/{MAX_RETRIES}, "
+                  f"retrying in {wait}s...")
+            _time.sleep(wait)
+            continue
+
+        return result
+
+    return result  # return last result even if still an error
+
+
+def _run_llm_once(chat_messages, full_prompt, selected_model, ollama_model="llama3.2"):
+    """Single-shot LLM call (no retries)."""
 
     if selected_model == "Gemini":
         gemini_key = os.environ.get("GEMINI_API_KEY", "")
@@ -107,6 +141,8 @@ def run_llm(chat_messages, full_prompt, selected_model):
             err_str = str(e)
             if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
                 return "Gemini Error: Rate Limited (429). Please wait a minute before trying again."
+            if "503" in err_str or "UNAVAILABLE" in err_str:
+                return f"503 UNAVAILABLE: {err_str}"
             return f"Gemini Error: {err_str}"
 
     elif selected_model == "OpenAI":
@@ -129,18 +165,24 @@ def run_llm(chat_messages, full_prompt, selected_model):
         except Exception as e:
             return f"OpenAI Error: {str(e)}"
 
-    elif selected_model == "Ollama":
         try:
             import requests
             response = requests.post(
                 "http://localhost:11434/api/chat",
                 json={
-                    "model": "llama3.2",
+                    "model": ollama_model,
                     "messages": chat_messages,
                     "stream": False
                 }
             )
-            response.raise_for_status()
+            if response.status_code != 200:
+                err_msg = response.text
+                try:
+                    err_json = response.json()
+                    err_msg = err_json.get("error", err_msg)
+                except Exception:
+                    pass
+                return f"Ollama API Error ({response.status_code}): {err_msg}"
             return response.json().get("message", {}).get("content", "").strip()
         except Exception as e:
             return f"Ollama Error: Could not connect or generate response. ({str(e)})\nEnsure 'ollama serve' is running locally on port 11434."
@@ -160,20 +202,22 @@ class LLMWorker(QObject):
     """
 
     response_ready = Signal(str)
+    command_ready  = Signal(dict)
     error_occurred = Signal(str)
 
     def __init__(self):
         super().__init__()
         self._orchestrator = MultiAgentOrchestrator()
 
-    @Slot(str, list, str)
-    def process_request(self, full_prompt, chat_messages, selected_model):
+    @Slot(str, list, str, str)
+    def process_request(self, full_prompt, chat_messages, selected_model, ollama_model):
         """Execute the multi-agent pipeline.
 
         Args:
             full_prompt:    complete prompt string (contains system + user).
             chat_messages:  list of {"role", "content"} dicts.
             selected_model: 'Gemini' | 'OpenAI' | 'Ollama'
+            ollama_model:   local ollama sub-model (e.g. 'llama3.2', 'qwen2.5')
         """
         try:
             # Extract the user message (last user entry in chat_messages)
@@ -198,11 +242,13 @@ class LLMWorker(QObject):
                 user_message=user_message,
                 layout_context=layout_context,
                 chat_history=chat_messages,
-                run_llm_fn=run_llm,
+                run_llm_fn=lambda sys, msg, sel: run_llm(sys, msg, sel, ollama_model),
                 selected_model=selected_model,
             )
 
             reply = result.get("reply", "")
+            commands = result.get("commands", [])
+            
             if reply:
                 self.response_ready.emit(reply)
             else:
@@ -210,6 +256,9 @@ class LLMWorker(QObject):
                     "I processed your request but had nothing to say. "
                     "Could you try rephrasing?"
                 )
+
+            for cmd in commands:
+                self.command_ready.emit(cmd)
 
         except Exception as exc:
             import traceback

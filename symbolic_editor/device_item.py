@@ -211,11 +211,12 @@ class DeviceItem(QGraphicsRectItem):
         num_fingers = self.nf
         num_sd      = num_fingers + 1   # S/D diffusion regions
 
-        # Layout proportions: 35% gates, 65% diffusions
-        total_gate_w = w * 0.35
-        total_sd_w   = w * 0.65
-        gate_w = total_gate_w / num_fingers
-        sd_w   = total_sd_w   / num_sd
+        # --- Visual proportions ---
+        # Make gate fingers and S/D diffusion regions have the exact same visual width
+        total_regions = num_fingers + num_sd
+        part_w = w / total_regions
+        gate_w = part_w
+        sd_w   = part_w
 
         # S/D identity per column (before flip)
         # Column 0,2,4... = Source;  1,3,5... = Drain

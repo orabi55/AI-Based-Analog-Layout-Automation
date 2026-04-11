@@ -76,7 +76,7 @@ class ChatPanel(QWidget):
     command_requested = Signal(dict)  # emits parsed command dicts
     toggle_requested = Signal()        # emitted when the user clicks the panel-toggle button
 
-    request_inference = Signal(str, list, str)
+    request_inference = Signal(str, list, str, str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -95,6 +95,7 @@ class ChatPanel(QWidget):
         self.request_inference.connect(self._llm_worker.process_request)
         # Shared response signals back to GUI
         self._llm_worker.response_ready.connect(self._on_llm_response)
+        self._llm_worker.command_ready.connect(self.command_requested.emit)
         self._llm_worker.error_occurred.connect(self._on_llm_error)
 
         # Start the worker thread's event loop
@@ -170,6 +171,20 @@ class ChatPanel(QWidget):
         )
         self.model_combo.setFixedWidth(80)
         header_layout.addWidget(self.model_combo)
+
+        # Ollama sub-model selector (hidden by default unless Ollama is chosen)
+        self.ollama_model_combo = QComboBox()
+        self.ollama_model_combo.setEditable(True)
+        self.ollama_model_combo.addItems(["llama3.2", "qwen3.5:latest", "deepseek-coder:6.7b"])
+        self.ollama_model_combo.setToolTip("Select Local Ollama Model")
+        self.ollama_model_combo.setStyleSheet(self.model_combo.styleSheet())
+        self.ollama_model_combo.setFixedWidth(110)
+        self.ollama_model_combo.setVisible(False)
+        header_layout.addWidget(self.ollama_model_combo)
+
+        def _on_provider_changed(text):
+            self.ollama_model_combo.setVisible(text == "Ollama")
+        self.model_combo.currentTextChanged.connect(_on_provider_changed)
 
         header_layout.addStretch()
 
@@ -536,7 +551,8 @@ class ChatPanel(QWidget):
 
         # Emit signal → crosses thread boundary → runs on worker thread
         selected_model = self.model_combo.currentText()
-        self.request_inference.emit(full_prompt, chat_messages, selected_model)
+        ollama_model = self.ollama_model_combo.currentText()
+        self.request_inference.emit(full_prompt, chat_messages, selected_model, ollama_model)
 
     # -----------------------------------------
     # Response handling (GUI thread)

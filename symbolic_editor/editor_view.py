@@ -483,10 +483,21 @@ class SymbolicEditor(QGraphicsView):
                 continue
             ordered = self._order_row_items(items)
             x_cursor = self._snap_value(min(it.pos().x() for it in ordered))
-            for it in ordered:
+            for i, it in enumerate(ordered):
                 it.setPos(x_cursor, row_y)
-                span = max(1, int(math.ceil(it.rect().width() / self._snap_grid)))
-                x_cursor += span * self._snap_grid
+                
+                # Default: move by full width
+                next_step = it.rect().width()
+                
+                # If this device and the NEXT device both have abutment flags on their touching edge,
+                # use the validator's expected 0.070um spacing.
+                if i < len(ordered) - 1:
+                    next_it = ordered[i+1]
+                    if it.get_abut_right() and next_it.get_abut_left():
+                        # 0.070um is the magic "overlap" pitch for shared diffusion in the AI validator
+                        next_step = 0.070 * self.scale_factor
+                
+                x_cursor += next_step
 
     def swap_devices(self, id_a, id_b):
         """Swap the positions of two devices on the canvas."""
