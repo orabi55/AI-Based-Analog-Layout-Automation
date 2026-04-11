@@ -84,8 +84,8 @@ class SymbolicEditor(QGraphicsView):
 
         # Grid settings
         self._grid_size = 20   # base grid spacing in scene coords
-        self._grid_color = QColor("#dce1e8")
-        self._grid_color_major = QColor("#b8c0cc")
+        self._grid_color = QColor("#1c2535")
+        self._grid_color_major = QColor("#2d3f54")
         self._snap_grid = self._grid_size
         self._row_pitch = self._grid_size * 3
 
@@ -265,14 +265,14 @@ class SymbolicEditor(QGraphicsView):
     # -------------------------------------------------
     # Load AI JSON Placement
     # -------------------------------------------------
-    def load_placement(self, nodes, compact=True):
+    def load_placement(self, nodes, compact=False):
         """Load placement from a list of node dicts.
 
         Args:
             nodes: list of node dicts with geometry.
-            compact: if True (default), run abutted row compaction.
-                     Set to False to preserve exact positions from data
-                     (e.g. after an AI swap/move command).
+            compact: if True, run abutted row compaction.
+                     Set to False (default) to preserve exact positions from data
+                     (e.g. after an OAS import or AI swap/move command).
         """
         self._clear_dummy_preview()
         self.scene.clear()
@@ -327,12 +327,12 @@ class SymbolicEditor(QGraphicsView):
             self.scene.addItem(item)
             self.device_items[node.get("id", "unknown")] = item
 
-
-        # Abutted rows horizontally + visible spacing between rows.
+        # Compute grid metrics from device sizes (used for UI snap / row pitch).
         if widths:
             min_w = min(widths)
             col_gap = 0.0
-            self._snap_grid = max(1.0, min_w + col_gap)
+            # Use a finer grid: half of the minimum device width
+            self._snap_grid = max(1.0, (min_w + col_gap) / 2.0)
         if heights:
             max_h = max(heights)
             if self._custom_row_gap is not None:
@@ -341,15 +341,22 @@ class SymbolicEditor(QGraphicsView):
                 row_gap = max(24.0, max_h * 0.55)
             self._row_pitch = max(1.0, max_h + row_gap)
 
-        for item in self.device_items.values():
-            item.set_snap_grid(self._snap_grid, self._row_pitch)
-
         if compact:
+            # Grid-snap mode: apply snap grid to items and compact rows.
+            for item in self.device_items.values():
+                item.set_snap_grid(self._snap_grid, self._snap_grid)
             for item in self.device_items.values():
                 item.setPos(self._snap_point(item.pos().x(), item.pos().y()))
             self._compact_rows_abutted()
         else:
-            self._skip_compaction = True
+            # Exact-coordinate mode (OAS import / AI placement):
+            # Do NOT apply snap grid to items so itemChange never rounds
+            # the original layout coordinates during subsequent operations.
+            # Snap grid is still stored for UI helpers (row/col display etc.)
+            # but items stay free until the user explicitly drags them.
+            for item in self.device_items.values():
+                item.set_snap_grid(None, None)   # disable per-item snapping
+            self._skip_compaction = True          # skip the set_terminal_nets compaction
 
         # Practically unlimited canvas.
         self.scene.setSceneRect(-1000000, -1000000, 2000000, 2000000)
@@ -1208,91 +1215,38 @@ class SymbolicEditor(QGraphicsView):
         """Draw row track bands — occupied and virtual (empty) rows."""
         super().drawBackground(painter, rect)
 
-        has_devices = bool(self.device_items)
-        has_virtual = (self._virtual_row_count > 0 or self._virtual_col_count > 0)
+        # Draw a beautiful infinite cartesian grid
+        left = int(math.floor(rect.left()))
+        right = int(math.ceil(rect.right()))
+        top = int(math.floor(rect.top()))
+        bottom = int(math.ceil(rect.bottom()))
 
-        if not has_devices and not has_virtual:
-            return
+        first_left = left - (left % self._grid_size)
+        first_top = top - (top % self._grid_size)
 
-        # Gather actual occupied rows
-        rows = {}
-        for it in self.device_items.values():
-            row_y = self._snap_row(it.pos().y())
-            rows.setdefault(row_y, []).append(it)
-
-        actual_row_ys = sorted(rows.keys())
-
-        # Reference metrics from existing devices
-        if has_devices:
-            all_items = list(self.device_items.values())
-            ref_min_x = min(it.pos().x() for it in all_items)
-            ref_max_x = max(it.pos().x() + it.rect().width() for it in all_items)
-            ref_max_dev_h = max(it.rect().height() for it in all_items)
-        else:
-            ref_min_x = 0.0
-            ref_max_x = 0.0
-            ref_max_dev_h = self._row_pitch * 0.5
-
-        # Virtual column right edge
-        virtual_right_x = (
-            ref_min_x + self._virtual_col_count * self._snap_grid
-            if self._virtual_col_count > 0
-            else ref_max_x
-        )
-
-        # Add virtual rows below existing ones
-        all_row_ys = list(actual_row_ys)
-        if self._virtual_row_count > len(actual_row_ys):
-            last_y = actual_row_ys[-1] if actual_row_ys else -self._row_pitch
-            for i in range(self._virtual_row_count - len(actual_row_ys)):
-                all_row_ys.append(last_y + (i + 1) * self._row_pitch)
-
-        # Compute a single symmetric left / right for ALL bands
-        global_left = ref_min_x
-        global_right = max(ref_max_x, virtual_right_x)
-
-        # Drawing styles
-        track_fill = QBrush(QColor("#151c28"))
-        empty_fill = QBrush(QColor("#121823"))
-        track_pen = QPen(QColor("#232d3e"), 1.0)
-        slot_pen = QPen(QColor("#1c2535"), 0.5, Qt.PenStyle.DotLine)
-
-        band_x = global_left - 8.0
-        band_w = (global_right - global_left) + 16.0
-
-        for row_y in sorted(all_row_ys):
-            items = rows.get(row_y, [])
-            is_empty = (len(items) == 0)
-            row_h = (
-                max(it.rect().height() for it in items) if items
-                else ref_max_dev_h
-            )
-
-            band_y = row_y - 6.0
-            band_h = row_h + 12.0
-
-            if (
-                band_x > rect.right()
-                or band_x + band_w < rect.left()
-                or band_y > rect.bottom()
-                or band_y + band_h < rect.top()
-            ):
-                continue
-
-            painter.setPen(track_pen)
-            painter.setBrush(empty_fill if is_empty else track_fill)
-            painter.drawRoundedRect(band_x, band_y, band_w, band_h, 1.5, 1.5)
-
-            # Draw column slot markers in extended / empty regions
-            if self._virtual_col_count > 0:
-                painter.setPen(slot_pen)
-                for c in range(self._virtual_col_count + 1):
-                    col_x = ref_min_x + c * self._snap_grid
-                    if global_left <= col_x <= global_right:
-                        painter.drawLine(
-                            QPointF(col_x, band_y + 2),
-                            QPointF(col_x, band_y + band_h - 2),
-                        )
+        lines_minor = []
+        lines_major = []
+        
+        from PySide6.QtCore import QLineF
+        for x in range(first_left, right, self._grid_size):
+            if x % (self._grid_size * 5) == 0:
+                lines_major.append(QLineF(x, top, x, bottom))
+            else:
+                lines_minor.append(QLineF(x, top, x, bottom))
+                
+        for y in range(first_top, bottom, self._grid_size):
+            if y % (self._grid_size * 5) == 0:
+                lines_major.append(QLineF(left, y, right, y))
+            else:
+                lines_minor.append(QLineF(left, y, right, y))
+                
+        # Draw minor grid lines
+        painter.setPen(QPen(self._grid_color, 1.0))
+        painter.drawLines(lines_minor)
+        
+        # Draw major grid lines
+        painter.setPen(QPen(self._grid_color_major, 1.2))
+        painter.drawLines(lines_major)
 
     # -------------------------------------------------
     # Zoom with Mouse Wheel

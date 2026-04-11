@@ -122,6 +122,8 @@ class ChatPanel(QWidget):
             self._layout_context["edges"] = edges
         if terminal_nets:
             self._layout_context["terminal_nets"] = terminal_nets
+        # Forward to multi-agent worker so orchestrator has fresh context
+        self._llm_worker.set_layout_context(self._layout_context)
 
     # -----------------------------------------
     # UI
@@ -455,6 +457,9 @@ class ChatPanel(QWidget):
         """Clear the chat display and history."""
         self.chat_display.clear()
         self._chat_history.clear()
+        # Reset multi-agent pipeline state so the Refiner doesn't
+        # think we're mid-conversation after a chat clear.
+        self._llm_worker.reset_pipeline()
         self._show_welcome()
 
     # keep backward-compat for external callers (main.py uses this)

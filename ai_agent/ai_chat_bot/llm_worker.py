@@ -3,6 +3,11 @@ LLM Worker using the Worker-Object Pattern (QThread + QObject).
 
 Handles all LLM API calls in a dedicated QThread, communicating
 with the GUI exclusively via Qt Signals and Slots.
+
+Multi-Agent Architecture (LayoutCopilot):
+    Uses MultiAgentOrchestrator to route user messages through
+    specialised agents: Classifier -> Analyzer -> Refiner ->
+    Adapter -> CodeGen.
 """
 
 import os
@@ -10,6 +15,8 @@ import re
 from pathlib import Path
 from dotenv import load_dotenv
 from PySide6.QtCore import QObject, Signal, Slot
+
+from ai_agent.ai_chat_bot.agents.orchestrator import MultiAgentOrchestrator
 
 # Load .env from the project root so API keys are available
 _env_path = Path(__file__).resolve().parent.parent.parent / ".env"
@@ -41,88 +48,17 @@ def _resolve_sp_file(layout_context: dict, project_root: Path) -> str | None:
 
 
 # -----------------------------------------------------------------
-# Utility: build the system prompt that tells the LLM how to behave
+# Backward-compatible build_system_prompt (kept for any external
+# callers; the new agents use their own prompts from prompts.py)
 # -----------------------------------------------------------------
 def build_system_prompt(layout_context):
-    """Build a system prompt that includes layout context."""
-    prompt = (
-        "RULE #1: For ANY action (swap/move/dummy), you MUST output a "
-        "[CMD]{...}[/CMD] block. Without it nothing happens.\n"
-        "Actions:\n"
-        '[CMD]{"action":"swap","device_a":"MM28","device_b":"MM25"}[/CMD]\n'
-        '[CMD]{"action":"move","device":"MM3","x":1.0,"y":0.5}[/CMD]\n'
-        '[CMD]{"action":"add_dummy","type":"nmos","count":2,"side":"left"}[/CMD]\n'
-        "Use full IDs (MM28 not 28). Multiple [CMD] blocks OK. "
-        "add_dummy type=nmos|pmos, count defaults to 1, side=left|right.\n"
-        "Write the [CMD] block FIRST, then 1-2 sentences confirming.\n\n"
-    )
+    """Build a system prompt that includes layout context.
 
-    prompt += (
-        "You are an expert Analog IC Layout Engineer in a Symbolic "
-        "Layout Editor. Expertise: CMOS matching, symmetry, current "
-        "mirrors, diff-pairs, guard rings, dummies, parasitic-aware "
-        "placement.\n\n"
-        "PERSONALITY: You are friendly, helpful, and conversational. "
-        "When the user greets you, respond warmly and remind them what you can help with.\n\n"
-    )
-
-    prompt += (
-        "Editor: Rows (PMOS top, NMOS bottom), auto-compacted by net "
-        "adjacency. Toolbar: Undo/Redo, Swap, Dummy mode(D), Delete, Grid snapping.\n"
-        "Orientations: R0, R0_FH, R0_FV, R0_FH_FV.\n\n"
-    )
-
-    prompt += (
-        "Advice style: SHORT (1-3 sentences), actionable. "
-        "Prioritise matched pairs and symmetry. "
-        "NEVER dump full JSON.\n\n"
-    )
-
-    if layout_context:
-        nodes         = layout_context.get("nodes",         [])
-        edges         = layout_context.get("edges",         [])
-        terminal_nets = layout_context.get("terminal_nets", {})
-        sp_file       = layout_context.get("sp_file_path",  "")
-
-        if sp_file:
-            prompt += f"Active netlist: {Path(sp_file).name}\n"
-
-        prompt += f"=== CURRENT LAYOUT ({len(nodes)} devices) ===\n"
-        for n in nodes:
-            nid      = n.get("id",          "?")
-            ntype    = n.get("type",        "?")
-            geo      = n.get("geometry",    {})
-            elec     = n.get("electrical",  {})
-            orient   = geo.get("orientation", "R0")
-            dummy_tag = " [DUMMY]" if n.get("is_dummy") else ""
-
-            line = (
-                f"  {nid} ({ntype}{dummy_tag}) "
-                f"pos=({geo.get('x', 0):.2f},{geo.get('y', 0):.2f}) "
-                f"orient={orient}"
-            )
-            elec_parts = []
-            for k in ("nf", "nfin", "l", "w"):
-                if k in elec:
-                    elec_parts.append(f"{k}={elec[k]}")
-            if elec_parts:
-                line += f" [{', '.join(elec_parts)}]"
-
-            tnets = terminal_nets.get(nid, {})
-            if tnets:
-                parts = [
-                    f"{t}={tnets[t]}"
-                    for t in ("D", "G", "S")
-                    if t in tnets
-                ]
-                line += f"  nets({', '.join(parts)})"
-            prompt += line + "\n"
-
-        all_nets = sorted({e.get("net", "") for e in edges if e.get("net")})
-        if all_nets:
-            prompt += f"\nNets: {', '.join(all_nets)}\n"
-
-    return prompt
+    NOTE: This is the legacy monolithic prompt. The multi-agent
+    pipeline uses individual prompts from agents/prompts.py instead.
+    """
+    from ai_agent.ai_chat_bot.agents.prompts import build_chat_prompt
+    return build_chat_prompt(layout_context)
 
 
 # -----------------------------------------------------------------
@@ -130,18 +66,18 @@ def build_system_prompt(layout_context):
 # -----------------------------------------------------------------
 def run_llm(chat_messages, full_prompt, selected_model):
     """Execute the chosen LLM request and return the reply text."""
-    
+
     print(f"[LLM] run_llm: model={selected_model}, msgs={len(chat_messages)}, prompt={len(full_prompt)}")
 
     if selected_model == "Gemini":
         gemini_key = os.environ.get("GEMINI_API_KEY", "")
         if not gemini_key:
             return "Error: GEMINI_API_KEY not set. Please update the API key in the Model Selection tool."
-            
+
         try:
             from google import genai
             from google.genai import types as genai_types
-            
+
             client = genai.Client(api_key=gemini_key)
             sys_text = ""
             conv_parts = []
@@ -163,7 +99,7 @@ def run_llm(chat_messages, full_prompt, selected_model):
                 contents=user_text,
                 config=genai_types.GenerateContentConfig(**config_kwargs),
             )
-            
+
             if response and response.text:
                 return response.text.strip()
             return "Error: Gemini returned an empty response."
@@ -172,7 +108,7 @@ def run_llm(chat_messages, full_prompt, selected_model):
             if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
                 return "Gemini Error: Rate Limited (429). Please wait a minute before trying again."
             return f"Gemini Error: {err_str}"
-            
+
     elif selected_model == "OpenAI":
         openai_key = os.environ.get("OPENAI_API_KEY", "")
         if not openai_key:
@@ -181,18 +117,18 @@ def run_llm(chat_messages, full_prompt, selected_model):
         try:
             from openai import OpenAI
             client = OpenAI(api_key=openai_key)
-            
+
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=chat_messages,
                 temperature=0.4,
                 max_tokens=4096
             )
-            
+
             return response.choices[0].message.content.strip()
         except Exception as e:
             return f"OpenAI Error: {str(e)}"
-            
+
     elif selected_model == "Ollama":
         try:
             import requests
@@ -213,19 +149,77 @@ def run_llm(chat_messages, full_prompt, selected_model):
 
 
 # -----------------------------------------------------------------
-# Worker QObject
+# Worker QObject — Multi-Agent Pipeline
 # -----------------------------------------------------------------
 class LLMWorker(QObject):
-    """Worker object that performs LLM API calls on a background QThread."""
+    """Worker object that performs LLM API calls on a background QThread.
+
+    Uses the MultiAgentOrchestrator to route requests through the
+    LayoutCopilot pipeline (Classifier -> Analyzer -> Refiner ->
+    Adapter -> CodeGen).
+    """
 
     response_ready = Signal(str)
     error_occurred = Signal(str)
 
+    def __init__(self):
+        super().__init__()
+        self._orchestrator = MultiAgentOrchestrator()
+
     @Slot(str, list, str)
     def process_request(self, full_prompt, chat_messages, selected_model):
-        """Execute the LLM request via run_llm()."""
+        """Execute the multi-agent pipeline.
+
+        Args:
+            full_prompt:    complete prompt string (contains system + user).
+            chat_messages:  list of {"role", "content"} dicts.
+            selected_model: 'Gemini' | 'OpenAI' | 'Ollama'
+        """
         try:
-            reply = run_llm(chat_messages, full_prompt, selected_model)
-            self.response_ready.emit(reply)
+            # Extract the user message (last user entry in chat_messages)
+            user_message = ""
+            layout_context = None
+
+            for msg in reversed(chat_messages):
+                if msg.get("role") == "user":
+                    user_message = msg["content"]
+                    break
+
+            if not user_message:
+                user_message = full_prompt
+
+            # The layout_context is stored by ChatPanel and injected
+            # into the system prompt. We parse it from there for the
+            # orchestrator. The ChatPanel sets _layout_context on us
+            # via set_layout_context().
+            layout_context = getattr(self, '_layout_context', None)
+
+            result = self._orchestrator.process(
+                user_message=user_message,
+                layout_context=layout_context,
+                chat_history=chat_messages,
+                run_llm_fn=run_llm,
+                selected_model=selected_model,
+            )
+
+            reply = result.get("reply", "")
+            if reply:
+                self.response_ready.emit(reply)
+            else:
+                self.response_ready.emit(
+                    "I processed your request but had nothing to say. "
+                    "Could you try rephrasing?"
+                )
+
         except Exception as exc:
+            import traceback
+            print(f"[LLM Worker] Error:\n{traceback.format_exc()}")
             self.error_occurred.emit(f"Unexpected error: {exc}")
+
+    def set_layout_context(self, context: dict | None):
+        """Store layout context for the orchestrator to use."""
+        self._layout_context = context
+
+    def reset_pipeline(self):
+        """Reset the orchestrator state (e.g. when chat is cleared)."""
+        self._orchestrator.reset()

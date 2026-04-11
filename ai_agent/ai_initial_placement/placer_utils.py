@@ -206,23 +206,36 @@ def _validate_placement(original_nodes: list, result) -> list:
     if extra:
         errors.append(f"EXTRA (invented) devices: {sorted(extra)}")
 
-    row_slots: dict = defaultdict(list)
+    # Overlap check - more flexible for abutment
+    rows = defaultdict(list)
     for n in placed_nodes:
-        if not isinstance(n, dict):
-            continue
-        dev_id   = n.get("id", "?")
-        dev_type = orig_type.get(dev_id, n.get("type", "?"))
-        geo      = n.get("geometry", {})
-        x        = geo.get("x")
-        if x is None:
-            errors.append(f"Device {dev_id} has no x-coordinate.")
-            continue
-        slot = round(float(x) / 0.294)
-        row_slots[(dev_type, slot)].append(dev_id)
-
-    for (dev_type, slot), ids in row_slots.items():
-        if len(ids) > 1:
-            errors.append(f"OVERLAP in {dev_type} row at x-slot {slot} (x~={slot*0.294:.4f}um): {ids}")
+        if not isinstance(n, dict): continue
+        y = n.get("geometry", {}).get("y", 0)
+        # Use 0.001 tolerance for row grouping
+        rows[round(float(y), 3)].append(n)
+    
+    for y, row_nodes in rows.items():
+        sorted_row = sorted(row_nodes, key=lambda n: n.get("geometry", {}).get("x", 0))
+        for i in range(len(sorted_row) - 1):
+            n1 = sorted_row[i]
+            n2 = sorted_row[i+1]
+            dx = n2.get("geometry", {}).get("x", 0) - n1.get("geometry", {}).get("x", 0)
+            
+            # Check if they are abutted
+            abut1 = n1.get("abutment", {})
+            abut2 = n2.get("abutment", {})
+            is_abutted = abut1.get("abut_right") and abut2.get("abut_left")
+            
+            # print(f"DEBUG: Validating {n1['id']} and {n2['id']}, dx={dx:.4f}, abutted={is_abutted}")
+            
+            if is_abutted:
+                # Target distance is 0.070 (5 fins). Allow some tolerance (0.015)
+                if abs(dx - 0.070) > 0.015:
+                    errors.append(f"Abutment spacing error between {n1['id']} and {n2['id']}: delta X is {dx:.4f}um, expected 0.070um.")
+            else:
+                # Non-abutted: must be at least 0.294 apart
+                if dx < 0.290:
+                    errors.append(f"Collision in row y={y} between {n1['id']} and {n2['id']}: delta X is {dx:.4f}um (too close for non-abutted devices).")
 
     for n in placed_nodes:
         if not isinstance(n, dict):
@@ -281,13 +294,75 @@ def _format_abutment_candidates(candidates: list) -> str:
         return ""
     lines = []
     for c in candidates:
-        flip_note = " (flip needed — use R0_FH orientation)" if c.get("needs_flip") else ""
+        flip_note = " (Note: set orientation='R0_FH' for device B)" if c.get("needs_flip") else ""
         lines.append(
-            f"  - {c['dev_a']}.{c['term_a']} MUST abut {c['dev_b']}.{c['term_b']}"
-            f"  [shared net: '{c['shared_net']}', type: {c['type']}]{flip_note}"
+            f"  - ABUTMENT CHAIN: {c['dev_a']} (Right Side) <---> (Left Side) {c['dev_b']}. Net: '{c['shared_net']}'.{flip_note}"
         )
     return "\n".join(lines)
 
+
+# ---------------------------------------------------------------------------
+# Post-placement Healing
+# ---------------------------------------------------------------------------
+def _heal_abutment_positions(nodes: list, candidates: list) -> list:
+    """
+    Robust Algorithmic correction: 
+    1. Ensures correct abutment flags.
+    2. Sorts devices in each row.
+    3. Forces exact 0.070um spacing for abutted neighbors and 0.294um for others.
+    """
+    if not nodes:
+        return nodes
+
+    node_map = {n["id"]: n for n in nodes if "id" in n}
+    
+    # 1. Map candidates to a set of pairs for quick lookup
+    abut_pairs = set()
+    for c in candidates:
+        abut_pairs.add(tuple(sorted([c["dev_a"], c["dev_b"]])))
+
+    # 2. Group nodes into rows (with tolerance)
+    rows = defaultdict(list)
+    for n in nodes:
+        y = n.get("geometry", {}).get("y", 0.0)
+        # Group by y rounded to 3 decimals to handle floats
+        rows[round(float(y), 3)].append(n)
+        
+    for y_key, row_nodes in rows.items():
+        # Sort row by X to establish relative order
+        sorted_nodes = sorted(row_nodes, key=lambda n: n.get("geometry", {}).get("x", 0.0))
+        
+        if not sorted_nodes:
+            continue
+            
+        # Start the row placement
+        current_x = sorted_nodes[0].get("geometry", {}).get("x", 0.0)
+        
+        for i in range(len(sorted_nodes) - 1):
+            n1 = sorted_nodes[i]
+            n2 = sorted_nodes[i+1]
+            
+            pair = tuple(sorted([n1["id"], n2["id"]]))
+            
+            abut1 = n1.get("abutment", {})
+            abut2 = n2.get("abutment", {})
+            is_explicitly_abutted = abut1.get("abut_right") and abut2.get("abut_left")
+            
+            if pair in abut_pairs or is_explicitly_abutted:
+                # FORCE ABUTMENT
+                n1.setdefault("abutment", {})["abut_right"] = True
+                n2.setdefault("abutment", {})["abut_left"] = True
+                new_x = round(current_x + 0.070, 4)
+            else:
+                # FORCE SPACING (min 0.294)
+                # If they were too close (e.g. both at 0), spread them out
+                suggested_x = n2.get("geometry", {}).get("x", 0.0)
+                new_x = round(max(suggested_x, current_x + 0.294), 4)
+            
+            n2["geometry"]["x"] = new_x
+            current_x = new_x
+                
+    return nodes
 
 # ---------------------------------------------------------------------------
 # Core Structured Prompt
@@ -300,18 +375,30 @@ def generate_vlsi_prompt(prompt_graph, inventory_str, adjacency_str, block_str,
     if abutment_str and abutment_str.strip() not in ("", "None detected."):
         abut_section = f"""
 8. Transistor Abutment (Diffusion Sharing — HIGHEST PRIORITY):
-The following transistor pairs MUST be placed directly adjacent (touching, no gap)
-so their diffusion regions can be shared (leftAbut / rightAbut = 1).
-This saves area and reduces parasitics. VIOLATION of these constraints is NOT acceptable.
+The following transistors share a Source/Drain net and MUST be abutted to save area.
 
-ABUTMENT PAIRS:
+REQUIRED ABUTMENT CHAINS:
 {abutment_str}
 
-Placement rules for abutment pairs:
-- The two devices in each pair MUST be in the same row (same y-coordinate).
-- They MUST be placed side-by-side with NO gap between them.
-- If "flip needed" is noted: the second device must use orientation "R0_FH" (horizontal flip).
-- Priority: abutment constraints override block grouping order when they conflict.
+ABUTMENT MATHEMATICAL RULES:
+- If Device A abuts Device B on the right: Origin X_b = X_a + 0.070 um.
+- Example: MM28 at x=0.000, then MM5 MUST be at x=0.070, then MM4 at x=0.140.
+- For EVERY abutted pair (A, B): 
+    * Device A MUST have {{"abutment": {{"abut_right": true, "abut_left": false}}}}
+    * Device B MUST have {{"abutment": {{"abut_left": true, "abut_right": false}}}}
+- NEVER place two different devices at the exact same X and Y coordinates (delta X must be > 0).
+
+OUTPUT EXAMPLE FOR ABUTTED PAIR:
+{{
+  "id": "DEV_A",
+  "geometry": {{ "x": 0.000, "y": 0.000, "orientation": "R0" }},
+  "abutment": {{ "abut_left": false, "abut_right": true }}
+}},
+{{
+  "id": "DEV_B",
+  "geometry": {{ "x": 0.070, "y": 0.000, "orientation": "R0" }},
+  "abutment": {{ "abut_left": true, "abut_right": false }}
+}}
 """
 
     return f"""
@@ -341,8 +428,8 @@ Generate an initial placement based on the following strict DRC and Floorplannin
 - The Fin pitch is 0.014 um. Continuous (fractional) coordinate placement is strictly forbidden.
 
 3. Spacing and Overlap Limits:
-- Side-by-side overlap between any devices must not exceed 0.028 um.
-- Vertical (up/down) overlap is strictly forbidden.
+- Standard non-abutted spacing between any devices should be at least 0.294 um.
+- VERTICAL overlap is strictly forbidden.
 - Both devices in any pair must be aligned on the same boundary.
 
 4. Voltage Domains & Isolation:
@@ -350,8 +437,8 @@ Generate an initial placement based on the following strict DRC and Floorplannin
 - Direct adjacency between 0.8 V and 1.8 V blocks is strictly forbidden.
 
 5. Diffusion & Routing:
-- Do not place blocks completely back-to-back.
-- Reserve dedicated whitespace between blocks for diffusion breaks and dummy fill.
+- For devices sharing a net (abutment pairs), use exactly 0.074 um spacing between origins.
+- For all other devices, reserve dedicated whitespace for diffusion breaks.
 - Minimize net/wire crossings.
 
 6. Block Grouping:
@@ -367,8 +454,11 @@ Generate an initial placement based on the following strict DRC and Floorplannin
 - The passive row height is independent of transistor geometry.
 {abut_section}
 IMPORTANT:
-You must return the EXACT same JSON structure as the input, keeping all existing keys and arrays intact.
-Your only task is to add or update the "x", "y", and "orientation" (default "R0") keys inside every object within the "nodes" array.
+You must return ONLY a JSON object containing a SINGLE key "nodes" which holds the updated array of devices.
+DO NOT return the "edges", "blocks", or "terminal_nets" arrays.
+Your task is to:
+1. Update "x", "y", and "orientation" (default "R0") keys inside every object within the "nodes" array.
+2. For abutment pairs, add an "abutment" key with {{"abut_left": true/false, "abut_right": true/false}} flags as specified in the rules.
 
 Return ONLY raw JSON. Do not include explanations, markdown, or text outside the JSON object.
 CRITICAL: Your response MUST be complete valid JSON. Do NOT truncate the output.

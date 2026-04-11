@@ -6,7 +6,8 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 5.0
+                "nfin": 5.0,
+                "w": 0
             },
             "geometry": {
                 "x": 3.2440000000000007,
@@ -26,7 +27,8 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 5.0
+                "nfin": 5.0,
+                "w": 0
             },
             "geometry": {
                 "x": 3.3320000000000007,
@@ -46,7 +48,8 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 5.0
+                "nfin": 5.0,
+                "w": 0
             },
             "geometry": {
                 "x": 0.9830000000000005,
@@ -66,7 +69,8 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 5.0
+                "nfin": 5.0,
+                "w": 0
             },
             "geometry": {
                 "x": 1.7100000000000004,
@@ -86,14 +90,15 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
-                "x": 5.344,
-                "y": 10.42,
-                "width": 0.368,
-                "height": 0.6680000000000001,
-                "orientation": "MX"
+                "x": 0.0,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
             },
             "block": {
                 "instance": "XI3",
@@ -106,14 +111,15 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
-                "x": 5.344,
-                "y": 10.42,
-                "width": 0.368,
-                "height": 0.6680000000000001,
-                "orientation": "MX"
+                "x": 0.0,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
             },
             "block": {
                 "instance": "XI3",
@@ -126,13 +132,14 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
-                "x": 7.754000000000001,
-                "y": 7.777,
+                "x": 0.0,
+                "y": 0.0,
                 "width": 0.294,
-                "height": 0.718,
+                "height": 0.668,
                 "orientation": "R0"
             },
             "block": {
@@ -146,13 +153,14 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
-                "x": 7.754000000000001,
-                "y": 7.777,
+                "x": 0.0,
+                "y": 0.0,
                 "width": 0.294,
-                "height": 0.718,
+                "height": 0.668,
                 "orientation": "R0"
             },
             "block": {
@@ -166,14 +174,15 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
-                "x": 5.92,
-                "y": 10.42,
-                "width": 0.368,
-                "height": 0.6680000000000001,
-                "orientation": "R180"
+                "x": 0.0,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
             },
             "block": {
                 "instance": "XI3",
@@ -186,14 +195,15 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
-                "x": 5.92,
-                "y": 10.42,
-                "width": 0.368,
-                "height": 0.6680000000000001,
-                "orientation": "R180"
+                "x": 0.0,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
             },
             "block": {
                 "instance": "XI3",
@@ -206,14 +216,15 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
-                "x": 5.492,
-                "y": 10.42,
-                "width": 0.368,
-                "height": 0.6680000000000001,
-                "orientation": "MX"
+                "x": 0.0,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
             },
             "block": {
                 "instance": "XI3",
@@ -226,14 +237,15 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
-                "x": 5.492,
-                "y": 10.42,
-                "width": 0.368,
-                "height": 0.6680000000000001,
-                "orientation": "MX"
+                "x": 0.0,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
             },
             "block": {
                 "instance": "XI3",
@@ -246,14 +258,15 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
-                "x": 5.048,
-                "y": 10.42,
-                "width": 0.368,
-                "height": 0.6680000000000001,
-                "orientation": "MX"
+                "x": 0.0,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
             },
             "block": {
                 "instance": "XI3",
@@ -266,14 +279,15 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
-                "x": 5.048,
-                "y": 10.42,
-                "width": 0.368,
-                "height": 0.6680000000000001,
-                "orientation": "MX"
+                "x": 0.0,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
             },
             "block": {
                 "instance": "XI3",
@@ -286,14 +300,15 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
-                "x": 5.196,
-                "y": 10.42,
-                "width": 0.368,
-                "height": 0.6680000000000001,
-                "orientation": "MX"
+                "x": 0.0,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
             },
             "block": {
                 "instance": "XI3",
@@ -306,14 +321,15 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
-                "x": 5.196,
-                "y": 10.42,
-                "width": 0.368,
-                "height": 0.6680000000000001,
-                "orientation": "MX"
+                "x": 0.0,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
             },
             "block": {
                 "instance": "XI3",
@@ -326,13 +342,14 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
-                "x": 5.196,
-                "y": 11.318000000000001,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 0.0,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
             },
             "block": {
@@ -346,13 +363,14 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
-                "x": 5.196,
-                "y": 11.318000000000001,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 0.0,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
             },
             "block": {
@@ -366,13 +384,14 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
-                "x": 7.027000000000001,
-                "y": 8.505,
+                "x": 0.0,
+                "y": 0.0,
                 "width": 0.294,
-                "height": 0.718,
+                "height": 0.668,
                 "orientation": "R0"
             },
             "block": {
@@ -386,13 +405,14 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
-                "x": 7.027000000000001,
-                "y": 8.505,
+                "x": 0.0,
+                "y": 0.0,
                 "width": 0.294,
-                "height": 0.718,
+                "height": 0.668,
                 "orientation": "R0"
             },
             "block": {
@@ -406,13 +426,14 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
-                "x": 5.832,
-                "y": 11.318000000000001,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 0.0,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
             },
             "block": {
@@ -426,13 +447,14 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
-                "x": 5.832,
-                "y": 11.318000000000001,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 0.0,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
             },
             "block": {
@@ -446,13 +468,14 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
-                "x": 5.492,
-                "y": 11.318000000000001,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 0.0,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
             },
             "block": {
@@ -466,13 +489,14 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
-                "x": 5.492,
-                "y": 11.318000000000001,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 0.0,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
             },
             "block": {
@@ -486,13 +510,14 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
-                "x": 5.344,
-                "y": 11.318000000000001,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 0.0,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
             },
             "block": {
@@ -506,13 +531,14 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
-                "x": 5.344,
-                "y": 11.318000000000001,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 0.0,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
             },
             "block": {
@@ -526,13 +552,14 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
-                "x": 5.048,
-                "y": 11.318000000000001,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 0.0,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
             },
             "block": {
@@ -546,13 +573,14 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
-                "x": 5.048,
-                "y": 11.318000000000001,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 0.0,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
             },
             "block": {
@@ -566,7 +594,8 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
                 "x": 3.880000000000001,
@@ -574,6 +603,10 @@
                 "width": 0.368,
                 "height": 0.6680000000000001,
                 "orientation": "MX"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             },
             "block": {
                 "instance": "XI2",
@@ -586,14 +619,19 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
-                "x": 3.880000000000001,
+                "x": 4.0280000000000005,
                 "y": 10.42,
                 "width": 0.368,
                 "height": 0.6680000000000001,
                 "orientation": "MX"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": false
             },
             "block": {
                 "instance": "XI2",
@@ -606,10 +644,11 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
-                "x": 4.796,
+                "x": 5.92,
                 "y": 10.42,
                 "width": 0.368,
                 "height": 0.6680000000000001,
@@ -626,7 +665,150 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
+            },
+            "geometry": {
+                "x": 7.754000000000001,
+                "y": 7.777,
+                "width": 0.294,
+                "height": 0.718,
+                "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI2_MM4_f1",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0
+            },
+            "geometry": {
+                "x": 5.344,
+                "y": 10.42,
+                "width": 0.368,
+                "height": 0.6680000000000001,
+                "orientation": "MX"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI2_MM4_f2",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0
+            },
+            "geometry": {
+                "x": 5.492,
+                "y": 10.42,
+                "width": 0.368,
+                "height": 0.6680000000000001,
+                "orientation": "MX"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": false
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI2_MM3_f1",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0
+            },
+            "geometry": {
+                "x": 5.048,
+                "y": 10.42,
+                "width": 0.368,
+                "height": 0.6680000000000001,
+                "orientation": "MX"
+            },
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI2_MM3_f2",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0
+            },
+            "geometry": {
+                "x": 5.196,
+                "y": 10.42,
+                "width": 0.368,
+                "height": 0.6680000000000001,
+                "orientation": "MX"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI2_MM2_f1",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0
+            },
+            "geometry": {
+                "x": 4.456000000000001,
+                "y": 10.42,
+                "width": 0.368,
+                "height": 0.6680000000000001,
+                "orientation": "R180"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI2_MM2_f2",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
                 "x": 4.796,
@@ -641,139 +823,24 @@
             }
         },
         {
-            "id": "XI2_MM4_f1",
-            "type": "nmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 4.0
-            },
-            "geometry": {
-                "x": 4.456000000000001,
-                "y": 10.42,
-                "width": 0.368,
-                "height": 0.6680000000000001,
-                "orientation": "R180"
-            },
-            "block": {
-                "instance": "XI2",
-                "subckt": "Xor"
-            }
-        },
-        {
-            "id": "XI2_MM4_f2",
-            "type": "nmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 4.0
-            },
-            "geometry": {
-                "x": 4.456000000000001,
-                "y": 10.42,
-                "width": 0.368,
-                "height": 0.6680000000000001,
-                "orientation": "R180"
-            },
-            "block": {
-                "instance": "XI2",
-                "subckt": "Xor"
-            }
-        },
-        {
-            "id": "XI2_MM3_f1",
-            "type": "nmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 4.0
-            },
-            "geometry": {
-                "x": 4.0280000000000005,
-                "y": 10.42,
-                "width": 0.368,
-                "height": 0.6680000000000001,
-                "orientation": "MX"
-            },
-            "block": {
-                "instance": "XI2",
-                "subckt": "Xor"
-            }
-        },
-        {
-            "id": "XI2_MM3_f2",
-            "type": "nmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 4.0
-            },
-            "geometry": {
-                "x": 4.0280000000000005,
-                "y": 10.42,
-                "width": 0.368,
-                "height": 0.6680000000000001,
-                "orientation": "MX"
-            },
-            "block": {
-                "instance": "XI2",
-                "subckt": "Xor"
-            }
-        },
-        {
-            "id": "XI2_MM2_f1",
-            "type": "nmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 4.0
-            },
-            "geometry": {
-                "x": 3.5840000000000005,
-                "y": 10.42,
-                "width": 0.368,
-                "height": 0.6680000000000001,
-                "orientation": "MX"
-            },
-            "block": {
-                "instance": "XI2",
-                "subckt": "Xor"
-            }
-        },
-        {
-            "id": "XI2_MM2_f2",
-            "type": "nmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 4.0
-            },
-            "geometry": {
-                "x": 3.5840000000000005,
-                "y": 10.42,
-                "width": 0.368,
-                "height": 0.6680000000000001,
-                "orientation": "MX"
-            },
-            "block": {
-                "instance": "XI2",
-                "subckt": "Xor"
-            }
-        },
-        {
             "id": "XI2_MM25_f1",
             "type": "nmos",
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
-                "x": 3.7320000000000007,
+                "x": 3.5840000000000005,
                 "y": 10.42,
                 "width": 0.368,
                 "height": 0.6680000000000001,
                 "orientation": "MX"
+            },
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
             },
             "block": {
                 "instance": "XI2",
@@ -786,7 +853,8 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
                 "x": 3.7320000000000007,
@@ -794,6 +862,10 @@
                 "width": 0.368,
                 "height": 0.6680000000000001,
                 "orientation": "MX"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             },
             "block": {
                 "instance": "XI2",
@@ -806,14 +878,19 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
-                "x": 3.7320000000000007,
+                "x": 3.880000000000001,
                 "y": 11.318000000000001,
                 "width": 0.368,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             },
             "block": {
                 "instance": "XI2",
@@ -826,14 +903,19 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
-                "x": 3.7320000000000007,
+                "x": 4.0280000000000005,
                 "y": 11.318000000000001,
                 "width": 0.368,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": false
             },
             "block": {
                 "instance": "XI2",
@@ -846,10 +928,11 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
-                "x": 4.708,
+                "x": 5.832,
                 "y": 11.318000000000001,
                 "width": 0.368,
                 "height": 0.6680000000000001,
@@ -866,13 +949,14 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
-                "x": 4.708,
-                "y": 11.318000000000001,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 7.027000000000001,
+                "y": 8.505,
+                "width": 0.294,
+                "height": 0.718,
                 "orientation": "R0"
             },
             "block": {
@@ -886,14 +970,19 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
-                "x": 4.368,
+                "x": 5.344,
                 "y": 11.318000000000001,
                 "width": 0.368,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             },
             "block": {
                 "instance": "XI2",
@@ -906,14 +995,19 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
-                "x": 4.368,
+                "x": 5.492,
                 "y": 11.318000000000001,
                 "width": 0.368,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": false
             },
             "block": {
                 "instance": "XI2",
@@ -926,14 +1020,19 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
-                "x": 4.0280000000000005,
+                "x": 5.048,
                 "y": 11.318000000000001,
                 "width": 0.368,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
             },
             "block": {
                 "instance": "XI2",
@@ -946,14 +1045,19 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
-                "x": 4.0280000000000005,
+                "x": 5.196,
                 "y": 11.318000000000001,
                 "width": 0.368,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             },
             "block": {
                 "instance": "XI2",
@@ -966,10 +1070,11 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
-                "x": 3.880000000000001,
+                "x": 4.368,
                 "y": 11.318000000000001,
                 "width": 0.368,
                 "height": 0.6680000000000001,
@@ -986,10 +1091,11 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
-                "x": 3.880000000000001,
+                "x": 4.708,
                 "y": 11.318000000000001,
                 "width": 0.368,
                 "height": 0.6680000000000001,
@@ -1006,7 +1112,8 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
                 "x": 3.5840000000000005,
@@ -1014,6 +1121,10 @@
                 "width": 0.368,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
             },
             "block": {
                 "instance": "XI2",
@@ -1026,14 +1137,19 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 4.0
+                "nfin": 4.0,
+                "w": 0
             },
             "geometry": {
-                "x": 3.5840000000000005,
+                "x": 3.7320000000000007,
                 "y": 11.318000000000001,
                 "width": 0.368,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             },
             "block": {
                 "instance": "XI2",

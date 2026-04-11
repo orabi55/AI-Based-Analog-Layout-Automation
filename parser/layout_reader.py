@@ -41,39 +41,46 @@ def _is_via_or_utility(cell_name):
             "boundary" in name_lower)
 
 
-def _parse_abut_flags(ref_cell):
-    """Parse leftAbut / rightAbut flags from a PCell's property list.
+def _parse_pcell_params(*objs):
+    """Parse parameters from multiple objects (e.g. Cell and Reference) and merge them.
 
-    The SAED PDK encodes these as bytes in a 'pcell' property entry, e.g.:
-        [b'pcell', b'SAED_PDK_14', b'nfet', b'layout',
-         b'leftAbut##32##5##32##1', b'rightAbut##32##5##32##0', ...]
-    The last token after '##32##' is '1' (active) or '0' (inactive).
-
-    Returns:
-        dict with keys 'abut_left' (bool) and 'abut_right' (bool).
+    The SAED PDK encodes these as bytes in a 'pcell' property entry.
+    Returns: dict of parameters {key: value_string}.
     """
-    result = {"abut_left": False, "abut_right": False}
-    try:
-        for prop in ref_cell.properties:
-            if not prop or prop[0] != "pcell":
-                continue
-            for entry in prop[1:]:
-                if isinstance(entry, (bytes, bytearray)):
-                    s = entry.decode("utf-8", errors="ignore")
-                elif isinstance(entry, str):
-                    s = entry
-                else:
+    params = {}
+    for obj in objs:
+        if not hasattr(obj, "properties"):
+            continue
+        try:
+            for prop in obj.properties:
+                if not prop or len(prop) < 1:
                     continue
-                if "leftAbut" in s:
-                    val = s.split("##32##")[-1].strip()
-                    result["abut_left"] = (val == "1")
-                elif "rightAbut" in s:
-                    val = s.split("##32##")[-1].strip()
-                    result["abut_right"] = (val == "1")
-    except Exception:
-        pass
-    return result
+                
+                # Check for 'pcell' key (could be bytes or str)
+                key = prop[0]
+                if isinstance(key, bytes):
+                    key = key.decode("utf-8", errors="ignore")
+                
+                if str(key).lower() != "pcell":
+                    continue
 
+                for entry in prop[1:]:
+                    if isinstance(entry, (bytes, bytearray)):
+                        s = entry.decode("utf-8", errors="ignore")
+                    elif isinstance(entry, str):
+                        s = entry
+                    else:
+                        continue
+
+                    if "##32##" in s:
+                        parts = s.split("##32##")
+                        if len(parts) >= 3:
+                            param_key = parts[0].strip()
+                            val = parts[-1].strip()
+                            params[param_key] = val
+        except Exception:
+            pass
+    return params
 
 
 def _ref_origin_rotation(ref):
@@ -139,7 +146,7 @@ def _extract_recursive(cell, lib, offset_x=0.0, offset_y=0.0,
                 width = 0
                 height = 0
 
-            abut_flags = _parse_abut_flags(ref_cell)
+            params = _parse_pcell_params(ref_cell, ref)
             devices.append({
                 "cell": cell_name,
                 "x": abs_x,
@@ -148,8 +155,9 @@ def _extract_recursive(cell, lib, offset_x=0.0, offset_y=0.0,
                 "height": height,
                 "orientation": orientation,
                 "hier_prefix": prefix,
-                "abut_left":  abut_flags["abut_left"],
-                "abut_right": abut_flags["abut_right"],
+                "params": params,
+                "abut_left":  params.get("leftAbut") == "1",
+                "abut_right": params.get("rightAbut") == "1",
             })
 
         elif _is_resistor_cell(cell_name) or _is_capacitor_cell(cell_name):
@@ -170,6 +178,7 @@ def _extract_recursive(cell, lib, offset_x=0.0, offset_y=0.0,
                 width = 0
                 height = 0
 
+            params = _parse_pcell_params(ref_cell)
             devices.append({
                 "cell": cell_name,
                 "x": abs_x,
@@ -179,6 +188,7 @@ def _extract_recursive(cell, lib, offset_x=0.0, offset_y=0.0,
                 "orientation": orientation,
                 "hier_prefix": prefix,
                 "passive_type": passive_type,
+                "params": params,
             })
 
         elif _is_via_or_utility(cell_name):
@@ -235,7 +245,16 @@ def extract_layout_instances(layout_file):
             if not _is_known_device(cell_name):
                 continue
 
-            x, y, rotation, mirrored, orientation = _ref_origin_rotation(ref)
+            x, y = ref.origin
+            rotation = ref.rotation if ref.rotation else 0
+            mirrored = ref.x_reflection
+
+            if mirrored:
+                orientation = "MX"
+            else:
+                deg = round(math.degrees(rotation)) % 360
+                orientation = f"R{deg}"
+
             ref_cell = ref.cell if hasattr(ref.cell, 'bounding_box') else None
             bbox = ref_cell.bounding_box() if ref_cell else None
 
@@ -261,12 +280,14 @@ def extract_layout_instances(layout_file):
             elif _is_capacitor_cell(cell_name):
                 entry["passive_type"] = "cap"
 
-            # Parse abutment flags from PCell properties
+            # Parse all PCell properties
             ref_cell_obj = ref.cell if hasattr(ref.cell, 'bounding_box') else None
-            if ref_cell_obj is not None and _is_transistor_cell(cell_name):
-                abut_flags = _parse_abut_flags(ref_cell_obj)
-                entry["abut_left"]  = abut_flags["abut_left"]
-                entry["abut_right"] = abut_flags["abut_right"]
+            if ref_cell_obj is not None:
+                params = _parse_pcell_params(ref_cell_obj, ref)
+                entry["params"] = params
+                if _is_transistor_cell(cell_name):
+                    entry["abut_left"]  = (params.get("leftAbut") == "1")
+                    entry["abut_right"] = (params.get("rightAbut") == "1")
 
             devices.append(entry)
         return devices

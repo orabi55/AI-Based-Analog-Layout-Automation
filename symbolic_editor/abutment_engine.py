@@ -12,7 +12,6 @@ When the user presses the "Abut" button, this engine:
       terminal faces the shared edge.
 
 The candidates are then used for:
-  - Visual highlighting (green glow on compatible terminal edges in the GUI).
   - AI placement constraints (the AI is told to place abutment candidates
     adjacent to each other so diffusion can be shared).
 
@@ -44,10 +43,19 @@ from itertools import combinations
 # Helpers
 # ──────────────────────────────────────────────────────────────────────────────
 
+_POWER_NETS = frozenset({"VDD", "VSS", "GND", "VCC", "AVDD", "AVSS"})
+
 def _sd_nets(dev_id: str, terminal_nets: dict) -> tuple[str | None, str | None]:
-    """Return (source_net, drain_net) for dev_id."""
+    """Return (source_net, drain_net) for dev_id, ignoring power nets."""
     nets = terminal_nets.get(dev_id, {})
-    return nets.get("S") or None, nets.get("D") or None
+    s = nets.get("S")
+    d = nets.get("D")
+    
+    # Filter out power nets
+    s_ret = s if (s and s.upper() not in _POWER_NETS) else None
+    d_ret = d if (d and d.upper() not in _POWER_NETS) else None
+    
+    return s_ret, d_ret
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -93,53 +101,57 @@ def find_abutment_candidates(nodes: list, terminal_nets: dict) -> list:
         if not (s_a or d_a) or not (s_b or d_b):
             continue  # missing net info
 
+        parent_a = node_a.get("electrical", {}).get("parent") or id_a.split("_f")[0]
+        parent_b = node_b.get("electrical", {}).get("parent") or id_b.split("_f")[0]
+
         found = []
+        is_same_parent = (parent_a == parent_b)
 
-        # Case 1: dev_a.S == dev_b.S  → flip dev_b
-        if s_a and s_b and s_a == s_b:
-            # After flip: dev_b left becomes Drain, right becomes Source
-            # So dev_a's left Source can abut with dev_b's flipped right Source
-            found.append({
-                "dev_a": id_a, "term_a": "S",
-                "dev_b": id_b, "term_b": "S",
-                "shared_net": s_a,
-                "type": type_a,
-                "needs_flip": True,
-            })
-
-        # Case 2: dev_a.S == dev_b.D  → no flip
-        if s_a and d_b and s_a == d_b:
-            # dev_b's Drain (right) abuts dev_a's Source (left)
-            # In layout: place dev_b LEFT of dev_a
-            found.append({
-                "dev_a": id_b, "term_a": "D",
-                "dev_b": id_a, "term_b": "S",
-                "shared_net": s_a,
-                "type": type_a,
-                "needs_flip": False,
-            })
-
-        # Case 3: dev_a.D == dev_b.S  → no flip
-        if d_a and s_b and d_a == s_b:
-            # dev_a's Drain (right) abuts dev_b's Source (left)
-            # In layout: place dev_a LEFT of dev_b
-            found.append({
-                "dev_a": id_a, "term_a": "D",
-                "dev_b": id_b, "term_b": "S",
-                "shared_net": d_a,
-                "type": type_a,
-                "needs_flip": False,
-            })
-
-        # Case 4: dev_a.D == dev_b.D  → flip dev_b
-        if d_a and d_b and d_a == d_b:
-            found.append({
-                "dev_a": id_a, "term_a": "D",
-                "dev_b": id_b, "term_b": "D",
-                "shared_net": d_a,
-                "type": type_a,
-                "needs_flip": True,
-            })
+        if is_same_parent:
+            # Multi-finger sequential chain: only abut strictly consecutive fingers
+            idx_a = int(id_a.split("_f")[-1]) if "_f" in id_a else 1
+            idx_b = int(id_b.split("_f")[-1]) if "_f" in id_b else 1
+            
+            if abs(idx_a - idx_b) != 1:
+                continue  # Skip non-consecutive fingers to avoid overlapping/O(N^2)
+                
+            min_idx = min(idx_a, idx_b)
+            # Alternate shared terminals: S, then D, then S...
+            if min_idx % 2 != 0:
+                if s_a and s_a == s_b:
+                    found.append({"dev_a": id_a, "term_a": "S", "dev_b": id_b, "term_b": "S", "shared_net": s_a, "type": type_a, "needs_flip": True})
+            else:
+                if d_a and d_a == d_b:
+                    found.append({"dev_a": id_a, "term_a": "D", "dev_b": id_b, "term_b": "D", "shared_net": d_a, "type": type_a, "needs_flip": True})
+        else:
+            # Cross-parent checks. To prevent massive identical arrays for cross-parent (e.g. all 16 fingers sharing VDD),
+            # we only attempt to abut the LAST finger of dev_a with the FIRST finger of dev_b
+            # (or vice-versa, assuming a simple block-to-block layout sequence).
+            idx_a = int(id_a.split("_f")[-1]) if "_f" in id_a else 1
+            idx_b = int(id_b.split("_f")[-1]) if "_f" in id_b else 1
+            
+            # Allow cross-parent connection roughly between boundary fingers
+            # For simplicity, if both are f1, or if we want them to link end-to-end, we just take the first matching case.
+            # Here we enforce a strict 1 valid case selection to prevent prompt conflicts.
+            if s_a and s_b and s_a == s_b:
+                found.append({"dev_a": id_a, "term_a": "S", "dev_b": id_b, "term_b": "S", "shared_net": s_a, "type": type_a, "needs_flip": True})
+            elif s_a and d_b and s_a == d_b:
+                found.append({"dev_a": id_b, "term_a": "D", "dev_b": id_a, "term_b": "S", "shared_net": s_a, "type": type_a, "needs_flip": False})
+            elif d_a and s_b and d_a == s_b:
+                found.append({"dev_a": id_a, "term_a": "D", "dev_b": id_b, "term_b": "S", "shared_net": d_a, "type": type_a, "needs_flip": False})
+            elif d_a and d_b and d_a == d_b:
+                found.append({"dev_a": id_a, "term_a": "D", "dev_b": id_b, "term_b": "D", "shared_net": d_a, "type": type_a, "needs_flip": True})
+                
+            # If cross-parent, we randomly got ONE hit. To prevent the permutation explosion
+            # (16x16 = 256 hits between MM1 and MM2), we only keep it if the AI hasn't already been given an abutment for this parent pair!
+            if found:
+                already_linked = any(
+                    (c["dev_a"].split("_f")[0] == parent_a and c["dev_b"].split("_f")[0] == parent_b) or
+                    (c["dev_b"].split("_f")[0] == parent_a and c["dev_a"].split("_f")[0] == parent_b)
+                    for c in candidates
+                )
+                if already_linked:
+                    found = [] # Discard extra cross-parent links
 
         # Deduplicate (same pair, same net can appear in multiple cases)
         for c in found:
