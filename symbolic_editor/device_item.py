@@ -265,47 +265,8 @@ class DeviceItem(QGraphicsRectItem):
 
         painter.restore()   # back to un-flipped for text
 
-        # ── Abutment candidate highlights ──────────────────────────────
-        # Draw a bright green glow on each edge where diffusion can be shared.
-        if self._hl_left or self._hl_right:
-            HL_COLOR = QColor("#00e676")   # vivid green
-            HL_ALPHA = QColor("#00e676")
-            HL_ALPHA.setAlpha(55)
-            glow_w = max(4.0, sd_w * 0.22)
-
-            if self._hl_left:
-                # Filled semi-transparent strip on left
-                painter.setBrush(QBrush(HL_ALPHA))
-                painter.setPen(Qt.PenStyle.NoPen)
-                painter.drawRect(QRectF(x0, y0, glow_w, h))
-                # Bright border line
-                painter.setPen(QPen(HL_COLOR, 2.5, Qt.PenStyle.SolidLine,
-                                    Qt.PenCapStyle.FlatCap))
-                painter.drawLine(QPointF(x0 + 1, y0 + 2),
-                                 QPointF(x0 + 1, y0 + h - 2))
-                # Arrow pointing right into device
-                mid = y0 + h * 0.5
-                painter.drawLine(QPointF(x0 + glow_w, mid - 4),
-                                 QPointF(x0 + glow_w + 6, mid))
-                painter.drawLine(QPointF(x0 + glow_w, mid + 4),
-                                 QPointF(x0 + glow_w + 6, mid))
-
-            if self._hl_right:
-                # Filled semi-transparent strip on right
-                painter.setBrush(QBrush(HL_ALPHA))
-                painter.setPen(Qt.PenStyle.NoPen)
-                painter.drawRect(QRectF(x0 + w - glow_w, y0, glow_w, h))
-                # Bright border line
-                painter.setPen(QPen(HL_COLOR, 2.5, Qt.PenStyle.SolidLine,
-                                    Qt.PenCapStyle.FlatCap))
-                painter.drawLine(QPointF(x0 + w - 1, y0 + 2),
-                                 QPointF(x0 + w - 1, y0 + h - 2))
-                # Arrow pointing left into device
-                mid = y0 + h * 0.5
-                painter.drawLine(QPointF(x0 + w - glow_w, mid - 4),
-                                 QPointF(x0 + w - glow_w - 6, mid))
-                painter.drawLine(QPointF(x0 + w - glow_w, mid + 4),
-                                 QPointF(x0 + w - glow_w - 6, mid))
+        # Abutment candidate highlights (visual annotation removed).
+        # _hl_left / _hl_right are kept for internal state but no longer painted.
 
         # ── Manual abutment state (amber solid stripe) ────────────────────
         # When the user manually sets leftAbut / rightAbut via right-click

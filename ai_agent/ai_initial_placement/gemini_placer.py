@@ -14,7 +14,7 @@ from ai_agent.ai_initial_placement.placer_utils import (
     sanitize_json, _ensure_placement_dict, _build_net_adjacency,
     _build_device_inventory, _build_block_info, _validate_placement,
     _normalise_coords, _restore_coords, generate_vlsi_prompt,
-    _format_abutment_candidates
+    _format_abutment_candidates, _heal_abutment_positions
 )
 
 try:
@@ -76,12 +76,20 @@ def gemini_generate_placement(input_json: str, output_json: str):
 
             raw_output = response.text.strip()
             
+            with open("debug_raw_output.json", "w") as dbg_m:
+                dbg_m.write(raw_output)
+            
             val_errors = []
             placement = _ensure_placement_dict(sanitize_json(raw_output))
             placed_nodes = placement.get("nodes", [])
 
             if not isinstance(placed_nodes, list) or not placed_nodes:
                 raise ValueError("Placement 'nodes' is empty or not a list")
+
+            # HEAL: Algorithmic fix for spacing before validation
+            candidates = graph_data.get("abutment_candidates", [])
+            placed_nodes = _heal_abutment_positions(placed_nodes, candidates)
+            placement["nodes"] = placed_nodes
 
             val_errors = _validate_placement(norm_nodes, placed_nodes)
             if val_errors:

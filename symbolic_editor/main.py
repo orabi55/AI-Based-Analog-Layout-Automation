@@ -707,6 +707,28 @@ class MainWindow(QMainWindow):
         self._act_import.triggered.connect(self._on_import_netlist_layout)
         file_menu.addAction(self._act_import)
 
+        # --- Add Examples Submenu ---
+        examples_menu = file_menu.addMenu("Examples")
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        examples_dir = os.path.join(base_dir, "examples")
+        if os.path.isdir(examples_dir):
+            for example_name in sorted(os.listdir(examples_dir)):
+                ex_path = os.path.join(examples_dir, example_name)
+                if os.path.isdir(ex_path):
+                    sp_files = glob.glob(os.path.join(ex_path, "*.sp"))
+                    if sp_files:
+                        sp_file = sp_files[-1] # Usually preferred if multiples exist
+                        oas_file = sp_file.rsplit('.', 1)[0] + ".oas"
+                        if not os.path.exists(oas_file):
+                            oas_file = ""
+                        
+                        def create_action(name, sp, oas):
+                            act = QAction(name.replace('_', ' ').title(), self)
+                            act.triggered.connect(lambda: self._load_example(sp, oas))
+                            return act
+                            
+                        examples_menu.addAction(create_action(example_name, sp_file, oas_file))
+
         file_menu.addSeparator()
 
         self._act_file_save = QAction("Save", self)
@@ -757,6 +779,13 @@ class MainWindow(QMainWindow):
         )
         view_menu.addAction(self._act_view_transistor)
         
+        view_menu.addSeparator()
+        
+        self._act_reload_app = QAction("Reload App", self)
+        self._act_reload_app.setShortcut(QKeySequence("F5"))
+        self._act_reload_app.triggered.connect(self._on_reload_app)
+        view_menu.addAction(self._act_reload_app)
+
         view_menu.addSeparator()
 
         self._act_toggle_blocks = QAction("Toggle Block Overlays", self)
@@ -1249,7 +1278,7 @@ class MainWindow(QMainWindow):
                 pass
         return terminal_nets
 
-    def _refresh_panels(self, compact=True):
+    def _refresh_panels(self, compact=False):
         """Refresh all panels from self.nodes.
 
         Args:
@@ -1397,7 +1426,19 @@ class MainWindow(QMainWindow):
         self._act_redo.setEnabled(bool(self._redo_stack))
 
     def _on_device_drag_start(self):
-        """Called when the user starts dragging a device — push undo."""
+        """Called when the user starts dragging a device — push undo.
+
+        Also re-enables per-item snap grid for any item that was loaded without
+        snapping (e.g. from an OAS import with exact coordinates). Once the user
+        intentionally moves a device we want it to snap to the grid.
+        """
+        # Re-enable snap grid on all selected items so dragging snaps correctly.
+        try:
+            for it in self.editor.scene.selectedItems():
+                if hasattr(it, "set_snap_grid"):
+                    it.set_snap_grid(self.editor._snap_grid, self.editor._row_pitch)
+        except RuntimeError:
+            pass
         self._sync_node_positions()
         self._push_undo()
 
@@ -1711,6 +1752,14 @@ class MainWindow(QMainWindow):
     # -------------------------------------------------
     # Import from Netlist + Layout
     # -------------------------------------------------
+    def _load_example(self, sp_path, oas_path):
+        """Helper to quickly load an example without showing the import dialog."""
+        self.overlay.show_message(f"Loading {os.path.basename(sp_path)}...")
+        self._import_worker = GenericWorker(self._run_parser_pipeline, sp_path, oas_path)
+        self._import_worker.finished.connect(lambda data: self._on_import_completed(data, sp_path))
+        self._import_worker.error.connect(self._on_import_error)
+        self._import_worker.start()
+
     def _on_import_netlist_layout(self):
         """Open the import dialog, parse files, and visualize the graph."""
         dlg = ImportDialog(self)
@@ -1729,7 +1778,7 @@ class MainWindow(QMainWindow):
 
     def _on_import_completed(self, data, sp_path):
         self.overlay.hide_overlay()
-        
+
         # Save the generated graph JSON next to the .sp file
         base_name = os.path.splitext(os.path.basename(sp_path))[0]
         sp_dir = os.path.dirname(os.path.abspath(sp_path))
@@ -1737,8 +1786,8 @@ class MainWindow(QMainWindow):
         with open(out_path, "w") as f:
             json.dump(data, f, indent=4)
 
-        # Load into the GUI
-        self._load_from_data_dict(data, out_path)
+        # Load into the GUI - PRESERVE existing layout coordinates
+        self._load_from_data_dict(data, out_path, False)
 
         num_nodes = len(data.get('nodes', []))
         self.chat_panel._append_message(
@@ -1749,7 +1798,6 @@ class MainWindow(QMainWindow):
             f"To run AI initial placement: Design > Run AI Initial Placement (Ctrl+P)",
             "#e8f4fd", "#1a1a2e",
         )
-
     def _on_import_error(self, err_msg):
         self.overlay.hide_overlay()
         QMessageBox.critical(
@@ -1877,8 +1925,20 @@ class MainWindow(QMainWindow):
             dev_type = dev.type  # "nmos" | "pmos" | "res" | "cap"
             is_passive = dev_type in ("res", "cap")
 
-            # Geometry: from layout matcher or from params
+            # 1. Base electrical params
+            electrical = {
+                "l":    dev.params.get("l",    1.4e-08),
+                "nf":   dev.params.get("nf",   1),
+                "nfin": dev.params.get("nfin", 1),
+                "w":    dev.params.get("w",    0),
+            }
+            if dev_type == "cap":
+                electrical["cval"] = dev.params.get("cval", 0.0)
+
+            # 2. Determine Geometry
             layout_idx = device_mapping.get(dev_name)
+            abut_info = None
+
             if layout_idx is not None and layout_idx < len(layout_instances):
                 inst = layout_instances[layout_idx]
                 geom = {
@@ -1888,11 +1948,11 @@ class MainWindow(QMainWindow):
                     "height":      inst.get("height", ROW_HEIGHT_UM),
                     "orientation": inst.get("orientation", "R0"),
                 }
-                # Carry OAS abutment state into the node
+                # Carry OAS abutment state
                 abut_l = inst.get("abut_left",  False)
                 abut_r = inst.get("abut_right", False)
                 if abut_l or abut_r:
-                    node["abutment"] = {"abut_left": abut_l, "abut_right": abut_r}
+                    abut_info = {"abut_left": abut_l, "abut_right": abut_r}
 
             elif is_passive:
                 # Compute passive geometry from params
@@ -1900,13 +1960,10 @@ class MainWindow(QMainWindow):
                 raw_w = prm.get("w", PITCH_UM)
                 raw_l = prm.get("l", ROW_HEIGHT_UM)
                 nf_p  = max(1, int(prm.get("nf", 1)))
-                m_p   = max(1, int(prm.get("m",  1)))
                 if dev_type == "res":
-                    # Resistor: length is the long axis, width is the narrow axis
                     width_um  = max(raw_l * nf_p, PITCH_UM)
                     height_um = max(raw_w, 0.1)
                 else:
-                    # Capacitor: width scaled by fingers/stacks
                     stm = max(1, int(prm.get("stm", 1)))
                     spm = max(1, int(prm.get("spm", 1)))
                     width_um  = max(raw_w * max(nf_p, 1), PITCH_UM)
@@ -1927,21 +1984,15 @@ class MainWindow(QMainWindow):
                     "orientation": "R0",
                 }
 
-            electrical = {
-                "l":    dev.params.get("l",    1.4e-08),
-                "nf":   dev.params.get("nf",   1),
-                "nfin": dev.params.get("nfin", 1),
-                "w":    dev.params.get("w",    0),
-            }
-            if dev_type == "cap":
-                electrical["cval"] = dev.params.get("cval", 0.0)
-
+            # 3. Create Node
             node_dict = {
                 "id":         dev_name,
                 "type":       dev_type,
                 "electrical": electrical,
                 "geometry":   geom,
             }
+            if abut_info:
+                node_dict["abutment"] = abut_info
 
             # Block membership
             block_info = block_map.get(dev_name)
@@ -1955,7 +2006,7 @@ class MainWindow(QMainWindow):
             nodes.append(node_dict)
             node_by_name[dev_name] = node_dict
 
-            # Terminal nets — passives use pin1/pin2; transistors use D/G/S
+            # Terminal nets
             if hasattr(dev, 'pins') and dev.pins:
                 if is_passive:
                     terminal_nets[dev_name] = {
@@ -2193,7 +2244,7 @@ class MainWindow(QMainWindow):
 
         return data
 
-    def _load_from_data_dict(self, data, file_path):
+    def _load_from_data_dict(self, data, file_path, compact=False):
         """
         Load a placement data dict (with nodes, edges, terminal_nets)
         directly into the GUI without reading from a file.
@@ -2203,7 +2254,7 @@ class MainWindow(QMainWindow):
         self.nodes = data["nodes"]
         self._terminal_nets = data.get("terminal_nets", {})
         self._current_file = file_path
-        self._refresh_panels()
+        self._refresh_panels(compact=compact)
         self.setWindowTitle(
             f"Symbolic Layout Editor \u2014 {os.path.basename(file_path)}"
         )
@@ -2275,8 +2326,10 @@ class MainWindow(QMainWindow):
 
         json_dir = os.path.dirname(os.path.abspath(self._current_file))
 
-        # Find sibling .oas file
-        oas_files = glob.glob(os.path.join(json_dir, "*.oas"))
+        # Find sibling .oas files, preferring the original (no _updated suffix,
+        # or the one with fewest cells so we don't start from a previously
+        # exported file that already has variant cells).
+        oas_files = sorted(glob.glob(os.path.join(json_dir, "*.oas")))
         if not oas_files:
             self.chat_panel._append_message(
                 "AI",
@@ -2284,7 +2337,10 @@ class MainWindow(QMainWindow):
                 "#fde8e8", "#a00",
             )
             return
-        oas_path = oas_files[0]
+
+        # Prefer a file WITHOUT "_updated" in its name (i.e., the base OAS)
+        base_oas_files = [f for f in oas_files if "_updated" not in os.path.basename(f).lower()]
+        oas_path = base_oas_files[0] if base_oas_files else oas_files[0]
 
         # Find sibling .sp file
         sp_files = glob.glob(os.path.join(json_dir, "*.sp"))
@@ -2298,7 +2354,8 @@ class MainWindow(QMainWindow):
         sp_path = sp_files[0]
 
         # Ask user where to save
-        default_name = os.path.splitext(os.path.basename(oas_path))[0] + "_updated.oas"
+        base_name = os.path.splitext(os.path.basename(oas_path))[0]
+        default_name = base_name + "_updated.oas"
         default_path = os.path.join(json_dir, default_name)
         output_path, _ = QFileDialog.getSaveFileName(
             self, "Export to OAS", default_path,
@@ -2315,6 +2372,7 @@ class MainWindow(QMainWindow):
 
             # Collect per-device manual abutment states from the canvas
             abut_states = self.editor.get_device_abutment_states()
+
             # Inject into node dicts so the writer can pick them up
             for node in self.nodes:
                 dev_id = node.get("id")
@@ -2322,6 +2380,33 @@ class MainWindow(QMainWindow):
                     node["abutment"] = abut_states[dev_id]
                 else:
                     node.pop("abutment", None)   # clear any old value
+
+            # Show a summary of what will be abutted
+            if abut_states:
+                lines = []
+                for dev_id, flags in abut_states.items():
+                    parts = []
+                    if flags.get("abut_left"):
+                        parts.append("left")
+                    if flags.get("abut_right"):
+                        parts.append("right")
+                    lines.append(f"  • **{dev_id}**: {' + '.join(parts)}")
+                self.chat_panel._append_message(
+                    "AI",
+                    f"Exporting OAS with abutment on {len(abut_states)} device(s):\n"
+                    + "\n".join(lines)
+                    + f"\n\nSource OAS: `{os.path.basename(oas_path)}`",
+                    "#e8f4fd", "#1a1a2e",
+                )
+            else:
+                self.chat_panel._append_message(
+                    "AI",
+                    "ℹ️  No abutment flags set — exporting with standard (non-abutted) cells.\n\n"
+                    "To set abutment: **right-click a transistor** on the canvas → "
+                    "**Left Abutment** / **Right Abutment**.\n\n"
+                    f"Source OAS: `{os.path.basename(oas_path)}`",
+                    "#fff8e1", "#7a5c00",
+                )
 
             update_oas_placement(
                 oas_path=oas_path,
@@ -2798,16 +2883,46 @@ class MainWindow(QMainWindow):
             )
 
     def _sync_node_positions(self):
-        """Sync canvas positions back to self.nodes and update layout context."""
+        """Sync canvas positions back to self.nodes and update layout context.
+
+        For devices that were loaded from OAS with exact coordinates (snap grid
+        disabled), we compare the canvas position against the stored geometry.
+        If they match (within floating-point tolerance), the original precision
+        values are kept so lossless round-trips back to the OAS file are
+        guaranteed even after Qt's internal float representation.
+        """
         positions = self.editor.get_updated_positions()
+        scale = getattr(self.editor, "scale_factor", 80) or 80
+
         for node in self.nodes:
             dev_id = node.get("id")
-            if dev_id in positions:
-                node["geometry"]["x"] = positions[dev_id][0]
-                node["geometry"]["y"] = positions[dev_id][1]
-                item = self.editor.device_items.get(dev_id)
+            if dev_id not in positions:
+                continue
+
+            canvas_x, canvas_y = positions[dev_id]
+            item = self.editor.device_items.get(dev_id)
+
+            # Check whether this item still has per-item snapping disabled
+            # (i.e. it was loaded from OAS and the user hasn't dragged it yet).
+            snap_disabled = (
+                item is not None
+                and getattr(item, "_snap_grid_x", None) is None
+            )
+
+            if snap_disabled:
+                # Keep the stored OAS precision; only update orientation.
+                # (The canvas position is already based on the stored value so
+                #  there should be no real difference, but floating-point
+                #  round-trips through Qt can introduce tiny errors.)
                 if item and hasattr(item, "orientation_string"):
                     node["geometry"]["orientation"] = item.orientation_string()
+            else:
+                # Item has been (or will be) snapped — use the live canvas position.
+                node["geometry"]["x"] = canvas_x
+                node["geometry"]["y"] = canvas_y
+                if item and hasattr(item, "orientation_string"):
+                    node["geometry"]["orientation"] = item.orientation_string()
+
         # Refresh the chat panel's context with updated positions
         self.chat_panel.set_layout_context(
             self.nodes, self._original_data.get("edges"),
@@ -2815,6 +2930,13 @@ class MainWindow(QMainWindow):
         )
         self._update_grid_counts()
         self._on_selection_count_changed()
+
+    def _on_reload_app(self):
+        """Restarts the application by spawning a new process and exiting."""
+        # Cleanup the LLM worker first
+        self.chat_panel.shutdown()
+        os.execl(sys.executable, sys.executable, *sys.argv)
+
 
 
 # -------------------------------------------------

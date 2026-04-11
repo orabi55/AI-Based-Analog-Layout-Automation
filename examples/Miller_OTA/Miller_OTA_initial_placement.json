@@ -1,0 +1,1066 @@
+{
+    "nodes": [
+        {
+            "id": "MM11",
+            "type": "nmos",
+            "electrical": {
+                "l": 1e-07,
+                "nf": 1,
+                "nfin": 2.0,
+                "w": 0
+            },
+            "geometry": {
+                "x": 0.0,
+                "y": -5.529,
+                "width": 0.552,
+                "height": 0.5680000000000001,
+                "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
+            }
+        },
+        {
+            "id": "MM3_f1",
+            "type": "nmos",
+            "electrical": {
+                "l": 1e-07,
+                "nf": 1,
+                "nfin": 2.0,
+                "w": 0
+            },
+            "geometry": {
+                "x": 3.262,
+                "y": -5.529,
+                "width": 0.294,
+                "height": 0.5680000000000001,
+                "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
+            }
+        },
+        {
+            "id": "MM3_f2",
+            "type": "nmos",
+            "electrical": {
+                "l": 1e-07,
+                "nf": 1,
+                "nfin": 2.0,
+                "w": 0
+            },
+            "geometry": {
+                "x": 3.332,
+                "y": -5.529,
+                "width": 0.294,
+                "height": 0.5680000000000001,
+                "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            }
+        },
+        {
+            "id": "MM3_f3",
+            "type": "nmos",
+            "electrical": {
+                "l": 1e-07,
+                "nf": 1,
+                "nfin": 2.0,
+                "w": 0
+            },
+            "geometry": {
+                "x": 3.402,
+                "y": -5.529,
+                "width": 0.294,
+                "height": 0.5680000000000001,
+                "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            }
+        },
+        {
+            "id": "MM3_f4",
+            "type": "nmos",
+            "electrical": {
+                "l": 1e-07,
+                "nf": 1,
+                "nfin": 2.0,
+                "w": 0
+            },
+            "geometry": {
+                "x": 3.472,
+                "y": -5.529,
+                "width": 0.294,
+                "height": 0.5680000000000001,
+                "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            }
+        },
+        {
+            "id": "MM3_f5",
+            "type": "nmos",
+            "electrical": {
+                "l": 1e-07,
+                "nf": 1,
+                "nfin": 2.0,
+                "w": 0
+            },
+            "geometry": {
+                "x": 3.542,
+                "y": -5.529,
+                "width": 0.294,
+                "height": 0.5680000000000001,
+                "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            }
+        },
+        {
+            "id": "MM3_f6",
+            "type": "nmos",
+            "electrical": {
+                "l": 1e-07,
+                "nf": 1,
+                "nfin": 2.0,
+                "w": 0
+            },
+            "geometry": {
+                "x": 3.612,
+                "y": -5.529,
+                "width": 0.294,
+                "height": 0.5680000000000001,
+                "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            }
+        },
+        {
+            "id": "MM3_f7",
+            "type": "nmos",
+            "electrical": {
+                "l": 1e-07,
+                "nf": 1,
+                "nfin": 2.0,
+                "w": 0
+            },
+            "geometry": {
+                "x": 3.682,
+                "y": -5.529,
+                "width": 0.294,
+                "height": 0.5680000000000001,
+                "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            }
+        },
+        {
+            "id": "MM3_f8",
+            "type": "nmos",
+            "electrical": {
+                "l": 1e-07,
+                "nf": 1,
+                "nfin": 2.0,
+                "w": 0
+            },
+            "geometry": {
+                "x": 3.752,
+                "y": -5.529,
+                "width": 0.294,
+                "height": 0.5680000000000001,
+                "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": false
+            }
+        },
+        {
+            "id": "MM2_f1",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.0000000000000001e-07,
+                "nf": 1,
+                "nfin": 2.0,
+                "w": 0
+            },
+            "geometry": {
+                "x": 0.07,
+                "y": -5.529,
+                "width": 0.552,
+                "height": 0.5680000000000001,
+                "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            }
+        },
+        {
+            "id": "MM2_f2",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.0000000000000001e-07,
+                "nf": 1,
+                "nfin": 2.0,
+                "w": 0
+            },
+            "geometry": {
+                "x": 0.14,
+                "y": -5.529,
+                "width": 0.552,
+                "height": 0.5680000000000001,
+                "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            }
+        },
+        {
+            "id": "MM2_f3",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.0000000000000001e-07,
+                "nf": 1,
+                "nfin": 2.0,
+                "w": 0
+            },
+            "geometry": {
+                "x": 0.21,
+                "y": -5.529,
+                "width": 0.552,
+                "height": 0.5680000000000001,
+                "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": false
+            }
+        },
+        {
+            "id": "MM2_f4",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.0000000000000001e-07,
+                "nf": 1,
+                "nfin": 2.0,
+                "w": 0
+            },
+            "geometry": {
+                "x": 2.59,
+                "y": -5.529,
+                "width": 0.378,
+                "height": 0.5680000000000001,
+                "orientation": "R0"
+            }
+        },
+        {
+            "id": "MM1",
+            "type": "nmos",
+            "electrical": {
+                "l": "'3*0.014u'",
+                "nf": 1,
+                "nfin": 2.0,
+                "w": 0
+            },
+            "geometry": {
+                "x": 1.918,
+                "y": -5.529,
+                "width": 0.378,
+                "height": 0.5680000000000001,
+                "orientation": "R0"
+            }
+        },
+        {
+            "id": "MM0",
+            "type": "nmos",
+            "electrical": {
+                "l": "'3*0.014u'",
+                "nf": 1,
+                "nfin": 2.0,
+                "w": 0
+            },
+            "geometry": {
+                "x": 1.064,
+                "y": -5.529,
+                "width": 0.552,
+                "height": 0.5680000000000001,
+                "orientation": "R0"
+            }
+        },
+        {
+            "id": "MM6",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 2.0,
+                "w": 0
+            },
+            "geometry": {
+                "x": 0.0,
+                "y": -4.861,
+                "width": 0.294,
+                "height": 0.5680000000000001,
+                "orientation": "R0"
+            }
+        },
+        {
+            "id": "MM10",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 2.0,
+                "w": 0
+            },
+            "geometry": {
+                "x": 0.588,
+                "y": -4.861,
+                "width": 0.294,
+                "height": 0.5680000000000001,
+                "orientation": "R0"
+            }
+        },
+        {
+            "id": "MM9",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 2.0,
+                "w": 0
+            },
+            "geometry": {
+                "x": 1.176,
+                "y": -4.861,
+                "width": 0.294,
+                "height": 0.5680000000000001,
+                "orientation": "R0"
+            }
+        },
+        {
+            "id": "cC7",
+            "type": "cap",
+            "electrical": {
+                "l": 8.0,
+                "nf": 4.0,
+                "nfin": 1,
+                "w": 1e-07,
+                "cval": 3.6768000000000004e-16
+            },
+            "geometry": {
+                "x": 0.0,
+                "y": -3.899,
+                "width": 7.000000000000011,
+                "height": 3.540000000000001,
+                "orientation": "R0"
+            }
+        },
+        {
+            "id": "rR8",
+            "type": "res",
+            "electrical": {
+                "l": 3.72e-07,
+                "nf": 1,
+                "nfin": 1,
+                "w": 1.12e-07
+            },
+            "geometry": {
+                "x": 7.294,
+                "y": -3.899,
+                "width": 0.368,
+                "height": 0.5680000000000001,
+                "orientation": "R0"
+            }
+        }
+    ],
+    "edges": [
+        {
+            "source": "MM11",
+            "target": "MM3_f1",
+            "net": "IB"
+        },
+        {
+            "source": "MM11",
+            "target": "MM3_f2",
+            "net": "IB"
+        },
+        {
+            "source": "MM11",
+            "target": "MM3_f3",
+            "net": "IB"
+        },
+        {
+            "source": "MM11",
+            "target": "MM3_f4",
+            "net": "IB"
+        },
+        {
+            "source": "MM11",
+            "target": "MM3_f5",
+            "net": "IB"
+        },
+        {
+            "source": "MM11",
+            "target": "MM3_f6",
+            "net": "IB"
+        },
+        {
+            "source": "MM11",
+            "target": "MM3_f7",
+            "net": "IB"
+        },
+        {
+            "source": "MM11",
+            "target": "MM3_f8",
+            "net": "IB"
+        },
+        {
+            "source": "MM11",
+            "target": "MM2_f1",
+            "net": "IB"
+        },
+        {
+            "source": "MM11",
+            "target": "MM2_f2",
+            "net": "IB"
+        },
+        {
+            "source": "MM11",
+            "target": "MM2_f3",
+            "net": "IB"
+        },
+        {
+            "source": "MM11",
+            "target": "MM2_f4",
+            "net": "IB"
+        },
+        {
+            "source": "MM3_f1",
+            "target": "MM3_f2",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f1",
+            "target": "MM3_f3",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f1",
+            "target": "MM3_f4",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f1",
+            "target": "MM3_f5",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f1",
+            "target": "MM3_f6",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f1",
+            "target": "MM3_f7",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f1",
+            "target": "MM3_f8",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f1",
+            "target": "MM2_f1",
+            "net": "IB"
+        },
+        {
+            "source": "MM3_f1",
+            "target": "MM2_f2",
+            "net": "IB"
+        },
+        {
+            "source": "MM3_f1",
+            "target": "MM2_f3",
+            "net": "IB"
+        },
+        {
+            "source": "MM3_f1",
+            "target": "MM2_f4",
+            "net": "IB"
+        },
+        {
+            "source": "MM3_f1",
+            "target": "MM6",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f1",
+            "target": "rR8",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f2",
+            "target": "MM3_f3",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f2",
+            "target": "MM3_f4",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f2",
+            "target": "MM3_f5",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f2",
+            "target": "MM3_f6",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f2",
+            "target": "MM3_f7",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f2",
+            "target": "MM3_f8",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f2",
+            "target": "MM2_f1",
+            "net": "IB"
+        },
+        {
+            "source": "MM3_f2",
+            "target": "MM2_f2",
+            "net": "IB"
+        },
+        {
+            "source": "MM3_f2",
+            "target": "MM2_f3",
+            "net": "IB"
+        },
+        {
+            "source": "MM3_f2",
+            "target": "MM2_f4",
+            "net": "IB"
+        },
+        {
+            "source": "MM3_f2",
+            "target": "MM6",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f2",
+            "target": "rR8",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f3",
+            "target": "MM3_f4",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f3",
+            "target": "MM3_f5",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f3",
+            "target": "MM3_f6",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f3",
+            "target": "MM3_f7",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f3",
+            "target": "MM3_f8",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f3",
+            "target": "MM2_f1",
+            "net": "IB"
+        },
+        {
+            "source": "MM3_f3",
+            "target": "MM2_f2",
+            "net": "IB"
+        },
+        {
+            "source": "MM3_f3",
+            "target": "MM2_f3",
+            "net": "IB"
+        },
+        {
+            "source": "MM3_f3",
+            "target": "MM2_f4",
+            "net": "IB"
+        },
+        {
+            "source": "MM3_f3",
+            "target": "MM6",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f3",
+            "target": "rR8",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f4",
+            "target": "MM3_f5",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f4",
+            "target": "MM3_f6",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f4",
+            "target": "MM3_f7",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f4",
+            "target": "MM3_f8",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f4",
+            "target": "MM2_f1",
+            "net": "IB"
+        },
+        {
+            "source": "MM3_f4",
+            "target": "MM2_f2",
+            "net": "IB"
+        },
+        {
+            "source": "MM3_f4",
+            "target": "MM2_f3",
+            "net": "IB"
+        },
+        {
+            "source": "MM3_f4",
+            "target": "MM2_f4",
+            "net": "IB"
+        },
+        {
+            "source": "MM3_f4",
+            "target": "MM6",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f4",
+            "target": "rR8",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f5",
+            "target": "MM3_f6",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f5",
+            "target": "MM3_f7",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f5",
+            "target": "MM3_f8",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f5",
+            "target": "MM2_f1",
+            "net": "IB"
+        },
+        {
+            "source": "MM3_f5",
+            "target": "MM2_f2",
+            "net": "IB"
+        },
+        {
+            "source": "MM3_f5",
+            "target": "MM2_f3",
+            "net": "IB"
+        },
+        {
+            "source": "MM3_f5",
+            "target": "MM2_f4",
+            "net": "IB"
+        },
+        {
+            "source": "MM3_f5",
+            "target": "MM6",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f5",
+            "target": "rR8",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f6",
+            "target": "MM3_f7",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f6",
+            "target": "MM3_f8",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f6",
+            "target": "MM2_f1",
+            "net": "IB"
+        },
+        {
+            "source": "MM3_f6",
+            "target": "MM2_f2",
+            "net": "IB"
+        },
+        {
+            "source": "MM3_f6",
+            "target": "MM2_f3",
+            "net": "IB"
+        },
+        {
+            "source": "MM3_f6",
+            "target": "MM2_f4",
+            "net": "IB"
+        },
+        {
+            "source": "MM3_f6",
+            "target": "MM6",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f6",
+            "target": "rR8",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f7",
+            "target": "MM3_f8",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f7",
+            "target": "MM2_f1",
+            "net": "IB"
+        },
+        {
+            "source": "MM3_f7",
+            "target": "MM2_f2",
+            "net": "IB"
+        },
+        {
+            "source": "MM3_f7",
+            "target": "MM2_f3",
+            "net": "IB"
+        },
+        {
+            "source": "MM3_f7",
+            "target": "MM2_f4",
+            "net": "IB"
+        },
+        {
+            "source": "MM3_f7",
+            "target": "MM6",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f7",
+            "target": "rR8",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f8",
+            "target": "MM2_f1",
+            "net": "IB"
+        },
+        {
+            "source": "MM3_f8",
+            "target": "MM2_f2",
+            "net": "IB"
+        },
+        {
+            "source": "MM3_f8",
+            "target": "MM2_f3",
+            "net": "IB"
+        },
+        {
+            "source": "MM3_f8",
+            "target": "MM2_f4",
+            "net": "IB"
+        },
+        {
+            "source": "MM3_f8",
+            "target": "MM6",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM3_f8",
+            "target": "rR8",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM2_f1",
+            "target": "MM2_f2",
+            "net": "net8"
+        },
+        {
+            "source": "MM2_f1",
+            "target": "MM2_f3",
+            "net": "net8"
+        },
+        {
+            "source": "MM2_f1",
+            "target": "MM2_f4",
+            "net": "net8"
+        },
+        {
+            "source": "MM2_f1",
+            "target": "MM1",
+            "net": "net8"
+        },
+        {
+            "source": "MM2_f1",
+            "target": "MM0",
+            "net": "net8"
+        },
+        {
+            "source": "MM2_f2",
+            "target": "MM2_f3",
+            "net": "net8"
+        },
+        {
+            "source": "MM2_f2",
+            "target": "MM2_f4",
+            "net": "net8"
+        },
+        {
+            "source": "MM2_f2",
+            "target": "MM1",
+            "net": "net8"
+        },
+        {
+            "source": "MM2_f2",
+            "target": "MM0",
+            "net": "net8"
+        },
+        {
+            "source": "MM2_f3",
+            "target": "MM2_f4",
+            "net": "net8"
+        },
+        {
+            "source": "MM2_f3",
+            "target": "MM1",
+            "net": "net8"
+        },
+        {
+            "source": "MM2_f3",
+            "target": "MM0",
+            "net": "net8"
+        },
+        {
+            "source": "MM2_f4",
+            "target": "MM1",
+            "net": "net8"
+        },
+        {
+            "source": "MM2_f4",
+            "target": "MM0",
+            "net": "net8"
+        },
+        {
+            "source": "MM1",
+            "target": "MM0",
+            "net": "net8"
+        },
+        {
+            "source": "MM1",
+            "target": "MM6",
+            "net": "net24"
+        },
+        {
+            "source": "MM1",
+            "target": "MM10",
+            "net": "net24"
+        },
+        {
+            "source": "MM1",
+            "target": "cC7",
+            "net": "net24"
+        },
+        {
+            "source": "MM0",
+            "target": "MM10",
+            "net": "net38"
+        },
+        {
+            "source": "MM0",
+            "target": "MM9",
+            "net": "net38"
+        },
+        {
+            "source": "MM6",
+            "target": "rR8",
+            "net": "VOUT"
+        },
+        {
+            "source": "MM6",
+            "target": "MM10",
+            "net": "net24"
+        },
+        {
+            "source": "MM6",
+            "target": "cC7",
+            "net": "net24"
+        },
+        {
+            "source": "MM10",
+            "target": "cC7",
+            "net": "net24"
+        },
+        {
+            "source": "MM10",
+            "target": "MM9",
+            "net": "net38"
+        },
+        {
+            "source": "cC7",
+            "target": "rR8",
+            "net": "net32"
+        }
+    ],
+    "terminal_nets": {
+        "MM11": {
+            "D": "IB",
+            "G": "IB",
+            "S": "VSS"
+        },
+        "MM3_f1": {
+            "D": "VOUT",
+            "G": "IB",
+            "S": "VSS"
+        },
+        "MM3_f2": {
+            "D": "VOUT",
+            "G": "IB",
+            "S": "VSS"
+        },
+        "MM3_f3": {
+            "D": "VOUT",
+            "G": "IB",
+            "S": "VSS"
+        },
+        "MM3_f4": {
+            "D": "VOUT",
+            "G": "IB",
+            "S": "VSS"
+        },
+        "MM3_f5": {
+            "D": "VOUT",
+            "G": "IB",
+            "S": "VSS"
+        },
+        "MM3_f6": {
+            "D": "VOUT",
+            "G": "IB",
+            "S": "VSS"
+        },
+        "MM3_f7": {
+            "D": "VOUT",
+            "G": "IB",
+            "S": "VSS"
+        },
+        "MM3_f8": {
+            "D": "VOUT",
+            "G": "IB",
+            "S": "VSS"
+        },
+        "MM2_f1": {
+            "D": "net8",
+            "G": "IB",
+            "S": "VSS"
+        },
+        "MM2_f2": {
+            "D": "net8",
+            "G": "IB",
+            "S": "VSS"
+        },
+        "MM2_f3": {
+            "D": "net8",
+            "G": "IB",
+            "S": "VSS"
+        },
+        "MM2_f4": {
+            "D": "net8",
+            "G": "IB",
+            "S": "VSS"
+        },
+        "MM1": {
+            "D": "net24",
+            "G": "VINN",
+            "S": "net8"
+        },
+        "MM0": {
+            "D": "net38",
+            "G": "VINP",
+            "S": "net8"
+        },
+        "MM6": {
+            "D": "VOUT",
+            "G": "net24",
+            "S": "VDD"
+        },
+        "MM10": {
+            "D": "net24",
+            "G": "net38",
+            "S": "VDD"
+        },
+        "MM9": {
+            "D": "net38",
+            "G": "net38",
+            "S": "VDD"
+        },
+        "cC7": {
+            "1": "net24",
+            "2": "net32"
+        },
+        "rR8": {
+            "1": "net32",
+            "2": "VOUT"
+        }
+    },
+    "abutment_candidates": []
+}
