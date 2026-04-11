@@ -114,15 +114,29 @@ def find_abutment_candidates(nodes: list, terminal_nets: dict) -> list:
             
             if abs(idx_a - idx_b) != 1:
                 continue  # Skip non-consecutive fingers to avoid overlapping/O(N^2)
-                
-            min_idx = min(idx_a, idx_b)
-            # Alternate shared terminals: S, then D, then S...
-            if min_idx % 2 != 0:
-                if s_a and s_a == s_b:
-                    found.append({"dev_a": id_a, "term_a": "S", "dev_b": id_b, "term_b": "S", "shared_net": s_a, "type": type_a, "needs_flip": True})
+
+            # Order so that lo is the lower-index finger, hi is the higher-index
+            if idx_a < idx_b:
+                lo_id, hi_id = id_a, id_b
             else:
-                if d_a and d_a == d_b:
-                    found.append({"dev_a": id_a, "term_a": "D", "dev_b": id_b, "term_b": "D", "shared_net": d_a, "type": type_a, "needs_flip": True})
+                lo_id, hi_id = id_b, id_a
+
+            # Fetch actual terminal nets for both fingers (including power nets)
+            lo_nets = terminal_nets.get(lo_id, {})
+            hi_nets = terminal_nets.get(hi_id, {})
+            lo_s, lo_d = lo_nets.get("S"), lo_nets.get("D")
+            hi_s, hi_d = hi_nets.get("S"), hi_nets.get("D")
+
+            # Check all four terminal combinations for a shared net
+            # The right edge of the lo finger faces the left edge of the hi finger
+            if lo_d and hi_s and lo_d == hi_s:
+                found.append({"dev_a": lo_id, "term_a": "D", "dev_b": hi_id, "term_b": "S", "shared_net": lo_d, "type": type_a, "needs_flip": False})
+            elif lo_d and hi_d and lo_d == hi_d:
+                found.append({"dev_a": lo_id, "term_a": "D", "dev_b": hi_id, "term_b": "D", "shared_net": lo_d, "type": type_a, "needs_flip": True})
+            elif lo_s and hi_s and lo_s == hi_s:
+                found.append({"dev_a": lo_id, "term_a": "S", "dev_b": hi_id, "term_b": "S", "shared_net": lo_s, "type": type_a, "needs_flip": True})
+            elif lo_s and hi_d and lo_s == hi_d:
+                found.append({"dev_a": lo_id, "term_a": "S", "dev_b": hi_id, "term_b": "D", "shared_net": lo_s, "type": type_a, "needs_flip": False})
         else:
             # Cross-parent checks. To prevent massive identical arrays for cross-parent (e.g. all 16 fingers sharing VDD),
             # we only attempt to abut the LAST finger of dev_a with the FIRST finger of dev_b

@@ -56,8 +56,14 @@ def ollama_generate_placement(input_json: str, output_json: str, model="llama3.2
                     "format": "json"
                 }
             )
-            response.raise_for_status()
-            
+            if response.status_code != 200:
+                err_msg = response.text
+                try:
+                    err_json = response.json()
+                    err_msg = err_json.get("error", err_msg)
+                except Exception:
+                    pass
+                raise RuntimeError(f"Ollama API Error ({response.status_code}): {err_msg}")
             result = response.json()
             raw_text = result.get("response", "{}")
 

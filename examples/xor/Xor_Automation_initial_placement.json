@@ -10,7 +10,7 @@
                 "w": 0
             },
             "geometry": {
-                "x": 0.0,
+                "x": 1.47,
                 "y": -3.057,
                 "width": 0.294,
                 "height": 0.6680000000000001,
@@ -27,11 +27,11 @@
                 "w": 0
             },
             "geometry": {
-                "x": 0.294,
+                "x": 0.588,
                 "y": -3.057,
                 "width": 0.294,
                 "height": 0.6680000000000001,
-                "orientation": "R0_FH"
+                "orientation": "R0"
             }
         },
         {
@@ -44,11 +44,11 @@
                 "w": 0
             },
             "geometry": {
-                "x": 0.588,
+                "x": 0.294,
                 "y": -3.057,
                 "width": 0.294,
                 "height": 0.6680000000000001,
-                "orientation": "R0_FH"
+                "orientation": "R0"
             }
         },
         {
@@ -61,7 +61,7 @@
                 "w": 0
             },
             "geometry": {
-                "x": 1.47,
+                "x": 0.882,
                 "y": -3.057,
                 "width": 0.294,
                 "height": 0.6680000000000001,
@@ -78,11 +78,11 @@
                 "w": 0
             },
             "geometry": {
-                "x": 1.764,
+                "x": 1.176,
                 "y": -3.057,
                 "width": 0.294,
                 "height": 0.6680000000000001,
-                "orientation": "R0_FH"
+                "orientation": "R0"
             }
         },
         {
@@ -95,66 +95,15 @@
                 "w": 0
             },
             "geometry": {
-                "x": 0.882,
-                "y": -3.057,
-                "width": 0.294,
-                "height": 0.6680000000000001,
-                "orientation": "R0_FH"
-            }
-        },
-        {
-            "id": "MM29",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 4.0,
-                "w": 0
-            },
-            "geometry": {
                 "x": 0.0,
-                "y": -2.389,
+                "y": -3.057,
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
             }
         },
         {
-            "id": "MM9",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 4.0,
-                "w": 0
-            },
-            "geometry": {
-                "x": 0.294,
-                "y": -2.389,
-                "width": 0.294,
-                "height": 0.6680000000000001,
-                "orientation": "R0_FH"
-            }
-        },
-        {
-            "id": "MM8",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 4.0,
-                "w": 0
-            },
-            "geometry": {
-                "x": 0.588,
-                "y": -2.389,
-                "width": 0.294,
-                "height": 0.6680000000000001,
-                "orientation": "R0_FH"
-            }
-        },
-        {
-            "id": "MM7",
+            "id": "MM29",
             "type": "pmos",
             "electrical": {
                 "l": 1.4e-08,
@@ -171,7 +120,7 @@
             }
         },
         {
-            "id": "MM6",
+            "id": "MM9",
             "type": "pmos",
             "electrical": {
                 "l": 1.4e-08,
@@ -180,15 +129,32 @@
                 "w": 0
             },
             "geometry": {
-                "x": 1.764,
+                "x": 1.176,
                 "y": -2.389,
                 "width": 0.294,
                 "height": 0.6680000000000001,
-                "orientation": "R0_FH"
+                "orientation": "R0"
             }
         },
         {
-            "id": "MM24",
+            "id": "MM8",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0
+            },
+            "geometry": {
+                "x": 0.588,
+                "y": -2.389,
+                "width": 0.294,
+                "height": 0.6680000000000001,
+                "orientation": "R0"
+            }
+        },
+        {
+            "id": "MM7",
             "type": "pmos",
             "electrical": {
                 "l": 1.4e-08,
@@ -201,7 +167,41 @@
                 "y": -2.389,
                 "width": 0.294,
                 "height": 0.6680000000000001,
-                "orientation": "R0_FH"
+                "orientation": "R0"
+            }
+        },
+        {
+            "id": "MM6",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0
+            },
+            "geometry": {
+                "x": 0.294,
+                "y": -2.389,
+                "width": 0.294,
+                "height": 0.6680000000000001,
+                "orientation": "R0"
+            }
+        },
+        {
+            "id": "MM24",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0
+            },
+            "geometry": {
+                "x": 0.0,
+                "y": -2.389,
+                "width": 0.294,
+                "height": 0.6680000000000001,
+                "orientation": "R0"
             }
         }
     ],
@@ -454,240 +454,5 @@
             "S": "VDD"
         }
     },
-    "abutment_candidates": [
-        {
-            "dev_a": "MM28",
-            "term_a": "S",
-            "dev_b": "MM5",
-            "term_b": "S",
-            "shared_net": "VSS",
-            "type": "nmos",
-            "needs_flip": true
-        },
-        {
-            "dev_a": "MM28",
-            "term_a": "S",
-            "dev_b": "MM4",
-            "term_b": "S",
-            "shared_net": "VSS",
-            "type": "nmos",
-            "needs_flip": true
-        },
-        {
-            "dev_a": "MM28",
-            "term_a": "S",
-            "dev_b": "MM25",
-            "term_b": "S",
-            "shared_net": "VSS",
-            "type": "nmos",
-            "needs_flip": true
-        },
-        {
-            "dev_a": "MM5",
-            "term_a": "S",
-            "dev_b": "MM4",
-            "term_b": "S",
-            "shared_net": "VSS",
-            "type": "nmos",
-            "needs_flip": true
-        },
-        {
-            "dev_a": "MM5",
-            "term_a": "D",
-            "dev_b": "MM4",
-            "term_b": "D",
-            "shared_net": "PDN",
-            "type": "nmos",
-            "needs_flip": true
-        },
-        {
-            "dev_a": "MM5",
-            "term_a": "D",
-            "dev_b": "MM3",
-            "term_b": "S",
-            "shared_net": "PDN",
-            "type": "nmos",
-            "needs_flip": false
-        },
-        {
-            "dev_a": "MM5",
-            "term_a": "D",
-            "dev_b": "MM2",
-            "term_b": "S",
-            "shared_net": "PDN",
-            "type": "nmos",
-            "needs_flip": false
-        },
-        {
-            "dev_a": "MM5",
-            "term_a": "S",
-            "dev_b": "MM25",
-            "term_b": "S",
-            "shared_net": "VSS",
-            "type": "nmos",
-            "needs_flip": true
-        },
-        {
-            "dev_a": "MM4",
-            "term_a": "D",
-            "dev_b": "MM3",
-            "term_b": "S",
-            "shared_net": "PDN",
-            "type": "nmos",
-            "needs_flip": false
-        },
-        {
-            "dev_a": "MM4",
-            "term_a": "D",
-            "dev_b": "MM2",
-            "term_b": "S",
-            "shared_net": "PDN",
-            "type": "nmos",
-            "needs_flip": false
-        },
-        {
-            "dev_a": "MM4",
-            "term_a": "S",
-            "dev_b": "MM25",
-            "term_b": "S",
-            "shared_net": "VSS",
-            "type": "nmos",
-            "needs_flip": true
-        },
-        {
-            "dev_a": "MM3",
-            "term_a": "S",
-            "dev_b": "MM2",
-            "term_b": "S",
-            "shared_net": "PDN",
-            "type": "nmos",
-            "needs_flip": true
-        },
-        {
-            "dev_a": "MM3",
-            "term_a": "D",
-            "dev_b": "MM2",
-            "term_b": "D",
-            "shared_net": "OUT",
-            "type": "nmos",
-            "needs_flip": true
-        },
-        {
-            "dev_a": "MM29",
-            "term_a": "S",
-            "dev_b": "MM9",
-            "term_b": "S",
-            "shared_net": "VDD",
-            "type": "pmos",
-            "needs_flip": true
-        },
-        {
-            "dev_a": "MM29",
-            "term_a": "S",
-            "dev_b": "MM8",
-            "term_b": "S",
-            "shared_net": "VDD",
-            "type": "pmos",
-            "needs_flip": true
-        },
-        {
-            "dev_a": "MM29",
-            "term_a": "S",
-            "dev_b": "MM24",
-            "term_b": "S",
-            "shared_net": "VDD",
-            "type": "pmos",
-            "needs_flip": true
-        },
-        {
-            "dev_a": "MM9",
-            "term_a": "S",
-            "dev_b": "MM8",
-            "term_b": "S",
-            "shared_net": "VDD",
-            "type": "pmos",
-            "needs_flip": true
-        },
-        {
-            "dev_a": "MM9",
-            "term_a": "D",
-            "dev_b": "MM8",
-            "term_b": "D",
-            "shared_net": "PUN",
-            "type": "pmos",
-            "needs_flip": true
-        },
-        {
-            "dev_a": "MM9",
-            "term_a": "D",
-            "dev_b": "MM7",
-            "term_b": "S",
-            "shared_net": "PUN",
-            "type": "pmos",
-            "needs_flip": false
-        },
-        {
-            "dev_a": "MM9",
-            "term_a": "D",
-            "dev_b": "MM6",
-            "term_b": "S",
-            "shared_net": "PUN",
-            "type": "pmos",
-            "needs_flip": false
-        },
-        {
-            "dev_a": "MM9",
-            "term_a": "S",
-            "dev_b": "MM24",
-            "term_b": "S",
-            "shared_net": "VDD",
-            "type": "pmos",
-            "needs_flip": true
-        },
-        {
-            "dev_a": "MM8",
-            "term_a": "D",
-            "dev_b": "MM7",
-            "term_b": "S",
-            "shared_net": "PUN",
-            "type": "pmos",
-            "needs_flip": false
-        },
-        {
-            "dev_a": "MM8",
-            "term_a": "D",
-            "dev_b": "MM6",
-            "term_b": "S",
-            "shared_net": "PUN",
-            "type": "pmos",
-            "needs_flip": false
-        },
-        {
-            "dev_a": "MM8",
-            "term_a": "S",
-            "dev_b": "MM24",
-            "term_b": "S",
-            "shared_net": "VDD",
-            "type": "pmos",
-            "needs_flip": true
-        },
-        {
-            "dev_a": "MM7",
-            "term_a": "S",
-            "dev_b": "MM6",
-            "term_b": "S",
-            "shared_net": "PUN",
-            "type": "pmos",
-            "needs_flip": true
-        },
-        {
-            "dev_a": "MM7",
-            "term_a": "D",
-            "dev_b": "MM6",
-            "term_b": "D",
-            "shared_net": "OUT",
-            "type": "pmos",
-            "needs_flip": true
-        }
-    ]
+    "abutment_candidates": []
 }

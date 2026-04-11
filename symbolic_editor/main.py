@@ -451,8 +451,17 @@ class AIModelSelectionDialog(QDialog):
         ollama_desc.setStyleSheet("color: #8899aa; font-size: 9pt; margin-left: 30px;")
         ollama_desc.setWordWrap(True)
         ollama_layout.addWidget(ollama_desc)
+        
+        ollama_form = QFormLayout()
+        ollama_form.setContentsMargins(30, 4, 0, 4)
+        self.ollama_model_combo = QComboBox()
+        self.ollama_model_combo.setEditable(True)
+        self.ollama_model_combo.addItems(["llama3.2", "qwen3.5:latest", "deepseek-coder:6.7b"])
+        ollama_form.addRow("Model:", self.ollama_model_combo)
+        ollama_layout.addLayout(ollama_form)
 
         layout.addWidget(ollama_group)
+
 
         # Connect toggles to enable/disable inputs
         self.check_gemini.toggled.connect(self._on_model_changed)
@@ -478,6 +487,7 @@ class AIModelSelectionDialog(QDialog):
     def _on_model_changed(self):
         self.gemini_api_key.setEnabled(self.check_gemini.isChecked())
         self.openai_api_key.setEnabled(self.check_openai.isChecked())
+        self.ollama_model_combo.setEnabled(self.check_ollama.isChecked())
 
     def get_selected_model(self):
         if self.check_gemini.isChecked():
@@ -486,6 +496,9 @@ class AIModelSelectionDialog(QDialog):
             return "OpenAI"
         elif self.check_ollama.isChecked():
             return "Ollama"
+
+    def get_ollama_submodel(self):
+        return self.ollama_model_combo.currentText()
 
     def apply_api_keys(self):
         # Update environment variables based on user changes if they didn't leave them empty/starred out
@@ -1428,38 +1441,23 @@ class MainWindow(QMainWindow):
     def _on_device_drag_start(self):
         """Called when the user starts dragging a device — push undo.
 
-        Also re-enables per-item snap grid for any item that was loaded without
-        snapping (e.g. from an OAS import with exact coordinates). Once the user
-        intentionally moves a device we want it to snap to the grid.
+        Re-enables per-item fine-grid snap for any item that was loaded
+        without snapping (e.g. from an OAS import with exact coordinates).
+        Uses the fine snap_grid for BOTH axes so movement feels free.
         """
-        # Re-enable snap grid on all selected items so dragging snaps correctly.
         try:
             for it in self.editor.scene.selectedItems():
                 if hasattr(it, "set_snap_grid"):
-                    it.set_snap_grid(self.editor._snap_grid, self.editor._row_pitch)
+                    it.set_snap_grid(self.editor._snap_grid, self.editor._snap_grid)
         except RuntimeError:
             pass
         self._sync_node_positions()
         self._push_undo()
 
     def _on_device_drag_end(self):
-        """Called when drag ends; snap dragged items to nearest free slot."""
-        try:
-            for it in self.editor.scene.selectedItems():
-                if not hasattr(it, "device_name"):
-                    continue
-                row_y = self.editor._snap_row(it.pos().y())
-                target_x = self.editor._snap_value(it.pos().x())
-                free_x = self.editor.find_nearest_free_x(
-                    row_y=row_y,
-                    width=it.rect().width(),
-                    target_x=target_x,
-                    exclude_id=it.device_name,
-                )
-                it.setPos(free_x, row_y)
-        except RuntimeError:
-            pass
+        """Called when drag ends — sync canvas positions to data model."""
         self._sync_node_positions()
+
     def _on_undo(self):
         if not self._undo_stack:
             return
@@ -1823,6 +1821,7 @@ class MainWindow(QMainWindow):
             return
             
         model_choice = dialog.get_selected_model()
+        submodel = dialog.get_ollama_submodel() if model_choice == "Ollama" else None
         dialog.apply_api_keys()
 
         # Build the data dict from current state
@@ -1836,7 +1835,7 @@ class MainWindow(QMainWindow):
 
         self.overlay.show_message(f"Running AI initial placement ({model_choice})...")
 
-        self._ai_worker = GenericWorker(self._run_ai_initial_placement, data, model_choice)
+        self._ai_worker = GenericWorker(self._run_ai_initial_placement, data, model_choice, submodel)
         self._ai_worker.finished.connect(self._on_ai_placement_completed)
         self._ai_worker.error.connect(self._on_ai_placement_error)
         self._ai_worker.start()
@@ -2109,6 +2108,26 @@ class MainWindow(QMainWindow):
                     n["geometry"]["y"] = passive_y
                     passive_x_cursor += w + PITCH_UM
 
+        # 7. Fan-out safety net: if the matcher was partial (some devices
+        #    mapped, others left at the default 0.0/0.0), spread the
+        #    unmatched devices out next to the matched ones so they don't
+        #    stack invisibly at the origin.
+        if device_mapping:
+            # Find the rightmost X occupied by any matched device
+            max_x = max(
+                (n["geometry"]["x"] + n["geometry"]["width"]
+                 for n in nodes if n["geometry"]["x"] != 0.0 or n["geometry"]["y"] != 0.0),
+                default=0.0,
+            )
+            fanout_x = max_x + PITCH_UM
+            for n in nodes:
+                geo = n["geometry"]
+                if geo["x"] == 0.0 and geo["y"] == 0.0:
+                    # Check this device was truly unmatched (no layout index)
+                    if device_mapping.get(n["id"]) is None:
+                        geo["x"] = fanout_x
+                        geo["y"] = 0.0
+                        fanout_x += geo["width"] + PITCH_UM
 
         return {
             "nodes": nodes,
@@ -2118,7 +2137,7 @@ class MainWindow(QMainWindow):
         }
 
     @staticmethod
-    def _run_ai_initial_placement(data, model_choice="Gemini"):
+    def _run_ai_initial_placement(data, model_choice="Gemini", submodel=None):
         """
         Send the parsed graph to the selected AI model for initial placement.
         Updates x/y coordinates in the nodes and returns the updated data.
@@ -2199,7 +2218,8 @@ class MainWindow(QMainWindow):
                         raise RuntimeError(f"Failed to start Ollama serve automatically: {e}")
 
                 from ai_agent.ai_initial_placement.ollama_placer import ollama_generate_placement
-                ollama_generate_placement(tmp_in_path, tmp_out_path)
+                ollama_submodel = submodel or "llama3.2"
+                ollama_generate_placement(tmp_in_path, tmp_out_path, model=ollama_submodel)
             else:
                 try:
                     from ai_agent.ai_initial_placement.gemini_placer import gemini_generate_placement
@@ -2431,110 +2451,7 @@ class MainWindow(QMainWindow):
             import traceback
             traceback.print_exc()
 
-    # -------------------------------------------------
-    # Pipeline stage canvas highlights
-    # -------------------------------------------------
-    def _on_pipeline_stage_completed(self, stage_index, stage_name):
-        """Briefly highlight devices relevant to the completed pipeline stage.
 
-        Stage 0 – Topology Analyst:  amber
-        Stage 1 – Placement Specialist: blue
-        Stage 2 – DRC Critic:         red (overlapping devices only)
-        Stage 3 – Routing Pre-Viewer: purple
-
-        NOTE: we capture only device *IDs*, not Qt item pointers, so the
-        restore callback is safe even after swap commands rebuild the items.
-        """
-        from PySide6.QtCore import QTimer as _QTimer
-
-        device_items = (
-            getattr(self, 'editor', None)
-            and getattr(self.editor, 'device_items', {})
-        ) or {}
-        if not device_items:
-            return
-
-        # ---- Choose which device IDs to highlight ----
-        if stage_index == 2:
-            # DRC stage: highlight overlapping pairs only
-            from ai_agent.ai_initial_placement.drc_critic import run_drc_check
-            nodes = []
-            for dev_id, item in device_items.items():
-                try:
-                    pos = item.scenePos()
-                    br  = item.boundingRect()
-                    nodes.append({
-                        "id": dev_id,
-                        "geometry": {
-                            "x": pos.x(), "y": pos.y(),
-                            "width": br.width(), "height": br.height(),
-                        },
-                    })
-                except RuntimeError:
-                    pass  # item already deleted; skip
-            drc = run_drc_check(nodes)
-            if not drc["pass"] and drc.get("structured"):
-                overlap_ids = set()
-                for v in drc["structured"]:
-                    overlap_ids.add(v.dev_a)
-                    overlap_ids.add(v.dev_b)
-                highlight_ids = overlap_ids
-            else:
-                highlight_ids = set(device_items.keys())
-        else:
-            highlight_ids = set(device_items.keys())
-
-        # ---- Dim selected items (capture IDs, not object refs) ----
-        dimmed_ids = set()
-        for dev_id in highlight_ids:
-            item = device_items.get(dev_id)
-            if item is None:
-                continue
-            try:
-                item.setOpacity(0.55)
-                dimmed_ids.add(dev_id)
-            except RuntimeError:
-                pass
-
-        print(f"[STAGE HL] Stage {stage_index} ({stage_name}): "
-              f"{len(dimmed_ids)} device(s) highlighted")
-
-        # ---- Auto-restore after 3 s --- safe: re-lookup items by ID ----
-        if self._stage_highlight_timer and self._stage_highlight_timer.isActive():
-            try:
-                self._stage_highlight_timer.stop()
-            except RuntimeError:
-                pass
-
-        def _restore():
-            """Restore opacity by re-looking up live items from editor."""
-            live_items = (
-                getattr(self, 'editor', None)
-                and getattr(self.editor, 'device_items', {})
-            ) or {}
-            for did in dimmed_ids:
-                itm = live_items.get(did)
-                if itm is None:
-                    continue
-                try:
-                    itm.setOpacity(1.0)
-                except RuntimeError:
-                    pass  # item deleted between highlight and restore
-            self._stage_highlight_timer = None
-
-        self._stage_highlight_timer = _QTimer(self)
-        self._stage_highlight_timer.setSingleShot(True)
-        self._stage_highlight_timer.timeout.connect(_restore)
-        self._stage_highlight_timer.start(3000)
-
-    def _clear_stage_highlights(self):
-        """Restore all devices to full opacity immediately."""
-        device_items = getattr(self, 'editor', None) and self.editor.device_items or {}
-        for item in device_items.values():
-            item.setOpacity(1.0)
-        if self._stage_highlight_timer:
-            self._stage_highlight_timer.stop()
-            self._stage_highlight_timer = None
 
 
     def _enqueue_ai_command(self, cmd):
@@ -2669,6 +2586,37 @@ class MainWindow(QMainWindow):
                         "#a00",
                     )
 
+            elif action == "abut":
+                raw_a = cmd.get("device_a", cmd.get("a"))
+                raw_b = cmd.get("device_b", cmd.get("b"))
+                id_a = self._resolve_device_id(raw_a)
+                id_b = self._resolve_device_id(raw_b)
+                print(f"[AI CMD] Abut: raw=({raw_a},{raw_b}) resolved=({id_a},{id_b})")
+
+                if not id_a or not id_b:
+                    self.chat_panel._append_message(
+                        "AI",
+                        f"Abutment failed: device not found ({raw_a}, {raw_b}).",
+                        "#fde8e8",
+                        "#a00",
+                    )
+                    return
+
+                # Sync current canvas state into self.nodes
+                self._sync_node_positions()
+                if not _skip_undo:
+                    self._push_undo()
+
+                self._abut_devices(id_a, id_b)
+                # Rebuild canvas WITHOUT re-compaction so the new abutted positions stick
+                self._refresh_panels(compact=False)
+                self.chat_panel._append_message(
+                    "AI",
+                    f"✅ Abutted **{id_a}** and **{id_b}**",
+                    "#e8f4fd",
+                    "#1a1a2e",
+                )
+
             elif action in {"move", "move_device"}:
                 raw_dev = cmd.get("device", cmd.get("device_id", cmd.get("id")))
                 dev_id = self._resolve_device_id(raw_dev)
@@ -2717,6 +2665,37 @@ class MainWindow(QMainWindow):
                         "#fde8e8",
                         "#a00",
                     )
+
+            elif action == "abut":
+                raw_a = cmd.get("device_a", cmd.get("a"))
+                raw_b = cmd.get("device_b", cmd.get("b"))
+                id_a = self._resolve_device_id(raw_a)
+                id_b = self._resolve_device_id(raw_b)
+                print(f"[AI CMD] Abut: raw=({raw_a},{raw_b}) resolved=({id_a},{id_b})")
+
+                if not id_a or not id_b:
+                    self.chat_panel._append_message(
+                        "AI",
+                        f"Abutment failed: device not found ({raw_a}, {raw_b}).",
+                        "#fde8e8",
+                        "#a00",
+                    )
+                    return
+
+                # Sync current canvas state into self.nodes
+                self._sync_node_positions()
+                if not _skip_undo:
+                    self._push_undo()
+
+                self._abut_devices(id_a, id_b)
+                # Rebuild canvas WITHOUT re-compaction so the new abutted positions stick
+                self._refresh_panels(compact=False)
+                self.chat_panel._append_message(
+                    "AI",
+                    f"✅ Abutted **{id_a}** and **{id_b}**",
+                    "#e8f4fd",
+                    "#1a1a2e",
+                )
 
             elif action in {"add_dummy", "add_dummies", "dummy"}:
                 dev_type = str(cmd.get("type", "nmos")).strip().lower()
@@ -2881,6 +2860,27 @@ class MainWindow(QMainWindow):
             self.chat_panel._append_message(
                 "AI", f"Could not execute command: {e}", "#fde8e8", "#a00"
             )
+
+    def _abut_devices(self, id_a, id_b):
+        """Align device B immediately to the right of device A and set abutment flags."""
+        node_a = next((n for n in self.nodes if n.get("id") == id_a), None)
+        node_b = next((n for n in self.nodes if n.get("id") == id_b), None)
+        if not node_a or not node_b:
+            return
+
+        # 1. Set abutment flags in the data model
+        node_a.setdefault("abutment", {})["abut_right"] = True
+        node_b.setdefault("abutment", {})["abut_left"] = True
+
+        # 2. Match Y positions (must be in same row)
+        node_b["geometry"]["y"] = node_a["geometry"]["y"]
+
+        # 3. Position B to the right of A
+        # Using the overlap pitch (0.070um) instead of full pitch
+        # Logic: origin_b = origin_a + overlap_pitch
+        node_b["geometry"]["x"] = node_a["geometry"]["x"] + 0.070
+
+        print(f"[AI CMD] Data abut done: {id_a} abut_right=True, {id_b} abut_left=True at x={node_b['geometry']['x']}")
 
     def _sync_node_positions(self):
         """Sync canvas positions back to self.nodes and update layout context.

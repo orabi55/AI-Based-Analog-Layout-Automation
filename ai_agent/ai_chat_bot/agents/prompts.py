@@ -23,10 +23,12 @@ ANALOG_KB = """\
 - PMOS = TOP row. NMOS = BOTTOM row. Never mix types in one row.
 - X-pitch = 0.294 um per device slot.
 
-## DUMMY DEVICES
-- Required for etch uniformity at row edges.
-- Rule: Dummies at FAR LEFT and FAR RIGHT of each row only.
-- Rule: >= 1 dummy at each end. DUMMYP -> PMOS, DUMMYN -> NMOS.
+## TRANSISTOR ABUTMENT (DIFFUSION SHARING)
+- When two transistors of the same type (NMOS/NMOS or PMOS/PMOS) share a SOURCE or DRAIN net, they should ABUT.
+- Abutment eliminates spacing, reducing parasitic capacitance and area.
+- Rule: To abut, set 'abut_right':true on the left device and 'abut_left':true on the right device.
+- Rule: Abutted devices MUST be in the same row and have the same orientation.
+- X-pitch for abutted devices = 0.070 um (shared diffusion) vs 0.294 um (broken diffusion).
 
 ## TOPOLOGY-SPECIFIC RULES (apply ONLY when the topology is detected)
 - DIFFERENTIAL PAIR: Two devices with same gate-type, shared tail source
@@ -151,24 +153,79 @@ def build_adapter_prompt(layout_context: dict | None) -> str:
 # 5. CODE GENERATOR Agent — produces [CMD] JSON blocks
 # ─────────────────────────────────────────────────────────────────
 def build_codegen_prompt(layout_context: dict | None) -> str:
-    """Prompt for the Code Generator Agent (Concrete Request Processor)."""
+    """Prompt for the Code Generator Agent (Concrete Request Processor).
+
+    Enhanced with grid-awareness so coordinates snap to real device
+    widths instead of arbitrary floats like -5.53.
+    """
+    # Compute grid info from context
+    grid_info = _compute_grid_info(layout_context)
+
     prompt = (
         "You are a strict JSON command generator for a layout editor.\n\n"
         "RULE #1: For ANY action, you MUST output a [CMD]{...}[/CMD] block.\n"
         "Available actions:\n"
         '[CMD]{"action":"swap","device_a":"MM28","device_b":"MM25"}[/CMD]\n'
-        '[CMD]{"action":"move","device":"MM3","x":1.0,"y":0.5}[/CMD]\n'
+        '[CMD]{"action":"move","device":"MM3","x":1.176,"y":0.0}[/CMD]\n'
+        '[CMD]{"action":"abut","device_a":"MM6","device_b":"MM29"}[/CMD]\n'
         '[CMD]{"action":"add_dummy","type":"nmos","count":2,"side":"left"}[/CMD]\n\n'
-        "RULES:\n"
+        "ABUTMENT RULES (CRITICAL):\n"
+        "- Use 'abut' ONLY for transistors that share a SOURCE or DRAIN net.\n"
+        "- Abutting MM_A and MM_B moves them side-by-side (X distance = 0.070µm).\n"
+        "- It also sets 'abut_right':true on MM_A and 'abut_left':true on MM_B.\n\n"
+        "COORDINATE RULES (CRITICAL — follow EXACTLY):\n"
+        f"- Device width (X pitch) = {grid_info['pitch']:.4f} µm.\n"
+        f"- PMOS row Y = {grid_info['pmos_y']:.4f} µm.\n"
+        f"- NMOS row Y = {grid_info['nmos_y']:.4f} µm.\n"
+        "- All X coordinates MUST be multiples of the device width.\n"
+        "- All Y coordinates MUST match an existing device row Y value.\n"
+        "- Do NOT invent arbitrary coordinates like -5.53 or 3.7.\n"
+        "- Look at each device's CURRENT position in the layout data\n"
+        "  and compute new positions by ADDING or SUBTRACTING whole\n"
+        "  multiples of the pitch.\n\n"
+        "GENERAL RULES:\n"
         "- Use full device IDs (MM28 not 28).\n"
         "- Multiple [CMD] blocks are OK.\n"
         "- add_dummy: type=nmos|pmos, count defaults to 1, side=left|right.\n"
+        "- Prefer 'swap' over 'move' when rearranging two devices.\n"
         "- Write the [CMD] block FIRST, then 1-2 sentences confirming.\n"
         "- NEVER explain analog theory. NEVER hallucinate device IDs.\n"
         "- Only use device IDs that appear in the layout data below.\n\n"
     )
     prompt += _format_layout_context(layout_context)
     return prompt
+
+
+def _compute_grid_info(layout_context: dict | None) -> dict:
+    """Extract grid metrics from the current layout context."""
+    default = {"pitch": 0.294, "pmos_y": 0.0, "nmos_y": 0.668}
+    if not layout_context:
+        return default
+
+    nodes = layout_context.get("nodes", [])
+    if not nodes:
+        return default
+
+    pmos_ys = []
+    nmos_ys = []
+    widths = []
+    for n in nodes:
+        geo = n.get("geometry", {})
+        ntype = n.get("type", "")
+        y = geo.get("y", 0.0)
+        w = geo.get("width", 0.0)
+        if w > 0:
+            widths.append(w)
+        if ntype == "pmos":
+            pmos_ys.append(y)
+        elif ntype == "nmos":
+            nmos_ys.append(y)
+
+    pitch = min(widths) if widths else 0.294
+    pmos_y = min(pmos_ys) if pmos_ys else 0.0
+    nmos_y = min(nmos_ys) if nmos_ys else 0.668
+
+    return {"pitch": pitch, "pmos_y": pmos_y, "nmos_y": nmos_y}
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -199,7 +256,8 @@ def _format_layout_context(layout_context: dict | None) -> str:
 
         line = (
             f"  {nid} ({ntype}{dummy_tag}) "
-            f"pos=({geo.get('x', 0):.2f},{geo.get('y', 0):.2f}) "
+            f"pos=({geo.get('x', 0):.4f},{geo.get('y', 0):.4f}) "
+            f"size=({geo.get('width', 0):.4f}x{geo.get('height', 0):.4f}) "
             f"orient={orient}"
         )
         elec_parts = [f"{k}={elec[k]}" for k in ("nf", "nfin", "l", "w") if k in elec]

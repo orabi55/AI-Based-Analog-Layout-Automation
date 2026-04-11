@@ -1,31 +1,13 @@
 """
-ai_agent/ai_chat_bot/agents/classifier.py
-==========================================
+ai_agent/classifier_agent.py
+==============================
 Lightweight intent classifier — runs before any pipeline stage.
-Returns: 'concrete' | 'abstract' | 'question' | 'chat'
+Returns: 'concrete' | 'abstract' | 'question'
 
-Adapted from ai_agent_old/classifier_agent.py with a local regex
-fast-path so trivial greetings never hit the LLM at all.
+This is a fast LLM call (tiny prompt, ~200 tokens) that routes the user's
+message correctly before committing to the 4-stage pipeline.
 """
 
-import re
-
-# ── Regex fast-path patterns (zero LLM cost) ─────────────────────
-_CHAT_RE = re.compile(
-    r"^(hi|hello|hey|thanks|thank you|bye|good\s*(morning|evening|night)|"
-    r"how\s+are\s+you|what\s+can\s+you\s+do|help|ok|okay|great|sure|cool)[\s!?.]*$",
-    re.IGNORECASE,
-)
-
-_CONCRETE_RE = re.compile(
-    r"\b(swap|move|flip|add\s+dummy|add\s+dummies|delete|remove|set\s+orientation"
-    r"|fix\s+abutment|abut|re-abut|reabut"
-    r"|fix\s+finger|fix\s+placement|rearrange|align|pack\s+finger"
-    r"|place\s+adjacent|group\s+together)\b",
-    re.IGNORECASE,
-)
-
-# ── LLM Classifier prompt ────────────────────────────────────────
 CLASSIFIER_PROMPT = """\
 You are an intent classifier for an analog IC layout editor.
 Classify the user's message into exactly ONE of these categories:
@@ -56,46 +38,31 @@ Do not explain. Do not add punctuation.
 """
 
 
-def classify_intent(user_message: str, run_llm_fn, selected_model: str) -> str:
+def classify_intent(user_message: str, run_llm_fn) -> str:
     """Classify user intent as 'concrete', 'abstract', 'question', or 'chat'.
 
-    Uses a regex fast-path for trivial cases (greetings, obvious
-    commands) and falls back to a lightweight LLM call only when
-    the intent is ambiguous.
-
     Args:
-        user_message:   the raw user text from the chat panel.
-        run_llm_fn:     callable(chat_messages, full_prompt, model) -> str
-        selected_model: which LLM backend to use.
+        user_message: the raw user text from the chat panel.
+        run_llm_fn:   the run_llm callable from llm_worker.py.
 
     Returns:
         'concrete' | 'abstract' | 'question' | 'chat'
         Falls back to 'abstract' on any error so the pipeline always runs.
     """
-    stripped = user_message.strip()
-
-    # ── Fast-path: regex (no LLM cost) ──────────────────────────
-    if _CHAT_RE.match(stripped):
-        print(f"[CLASSIFIER] regex -> CHAT: '{stripped[:60]}'")
-        return "chat"
-
-    if _CONCRETE_RE.search(stripped):
-        print(f"[CLASSIFIER] regex -> CONCRETE: '{stripped[:60]}'")
-        return "concrete"
-
-    # ── Slow-path: ask the LLM ──────────────────────────────────
     msgs = [
         {"role": "system", "content": CLASSIFIER_PROMPT},
         {"role": "user",   "content": user_message},
     ]
     full_prompt = CLASSIFIER_PROMPT + "\n\n" + user_message
     try:
-        result = run_llm_fn(msgs, full_prompt, selected_model)
+        result = run_llm_fn(msgs, full_prompt)
         if not result:
             return "abstract"
+        # Accept the first word only, upper-cased
         label = result.strip().upper().split()[0].rstrip(".,;:")
         if label in ("CONCRETE", "ABSTRACT", "QUESTION", "CHAT"):
-            print(f"[CLASSIFIER] LLM -> {label}: '{stripped[:60]}'")
+            preview = user_message[:60]
+            print(f"[CLASSIFIER] '{preview}' → {label}")
             return label.lower()
     except Exception as exc:
         print(f"[CLASSIFIER] Failed: {exc} — defaulting to abstract")
