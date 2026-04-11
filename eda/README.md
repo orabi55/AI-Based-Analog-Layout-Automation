@@ -36,6 +36,10 @@ In your EDA tool's console, source the file. You only need to do this once per s
 ```tcl
 source /path/to/your/scripts/run.tcl
 ```
+#### Example
+```tcl
+source eda/run.tcl
+```
 *Upon successful loading, the console will print a confirmation message along with the registered tool path and available commands.*
 
 ### 2. Run an Extraction
