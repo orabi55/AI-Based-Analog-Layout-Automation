@@ -2433,7 +2433,16 @@ class MainWindow(QMainWindow):
                 "nf":   dev.params.get("nf",   1),
                 "nfin": dev.params.get("nfin", 1),
                 "w":    dev.params.get("w",    0),
+                # Hierarchy metadata for device tree grouping
+                "parent":           dev.params.get("parent"),
+                "m":                dev.params.get("m", 1),
+                "multiplier_index": dev.params.get("multiplier_index"),
+                "finger_index":     dev.params.get("finger_index"),
+                "array_index":      dev.params.get("array_index"),
             }
+            # Clean up parent for single devices
+            if electrical["parent"] == dev_name:
+                electrical["parent"] = None
             if dev_type == "cap":
                 electrical["cval"] = dev.params.get("cval", 0.0)
 
@@ -3199,6 +3208,39 @@ class MainWindow(QMainWindow):
                         "#fde8e8",
                         "#a00",
                     )
+
+            elif action in {"move_row", "move_row_devices"}:
+                dev_type = cmd.get("type", "")
+                new_y = cmd.get("y")
+                print(f"[AI CMD] Move row: type={dev_type} y={new_y}")
+
+                if not dev_type or new_y is None:
+                    self.chat_panel._append_message(
+                        "AI",
+                        "Move row failed: missing type or y in command.",
+                        "#fde8e8",
+                        "#a00",
+                    )
+                    return
+
+                self._sync_node_positions()
+                if not _skip_undo:
+                    self._push_undo()
+
+                # Move ALL devices of the given type to the new Y
+                count = 0
+                for node in self.nodes:
+                    if node.get("type") == dev_type:
+                        node["geometry"]["y"] = float(new_y)
+                        count += 1
+
+                self._refresh_panels(compact=False)
+                self.chat_panel._append_message(
+                    "AI",
+                    f"Moved all {count} {dev_type} devices to Y={new_y}",
+                    "#e8f4fd",
+                    "#1a1a2e",
+                )
 
             elif action == "abut":
                 raw_a = cmd.get("device_a", cmd.get("a"))

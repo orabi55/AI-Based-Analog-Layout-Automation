@@ -186,26 +186,31 @@ def build_codegen_prompt(layout_context: dict | None) -> str:
         "Available actions:\n"
         '[CMD]{"action":"swap","device_a":"MM28","device_b":"MM25"}[/CMD]\n'
         '[CMD]{"action":"move","device":"MM3","x":1.176,"y":0.0}[/CMD]\n'
+        '[CMD]{"action":"move_row","type":"pmos","y":1.336}[/CMD]\n'
         '[CMD]{"action":"abut","device_a":"MM6","device_b":"MM29"}[/CMD]\n'
         '[CMD]{"action":"add_dummy","type":"nmos","count":2,"side":"left"}[/CMD]\n\n'
         "ABUTMENT RULES (CRITICAL):\n"
         "- Use 'abut' ONLY for transistors that share a SOURCE or DRAIN net.\n"
         "- Abutting MM_A and MM_B moves them side-by-side (X distance = 0.070µm).\n"
         "- It also sets 'abut_right':true on MM_A and 'abut_left':true on MM_B.\n\n"
-        "COORDINATE RULES (CRITICAL — follow EXACTLY):\n"
-        f"- Device width (X pitch) = {grid_info['pitch']:.4f} µm.\n"
-        f"- PMOS row Y = {grid_info['pmos_y']:.4f} µm.\n"
-        f"- NMOS row Y = {grid_info['nmos_y']:.4f} µm.\n"
-        "- All X coordinates MUST be multiples of the device width.\n"
-        "- All Y coordinates MUST match an existing device row Y value.\n"
-        "- Do NOT invent arbitrary coordinates like -5.53 or 3.7.\n"
-        "- Look at each device's CURRENT position in the layout data\n"
-        "  and compute new positions by ADDING or SUBTRACTING whole\n"
-        "  multiples of the pitch.\n\n"
+        "COORDINATE RULES (CRITICAL - follow EXACTLY):\n"
+        f"- Device width (X pitch) = {grid_info['pitch']:.4f} um.\n"
+        f"- PMOS row Y = {grid_info['pmos_y']:.4f} um.\n"
+        f"- NMOS row Y = {grid_info['nmos_y']:.4f} um.\n"
+        f"- Row pitch (distance between rows) = {grid_info['row_pitch']:.4f} um.\n"
+        "- All X coordinates MUST be multiples of the device width (pitch).\n"
+        "- Y coordinates MUST be on the row grid: row_Y = base_Y + N * row_pitch.\n"
+        "- You CAN change Y coordinates to add vertical space between rows.\n"
+        "- To add space between NMOS and PMOS rows, use 'move_row' action to\n"
+        "  shift ALL devices of one type up or down by N * row_pitch.\n"
+        "- To move a single device, set its Y to any valid row grid value.\n"
+        "- Do NOT invent arbitrary coordinates like -5.53 or 3.7 - always use\n"
+        "  the row grid formula (base + N * row_pitch).\n\n"
         "GENERAL RULES:\n"
         "- Use full device IDs (MM28 not 28).\n"
         "- Multiple [CMD] blocks are OK.\n"
         "- add_dummy: type=nmos|pmos, count defaults to 1, side=left|right.\n"
+        "- move_row: type=pmos|nmos, y=new Y for ALL devices of that type.\n"
         "- Prefer 'swap' over 'move' when rearranging two devices.\n"
         "- Write the [CMD] block FIRST, then 1-2 sentences confirming.\n"
         "- NEVER explain analog theory. NEVER hallucinate device IDs.\n"
@@ -216,8 +221,8 @@ def build_codegen_prompt(layout_context: dict | None) -> str:
 
 
 def _compute_grid_info(layout_context: dict | None) -> dict:
-    """Extract grid metrics from the current layout context."""
-    default = {"pitch": 0.294, "pmos_y": 0.0, "nmos_y": 0.668}
+    """Extract grid info from the current layout context."""
+    default = {"pitch": 0.294, "pmos_y": 0.0, "nmos_y": 0.668, "row_pitch": 0.668}
     if not layout_context:
         return default
 
@@ -244,7 +249,15 @@ def _compute_grid_info(layout_context: dict | None) -> dict:
     pmos_y = min(pmos_ys) if pmos_ys else 0.0
     nmos_y = min(nmos_ys) if nmos_ys else 0.668
 
-    return {"pitch": pitch, "pmos_y": pmos_y, "nmos_y": nmos_y}
+    # Compute row_pitch from the gap between NMOS and PMOS rows
+    row_pitch = 0.668
+    if pmos_ys and nmos_ys:
+        # Row pitch = difference between PMOS and NMOS row Y values
+        row_pitch = abs(pmos_y - nmos_y)
+        if row_pitch < 0.1:
+            row_pitch = 0.668  # fallback if rows overlap
+
+    return {"pitch": pitch, "pmos_y": pmos_y, "nmos_y": nmos_y, "row_pitch": row_pitch}
 
 
 # ─────────────────────────────────────────────────────────────────
