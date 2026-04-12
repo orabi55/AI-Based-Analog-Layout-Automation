@@ -83,6 +83,161 @@ class GenericWorker(QThread):
         except Exception as e:
             self.error.emit(str(e))
 
+
+# -------------------------------------------------
+# Match Dialog — select interdigitated or common-centroid
+# -------------------------------------------------
+class _MatchDialog(QDialog):
+    """Dialog for choosing matching technique (Interdigitated / Common-Centroid)."""
+
+    def __init__(self, device_ids: list, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Match Devices")
+        self.setMinimumWidth(380)
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #1e2636;
+                color: #e0e0e0;
+                border-radius: 12px;
+            }
+            QLabel {
+                color: #e0e0e0;
+                font-size: 13px;
+            }
+            QRadioButton {
+                color: #e0e0e0;
+                font-size: 13px;
+                spacing: 8px;
+                padding: 6px;
+            }
+            QRadioButton::indicator {
+                width: 16px; height: 16px;
+            }
+            QRadioButton::indicator:checked {
+                background-color: #4FC3F7;
+                border: 2px solid #4FC3F7;
+                border-radius: 8px;
+            }
+            QRadioButton::indicator:unchecked {
+                background-color: transparent;
+                border: 2px solid #546E7A;
+                border-radius: 8px;
+            }
+            QPushButton {
+                background-color: #2196F3;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 20px;
+                font-weight: bold;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background-color: #42A5F5;
+            }
+            QPushButton[text="Cancel"] {
+                background-color: #455A64;
+            }
+            QPushButton[text="Cancel"]:hover {
+                background-color: #546E7A;
+            }
+            QGroupBox {
+                color: #90CAF9;
+                border: 1px solid #37474F;
+                border-radius: 8px;
+                margin-top: 12px;
+                padding-top: 16px;
+                font-weight: bold;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 6px;
+            }
+        """)
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+
+        # Header
+        header = QLabel(f"Match {len(device_ids)} Devices")
+        header.setStyleSheet("font-size: 16px; font-weight: bold; color: #90CAF9;")
+        layout.addWidget(header)
+
+        # Device list
+        dev_list = QLabel(f"Devices: {', '.join(device_ids[:20])}")
+        dev_list.setWordWrap(True)
+        dev_list.setStyleSheet("color: #B0BEC5; font-size: 12px;")
+        layout.addWidget(dev_list)
+
+        # Technique selection
+        tech_group = QGroupBox("Matching Technique")
+        tech_layout = QVBoxLayout(tech_group)
+
+        self._radio_interdig = QRadioButton("Interdigitated (ABBA)")
+        self._radio_interdig.setChecked(True)
+        self._radio_interdig.setToolTip(
+            "Pattern: A₁ B₁ B₂ A₂ A₃ B₃ B₄ A₄\n"
+            "Best for: differential pairs, current mirrors\n"
+            "Cancels linear process gradients"
+        )
+        tech_layout.addWidget(self._radio_interdig)
+
+        # Description for interdigitated
+        desc1 = QLabel("  Pattern: A₁B₁B₂A₂ — cancels linear gradients")
+        desc1.setStyleSheet("color: #78909C; font-size: 11px; margin-left: 24px;")
+        tech_layout.addWidget(desc1)
+
+        self._radio_cc = QRadioButton("Common-Centroid (1D)")
+        self._radio_cc.setToolTip(
+            "Pattern: D C B A | A B C D (mirror around center in one row)\n"
+            "Best for: 4+ matched devices\n"
+            "Cancels both linear and quadratic gradients"
+        )
+        tech_layout.addWidget(self._radio_cc)
+
+        desc2 = QLabel("  Pattern: DCBA|ABCD — 1D mirror")
+        desc2.setStyleSheet("color: #78909C; font-size: 11px; margin-left: 24px;")
+        tech_layout.addWidget(desc2)
+
+        self._radio_cc_2d = QRadioButton("Common-Centroid (2D Multi-Row)")
+        self._radio_cc_2d.setToolTip(
+            "Pattern: A B | B A across two rows (cross-coupled)\n"
+            "Best for: Differential pairs with 4 devices (e.g. 2 fingers each)\n"
+            "Cancels gradients in both X and Y directions"
+        )
+        tech_layout.addWidget(self._radio_cc_2d)
+
+        desc3 = QLabel("  Pattern: Cross-Quad on two rows — cancels 2D gradients")
+        desc3.setStyleSheet("color: #78909C; font-size: 11px; margin-left: 24px;")
+        tech_layout.addWidget(desc3)
+
+        self._btn_group = QButtonGroup(self)
+        self._btn_group.addButton(self._radio_interdig, 0)
+        self._btn_group.addButton(self._radio_cc, 1)
+        self._btn_group.addButton(self._radio_cc_2d, 2)
+
+        layout.addWidget(tech_group)
+
+        # Buttons
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        btn_cancel = QPushButton("Cancel")
+        btn_cancel.clicked.connect(self.reject)
+        btn_layout.addWidget(btn_cancel)
+        btn_ok = QPushButton("Apply Matching")
+        btn_ok.clicked.connect(self.accept)
+        btn_layout.addWidget(btn_ok)
+        layout.addLayout(btn_layout)
+
+    def get_technique(self) -> str:
+        """Return 'interdigitated' or 'common_centroid' or 'common_centroid_2d'."""
+        if self._radio_cc.isChecked():
+            return "common_centroid"
+        elif self._radio_cc_2d.isChecked():
+            return "common_centroid_2d"
+        return "interdigitated"
+
 # -------------------------------------------------
 # Modern Loading Overlay
 # -------------------------------------------------
@@ -519,6 +674,35 @@ class AIModelSelectionDialog(QDialog):
         scroll.setWidget(scroll_widget)
         main_layout.addWidget(scroll)
 
+        # 4. Placement Options
+        options_group = QGroupBox("Placement Options")
+        options_layout = QVBoxLayout(options_group)
+
+        self.check_abutment = QCheckBox("Enable Abutment (Diffusion Sharing)")
+        self.check_abutment.setChecked(True)
+        self.check_abutment.setStyleSheet("""
+            QCheckBox {
+                color: #c8d0dc;
+                font-size: 10pt;
+                spacing: 10px;
+            }
+            QCheckBox::indicator {
+                width: 18px; height: 18px;
+            }
+        """)
+        options_layout.addWidget(self.check_abutment)
+
+        abutment_desc = QLabel(
+            "When enabled, adjacent fingers sharing a Source/Drain net will be "
+            "abutted at 0.070 \u00b5m pitch to save area. "
+            "When disabled, standard spacing (0.294 \u00b5m) is used everywhere."
+        )
+        abutment_desc.setStyleSheet("color: #8899aa; font-size: 9pt; margin-left: 30px;")
+        abutment_desc.setWordWrap(True)
+        options_layout.addWidget(abutment_desc)
+
+        main_layout.addWidget(options_group)
+
         # ── Connect toggles ──────────────────────────────
         self.check_gemini.toggled.connect(self._on_model_changed)
         self.check_groq.toggled.connect(self._on_model_changed)
@@ -571,6 +755,9 @@ class AIModelSelectionDialog(QDialog):
     def get_ollama_submodel(self):
         return self.ollama_model_combo.currentText()
 
+    def is_abutment_enabled(self):
+        return self.check_abutment.isChecked()
+
     def apply_api_keys(self):
         # Update environment variables based on user changes if they didn't leave them empty/starred out
         gemini_key = self.gemini_api_key.text().strip().strip('\'"')
@@ -609,6 +796,7 @@ class MainWindow(QMainWindow):
         self._ignore_grid_spin_change = False
         self._original_data = None  # raw loaded JSON (for edges + terminals)
         self.nodes = None
+        self._matched_groups = []  # [{ids: [dev_ids], technique: str, anchor_x: float, anchor_y: float}]
 
 
         # Load placement data
@@ -1185,6 +1373,16 @@ class MainWindow(QMainWindow):
         self._act_abutment.toggled.connect(self._on_toggle_abutment)
         toolbar.addAction(self._act_abutment)
 
+        # Matching / Interdigitation button
+        self._act_match = QAction("⊠ Match", self)
+        self._act_match.setShortcut(QKeySequence("Ctrl+M"))
+        self._act_match.setToolTip(
+            "Match Selected Devices (Ctrl+M)\n"
+            "Select 2+ devices, then apply Interdigitated (ABBA)\n"
+            "or Common-Centroid matching. Creates a fixed block."
+        )
+        self._act_match.triggered.connect(self._on_match_devices)
+        toolbar.addAction(self._act_match)
 
     # -------------------------------------------------
     # Panel collapse / expand
@@ -1305,9 +1503,61 @@ class MainWindow(QMainWindow):
         )
 
     def _exit_move_mode(self):
+        # Before finalizing: if the moved device is part of a matched group,
+        # move all group members by the same delta
+        if self._move_dev_id:
+            self._enforce_matched_group_move(self._move_dev_id)
         self._move_mode = False
         self._move_dev_id = None
         self._sync_node_positions()
+
+    def _enforce_matched_group_move(self, moved_id):
+        """If moved_id is in a matched group, move all group members by the same delta."""
+        for group in self._matched_groups:
+            if moved_id not in group["ids"]:
+                continue
+
+            # Find the moved item and compute the delta from its original position
+            moved_item = self.editor.device_items.get(moved_id)
+            if not moved_item:
+                return
+
+            # Get the original position from the node data
+            orig_node = None
+            if self.nodes:
+                for n in self.nodes:
+                    if n.get("id") == moved_id:
+                        orig_node = n
+                        break
+
+            if not orig_node:
+                return
+
+            orig_geo = orig_node.get("geometry", {})
+            orig_x = orig_geo.get("x", 0.0)
+            orig_y = orig_geo.get("y", 0.0)
+
+            # Compute delta from how the user moved this device
+            scale = self.editor._snap_grid
+            dx = moved_item.pos().x() - orig_x * (scale / 0.294)
+            dy = moved_item.pos().y() - orig_y * (scale / 0.668) if abs(orig_y) > 1e-9 else moved_item.pos().y()
+
+            # Apply same delta to all other group members
+            for gid in group["ids"]:
+                if gid == moved_id:
+                    continue
+                item = self.editor.device_items.get(gid)
+                if not item:
+                    continue
+                # Find this member's original node position
+                for n in self.nodes:
+                    if n.get("id") == gid:
+                        g = n.get("geometry", {})
+                        ox = g.get("x", 0.0) * (scale / 0.294)
+                        oy = g.get("y", 0.0) * (scale / 0.668) if abs(g.get("y", 0)) > 1e-9 else item.pos().y()
+                        item.setPos(ox + dx, moved_item.pos().y())
+                        break
+            return
 
     # -------------------------------------------------
     # Row-gap (Edit menu)
@@ -1663,6 +1913,172 @@ class MainWindow(QMainWindow):
         self.editor.flip_devices_v(selected)
         self._sync_node_positions()
 
+    # -------------------------------------------------
+    # Match Devices (Interdigitation / Common-Centroid)
+    # -------------------------------------------------
+    def _on_match_devices(self):
+        """Open the Match dialog for selected devices."""
+        selected = self.editor.selected_device_ids()
+        if len(selected) < 2:
+            self.chat_panel._append_message(
+                "AI",
+                "Select at least 2 devices to match.\n"
+                "Use Ctrl+Click to select multiple devices.",
+                "#fde8e8",
+                "#a00",
+            )
+            return
+
+        # Check same type
+        types = set()
+        for sid in selected:
+            item = self.editor.device_items.get(sid)
+            if item:
+                types.add(getattr(item, "device_type", "?"))
+        if len(types) > 1:
+            self.chat_panel._append_message(
+                "AI",
+                "All selected devices must be the same type (all NMOS or all PMOS).",
+                "#fde8e8",
+                "#a00",
+            )
+            return
+
+        # Show dialog
+        dlg = _MatchDialog(selected, self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        technique = dlg.get_technique()
+        self._apply_matching(selected, technique)
+
+    def _apply_matching(self, device_ids, technique):
+        """
+        Apply matching to the selected devices.
+        Rearrange their finger positions according to the chosen technique,
+        then register them as a fixed matched group.
+        """
+        from ai_agent.ai_initial_placement.finger_grouper import (
+            FINGER_PITCH, STD_PITCH, ROW_PITCH
+        )
+
+        self._sync_node_positions()
+        self._push_undo()
+
+        # Gather device items and sort by current X position
+        items = []
+        for did in device_ids:
+            item = self.editor.device_items.get(did)
+            if item:
+                items.append((did, item))
+        items.sort(key=lambda t: t[1].pos().x())
+
+        if len(items) < 2:
+            return
+
+        # Determine anchor position (leftmost device)
+        anchor_x = items[0][1].pos().x()
+        anchor_y = items[0][1].pos().y()
+
+        # Apply the chosen technique
+        pitch = FINGER_PITCH  # 0.070 um for abutted interdigitation
+
+        if technique == "interdigitated":
+            # ABBA interdigitation for 2 groups
+            if len(items) == 2:
+                # Split into A and B groups (by original ID sorting)
+                a_id, a_item = items[0]
+                b_id, b_item = items[1]
+                # Place side by side with ABBA pattern (just 2 devices: AB)
+                a_item.setPos(anchor_x, anchor_y)
+                b_item.setPos(
+                    self.editor._snap_value(anchor_x + pitch),
+                    anchor_y,
+                )
+            else:
+                # For N devices: ABBA pattern — pair them and interleave
+                # A1 B1 B2 A2  A3 B3 B4 A4 ...
+                n = len(items)
+                half = n // 2
+                group_a = items[:half]
+                group_b = items[half:]
+                # Reverse B for ABBA
+                ordered = []
+                for i in range(max(len(group_a), len(group_b))):
+                    if i < len(group_a):
+                        ordered.append(group_a[i])
+                    if i < len(group_b):
+                        ordered.append(group_b[i])
+                # Place in order
+                x = anchor_x
+                for did, item in ordered:
+                    item.setPos(self.editor._snap_value(x), anchor_y)
+                    x += pitch
+
+        elif technique == "common_centroid":
+            # Common-centroid: DCBA|ABCD mirror pattern
+            n = len(items)
+            # Create two halves: reversed + forward
+            # Place: items[n-1], items[n-2], ..., items[0], items[0], ..., items[n-1]
+            # But we only have N devices, so just mirror them:
+            # first half reversed, second half forward
+            half = n // 2
+            left_half = list(reversed(items[:half]))
+            right_half = items[half:]
+            ordered = left_half + right_half
+
+            x = anchor_x
+            for did, item in ordered:
+                item.setPos(self.editor._snap_value(x), anchor_y)
+                x += pitch
+
+        elif technique == "common_centroid_2d":
+            # 2D Common Centroid (Cross-Quad on 2 rows)
+            n = len(items)
+            half = n // 2
+            left_half = items[:half]
+            right_half = list(reversed(items[half:]))
+            
+            # Row 1 (Top)
+            x = anchor_x
+            for did, item in left_half:
+                item.setPos(self.editor._snap_value(x), anchor_y)
+                x += pitch
+                
+            # Row 2 (Bottom)
+            x = anchor_x
+            # Depending on y direction, usually row pitch goes down/up. Here we just add ROW_PITCH
+            row2_y = anchor_y + ROW_PITCH
+            for did, item in right_half:
+                item.setPos(self.editor._snap_value(x), row2_y)
+                x += pitch
+
+        # Register as a matched group
+        group_ids = [did for did, _ in items]
+        self._matched_groups.append({
+            "ids": group_ids,
+            "technique": technique,
+        })
+
+        # Set visual indicator — color the matched devices
+        match_color = QColor("#4FC3F7") if technique == "interdigitated" else QColor("#AED581")
+        for did, item in items:
+            if hasattr(item, "set_match_highlight"):
+                item.set_match_highlight(match_color)
+
+        self.editor.resolve_overlaps(anchor_ids=group_ids)
+        self._sync_node_positions()
+
+        tech_label = "Interdigitated (ABBA)" if technique == "interdigitated" else "Common-Centroid"
+        self.chat_panel._append_message(
+            "AI",
+            f"✅ Matched {len(group_ids)} devices as **{tech_label}** block.\n"
+            f"Devices: {', '.join(group_ids)}\n"
+            f"These devices are now a fixed group.",
+            "#e8f5e9",
+            "#2e7d32",
+        )
+
     def _apply_row_col_to_selected(self):
         selected = self.editor.selected_device_ids()
         if len(selected) != 1:
@@ -1901,6 +2317,7 @@ class MainWindow(QMainWindow):
             
         model_choice = dialog.get_selected_model()
         submodel = dialog.get_ollama_submodel() if model_choice == "Ollama" else None
+        abutment_enabled = dialog.is_abutment_enabled()
         dialog.apply_api_keys()
 
         # Build the data dict from current state
@@ -1909,10 +2326,17 @@ class MainWindow(QMainWindow):
         if "terminal_nets" not in data:
             data["terminal_nets"] = self._terminal_nets
 
-        # Inject abutment candidates if the user has activated abutment analysis
-        data["abutment_candidates"] = getattr(self, "_abutment_candidates", [])
+        # Inject abutment candidates only when the user opted in
+        if abutment_enabled:
+            data["abutment_candidates"] = getattr(self, "_abutment_candidates", [])
+        else:
+            data["abutment_candidates"] = []
 
-        self.overlay.show_message(f"Running AI initial placement ({model_choice})...")
+        # Store the abutment flag so the placer knows whether to abut fingers
+        data["no_abutment"] = not abutment_enabled
+
+        abut_label = "with abutment" if abutment_enabled else "no abutment"
+        self.overlay.show_message(f"Running AI initial placement ({model_choice}, {abut_label})...")
 
         self._ai_worker = GenericWorker(self._run_ai_initial_placement, data, model_choice, submodel)
         self._ai_worker.finished.connect(self._on_ai_placement_completed)

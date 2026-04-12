@@ -43,3 +43,5 @@ logs/
 *_graph.json
 *_placed.json
 .venv/
+.venv/
+venv/
