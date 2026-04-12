@@ -2,1280 +2,314 @@
 {
   "nodes": [
     {
-      "id": "MM5_f1",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 3.64,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_right": true
-      }
-    },
-    {
-      "id": "MM5_f2",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 3.71,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
-    },
-    {
-      "id": "MM5_f3",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 3.78,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
-    },
-    {
-      "id": "MM5_f4",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 3.85,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true
-      }
-    },
-    {
-      "id": "MM4_f1",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 3.136,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_right": true
-      }
-    },
-    {
-      "id": "MM4_f2",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 3.206,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
-    },
-    {
-      "id": "MM4_f3",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 3.276,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
-    },
-    {
-      "id": "MM4_f4",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 3.346,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true
-      }
-    },
-    {
-      "id": "MM3_f1",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 2.352,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_right": true
-      }
-    },
-    {
-      "id": "MM3_f2",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 2.422,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
-    },
-    {
-      "id": "MM3_f3",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 2.492,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
-    },
-    {
-      "id": "MM3_f4",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 2.562,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
-    },
-    {
-      "id": "MM3_f5",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 2.632,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
-    },
-    {
-      "id": "MM3_f6",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 2.702,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
-    },
-    {
-      "id": "MM3_f7",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 2.772,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
-    },
-    {
-      "id": "MM3_f8",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 2.842,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true
-      }
-    },
-    {
-      "id": "MM2_f1",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 1.568,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_right": true
-      }
-    },
-    {
-      "id": "MM2_f2",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 1.638,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
-    },
-    {
-      "id": "MM2_f3",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 1.708,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
-    },
-    {
-      "id": "MM2_f4",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 1.778,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
-    },
-    {
-      "id": "MM2_f5",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 1.848,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
-    },
-    {
-      "id": "MM2_f6",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 1.918,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
-    },
-    {
-      "id": "MM2_f7",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 1.988,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
-    },
-    {
-      "id": "MM2_f8",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 2.058,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true
-      }
-    },
-    {
-      "id": "MM1_f1",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 0.784,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_right": true
-      }
-    },
-    {
-      "id": "MM1_f2",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 0.854,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
-    },
-    {
-      "id": "MM1_f3",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 0.924,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
-    },
-    {
-      "id": "MM1_f4",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 0.994,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
-    },
-    {
-      "id": "MM1_f5",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 1.064,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
-    },
-    {
-      "id": "MM1_f6",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 1.134,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
-    },
-    {
-      "id": "MM1_f7",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 1.204,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
-    },
-    {
-      "id": "MM1_f8",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 1.274,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true
-      }
-    },
-    {
       "id": "MM0_f1",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 0.0,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_right": true
-      }
+      "geometry": { "x": 0.896, "y": 2.004, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": true }
     },
     {
       "id": "MM0_f2",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 0.07,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
+      "geometry": { "x": 0.966, "y": 2.004, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
     },
     {
       "id": "MM0_f3",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 0.14,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
+      "geometry": { "x": 1.036, "y": 2.004, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
     },
     {
       "id": "MM0_f4",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 0.21,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
+      "geometry": { "x": 1.106, "y": 2.004, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
     },
     {
       "id": "MM0_f5",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 0.28,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
+      "geometry": { "x": 1.176, "y": 2.004, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
     },
     {
       "id": "MM0_f6",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 0.35,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
+      "geometry": { "x": 1.246, "y": 2.004, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
     },
     {
       "id": "MM0_f7",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 0.42,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
+      "geometry": { "x": 1.316, "y": 2.004, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
     },
     {
       "id": "MM0_f8",
-      "type": "pmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 0.49,
-        "y": 0.668,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true
-      }
+      "geometry": { "x": 1.386, "y": 2.004, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": false }
     },
     {
-      "id": "MM9<7>",
-      "type": "nmos",
-      "electrical": {
-        "l": 2.8000000000000003e-08,
-        "nf": 1,
-        "nfin": 7.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 1.862,
-        "y": 0.0,
-        "width": 0.336,
-        "height": 0.8180000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true
-      }
+      "id": "MM1_f1",
+      "geometry": { "x": 1.610, "y": 1.336, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": true }
     },
     {
-      "id": "MM9<6>",
-      "type": "nmos",
-      "electrical": {
-        "l": 2.8000000000000003e-08,
-        "nf": 1,
-        "nfin": 7.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 1.792,
-        "y": 0.0,
-        "width": 0.336,
-        "height": 0.8180000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
+      "id": "MM1_f2",
+      "geometry": { "x": 1.680, "y": 1.336, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
     },
     {
-      "id": "MM9<5>",
-      "type": "nmos",
-      "electrical": {
-        "l": 2.8000000000000003e-08,
-        "nf": 1,
-        "nfin": 7.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 1.722,
-        "y": 0.0,
-        "width": 0.336,
-        "height": 0.8180000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
+      "id": "MM1_f3",
+      "geometry": { "x": 1.750, "y": 1.336, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
     },
     {
-      "id": "MM9<4>",
-      "type": "nmos",
-      "electrical": {
-        "l": 2.8000000000000003e-08,
-        "nf": 1,
-        "nfin": 7.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 1.652,
-        "y": 0.0,
-        "width": 0.336,
-        "height": 0.8180000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
+      "id": "MM1_f4",
+      "geometry": { "x": 1.820, "y": 1.336, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
     },
     {
-      "id": "MM9<3>",
-      "type": "nmos",
-      "electrical": {
-        "l": 2.8000000000000003e-08,
-        "nf": 1,
-        "nfin": 7.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 1.582,
-        "y": 0.0,
-        "width": 0.336,
-        "height": 0.8180000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
+      "id": "MM1_f5",
+      "geometry": { "x": 1.890, "y": 1.336, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
     },
     {
-      "id": "MM9<2>",
-      "type": "nmos",
-      "electrical": {
-        "l": 2.8000000000000003e-08,
-        "nf": 1,
-        "nfin": 7.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 1.512,
-        "y": 0.0,
-        "width": 0.336,
-        "height": 0.8180000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
+      "id": "MM1_f6",
+      "geometry": { "x": 1.960, "y": 1.336, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
     },
     {
-      "id": "MM9<1>",
-      "type": "nmos",
-      "electrical": {
-        "l": 2.8000000000000003e-08,
-        "nf": 1,
-        "nfin": 7.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 1.442,
-        "y": 0.0,
-        "width": 0.336,
-        "height": 0.8180000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
+      "id": "MM1_f7",
+      "geometry": { "x": 2.030, "y": 1.336, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
     },
     {
-      "id": "MM9<0>",
-      "type": "nmos",
-      "electrical": {
-        "l": 2.8000000000000003e-08,
-        "nf": 1,
-        "nfin": 7.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 1.372,
-        "y": 0.0,
-        "width": 0.336,
-        "height": 0.8180000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_right": true
-      }
+      "id": "MM1_f8",
+      "geometry": { "x": 2.100, "y": 1.336, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": false }
     },
     {
-      "id": "MM8<7>",
-      "type": "nmos",
-      "electrical": {
-        "l": 2.8000000000000003e-08,
-        "nf": 1,
-        "nfin": 7.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 1.036,
-        "y": 0.0,
-        "width": 0.336,
-        "height": 0.8180000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true
-      }
+      "id": "MM2_f1",
+      "geometry": { "x": 0.826, "y": 1.336, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": true }
     },
     {
-      "id": "MM8<6>",
-      "type": "nmos",
-      "electrical": {
-        "l": 2.8000000000000003e-08,
-        "nf": 1,
-        "nfin": 7.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 0.966,
-        "y": 0.0,
-        "width": 0.336,
-        "height": 0.8180000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
+      "id": "MM2_f2",
+      "geometry": { "x": 0.896, "y": 1.336, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
     },
     {
-      "id": "MM8<5>",
-      "type": "nmos",
-      "electrical": {
-        "l": 2.8000000000000003e-08,
-        "nf": 1,
-        "nfin": 7.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 0.896,
-        "y": 0.0,
-        "width": 0.336,
-        "height": 0.8180000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
+      "id": "MM2_f3",
+      "geometry": { "x": 0.966, "y": 1.336, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
     },
     {
-      "id": "MM8<4>",
-      "type": "nmos",
-      "electrical": {
-        "l": 2.8000000000000003e-08,
-        "nf": 1,
-        "nfin": 7.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 0.826,
-        "y": 0.0,
-        "width": 0.336,
-        "height": 0.8180000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
+      "id": "MM2_f4",
+      "geometry": { "x": 1.036, "y": 1.336, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
     },
     {
-      "id": "MM8<3>",
-      "type": "nmos",
-      "electrical": {
-        "l": 2.8000000000000003e-08,
-        "nf": 1,
-        "nfin": 7.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 0.756,
-        "y": 0.0,
-        "width": 0.336,
-        "height": 0.8180000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
+      "id": "MM2_f5",
+      "geometry": { "x": 1.106, "y": 1.336, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
     },
     {
-      "id": "MM8<2>",
-      "type": "nmos",
-      "electrical": {
-        "l": 2.8000000000000003e-08,
-        "nf": 1,
-        "nfin": 7.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 0.686,
-        "y": 0.0,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
+      "id": "MM2_f6",
+      "geometry": { "x": 1.176, "y": 1.336, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
     },
     {
-      "id": "MM8<1>",
-      "type": "nmos",
-      "electrical": {
-        "l": 2.8000000000000003e-08,
-        "nf": 1,
-        "nfin": 7.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 0.616,
-        "y": 0.0,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
+      "id": "MM2_f7",
+      "geometry": { "x": 1.246, "y": 1.336, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
     },
     {
-      "id": "MM8<0>",
-      "type": "nmos",
-      "electrical": {
-        "l": 2.8000000000000003e-08,
-        "nf": 1,
-        "nfin": 7.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 0.546,
-        "y": 0.0,
-        "width": 0.336,
-        "height": 0.8180000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_right": true
-      }
+      "id": "MM2_f8",
+      "geometry": { "x": 1.316, "y": 1.336, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": false }
     },
     {
-      "id": "MM10<3>",
-      "type": "nmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 0.21,
-        "y": 0.0,
-        "width": 0.336,
-        "height": 0.8180000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true
-      }
+      "id": "MM3_f1",
+      "geometry": { "x": 0.042, "y": 1.336, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": true }
     },
     {
-      "id": "MM10<2>",
-      "type": "nmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 0.14,
-        "y": 0.0,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
+      "id": "MM3_f2",
+      "geometry": { "x": 0.112, "y": 1.336, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
     },
     {
-      "id": "MM10<1>",
-      "type": "nmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 0.07,
-        "y": 0.0,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
+      "id": "MM3_f3",
+      "geometry": { "x": 0.182, "y": 1.336, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
     },
     {
-      "id": "MM10<0>",
-      "type": "nmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 0.0,
-        "y": 0.0,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_right": true
-      }
+      "id": "MM3_f4",
+      "geometry": { "x": 0.252, "y": 1.336, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
     },
     {
-      "id": "MM7",
-      "type": "nmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 2.492,
-        "y": 0.0,
-        "width": 0.336,
-        "height": 0.8180000000000001,
-        "orientation": "R0"
-      }
+      "id": "MM3_f5",
+      "geometry": { "x": 0.322, "y": 1.336, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
+    },
+    {
+      "id": "MM3_f6",
+      "geometry": { "x": 0.392, "y": 1.336, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
+    },
+    {
+      "id": "MM3_f7",
+      "geometry": { "x": 0.462, "y": 1.336, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
+    },
+    {
+      "id": "MM3_f8",
+      "geometry": { "x": 0.532, "y": 1.336, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": false }
+    },
+    {
+      "id": "MM4_f1",
+      "geometry": { "x": 1.176, "y": 0.668, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
+    },
+    {
+      "id": "MM4_f2",
+      "geometry": { "x": 1.470, "y": 0.668, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
+    },
+    {
+      "id": "MM4_f3",
+      "geometry": { "x": 1.764, "y": 0.668, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
+    },
+    {
+      "id": "MM4_f4",
+      "geometry": { "x": 2.058, "y": 0.668, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
+    },
+    {
+      "id": "MM5_f1",
+      "geometry": { "x": 0.000, "y": 0.668, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
+    },
+    {
+      "id": "MM5_f2",
+      "geometry": { "x": 0.294, "y": 0.668, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
+    },
+    {
+      "id": "MM5_f3",
+      "geometry": { "x": 0.588, "y": 0.668, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
+    },
+    {
+      "id": "MM5_f4",
+      "geometry": { "x": 0.882, "y": 0.668, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
     },
     {
       "id": "MM6",
-      "type": "nmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 2.198,
-        "y": 0.0,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      }
+      "geometry": { "x": 1.036, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": true }
+    },
+    {
+      "id": "MM7",
+      "geometry": { "x": 0.742, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": false }
+    },
+    {
+      "id": "MM8<0>",
+      "geometry": { "x": 0.182, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
+    },
+    {
+      "id": "MM8<1>",
+      "geometry": { "x": 0.252, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
+    },
+    {
+      "id": "MM8<2>",
+      "geometry": { "x": 0.322, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
+    },
+    {
+      "id": "MM8<3>",
+      "geometry": { "x": 0.392, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
+    },
+    {
+      "id": "MM8<4>",
+      "geometry": { "x": 0.462, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
+    },
+    {
+      "id": "MM8<5>",
+      "geometry": { "x": 0.532, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
+    },
+    {
+      "id": "MM8<6>",
+      "geometry": { "x": 0.602, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
+    },
+    {
+      "id": "MM8<7>",
+      "geometry": { "x": 0.672, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
+    },
+    {
+      "id": "MM9<0>",
+      "geometry": { "x": 1.400, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
+    },
+    {
+      "id": "MM9<1>",
+      "geometry": { "x": 1.470, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
+    },
+    {
+      "id": "MM9<2>",
+      "geometry": { "x": 1.540, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
+    },
+    {
+      "id": "MM9<3>",
+      "geometry": { "x": 1.610, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
+    },
+    {
+      "id": "MM9<4>",
+      "geometry": { "x": 1.680, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
+    },
+    {
+      "id": "MM9<5>",
+      "geometry": { "x": 1.750, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
+    },
+    {
+      "id": "MM9<6>",
+      "geometry": { "x": 1.820, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
+    },
+    {
+      "id": "MM9<7>",
+      "geometry": { "x": 1.890, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
+    },
+    {
+      "id": "MM10<0>",
+      "geometry": { "x": 0.042, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": true }
+    },
+    {
+      "id": "MM10<1>",
+      "geometry": { "x": 0.112, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
+    },
+    {
+      "id": "MM10<2>",
+      "geometry": { "x": 1.960, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
+    },
+    {
+      "id": "MM10<3>",
+      "geometry": { "x": 2.030, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": false }
     }
   ]
 }

@@ -136,22 +136,36 @@ def _build_net_adjacency(nodes: list, edges: list) -> str:
         lines.append(f"  {net:<12} -> {', '.join(devs)}{cross}")
     return "\n".join(lines)
 
-def _build_device_inventory(nodes: list) -> str:
-    """Return a structured device inventory string for the prompt."""
+def _build_device_inventory(nodes: list, row_summary: str = "") -> str:
+    """Return a structured device inventory string for the prompt.
+
+    Parameters
+    ----------
+    nodes       : list of node dicts
+    row_summary : optional pre-computed row assignment summary from
+                  ``pre_assign_rows()``.  When provided the inventory will
+                  reference multi-row placement instead of a single row per type.
+    """
     pmos = [n for n in nodes if n.get("type") == "pmos"]
     nmos = [n for n in nodes if n.get("type") == "nmos"]
     lines = []
     lines.append(f"  TOTAL: {len(nodes)} devices ({len(pmos)} PMOS, {len(nmos)} NMOS)")
     lines.append("")
-    lines.append("  PMOS devices (must all be placed in the PMOS row):")
+    lines.append("  PMOS devices (must be placed in PMOS rows — see ROW ASSIGNMENT below):")
     for n in sorted(pmos, key=lambda x: x["id"]):
         e = n.get("electrical", {})
         lines.append(f"    {n['id']:<10}  nfin={e.get('nfin',1)}  nf={e.get('nf',1)}  l={e.get('l')}")
     lines.append("")
-    lines.append("  NMOS devices (must all be placed in the NMOS row):")
+    lines.append("  NMOS devices (must be placed in NMOS rows — see ROW ASSIGNMENT below):")
     for n in sorted(nmos, key=lambda x: x["id"]):
         e = n.get("electrical", {})
         lines.append(f"    {n['id']:<10}  nfin={e.get('nfin',1)}  nf={e.get('nf',1)}  l={e.get('l')}")
+
+    if row_summary:
+        lines.append("")
+        lines.append("  PRE-ASSIGNED ROW LAYOUT:")
+        lines.append(row_summary)
+
     return "\n".join(lines)
 
 def _build_block_info(nodes: list, graph_data: dict) -> str:
@@ -390,7 +404,8 @@ def _build_abutment_chains(nodes: list, candidates: list) -> list[list[str]]:
 
 
 
-def _heal_abutment_positions(nodes: list, candidates: list) -> list:
+def _heal_abutment_positions(nodes: list, candidates: list,
+                              no_abutment: bool = False) -> list:
     """Robust post-placement healing with chain-based topological clustering.
 
     Algorithm (per row):
@@ -403,6 +418,12 @@ def _heal_abutment_positions(nodes: list, candidates: list) -> list:
     4. Separate different chains / standalone devices by device width.
     5. The result is guaranteed to pass _validate_placement even when the
        LLM outputs completely wrong X values inside a chain.
+
+    Parameters
+    ----------
+    no_abutment : bool
+        If True, skip ALL abutment chain logic. Pack every device at standard
+        spacing (device width) and clear all abutment flags.
     """
     ABUT_SPACING = 0.070   # µm between abutted device origins
     PITCH        = 0.294   # µm between non-abutted device origins
@@ -424,6 +445,34 @@ def _heal_abutment_positions(nodes: list, candidates: list) -> list:
             geo["y"] = PASSIVE_Y
             p_width = geo.get("width", PITCH)
             cursor = round(cursor + p_width, 6)
+
+    # ── No-abutment mode: simple left-to-right packing per row ──────────
+    if no_abutment:
+        passive_ids = {p["id"] for p in passives} if passives else set()
+        row_buckets: dict[float, list] = defaultdict(list)
+        for n in nodes:
+            if n.get("id") in passive_ids:
+                continue
+            y = round(float(n.get("geometry", {}).get("y", 0.0)), 3)
+            row_buckets[y].append(n)
+
+        for y_key, row_nodes in row_buckets.items():
+            row_sorted = sorted(row_nodes,
+                                key=lambda n: n.get("geometry", {}).get("x", 0.0))
+            if not row_sorted:
+                continue
+            cursor = row_sorted[0].get("geometry", {}).get("x", 0.0)
+            for dev in row_sorted:
+                geo = dev.setdefault("geometry", {})
+                geo["x"] = round(cursor, 6)
+                geo["y"] = round(float(y_key), 6)
+                # Clear ALL abutment flags
+                dev["abutment"] = {"abut_left": False, "abut_right": False}
+                dev_w = geo.get("width", PITCH)
+                cursor = round(cursor + dev_w, 6)
+        return nodes
+
+    # ── Normal abutment mode below ──────────────────────────────────────
 
     # 1. Identify chains across ALL nodes (not per-row)
     chains = _build_abutment_chains(nodes, candidates)
@@ -534,13 +583,22 @@ def _heal_abutment_positions(nodes: list, candidates: list) -> list:
 # Core Structured Prompt
 # ---------------------------------------------------------------------------
 def generate_vlsi_prompt(prompt_graph, inventory_str, adjacency_str, block_str,
-                         abutment_str: str = "") -> str:
-    """Returns the perfectly structured core VLSI formatting string for LLMs."""
+                         abutment_str: str = "",
+                         row_summary: str = "",
+                         matching_section: str = "") -> str:
+    """Returns the perfectly structured core VLSI formatting string for LLMs.
+
+    Parameters
+    ----------
+    row_summary      : human-readable row assignment from ``pre_assign_rows()``
+    matching_section : matching/symmetry constraints from
+                       ``build_matching_section()``
+    """
 
     abut_section = ""
     if abutment_str and abutment_str.strip() not in ("", "None detected."):
         abut_section = f"""
-8. Transistor Abutment (Diffusion Sharing — HIGHEST PRIORITY):
+9. Transistor Abutment (Diffusion Sharing — HIGHEST PRIORITY):
 The following transistors share a Source/Drain net and MUST be abutted to save area.
 
 REQUIRED ABUTMENT CHAINS:
@@ -567,69 +625,114 @@ OUTPUT EXAMPLE FOR ABUTTED PAIR:
 }}
 """
 
-    return f"""
-You are an expert VLSI placement engineer.
+    # --- Row assignment section ---
+    row_assignment_section = ""
+    if row_summary:
+        row_assignment_section = f"""
+ROW ASSIGNMENT (pre-computed — MANDATORY Y values):
+{row_summary}
 
-Given this transistor-level graph:
+CRITICAL: You MUST use the Y values from this table. Do NOT invent new Y values.
+Multiple PMOS rows and NMOS rows are used for rectangular form-factor.
+"""
 
-{json.dumps(prompt_graph, indent=2)}
+    # --- Matching / symmetry section ---
+    matching_prompt_section = ""
+    if matching_section:
+        matching_prompt_section = f"""
+8. Transistor Matching & Symmetry Constraints:
+{matching_section}
+"""
+
+    return f"""You are a world-class VLSI analog placement engineer with deep expertise in
+FinFET analog layout, parasitic-aware placement, and high-performance analog
+circuit design (op-amps, comparators, current mirrors, data converters).
+
+YOUR OBJECTIVE: Generate an optimal initial placement that:
+  (a) Minimises total estimated wire length (HPWL)
+  (b) Preserves symmetry for all matched / differential device pairs
+  (c) Maximises diffusion sharing (abutment) to reduce parasitic capacitance
+  (d) Produces a compact, near-rectangular bounding box
+  (e) Satisfies ALL DRC constraints listed below
+
+REASONING STEPS (think through these before writing coordinates):
+  1. Study the ROW ASSIGNMENT table — each device has a FIXED Y coordinate.
+  2. Study the NET ADJACENCY list — devices sharing critical nets should be adjacent.
+  3. Identify matched blocks marked [FIXED MATCHED BLOCK] — these are pre-interdigitated
+     and MUST be placed as single units. Just assign their origin X.
+  4. Place the most-connected device first, then place neighbors to minimise wire length.
+  5. Within each row, order devices to minimise the total number of net crossings.
+  6. Verify no overlaps: next device X >= previous device X + previous device width.
+
+=== INPUT DATA ===
 
 DEVICE INVENTORY:
 {inventory_str}
 
-NET ADJACENCY (Critical Routing Requirements):
+NET ADJACENCY (devices sharing each net — place them near each other):
 {adjacency_str}
 
-BLOCK GROUPING (Hierarchical Structure):
+BLOCK GROUPING:
 {block_str}
+{row_assignment_section}
+=== DRC & FLOORPLANNING RULES ===
 
-Generate an initial placement based on the following strict DRC and Floorplanning rules:
+1. Row Structure & Y-Axis Placement:
+   - Row pitch = 0.668 um.  NMOS rows: y = 0, 0.668, 1.336, ...
+   - PMOS rows sit ABOVE all NMOS rows.
+   - CRITICAL: No row may contain both NMOS and PMOS.
+   - Use the ROW ASSIGNMENT table above for the exact Y value of each device.
+   - If no table is provided: NMOS y=0.000, PMOS y=0.668.
 
-1. Device Types & Y-Axis Placement:
-- Place NMOS devices exactly at y = 0.
-- Place PMOS devices exactly at y = 0.668 (directly above NMOS row).
+2. Fin Grid Quantisation:
+   - ALL coordinates must snap to finPitch = 0.014 um multiples.
+   - Fractional or arbitrary coordinates are FORBIDDEN.
 
-2. Fin Quantization & Grid:
-- Placement coordinates must snap to a discrete Fin Grid.
-- The Fin pitch is 0.014 um. Continuous (fractional) coordinate placement is strictly forbidden.
+3. Spacing & Overlap:
+   - Non-abutted devices: next origin X >= prev origin X + prev width (0.294 um standard).
+   - Abutted devices: next origin X = prev origin X + 0.070 um.
+   - Vertical overlap between devices is FORBIDDEN.
 
-3. Spacing and Overlap Limits:
-- For NON-ABUTTED transistors: the next device origin x MUST be >= previous device origin x + previous device width. Bounding boxes should touch (zero gap).
-- For standard transistors the width is 0.294 um, so standard spacing is 0.294 um.
-- VERTICAL overlap is strictly forbidden.
-- Both devices in any pair must be aligned on the same Y row.
+4. Voltage Domain Isolation:
+   - Different voltage domains (0.8 V, 1.5 V, 1.8 V) must be physically isolated.
 
-4. Voltage Domains & Isolation:
-- Strictly isolate different voltage domains (0.8 V, 1.5 V, 1.8 V).
-- Direct adjacency between 0.8 V and 1.8 V blocks is strictly forbidden.
-
-5. Multi-Finger Devices (CRITICAL):
-- Devices like MM1_f1, MM1_f2, MM1_f3 are FINGERS of the SAME base device MM1.
-- ALL fingers of the same device MUST be placed in consecutive slots in the SAME row.
-- Fingers must be ordered sequentially: MM1_f1, MM1_f2, MM1_f3, ... (no gaps, no reordering).
-- Adjacent fingers that SHARE A NET on their touching terminals are abutted. Set abut_right=true on finger N and abut_left=true on finger N+1.
-- The step between consecutive abutted finger origins is exactly 0.070 um.
-- If two consecutive fingers do NOT share a terminal net, they are NOT abutted. Use standard spacing (device width).
+5. Multi-Finger Devices:
+   - MM1_f1, MM1_f2, ... are FINGERS of the same transistor MM1.
+   - ALL fingers MUST be consecutive in the same row, in ascending order.
+   - Adjacent same-net-sharing fingers: abutted at 0.070 um pitch.
+   - Otherwise: standard 0.294 um spacing.
 
 6. Block Grouping:
-- Devices belonging to the same block MUST be placed adjacent to each other.
-- Within each row (PMOS / NMOS / Passive), keep block members contiguous.
-- Do not interleave devices from different blocks.
+   - Same-block devices MUST be contiguous. No interleaving across blocks.
 
-7. Passive Devices (Resistors & Capacitors):
-- Devices with type="res" or type="cap" are PASSIVE COMPONENTS.
-- Place ALL passive devices in a dedicated PASSIVE ROW at y = 1.630.
-- NEVER place passives in the PMOS row (y=0.668) or NMOS row (y=0).
-- Passives MUST NOT overlap with each other or with transistors.
-- Passive spacing: next passive origin x >= previous passive origin x + previous passive width (zero gap, bounding boxes aligned).
-{abut_section}
-IMPORTANT:
-You must return ONLY a JSON object containing a SINGLE key "nodes" which holds the updated array of devices.
-DO NOT return the "edges", "blocks", or "terminal_nets" arrays.
-Your task is to:
-1. Update "x", "y", and "orientation" (default "R0") keys inside every object within the "nodes" array.
-2. For abutment pairs, add an "abutment" key with {{"abut_left": true/false, "abut_right": true/false}} flags as specified in the rules.
+7. Passive Devices:
+   - type="res" or type="cap" → dedicated PASSIVE ROW above all transistor rows.
 
-Return ONLY raw JSON. Do not include explanations, markdown, or text outside the JSON object.
-CRITICAL: Your response MUST be complete valid JSON. Do NOT truncate the output.
+{matching_prompt_section}{abut_section}
+=== OUTPUT FORMAT ===
+
+Return ONLY a JSON object with a single key "nodes" containing the array of placed devices.
+Do NOT return "edges", "blocks", or "terminal_nets".
+
+For each device, set:
+  - "x": origin X coordinate (fin-grid snapped)
+  - "y": from ROW ASSIGNMENT table
+  - "orientation": "R0" (default) or as needed
+  - "abutment": {{"abut_left": bool, "abut_right": bool}} for abutted pairs
+
+CRITICAL: Your response MUST be complete valid JSON. Do NOT truncate.
+CRITICAL: Include EVERY device from the inventory — missing devices = failure.
+CRITICAL: Matched blocks marked [FIXED] must be placed as single units.
+CRITICAL: The footprint (width) of each group in the ROW ASSIGNMENT table is in real layout µm.
+  - A group with footprint=2.352 µm placed at x=0 occupies X range [0, 2.352].
+  - The next group must start at x >= 2.352 (+ gap if needed).
+  - DO NOT pile all groups at x < 1.0 — this WILL cause overlaps.
+  - Spread devices across the full width of the row.
+
+Return ONLY raw JSON. No markdown, no explanation, no commentary.
+
+TRANSISTOR-LEVEL GRAPH:
+
+{json.dumps(prompt_graph, indent=2)}
 """
+
