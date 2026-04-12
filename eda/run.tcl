@@ -86,7 +86,105 @@ proc run_extraction {operation lib cell} {
 }
 
 # --------------------------------------------------------------------
-# 2. STARTUP INSTRUCTIONS
+# 2. THE CREATE COMMAND
+# --------------------------------------------------------------------
+proc run_create {operation lib cell} {
+    # Pull in the global directory variable
+    global EDA_TOOLS_DIR
+    
+    # Input Validation
+    set valid_ops {sch schematic lay layout all sdl -a}
+    
+    if {[lsearch -exact $valid_ops [string tolower $operation]] == -1} {
+        puts "Error: Invalid create operation '$operation'."
+        puts "Valid options are: [join $valid_ops {, }]"
+        return
+    }
+
+    # Map inputs to standard display names and execution flags
+    switch -exact -- [string tolower $operation] {
+        "sch" - "schematic" {
+            set display_op "SCHEMATIC"
+            set run_sch 1
+            set run_lay 0
+            set run_sdl 0
+        }
+        "lay" - "layout" {
+            set display_op "LAYOUT"
+            set run_sch 0
+            set run_lay 1
+            set run_sdl 0
+        }
+        "sdl" {
+            set display_op "SDL"
+            set run_sch 0
+            set run_lay 0
+            set run_sdl 1
+        }
+        "all" - "-a" {
+            set display_op "ALL"
+            set run_sch 1
+            set run_lay 1
+        }
+    }
+
+    puts "\n========================================"
+    puts " Launching Create Flow..."
+    puts " Operation : $display_op"    
+    puts " Library   : $lib"
+    puts " Cell      : $cell"
+    puts "========================================\n"
+
+    # Package the inputs so the target scripts can read them
+    set ::argv [list $lib $cell]
+    set ::argc 2
+
+    # Build reliable paths to your creation scripts
+    set sch_script [file join $EDA_TOOLS_DIR "create_sch.tcl"]
+    set lay_script [file join $EDA_TOOLS_DIR "create_lay.tcl"]
+    set sdl_script [file join $EDA_TOOLS_DIR "create_sdl.tcl"]
+
+    # Execute Schematic Creation
+    if {$run_sch == 1} {
+        if {[file exists $sch_script]} {
+            puts ">>> Sourcing: $sch_script..."
+            if {[catch { source [file normalize $sch_script] } result]} {
+                puts "Error: Failed to source $sch_script: $result"
+            }
+        } else {
+            puts "Error: Could not find $sch_script"
+        }
+    }
+
+    # Execute Layout Creation
+    if {$run_lay == 1} {
+        if {[file exists $lay_script]} {
+            puts ">>> Sourcing: $lay_script..."
+            if {[catch { source [file normalize $lay_script] } result]} {
+                puts "Error: Failed to source $lay_script: $result"
+            }
+        } else {
+            puts "Error: Could not find $lay_script"
+        }
+    }
+    
+    # Execute SDL Creation
+    if {$run_sdl == 1} {
+        if {[file exists $sdl_script]} {
+            puts ">>> Sourcing: $sdl_script..."
+            if {[catch { source [file normalize $sdl_script] } result]} {
+                puts "Error: Failed to source $sdl_script: $result"
+            }
+        } else {
+            puts "Error: Could not find $sdl_script"
+        }
+    }
+    
+    puts "\nCreate Flow Done!"
+}
+
+# --------------------------------------------------------------------
+# 3. STARTUP INSTRUCTIONS
 # --------------------------------------------------------------------
 puts "--------------------------------------------------------"
 puts ">>> run.tcl loaded successfully! <<<"
@@ -96,5 +194,6 @@ puts "Available Commands:"
 puts "  run_extraction <operation> <library_name> <cell_name>"
 puts "      (Valid ops: net, oas, all, -n, -o, -a)"
 puts ""
+puts "  run_create <operation> <library_name> <cell_name>"
 puts "      (Valid ops: sch, lay, sdl, all, -a)"
 puts "--------------------------------------------------------"
