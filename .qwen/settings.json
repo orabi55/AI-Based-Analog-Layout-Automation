@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python *)",
+      "Bash(type *)",
+      "Bash(powershell *)",
+      "Bash(timeout *)",
+      "Bash(del *)"
+    ]
+  },
+  "$version": 3
+}

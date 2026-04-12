@@ -165,6 +165,7 @@ def _run_llm_once(chat_messages, full_prompt, selected_model, ollama_model="llam
         except Exception as e:
             return f"OpenAI Error: {str(e)}"
 
+    elif selected_model == "Ollama":
         try:
             import requests
             response = requests.post(
@@ -173,7 +174,8 @@ def _run_llm_once(chat_messages, full_prompt, selected_model, ollama_model="llam
                     "model": ollama_model,
                     "messages": chat_messages,
                     "stream": False
-                }
+                },
+                timeout=300
             )
             if response.status_code != 200:
                 err_msg = response.text
@@ -186,6 +188,49 @@ def _run_llm_once(chat_messages, full_prompt, selected_model, ollama_model="llam
             return response.json().get("message", {}).get("content", "").strip()
         except Exception as e:
             return f"Ollama Error: Could not connect or generate response. ({str(e)})\nEnsure 'ollama serve' is running locally on port 11434."
+
+    elif selected_model == "Groq":
+        groq_key = os.environ.get("GROQ_API_KEY", "")
+        if not groq_key:
+            return "Error: GROQ_API_KEY not set. Please update the API key in the Model Selection tool."
+
+        try:
+            from groq import Groq as GroqClient
+            client = GroqClient(api_key=groq_key)
+
+            response = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=chat_messages,
+                temperature=0.4,
+                max_tokens=4096
+            )
+
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            return f"Groq Error: {str(e)}"
+
+    elif selected_model == "DeepSeek":
+        deepseek_key = os.environ.get("DEEPSEEK_API_KEY", "")
+        if not deepseek_key:
+            return "Error: DEEPSEEK_API_KEY not set. Please update the API key in the Model Selection tool."
+
+        try:
+            from openai import OpenAI
+            client = OpenAI(
+                api_key=deepseek_key,
+                base_url="https://api.deepseek.com"
+            )
+
+            response = client.chat.completions.create(
+                model="deepseek-chat",
+                messages=chat_messages,
+                temperature=0.4,
+                max_tokens=4096
+            )
+
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            return f"DeepSeek Error: {str(e)}"
 
     return f"Error: Unknown model selected ('{selected_model}')."
 

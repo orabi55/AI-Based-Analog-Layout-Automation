@@ -1,11 +1,13 @@
 """
-ollama_placer.py
+deepseek_placer.py
 ================
-Generates an initial analog transistor placement using the local Ollama API.
+Generates an initial analog transistor placement using the DeepSeek API.
+Uses deepseek-chat model with OpenAI-compatible API.
 """
 
+import os
 import json
-import requests
+from openai import OpenAI
 
 from ai_agent.ai_initial_placement.placer_utils import (
     sanitize_json, _ensure_placement_dict, _build_net_adjacency,
@@ -15,12 +17,17 @@ from ai_agent.ai_initial_placement.placer_utils import (
 )
 
 MAX_RETRIES = 2
-# Timeout in seconds — local models are slower, give them enough time
-# but avoid hanging indefinitely. Small models on complex prompts can
-# take 2-5 minutes; we set a generous ceiling.
-REQUEST_TIMEOUT = 600  # 10 minutes
 
-def ollama_generate_placement(input_json: str, output_json: str, model="llama3.2"):
+def deepseek_generate_placement(input_json: str, output_json: str):
+    api_key = os.getenv("DEEPSEEK_API_KEY")
+    if not api_key:
+        raise ValueError("DEEPSEEK_API_KEY not set")
+
+    client = OpenAI(
+        api_key=api_key,
+        base_url="https://api.deepseek.com"
+    )
+
     with open(input_json, "r") as f:
         graph_data = json.load(f)
 
@@ -29,7 +36,7 @@ def ollama_generate_placement(input_json: str, output_json: str, model="llama3.2
 
     norm_nodes, y_offset = _normalise_coords(nodes)
     if abs(y_offset) > 1e-9:
-        print(f"[ollama_placer] Y-coord offset applied: {y_offset:+.4f} µm")
+        print(f"[deepseek_placer] Y-coord offset applied: {y_offset:+.4f} µm")
 
     prompt_graph = dict(graph_data)
     prompt_graph["nodes"] = norm_nodes
@@ -38,7 +45,6 @@ def ollama_generate_placement(input_json: str, output_json: str, model="llama3.2
     inventory_str = _build_device_inventory(norm_nodes)
     block_str = _build_block_info(norm_nodes, graph_data)
 
-    # Build abutment constraint string if candidates were provided
     abutment_str = _format_abutment_candidates(
         graph_data.get("abutment_candidates", [])
     )
@@ -48,36 +54,19 @@ def ollama_generate_placement(input_json: str, output_json: str, model="llama3.2
 
     last_error = None
     for attempt in range(1, MAX_RETRIES + 1):
-        print(f"[ollama_placer] Attempt {attempt}/{MAX_RETRIES}...")
+        print(f"[deepseek_placer] Attempt {attempt}/{MAX_RETRIES}...")
 
         try:
-            response = requests.post(
-                "http://localhost:11434/api/generate",
-                json={
-                    "model": model,
-                    "prompt": prompt,
-                    "stream": False,
-                    "format": "json",
-                    "options": {
-                        "temperature": 0.1,
-                        "num_predict": 8192,
-                    }
-                },
-                timeout=REQUEST_TIMEOUT
+            response = client.chat.completions.create(
+                model="deepseek-chat",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3
             )
-            if response.status_code != 200:
-                err_msg = response.text
-                try:
-                    err_json = response.json()
-                    err_msg = err_json.get("error", err_msg)
-                except Exception:
-                    pass
-                raise RuntimeError(f"Ollama API Error ({response.status_code}): {err_msg}")
-            result = response.json()
-            raw_text = result.get("response", "{}")
+
+            raw_output = response.choices[0].message.content.strip()
 
             val_errors = []
-            placement = _ensure_placement_dict(sanitize_json(raw_text))
+            placement = _ensure_placement_dict(sanitize_json(raw_output))
             placed_nodes = placement.get("nodes", [])
 
             if not isinstance(placed_nodes, list) or not placed_nodes:
@@ -97,7 +86,7 @@ def ollama_generate_placement(input_json: str, output_json: str, model="llama3.2
 
         except Exception as e:
             last_error = e
-            print(f"[ollama_placer] Attempt {attempt} failed: {e}")
+            print(f"[deepseek_placer] Attempt {attempt} failed: {e}")
             if attempt < MAX_RETRIES:
                 prompt += f"\n\nPREVIOUS ATTEMPT FAILED. Error: {e}\nYou MUST output COMPLETE, VALID JSON object with a 'nodes' array."
 

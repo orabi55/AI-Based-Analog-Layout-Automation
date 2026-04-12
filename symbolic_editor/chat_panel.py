@@ -152,7 +152,7 @@ class ChatPanel(QWidget):
 
         # Model selector dropdown
         self.model_combo = QComboBox()
-        self.model_combo.addItems(["Gemini", "OpenAI", "Ollama"])
+        self.model_combo.addItems(["Gemini", "OpenAI", "Ollama", "Groq", "DeepSeek"])
         self.model_combo.setToolTip("Select AI Model for Chat")
         self.model_combo.setStyleSheet(
             """
