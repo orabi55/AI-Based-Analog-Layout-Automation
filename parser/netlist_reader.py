@@ -5,13 +5,21 @@ Merged pipeline stage combining models, hierarchy, and netlist parsing.
 """
 models.py
 Core data structures for the parsing module. Includes the `Device` and `Netlist`
-classes representing circuit components and connectivity, as well as utility functions 
+classes representing circuit components and connectivity, as well as utility functions
 for parsing SPICE numerical values.
 """
+
 
 class Device:
     """
     Represents one circuit device (transistor, resistor, capacitor...)
+
+    Hierarchy metadata attributes (set when array/multiplier/finger detected):
+        array_size  : int  — array suffix <N> from device name (1 if none)
+        multiplier  : int  — m=N parameter value (1 if none)
+        fingers     : int  — nf=N parameter value (1 if none)
+    These are stored in self.params but also exposed as convenience
+    properties for code that needs quick access without digging into params.
     """
 
     def __init__(self, name, dtype, pins, params):
@@ -22,6 +30,22 @@ class Device:
 
     def __repr__(self):
         return f"<Device {self.name} type={self.type}>"
+
+    # -- Convenience properties for hierarchy metadata ------------------------
+    @property
+    def array_size(self) -> int:
+        """Array suffix <N> from device name; 1 if none."""
+        return self.params.get('array_size', 1)
+
+    @property
+    def multiplier(self) -> int:
+        """Multiplier m=N; 1 if not specified."""
+        return self.params.get('m', 1)
+
+    @property
+    def fingers(self) -> int:
+        """Finger count nf=N; 1 if not specified."""
+        return self.params.get('nf', 1)
 
 
 class Netlist:
@@ -137,7 +161,7 @@ def expand_instance(line, subckts, prefix=""):
     subckt_name = tokens[-1]        # subcircuit being instantiated
 
     if subckt_name not in subckts:
-        # Unknown subcircuit â€” skip with warning
+        # Unknown subcircuit — skip with warning
         print(f"[Hierarchy] Warning: subcircuit '{subckt_name}' not found, "
               f"skipping instance '{inst_name}'")
         return []
@@ -172,20 +196,20 @@ def expand_instance(line, subckts, prefix=""):
                 if token in port_map:
                     remapped_parts.append(port_map[token])
                 else:
-                    # Internal net â€” prefix to avoid name collisions
+                    # Internal net — prefix to avoid name collisions
                     remapped_parts.append(f"{full_prefix}{token}")
             remapped_line = " ".join(remapped_parts)
             # Recurse
             expanded.extend(expand_instance(remapped_line, subckts, prefix=""))
         else:
-            # Leaf device (M, R, C, etc.) â€” rename and remap nets
+            # Leaf device (M, R, C, etc.) — rename and remap nets
             parts[0] = f"{full_prefix}{devname}"
             for i in range(1, len(parts)):
                 token = parts[i]
                 if token in port_map:
                     parts[i] = port_map[token]
                 elif "=" not in token:
-                    # Internal net â€” prefix to avoid collisions
+                    # Internal net — prefix to avoid collisions
                     # But don't prefix model names or key=value params
                     # Heuristic: if token position is 1..4 for MOS (D,G,S,B nets)
                     # or if the token doesn't look like a param
@@ -288,7 +312,7 @@ def flatten_netlist(filename):
             # Expand X-instance recursively
             flat_lines.extend(expand_instance(line, subckts))
         else:
-            # Leaf device at top level â€” keep as-is
+            # Leaf device at top level — keep as-is
             flat_lines.append(line)
 
     return flat_lines
@@ -434,13 +458,17 @@ def flatten_netlist_with_blocks(filename):
 
 """
 netlist_reader.py
-Entry point for reading SPICE/CDL text netlists. 
-Orchestrates flattening the netlist hierarchy, parsing leaf device parameters (like M, C, R limits), 
+Entry point for reading SPICE/CDL text netlists.
+Orchestrates flattening the netlist hierarchy, parsing leaf device parameters (like M, C, R limits),
 and constructing the unified structural mappings into `Netlist` objects.
 """
 
 import re
 import logging
+
+
+# Import hierarchy helpers for array suffix detection
+from .hierarchy import parse_array_suffix
 
 
 # -------------------------------------------------
@@ -452,7 +480,25 @@ def parse_mos(tokens):
     Generic MOS parser for CDL style:
 
     MM25 D G S B model param=value ...
-    Expands multi-finger (nf) and multiplier (m).
+
+    Naming convention for expanded devices:
+      - Multiplier/array children:  {parent}_m{N}       (N is 1-based)
+      - Finger children:             {parent}_f{N}       (N is 1-based)
+      - Mixed:                       {parent}_m{M}_f{F}
+
+    Array-indexed devices (e.g. MM9<7> from separate SPICE lines):
+      - Each line is one array copy with nf=1, m=1 (typically)
+      - Named as {base_name}_m{array_index+1}
+      - Grouped under parent={base_name} during hierarchy reconstruction
+      - Total array count determined by counting children during grouping
+
+    Multiplier + finger expansion (e.g. m=3, nf=5 from a single line):
+      - Expands to 15 devices: MM6_m1_f1 .. MM6_m1_f5, MM6_m2_f1 .. etc.
+      - All share parent=MM6
+
+    Error handling:
+      - Non-integer m or nf values are rounded.
+      - Missing closing angle bracket in array syntax returns None.
     """
 
     name = tokens[0]
@@ -484,32 +530,90 @@ def parse_mos(tokens):
             params[k] = val
 
             if k == "nf":
-                nf = int(val)
+                try:
+                    nf = int(val)
+                except (ValueError, TypeError):
+                    nf = int(round(float(val)))
 
             if k == "m":
-                m = int(val)
+                try:
+                    m = int(val)
+                except (ValueError, TypeError):
+                    m = int(round(float(val)))
+
+    # --- Detect array suffix <N> (0-based index) --------------------------
+    base_name, array_idx = parse_array_suffix(name)
 
     pins = {"D": D, "G": G, "S": S, "B": B}
 
-    # -------------------------------------------------
-    # FINGER + MULTIPLIER EXPANSION
-    # -------------------------------------------------
+    if array_idx is not None:
+        # ── ARRAY-INDEXED DEVICE ──
+        # This is one copy of an array (e.g., MM9<7> is the 8th copy of MM9).
+        # Total array count is determined during grouping by counting children.
+        # Each copy may also have its own m>1 or nf>1.
 
-    total_instances = nf * m
+        total = nf * m
+        devices = []
+        for i in range(total):
+            if m > 1:
+                # Array copy + multiplier: combined flat m-level index
+                # MM9<3> with m=2 → MM9_m7, MM9_m8
+                combined_idx = array_idx * m + i + 1
+                new_name = f"{base_name}_m{combined_idx}"
+                mult_idx = combined_idx
+                finger_idx = None
+            elif nf > 1:
+                # Array copy + fingers: m-level + f-level
+                # MM9<3> with nf=5 → MM9_m4_f1 through MM9_m4_f5
+                mult_idx = array_idx + 1
+                finger_idx = i + 1
+                new_name = f"{base_name}_m{mult_idx}_f{finger_idx}"
+            else:
+                # Array only
+                mult_idx = array_idx + 1
+                new_name = f"{base_name}_m{mult_idx}"
+                finger_idx = None
 
+            new_params = params.copy()
+            new_params["nf"] = 1
+            new_params["parent"] = base_name
+            new_params["array_index"] = array_idx
+            new_params["multiplier_index"] = mult_idx
+            if finger_idx is not None:
+                new_params["finger_index"] = finger_idx
+            new_params["m"] = m
+            new_params["orig_nf"] = nf  # preserve original nf for grouping
+
+            devices.append(Device(new_name, dtype, pins, new_params))
+        return devices
+
+    # ── NON-ARRAY DEVICE: normal m/nf expansion ──
+    total = nf * m
     devices = []
 
-    for i in range(total_instances):
+    for i in range(total):
+        if total > 1:
+            mult_bucket = i // nf + 1
+            finger_idx = i % nf + 1
 
-        if total_instances > 1:
-            new_name = f"{name}_f{i+1}"
+            if m > 1 and nf > 1:
+                new_name = f"{name}_m{mult_bucket}_f{finger_idx}"
+            elif m > 1:
+                new_name = f"{name}_m{mult_bucket}"
+            else:
+                new_name = f"{name}_f{finger_idx}"
         else:
             new_name = name
 
-        # Each physical finger should have nf = 1
         new_params = params.copy()
         new_params["nf"] = 1
+        new_params["m"] = m
         new_params["parent"] = name
+        if total > 1:
+            if m > 1:
+                new_params["multiplier_index"] = mult_bucket
+            if nf > 1:
+                new_params["finger_index"] = finger_idx
 
         devices.append(Device(new_name, dtype, pins, new_params))
 
@@ -593,8 +697,6 @@ def parse_res(tokens):
 # -------------------------------------------------
 
 
-
-
 def parse_line(line):
     tokens = line.split()
     if not tokens:
@@ -617,7 +719,6 @@ def parse_line(line):
     return None
 
 
-
 # -------------------------------------------------
 # Main Reader
 # -------------------------------------------------
@@ -629,7 +730,7 @@ def read_netlist(filename):
 
     nl = Netlist()
 
-    # STEP 1 â€” flatten hierarchy
+    # STEP 1 — flatten hierarchy
     flat_lines = flatten_netlist(filename)
 
     # DEBUG: print flattened lines
@@ -637,7 +738,7 @@ def read_netlist(filename):
     for l in flat_lines:
         logging.debug(l)
 
-    # STEP 2 â€” parse devices
+    # STEP 2 — parse devices
     for line in flat_lines:
 
         line = line.strip()
@@ -652,9 +753,9 @@ def read_netlist(filename):
                 nl.add_device(d)
         elif dev:
             nl.add_device(dev)
-        
 
-    # STEP 3 â€” build connectivity
+
+    # STEP 3 — build connectivity
     nl.build_connectivity()
 
     return nl
@@ -670,7 +771,7 @@ def read_netlist_with_blocks(filename):
 
     nl = Netlist()
 
-    # STEP 1 â€” flatten hierarchy with block tracking
+    # STEP 1 — flatten hierarchy with block tracking
     flat_lines, block_map = flatten_netlist_with_blocks(filename)
 
     # DEBUG: print flattened lines
@@ -678,7 +779,7 @@ def read_netlist_with_blocks(filename):
     for l in flat_lines:
         logging.debug(l)
 
-    # STEP 2 â€” parse devices
+    # STEP 2 — parse devices
     for line in flat_lines:
         line = line.strip()
         if not line or line.startswith('*'):
@@ -690,8 +791,64 @@ def read_netlist_with_blocks(filename):
         elif dev:
             nl.add_device(dev)
 
-    # STEP 3 â€” build connectivity
+    # STEP 3 — build connectivity
     nl.build_connectivity()
 
     return nl, block_map
 
+
+# -------------------------------------------------
+# Hierarchy-aware netlist reader
+# -------------------------------------------------
+
+def read_netlist_with_hierarchy(filename):
+    """Read SPICE/CDL netlist and return a hierarchy-aware netlist.
+
+    This entry point:
+      1. Parses device lines (parse_mos expands m/nf into individual devices)
+      2. Reconstructs DeviceHierarchy objects from the expanded devices
+      3. Returns the flat netlist (with all expanded devices) plus hierarchies
+
+    The netlist.devices dict contains all expanded finger devices (backward-
+    compatible).  The hierarchies dict provides the logical grouping for
+    placement and visualization.
+
+    Returns
+    -------
+    nl            : Netlist object with all expanded leaf devices and connectivity
+    hierarchies   : dict[name -> DeviceHierarchy] mapping parent names to hierarchies
+    """
+    from .hierarchy import build_device_hierarchy
+
+    nl = Netlist()
+
+    # STEP 1 — flatten hierarchy
+    flat_lines = flatten_netlist(filename)
+
+    logging.debug("\n--- Flattened Netlist (hierarchy-aware) ---")
+    for l in flat_lines:
+        logging.debug(l)
+
+    # STEP 2 — parse devices (parse_mos returns expanded devices)
+    parsed_devices = []
+    for line in flat_lines:
+        line = line.strip()
+        if not line or line.startswith('*'):
+            continue
+        dev = parse_line(line)
+        if isinstance(dev, list):
+            parsed_devices.extend(dev)
+        elif dev:
+            parsed_devices.append(dev)
+
+    # Add all devices to the netlist
+    for dev in parsed_devices:
+        nl.add_device(dev)
+
+    # STEP 3 — reconstruct hierarchies from expanded devices
+    hierarchies = build_device_hierarchy(parsed_devices)
+
+    # STEP 4 — build connectivity
+    nl.build_connectivity()
+
+    return nl, hierarchies
