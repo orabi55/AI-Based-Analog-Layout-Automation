@@ -22,6 +22,7 @@ if {[file isdirectory $layout_dir] && [file isdirectory $config_dir]} {
     db::setAttr geometry -of [gi::getDialogs {dbExportOasis}] -value 685x634+416+75
     gi::setField {libName} -value $lib -in [gi::getDialogs {dbExportOasis}]
     gi::setField {topCellName} -value $cell -in [gi::getDialogs {dbExportOasis}]
+    gi::setField {runDirectory} -value $oasis_dir -in [gi::getDialogs {dbExportOasis}]
     gi::setField {fileName} -value $oasisFile -in [gi::getDialogs {dbExportOasis}]
     gi::pressButton {ok} -in [gi::getDialogs {dbExportOasis}]
 } else {
