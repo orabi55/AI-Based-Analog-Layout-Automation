@@ -196,6 +196,7 @@ Step 8: Self-check — count every finger ID in your CMD output against the
 OUTPUT FORMAT
  
 Write ALL [CMD] blocks first, then a single sentence summarizing what you did.
+DO NOT write any explanatory text before the commands. The human will read your commands and summary together, so the summary should be concise and directly reflect the commands you issued.
  
 Supported command types:
   [CMD]{"action":"swap","device_a":"MM1","device_b":"MM2"}[/CMD]

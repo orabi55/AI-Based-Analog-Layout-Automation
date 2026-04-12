@@ -6,14 +6,12 @@ import json
 from pathlib import Path
 from ai_agent.run_llm import run_llm
 from langgraph.types import interrupt
-from ai_agent.routing_utils import generate_targeted_swaps
 from ai_agent.state import LayoutState
 from ai_agent.finger_grouping import aggregate_to_logical_devices
 # Domain logic & Prompts
 import ai_agent.topology_analyst as topology_analyst
 import ai_agent.strategy_selector as strategy_selector
 from ai_agent.tools import tool_resolve_overlaps
-from ai_agent.pipeline_optimizer import apply_deterministic_optimizations
 from ai_agent.strategy_selector import parse_placement_mode
 from ai_agent.placement_specialist import PLACEMENT_SPECIALIST_PROMPT, build_placement_context
 from ai_agent.drc_critic import DRC_CRITIC_PROMPT, run_drc_check, format_drc_violations_for_llm, compute_prescriptive_fixes
@@ -110,10 +108,6 @@ def node_topology_analyst(state: LayoutState):
 
     #logical_nodes = aggregate_to_logical_devices(nodes)
     
-    # constraint_text = topology_analyst.analyze_topology(
-    #     nodes, terminal_nets, sp_file_path
-    # )
-
     constraint_text = topology_analyst.analyze_json(
         nodes, terminal_nets
     )
@@ -311,87 +305,16 @@ def node_placement_specialist(state: LayoutState):
         stage2_cmds = []
 
     current_pending = state.get("pending_cmds", [])
-    
+    print("[PLACEMENT] Stage 2 complete. Generated commands:")
+    for cmd in current_pending + stage2_cmds:
+        print(f"  - {cmd}")
+
     return {
         "placement_nodes": working_nodes,
         "pending_cmds": current_pending + stage2_cmds,
         "chat_history": updated_chat_history,
     }
 
-def node_deterministic_optimizer(state: LayoutState):
-    """
-    Stage 2.5: Deterministic Optimizer
-    Refines the LLM's placement using apply_deterministic_optimizations()
-    from pipeline_optimizer.
-    """
-    print("[OPTIMIZER] Starting Deterministic Optimizer...")
-
-    nodes = state.get("placement_nodes", [])
-    constraint_text = state.get("constraint_text", "")
-    terminal_nets = state.get("terminal_nets", {})
-    edges = state.get("edges", [])
-    pending_cmds = state.get("pending_cmds", [])
-    selected_strategy = state.get("selected_strategy", "auto")
-
-    # This check must come BEFORE calling the optimizer
-    if selected_strategy in ["interdigitated", "common_centroid"]:
-        print(f"[OPTIMIZER] Skipping optimization to preserve strict '{selected_strategy}' pattern.")
-        return {}
-    # Parse the placement mode from the user's strategy selection + constraints,
-    placement_mode = parse_placement_mode(selected_strategy, constraint_text)
-    print(f"[OPTIMIZER] Placement mode: {placement_mode}")
-
-    # Snapshot pre-optimization x-positions to detect actual changes
-    pre_opt_positions = {
-        n["id"]: round(float(n["geometry"]["x"]), 3)
-        for n in nodes if not n.get("is_dummy")
-    }
-    optimized_nodes = apply_deterministic_optimizations(
-        nodes,
-        constraint_text,
-        terminal_nets,
-        edges,
-        placement_mode=placement_mode,
-    )
-
-    # Log which devices actually moved 
-    post_opt_positions = {
-        n["id"]: round(float(n["geometry"]["x"]), 3)
-        for n in optimized_nodes if not n.get("is_dummy")
-    }
-    changed = {
-        k: (pre_opt_positions.get(k), v)
-        for k, v in post_opt_positions.items()
-        if pre_opt_positions.get(k) != v
-    }
-    if changed:
-        print(f"[OPTIMIZER] Changed {len(changed)} device positions:")
-        for dev_id, (old_x, new_x) in list(changed.items())[:5]:
-            print(f"  {dev_id}: x={old_x} -> x={new_x}")
-    else:
-        print("[OPTIMIZER] No position changes — placement already optimal.")
-        return {}
-
-    # Build move commands from the optimized node state.
-    # Reads from node["geometry"] (nested dict).
-    optimizer_cmds = [
-        {
-            "action": "move",
-            "device": n["id"],
-            "x": float(n["geometry"]["x"]),
-            "y": float(n["geometry"]["y"]),
-        }
-        for n in optimized_nodes
-        if not n.get("is_dummy")
-    ]
-
-    print(f"[OPTIMIZER] Emitting {len(optimizer_cmds)} move commands.")
-
-    return {
-        "placement_nodes": optimized_nodes,
-        "pending_cmds": pending_cmds + optimizer_cmds,
-        "deterministic_snapshot": copy.deepcopy(optimized_nodes),
-    }
 
 def node_finger_expansion(state: LayoutState):
     logical_nodes = state.get("placement_nodes", [])
@@ -404,7 +327,6 @@ def node_finger_expansion(state: LayoutState):
     return {"placement_nodes": physical_nodes,
             "deterministic_snapshot": copy.deepcopy(physical_nodes),
             }
-
 
 
 def node_drc_critic(state: LayoutState):
@@ -520,17 +442,16 @@ def node_drc_critic(state: LayoutState):
         )
 
     # ── Apply corrections on top of the deterministic snapshot ───────────────
-    # Build a unified command dict: pending_cmds first, then this round's fixes
-    # on top. Keying by device id means later fixes correctly overwrite earlier
-    # ones rather than stacking, making every retry idempotent.
-    accumulated_by_dev = {
-        (c.get("device") or c.get("device_a") or c.get("id") or i): c
-        for i, c in enumerate(pending_cmds)
-    }
-    for c in merged_cmds:
-        key = c.get("device") or c.get("device_a") or c.get("id") or id(c)
-        accumulated_by_dev[key] = c
-    accumulated_cmds = list(accumulated_by_dev.values())
+    # Preserve original command sequence and avoid device-key overwrites.
+    merged_all_cmds = list(pending_cmds) + list(merged_cmds)
+    seen_cmds = set()
+    accumulated_cmds = []
+    for cmd in merged_all_cmds:
+        sig = json.dumps(cmd, sort_keys=True)
+        if sig in seen_cmds:
+            continue
+        seen_cmds.add(sig)
+        accumulated_cmds.append(cmd)
 
     # Always recompute from snapshot so retries don't compound on mutated state
     fixed_nodes = _apply_cmds_to_nodes(snapshot, accumulated_cmds)
@@ -543,13 +464,23 @@ def node_drc_critic(state: LayoutState):
         # Sync physics-guard moves back into accumulated_cmds
         moved_map = {n["id"]: n for n in fixed_nodes if n["id"] in moved_ids}
         for dev_id, node in moved_map.items():
-            accumulated_by_dev[dev_id] = {
+            accumulated_cmds.append({
                 "action": "move",
                 "device": dev_id,
                 "x": float(node["geometry"]["x"]),
                 "y": float(node["geometry"]["y"]),
-            }
-        accumulated_cmds = list(accumulated_by_dev.values())
+            })
+
+        # Keep sequence stable; remove only exact duplicate commands.
+        seen_cmds = set()
+        deduped_cmds = []
+        for cmd in accumulated_cmds:
+            sig = json.dumps(cmd, sort_keys=True)
+            if sig in seen_cmds:
+                continue
+            seen_cmds.add(sig)
+            deduped_cmds.append(cmd)
+        accumulated_cmds = deduped_cmds
 
     # ── Post-guard DRC re-check ───────────────────────────────────────────────
     final_drc = run_drc_check(fixed_nodes, gap_um)
@@ -576,6 +507,10 @@ def node_drc_critic(state: LayoutState):
 
         structured_flags.append({"value": str(v)})
 
+    print("[DRC] New accumulated commands after LLM + prescriptive fixes + physics guard:")
+    for cmd in accumulated_cmds:
+        print(f"  - {cmd}")
+
     return {
         "placement_nodes":  fixed_nodes,
         "pending_cmds":     accumulated_cmds,
@@ -588,8 +523,7 @@ def node_drc_critic(state: LayoutState):
 def node_routing_previewer(state: LayoutState):
     """
     Stage 4: Routing Pre-Viewer
-    One LLM swap pass followed by deterministic hill-climbing via
-    generate_targeted_swaps(), matching the orchestrator's behavior.
+    One LLM swap pass for routing improvement.
     """
     print("[ROUTING] Starting Routing Previewer...")
     current_passes = state.get("routing_pass_count", 0)
@@ -672,33 +606,27 @@ def node_routing_previewer(state: LayoutState):
         else:
             print(f"[ROUTING] LLM swaps rejected: {new_cost:.4f} >= {initial_cost:.4f}")
 
-    # We run the full hill-climb here within a single node invocation so that
-    # the LangGraph loop (route_after_routing) acts as an outer retry on top.
-    worst_nets = initial_routing.get("worst_nets", [])
-    if worst_nets:
-        targeted_swaps = generate_targeted_swaps(working_nodes, worst_nets, terminal_nets)
-        if targeted_swaps:
-            trial_nodes = _apply_cmds_to_nodes(working_nodes, targeted_swaps)
-            tool_resolve_overlaps(trial_nodes)
-            trial_routing = score_routing(trial_nodes, edges, terminal_nets)
-            if trial_routing.get("placement_cost", float("inf")) < initial_cost:
-                working_nodes = trial_nodes
-                initial_routing = trial_routing
-                applied_cmds = applied_cmds + targeted_swaps
+    # ── Accumulate commands (preserve existing order, never overwrite by device key) ──
+    # Dict keying by device drops/replaces prior commands (e.g. move + swap on same device).
+    # Keep all commands in sequence and only skip exact duplicates.
+    merged_cmds = list(pending_cmds) + list(applied_cmds)
+    seen_cmds = set()
+    accumulated_cmds = []
+    for cmd in merged_cmds:
+        sig = json.dumps(cmd, sort_keys=True)
+        if sig in seen_cmds:
+            continue
+        seen_cmds.add(sig)
+        accumulated_cmds.append(cmd)
 
-    # ── Accumulate commands ──
-    accum_dict = {
-        (c.get("device") or c.get("device_a") or c.get("id") or i): c
-        for i, c in enumerate(pending_cmds)
-    }
-    for c in applied_cmds:
-        key = c.get("device") or c.get("device_a") or c.get("id") or id(c)
-        accum_dict[key] = c
+    print("[ROUTING] Completed new accumulated commands: ")
+    for cmd in accumulated_cmds:
+        print(f"  - {cmd}")
 
     return {
         "placement_nodes":    working_nodes,
         "routing_result":     initial_routing,
-        "pending_cmds":       list(accum_dict.values()),
+        "pending_cmds":       accumulated_cmds,
         "routing_pass_count": current_passes + 1,
         "chat_history":       updated_chat_history,
     }
