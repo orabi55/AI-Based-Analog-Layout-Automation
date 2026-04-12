@@ -20,33 +20,52 @@ ANALOG_KB = """\
 ## GENERAL PLACEMENT RULES
 - Devices that share a net should be placed ADJACENT to minimise wire length.
 - Devices with identical W/L/nf are matching candidates -> place adjacent, same orientation.
-- PMOS = TOP row. NMOS = BOTTOM row. Never mix types in one row.
-- X-pitch = 0.294 um per device slot.
+- PMOS = TOP row(s). NMOS = BOTTOM row(s). Never mix types in one row.
+- Multiple PMOS and NMOS rows are allowed for rectangular form factor.
+- X-pitch = 0.294 um per device slot (standard). Abutted pitch = 0.070 um.
+- Row pitch = 0.668 um.
 
 ## TRANSISTOR ABUTMENT (DIFFUSION SHARING)
-- When two transistors of the same type (NMOS/NMOS or PMOS/PMOS) share a SOURCE or DRAIN net, they should ABUT.
-- Abutment eliminates spacing, reducing parasitic capacitance and area.
-- Rule: To abut, set 'abut_right':true on the left device and 'abut_left':true on the right device.
-- Rule: Abutted devices MUST be in the same row and have the same orientation.
-- X-pitch for abutted devices = 0.070 um (shared diffusion) vs 0.294 um (broken diffusion).
+- When two transistors of the same type share a SOURCE or DRAIN net, they should ABUT.
+- Abutment eliminates diffusion break, reducing parasitic capacitance and area.
+- Abutted devices MUST be in the same row with the same orientation.
 
-## TOPOLOGY-SPECIFIC RULES (apply ONLY when the topology is detected)
-- DIFFERENTIAL PAIR: Two devices with same gate-type, shared tail source
-  -> MUST be SYMMETRIC about centre. Orientations mirror (R0 vs R0_FH).
+## MATCHING TECHNIQUES (for precision analog)
+- INTERDIGITATION (ABBA): For differential pairs and current mirrors.
+  Place fingers of matched transistors in alternating pattern: A1 B1 B2 A2 A3 B3 B4 A4
+  This cancels linear process gradients and improves matching.
+- COMMON-CENTROID: For 4+ matched devices. Arrange symmetrically around a center.
+  Pattern for ABCD: D C B A A B C D (mirror around center axis).
+  Cancels both linear and quadratic process gradients.
+- SYMMETRIC MIRRORING: For cross-coupled pairs. Place A and B adjacent with
+  mirror symmetry. This ensures identical parasitic environments.
+
+## TOPOLOGY-SPECIFIC RULES
+- DIFFERENTIAL PAIR: Two devices with complementary gate inputs (VINP/VINN)
+  -> MUST be SYMMETRIC about centre. Use ABBA interdigitation for best matching.
+  -> Place tail current source ADJACENT to the diff pair.
 - CURRENT MIRROR: Diode-connected device + copies sharing that gate net
-  -> MUST be ADJACENT. Same orientation. Place near row centre.
+  -> MUST be ADJACENT with ABBA interdigitation. Same orientation.
+- STRONG-ARM LATCH COMPARATOR:
+  -> Cross-coupled latch pairs at CENTER of each row.
+  -> Diff pair flanking the latch. CLK switches at outer edges.
+  -> Tail current source adjacent to diff pair.
+  -> PMOS and NMOS latch pairs vertically aligned for shortest routing.
 - CASCODE: Stacked between mirror and output -> same x-slot vertically.
-- TRANSMISSION GATE / PASS TRANSISTOR: NMOS+PMOS pair sharing same
-  drain and source nets -> place vertically aligned (same x-slot).
+- TRANSMISSION GATE: NMOS+PMOS pair sharing drain/source
+  -> place vertically aligned (same x-slot).
 - LOGIC GATES (NAND/NOR/XOR/INV): Complementary PMOS/NMOS stacks
   -> align PMOS above its corresponding NMOS vertically.
-  -> Group transistors by logic function (each gate's devices together).
-  -> Minimise internal routing by placing series-connected devices adjacent.
+- FOLDED-CASCODE OTA:
+  -> Input diff pair at center. Cascode devices flanking.
+  -> CMFB devices near output stage. Bias mirrors at edges.
 
-## NET-DRIVEN OPTIMISATION
-- Group devices that share the SAME signal net together.
-- CRITICAL nets (output, clock) -> minimise wire length.
-- POWER nets (VDD/GND) -> route along row edges.
+## PARASITIC-AWARE PLACEMENT
+- CRITICAL signal nets (output, clock, feedback): minimise wire length.
+- POWER nets (VDD/GND): route along row edges, wide metal.
+- HIGH-FREQUENCY paths: minimise parasitic capacitance at sensitive nodes.
+- GUARD RINGS: For substrate noise isolation between analog and digital.
+- DUMMY DEVICES: Place at row edges to protect active devices from edge effects.
 """
 
 
