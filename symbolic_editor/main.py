@@ -44,6 +44,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QRadioButton,
     QButtonGroup,
+    QScrollArea,
 )
 from PySide6.QtCore import Qt, QTimer, QSize, QThread, Signal
 from PySide6.QtGui import QFont, QAction, QKeySequence, QColor, QPalette
@@ -314,7 +315,8 @@ class AIModelSelectionDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Select AI Model")
-        self.setMinimumWidth(450)
+        self.setMinimumSize(500, 550)
+        self.resize(500, 550)
         self.setStyleSheet("""
             QDialog {
                 background-color: #1a1f2b;
@@ -323,15 +325,15 @@ class AIModelSelectionDialog(QDialog):
             }
             QLabel {
                 color: #c8d0dc;
-                font-size: 10pt;
+                font-size: 9pt;
             }
             QLineEdit {
                 background-color: #232a38;
                 color: #c8d0dc;
                 border: 1px solid #2d3548;
                 border-radius: 6px;
-                padding: 6px 10px;
-                font-size: 10pt;
+                padding: 5px 10px;
+                font-size: 9pt;
             }
             QPushButton {
                 background-color: #2a3345;
@@ -354,148 +356,217 @@ class AIModelSelectionDialog(QDialog):
             QPushButton#run_btn:hover {
                 background-color: #5da0e9;
             }
-            QGroupBox {
-                background-color: #1e2636;
-                border: 1px solid #3d5066;
-                border-radius: 8px;
-                margin-top: 14px;
-                padding-top: 16px;
-                font-size: 11pt;
-                font-weight: bold;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 12px;
-                padding: 0 6px;
-            }
             QCheckBox {
                 color: #c8d0dc;
-                font-size: 11pt;
+                font-size: 10pt;
                 font-weight: bold;
-                spacing: 10px;
+                spacing: 8px;
             }
             QCheckBox::indicator {
-                width: 18px; height: 18px;
+                width: 16px; height: 16px;
+            }
+            QScrollArea {
+                border: none;
+                background-color: transparent;
+            }
+            QScrollBar:vertical {
+                background-color: #1a1f2b;
+                width: 10px;
+                border-radius: 5px;
+            }
+            QScrollBar::handle:vertical {
+                background-color: #3d5066;
+                border-radius: 5px;
+                min-height: 30px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background-color: #4d6076;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
             }
         """)
 
-        layout = QVBoxLayout(self)
-        layout.setSpacing(16)
-        layout.setContentsMargins(24, 24, 24, 24)
+        # ── Main layout ──────────────────────────────────────
+        main_layout = QVBoxLayout(self)
+        main_layout.setSpacing(0)
+        main_layout.setContentsMargins(20, 16, 20, 16)
 
-        # Title
+        # Title (fixed, not scrolled)
         title = QLabel("AI Initial Placement")
-        title.setStyleSheet("font-size: 15pt; font-weight: bold; color: #ffffff;")
-        layout.addWidget(title)
+        title.setStyleSheet("font-size: 14pt; font-weight: bold; color: #ffffff;")
+        main_layout.addWidget(title)
 
-        subtitle = QLabel("Select an AI model and configure its constraints to proceed.")
-        subtitle.setStyleSheet("font-size: 10pt; color: #8899aa; margin-bottom: 8px;")
-        subtitle.setWordWrap(True)
-        layout.addWidget(subtitle)
+        subtitle = QLabel("Choose a model and enter its API key below.")
+        subtitle.setStyleSheet("font-size: 9pt; color: #8899aa; margin-bottom: 4px;")
+        main_layout.addWidget(subtitle)
 
-        # Button group for exclusivity natively with checkpoints
+        # ── Scrollable area for model cards ──────────────────
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+
+        scroll_widget = QWidget()
+        scroll_layout = QVBoxLayout(scroll_widget)
+        scroll_layout.setSpacing(10)
+        scroll_layout.setContentsMargins(0, 8, 4, 8)
+
+        # Button group for exclusivity
         self.model_group = QButtonGroup(self)
         self.model_group.setExclusive(True)
 
-        # 1. Gemini
-        gemini_group = QGroupBox()
-        gemini_layout = QVBoxLayout(gemini_group)
-        self.check_gemini = QCheckBox("Gemini Pro (Cloud)")
-        self.check_gemini.setChecked(True)
-        self.model_group.addButton(self.check_gemini)
-        gemini_layout.addWidget(self.check_gemini)
+        # ── Helper: build a compact model card ───────────
+        def make_card(label_text, desc_html, checkbox_attr, form_rows):
+            """Build a compact model-selection card."""
+            card = QFrame()
+            card.setStyleSheet("""
+                QFrame {
+                    background-color: #1e2636;
+                    border: 1px solid #3d5066;
+                    border-radius: 8px;
+                }
+            """)
+            card_layout = QVBoxLayout(card)
+            card_layout.setSpacing(6)
+            card_layout.setContentsMargins(12, 8, 12, 8)
 
-        gemini_desc = QLabel("Fast and efficient layout reasoning.")
-        gemini_desc.setStyleSheet("color: #8899aa; font-size: 9pt; margin-left: 30px;")
-        gemini_layout.addWidget(gemini_desc)
+            cb = QCheckBox(label_text)
+            cb.setObjectName(checkbox_attr)
+            self.model_group.addButton(cb)
+            card_layout.addWidget(cb)
 
-        gemini_form = QFormLayout()
-        gemini_form.setContentsMargins(30, 4, 0, 4)
+            desc = QLabel(desc_html)
+            desc.setStyleSheet("color: #8899aa; font-size: 8pt; margin-left: 26px;")
+            desc.setWordWrap(True)
+            card_layout.addWidget(desc)
+
+            form = QFormLayout()
+            form.setContentsMargins(26, 2, 4, 2)
+            form.setSpacing(4)
+            for row_label, widget in form_rows:
+                form.addRow(row_label, widget)
+            card_layout.addLayout(form)
+
+            return card, cb
+
+        # ── 1. Gemini ────────────────────────────────────
         self.gemini_api_key = QLineEdit()
         self.gemini_api_key.setPlaceholderText("Enter Gemini API Key")
         self.gemini_api_key.setText(os.environ.get("GEMINI_API_KEY", "******"))
-        gemini_form.addRow("Default API Key:", self.gemini_api_key)
-        gemini_layout.addLayout(gemini_form)
+        self.card_gemini, self.check_gemini = make_card(
+            "Gemini Pro (Cloud)",
+            "Fast &amp; efficient. Free tier: 15 req/min.",
+            "check_gemini",
+            [("API Key:", self.gemini_api_key)],
+        )
+        self.check_gemini.setChecked(True)
+        scroll_layout.addWidget(self.card_gemini)
 
-        layout.addWidget(gemini_group)
+        # ── 2. Groq ──────────────────────────────────────
+        self.groq_api_key = QLineEdit()
+        self.groq_api_key.setPlaceholderText("Enter Groq API Key")
+        self.groq_api_key.setText(os.environ.get("GROQ_API_KEY", "******"))
+        self.card_groq, self.check_groq = make_card(
+            "Groq (Cloud — Ultra Fast)",
+            "Llama 3.3 70B. Free tier: 30 req/min. ⚡",
+            "check_groq",
+            [("API Key:", self.groq_api_key)],
+        )
+        scroll_layout.addWidget(self.card_groq)
 
-        # 2. OpenAI
-        openai_group = QGroupBox()
-        openai_layout = QVBoxLayout(openai_group)
-        self.check_openai = QCheckBox("OpenAI GPT-4 (Cloud)")
-        self.model_group.addButton(self.check_openai)
-        openai_layout.addWidget(self.check_openai)
+        # ── 3. DeepSeek ──────────────────────────────────
+        self.deepseek_api_key = QLineEdit()
+        self.deepseek_api_key.setPlaceholderText("Enter DeepSeek API Key")
+        self.deepseek_api_key.setText(os.environ.get("DEEPSEEK_API_KEY", "******"))
+        self.card_deepseek, self.check_deepseek = make_card(
+            "DeepSeek (Cloud)",
+            "Strong code reasoning. Free tier available.",
+            "check_deepseek",
+            [("API Key:", self.deepseek_api_key)],
+        )
+        scroll_layout.addWidget(self.card_deepseek)
 
-        openai_desc = QLabel("High precision spatial understanding.")
-        openai_desc.setStyleSheet("color: #8899aa; font-size: 9pt; margin-left: 30px;")
-        openai_layout.addWidget(openai_desc)
-
-        openai_form = QFormLayout()
-        openai_form.setContentsMargins(30, 4, 0, 4)
+        # ── 4. OpenAI ────────────────────────────────────
         self.openai_api_key = QLineEdit()
         self.openai_api_key.setPlaceholderText("Enter OpenAI API Key")
         self.openai_api_key.setText(os.environ.get("OPENAI_API_KEY", "******"))
-        openai_form.addRow("Default API Key:", self.openai_api_key)
-        openai_layout.addLayout(openai_form)
+        self.card_openai, self.check_openai = make_card(
+            "OpenAI GPT-4 (Cloud)",
+            "High precision spatial understanding.",
+            "check_openai",
+            [("API Key:", self.openai_api_key)],
+        )
+        scroll_layout.addWidget(self.card_openai)
 
-        layout.addWidget(openai_group)
-
-        # 3. Ollama
-        ollama_group = QGroupBox()
-        ollama_layout = QVBoxLayout(ollama_group)
-        self.check_ollama = QCheckBox("Ollama (Local)")
-        self.model_group.addButton(self.check_ollama)
-        ollama_layout.addWidget(self.check_ollama)
-
-        ollama_desc = QLabel("Private execution. <b>Note: Requires Ollama installed & running.</b>")
-        ollama_desc.setStyleSheet("color: #8899aa; font-size: 9pt; margin-left: 30px;")
-        ollama_desc.setWordWrap(True)
-        ollama_layout.addWidget(ollama_desc)
-        
-        ollama_form = QFormLayout()
-        ollama_form.setContentsMargins(30, 4, 0, 4)
+        # ── 5. Ollama ────────────────────────────────────
         self.ollama_model_combo = QComboBox()
         self.ollama_model_combo.setEditable(True)
-        self.ollama_model_combo.addItems(["llama3.2", "qwen3.5:latest", "deepseek-coder:6.7b"])
-        ollama_form.addRow("Model:", self.ollama_model_combo)
-        ollama_layout.addLayout(ollama_form)
+        self.ollama_model_combo.addItems([
+            "qwen2.5-coder:3b", "llama3.2", "phi4-mini:3.8b", "gemma3:4b"
+        ])
+        self.card_ollama, self.check_ollama = make_card(
+            "Ollama (Local — Private)",
+            "Requires Ollama installed &amp; running locally.",
+            "check_ollama",
+            [("Model:", self.ollama_model_combo)],
+        )
+        scroll_layout.addWidget(self.card_ollama)
 
-        layout.addWidget(ollama_group)
+        # Stretch to push cards to top
+        scroll_layout.addStretch()
 
+        scroll.setWidget(scroll_widget)
+        main_layout.addWidget(scroll)
 
-        # Connect toggles to enable/disable inputs
+        # ── Connect toggles ──────────────────────────────
         self.check_gemini.toggled.connect(self._on_model_changed)
+        self.check_groq.toggled.connect(self._on_model_changed)
+        self.check_deepseek.toggled.connect(self._on_model_changed)
         self.check_openai.toggled.connect(self._on_model_changed)
         self.check_ollama.toggled.connect(self._on_model_changed)
         self._on_model_changed()
 
-        # Buttons
+        # ── Buttons (fixed at bottom, never scrolls) ─────
         btn_layout = QHBoxLayout()
+        btn_layout.setContentsMargins(0, 8, 0, 0)
+        info_label = QLabel("<a href='https://aistudio.google.com' style='color:#8899aa;'>Get Gemini Key</a>  |  "
+                             "<a href='https://console.groq.com' style='color:#8899aa;'>Get Groq Key</a>  |  "
+                             "<a href='https://platform.deepseek.com' style='color:#8899aa;'>Get DeepSeek Key</a>")
+        info_label.setOpenExternalLinks(True)
+        info_label.setStyleSheet("font-size: 8pt; color: #8899aa;")
+        btn_layout.addWidget(info_label)
         btn_layout.addStretch()
+
         cancel_btn = QPushButton("Cancel")
         cancel_btn.clicked.connect(self.reject)
-        
         self.run_btn = QPushButton("Run Placement")
         self.run_btn.setObjectName("run_btn")
         self.run_btn.clicked.connect(self.accept)
-        
         btn_layout.addWidget(cancel_btn)
         btn_layout.addWidget(self.run_btn)
-        
-        layout.addLayout(btn_layout)
+
+        main_layout.addLayout(btn_layout)
 
     def _on_model_changed(self):
         self.gemini_api_key.setEnabled(self.check_gemini.isChecked())
+        self.groq_api_key.setEnabled(self.check_groq.isChecked())
+        self.deepseek_api_key.setEnabled(self.check_deepseek.isChecked())
         self.openai_api_key.setEnabled(self.check_openai.isChecked())
         self.ollama_model_combo.setEnabled(self.check_ollama.isChecked())
 
     def get_selected_model(self):
         if self.check_gemini.isChecked():
             return "Gemini"
+        elif self.check_groq.isChecked():
+            return "Groq"
+        elif self.check_deepseek.isChecked():
+            return "DeepSeek"
         elif self.check_openai.isChecked():
             return "OpenAI"
         elif self.check_ollama.isChecked():
             return "Ollama"
+        return "Gemini"
 
     def get_ollama_submodel(self):
         return self.ollama_model_combo.currentText()
@@ -505,10 +576,18 @@ class AIModelSelectionDialog(QDialog):
         gemini_key = self.gemini_api_key.text().strip().strip('\'"')
         if gemini_key and gemini_key != "******":
             os.environ["GEMINI_API_KEY"] = gemini_key
-            
+
         openai_key = self.openai_api_key.text().strip().strip('\'"')
         if openai_key and openai_key != "******":
             os.environ["OPENAI_API_KEY"] = openai_key
+
+        groq_key = self.groq_api_key.text().strip().strip('\'"')
+        if groq_key and groq_key != "******":
+            os.environ["GROQ_API_KEY"] = groq_key
+
+        deepseek_key = self.deepseek_api_key.text().strip().strip('\'"')
+        if deepseek_key and deepseek_key != "******":
+            os.environ["DEEPSEEK_API_KEY"] = deepseek_key
 
 # -------------------------------------------------
 # Main Window
@@ -2220,6 +2299,37 @@ class MainWindow(QMainWindow):
                 from ai_agent.ai_initial_placement.ollama_placer import ollama_generate_placement
                 ollama_submodel = submodel or "llama3.2"
                 ollama_generate_placement(tmp_in_path, tmp_out_path, model=ollama_submodel)
+
+            elif model_choice == "Groq":
+                try:
+                    from ai_agent.ai_initial_placement.groq_placer import groq_generate_placement
+                    groq_generate_placement(tmp_in_path, tmp_out_path)
+                except Exception as e:
+                    err_str = str(e)
+                    if "401" in err_str or "Authentication" in err_str or "invalid_api_key" in err_str:
+                        raise RuntimeError(
+                            "Invalid Groq API Key.\n\n"
+                            "The API key provided is rejected by Groq.\n\n"
+                            "Please enter a fresh, valid Groq secret key in the dialog.\n"
+                            "Get one at: https://console.groq.com"
+                        )
+                    raise
+
+            elif model_choice == "DeepSeek":
+                try:
+                    from ai_agent.ai_initial_placement.deepseek_placer import deepseek_generate_placement
+                    deepseek_generate_placement(tmp_in_path, tmp_out_path)
+                except Exception as e:
+                    err_str = str(e)
+                    if "401" in err_str or "Authentication" in err_str or "invalid_api_key" in err_str:
+                        raise RuntimeError(
+                            "Invalid DeepSeek API Key.\n\n"
+                            "The API key provided is rejected by DeepSeek.\n\n"
+                            "Please enter a fresh, valid DeepSeek secret key in the dialog.\n"
+                            "Get one at: https://platform.deepseek.com"
+                        )
+                    raise
+
             else:
                 try:
                     from ai_agent.ai_initial_placement.gemini_placer import gemini_generate_placement
