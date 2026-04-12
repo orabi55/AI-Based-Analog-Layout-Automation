@@ -7,7 +7,12 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
             },
             "geometry": {
                 "x": 0.454,
@@ -24,7 +29,12 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
             },
             "geometry": {
                 "x": 0.758,
@@ -41,7 +51,12 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
             },
             "geometry": {
                 "x": 0.758,
@@ -58,7 +73,12 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
             },
             "geometry": {
                 "x": 0.454,
@@ -75,7 +95,12 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
             },
             "geometry": {
                 "x": 0.15,
@@ -92,7 +117,12 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
             },
             "geometry": {
                 "x": 0.15,
@@ -109,7 +139,12 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
             },
             "geometry": {
                 "x": 0.15000000000000002,
@@ -126,7 +161,12 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
             },
             "geometry": {
                 "x": 0.758,
@@ -143,7 +183,12 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
             },
             "geometry": {
                 "x": 0.758,
@@ -160,7 +205,12 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
             },
             "geometry": {
                 "x": 0.454,
@@ -177,7 +227,12 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
             },
             "geometry": {
                 "x": 0.454,
@@ -194,7 +249,12 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
             },
             "geometry": {
                 "x": 0.15000000000000002,

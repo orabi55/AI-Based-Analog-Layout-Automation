@@ -1,24 +1,23 @@
-import google.generativeai as genai
+from openai import OpenAI
 
-# Replace with your Gemini API key
-API_KEY = "AIzaSyA9f5nQRfW8qvPDZjXHaoXf_Wnu7oGI7Sc"
-
-genai.configure(api_key=API_KEY)
+client = OpenAI(
+  base_url="https://api.openrouter.ai/api/v1",
+  api_key="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", 
+)
 
 try:
-    print("🔍 Fetching available models...\n")
-
-    models = genai.list_models()
-
-    for model in models:
-        print("📌 Model Name:", model.name)
-        print("   Display Name:", model.display_name)
-        print("   Description:", model.description)
-        print("   Supported Methods:", model.supported_generation_methods)
-        print("-" * 50)
-
-    print("\n✅ Done!")
+    print("--- Testing OpenRouter Free Tier ---")
+    
+    completion = client.chat.completions.create(
+      # IMPORTANT: You must add ':free' to the model name
+      model="qwen/qwen3-coder:free", 
+      messages=[
+        {"role": "system", "content": "You are an expert in Analog IC Layout Automation."},
+        {"role": "user", "content": "Write a Python snippet for a simple transistor placement script."}
+      ]
+    )
+    
+    print(f"Response:\n{completion.choices[0].message.content}")
 
 except Exception as e:
-    print("❌ Error occurred!")
-    print("Error:", str(e))
+    print(f"Error: {e}")

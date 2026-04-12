@@ -17,6 +17,8 @@ dist/
 .mypy_cache/
 
 # IDE / editor files
+.sixth/
+.qwen/
 .vscode/
 .idea/
 *.swp
