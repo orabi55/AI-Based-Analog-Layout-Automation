@@ -3,6 +3,8 @@ Device Tree Panel — left sidebar showing device hierarchy and
 terminal connectivity.
 """
 
+import re
+
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -162,6 +164,13 @@ class DeviceTreePanel(QWidget):
     def load_devices(self, nodes, blocks=None):
         """Populate tree from the placement JSON nodes.
 
+        Devices are grouped hierarchically:
+          Level 1: Parent device (e.g. MM3, MM6)
+          Level 2: Multiplier/array children (e.g. MM3_1..MM3_8, or MM9<1>..MM9<7>)
+          Level 3: Finger children (e.g. MM3_1_f1..MM3_1_fN)
+
+        Single devices (m=1, nf=1, no array) appear directly without nesting.
+
         Args:
             nodes: list of node dicts
             blocks: optional {inst: {"subckt": str, "devices": [str, ...]}}
@@ -207,68 +216,251 @@ class DeviceTreePanel(QWidget):
 
             blocks_root.setExpanded(True)
 
-        # ── Standard NMOS/PMOS groups ──
-        nmos_real, nmos_dummy = [], []
-        pmos_real, pmos_dummy = [], []
-        for node in nodes:
-            dev_type = node.get("type", "unknown")
-            is_dummy = node.get("is_dummy", False) or str(node.get("id", "")).upper().startswith("DUMMY")
-            if dev_type == "nmos":
-                (nmos_dummy if is_dummy else nmos_real).append(node)
-            elif dev_type == "pmos":
-                (pmos_dummy if is_dummy else pmos_real).append(node)
+        # ── Group devices by parent (hierarchical grouping) ──
+        parent_groups = self._group_by_parent(nodes)
+
+        # ── Separate into NMOS / PMOS ──
+        nmos_groups, pmos_groups = {}, {}
+        for parent_name, (children, meta) in parent_groups.items():
+            if children:
+                dev_type = children[0].get("type", "nmos")
+            else:
+                dev_type = "nmos"
+            if dev_type == "pmos":
+                pmos_groups[parent_name] = (children, meta)
+            else:
+                nmos_groups[parent_name] = (children, meta)
 
         # NMOS group
-        all_nmos = nmos_real + nmos_dummy
-        if all_nmos:
+        if nmos_groups:
             nmos_root = QTreeWidgetItem(
-                self.tree, [f"⬜ NMOS Devices ({len(all_nmos)})"]
+                self.tree, [f"⬜ NMOS Devices ({len(nmos_groups)} groups)"]
             )
             nmos_root.setFont(0, QFont("Segoe UI", 11, QFont.Weight.Bold))
             nmos_root.setForeground(0, QColor("#7ec8e3"))
-            for dev in nmos_real:
-                self._add_device_item(nmos_root, dev)
-            if nmos_dummy:
-                dummy_n_root = QTreeWidgetItem(
-                    nmos_root, [f"🟪 Dummy NMOS ({len(nmos_dummy)})"]
-                )
-                dummy_n_root.setFont(0, QFont("Segoe UI", 10, QFont.Weight.DemiBold))
-                dummy_n_root.setForeground(0, QColor("#d14d94"))
-                for dev in nmos_dummy:
-                    self._add_device_item(dummy_n_root, dev)
-                dummy_n_root.setExpanded(True)
+            for parent_name in sorted(nmos_groups.keys()):
+                children, meta = nmos_groups[parent_name]
+                self._add_hierarchy_group(nmos_root, parent_name, children, meta)
             nmos_root.setExpanded(True)
 
         # PMOS group
-        all_pmos = pmos_real + pmos_dummy
-        if all_pmos:
+        if pmos_groups:
             pmos_root = QTreeWidgetItem(
-                self.tree, [f"⬜ PMOS Devices ({len(all_pmos)})"]
+                self.tree, [f"⬜ PMOS Devices ({len(pmos_groups)} groups)"]
             )
             pmos_root.setFont(0, QFont("Segoe UI", 11, QFont.Weight.Bold))
             pmos_root.setForeground(0, QColor("#e87474"))
-            for dev in pmos_real:
-                self._add_device_item(pmos_root, dev)
-            if pmos_dummy:
-                dummy_p_root = QTreeWidgetItem(
-                    pmos_root, [f"🟪 Dummy PMOS ({len(pmos_dummy)})"]
-                )
-                dummy_p_root.setFont(0, QFont("Segoe UI", 10, QFont.Weight.DemiBold))
-                dummy_p_root.setForeground(0, QColor("#d14d94"))
-                for dev in pmos_dummy:
-                    self._add_device_item(dummy_p_root, dev)
-                dummy_p_root.setExpanded(True)
+            for parent_name in sorted(pmos_groups.keys()):
+                children, meta = pmos_groups[parent_name]
+                self._add_hierarchy_group(pmos_root, parent_name, children, meta)
             pmos_root.setExpanded(True)
+
+    # ── Hierarchical grouping helpers ─────────────────────────────────
+
+    def _group_by_parent(self, nodes):
+        """Group expanded finger nodes by their logical parent device.
+
+        Each node's electrical dict contains:
+          - parent: original device name (set by parse_mos on each child)
+          - m: original multiplier count
+          - array_size: not used anymore; array count = number of children
+          - multiplier_index: m-level index (for array/multiplier copies)
+          - finger_index: f-level index (for finger children)
+
+        Returns dict: parent_name -> (child_nodes, meta_dict)
+        """
+        groups = {}
+        for node in nodes:
+            elec = node.get("electrical", {})
+            parent = elec.get("parent")
+
+            if parent:
+                if parent not in groups:
+                    groups[parent] = {
+                        "children": [],
+                        "m": elec.get("m", 1),
+                        "type": node.get("type", "nmos"),
+                    }
+                groups[parent]["children"].append(node)
+            else:
+                # Standalone device (not expanded)
+                name = node.get("id", "unknown")
+                groups[name] = {
+                    "children": [node],
+                    "m": elec.get("m", 1),
+                    "type": node.get("type", "nmos"),
+                }
+
+        return {
+            name: (info["children"], {
+                "m": info["m"],
+                "type": info["type"],
+            })
+            for name, info in groups.items()
+        }
+
+    def _add_hierarchy_group(self, parent, name, children, meta):
+        """Add a hierarchical device group to the tree.
+
+        Display hierarchy:
+          🔷 MM9 (array=8)          ← Level 0: parent
+            ├── 🔸 MM9_m1 (nf=1)     ← Level 1: array/multiplier copy
+            │   └── 🔹 MM9_m1        ← Level 2: finger (if nf>1)
+            ├── 🔸 MM9_m2 (nf=1)
+            └── ...
+
+          🔷 MM6 (m=3, nf=5)        ← Level 0: parent
+            ├── 🔸 MM6_m1 (nf=5)     ← Level 1: multiplier copy
+            │   ├── 🔹 MM6_m1_f1     ← Level 2: fingers
+            │   └── ...
+            └── ...
+
+          🔷 MM1 (nf=1, nfin=4)     ← Single device, no nesting
+        """
+        m = meta.get("m", 1)
+        dev_type = meta.get("type", "nmos")
+        total_children = len(children)
+
+        # Determine structure from children's indices
+        has_mult = any(
+            n.get("electrical", {}).get("multiplier_index") is not None
+            for n in children
+        )
+        has_finger = any(
+            n.get("electrical", {}).get("finger_index") is not None
+            for n in children
+        )
+        has_array = any(
+            n.get("electrical", {}).get("array_index") is not None
+            for n in children
+        )
+
+        # Compute m-level and f-level counts
+        if has_mult:
+            mult_indices = set()
+            for n in children:
+                mi = n.get("electrical", {}).get("multiplier_index")
+                if mi is not None:
+                    mult_indices.add(mi)
+            m_count = len(mult_indices)
+        else:
+            m_count = 1
+
+        if has_finger:
+            # Count fingers per multiplier group
+            fingers_per_mult = {}
+            for n in children:
+                mi = n.get("electrical", {}).get("multiplier_index", 0)
+                fi = n.get("electrical", {}).get("finger_index")
+                if fi is not None:
+                    fingers_per_mult.setdefault(mi, set()).add(fi)
+            # All multiplier groups should have the same finger count
+            nf_per_mult = max(len(v) for v in fingers_per_mult.values()) if fingers_per_mult else 1
+        else:
+            nf_per_mult = 1
+
+        # For finger-only devices (no m-level), nf = total_children
+        if not has_mult:
+            nf_per_mult = total_children
+
+        # --- Single device ---
+        if m_count == 1 and nf_per_mult == 1:
+            assert len(children) == 1
+            self._add_device_item(parent, children[0])
+            return
+
+        # --- Build parent label ---
+        label_parts = [f"🔷 {name}"]
+        if has_array and m_count > 1:
+            label_parts.append(f"(array={m_count})")
+        elif m_count > 1 and nf_per_mult > 1:
+            label_parts.append(f"(m={m_count}, nf={nf_per_mult})")
+        elif m_count > 1:
+            label_parts.append(f"(m={m_count})")
+        elif nf_per_mult > 1:
+            label_parts.append(f"(nf={nf_per_mult})")
+
+        parent_label = " ".join(label_parts)
+        parent_item = QTreeWidgetItem(parent, [parent_label])
+        parent_item.setFont(0, QFont("Segoe UI", 11, QFont.Weight.DemiBold))
+
+        if dev_type == "pmos":
+            parent_item.setForeground(0, QColor("#e87474"))
+        else:
+            parent_item.setForeground(0, QColor("#7ec8e3"))
+
+        parent_item.setData(0, Qt.ItemDataRole.UserRole, None)
+        parent_item.setData(0, Qt.ItemDataRole.UserRole + 1, children[0].get("id", ""))
+        parent_item.setExpanded(False)
+
+        # --- Sort children by multiplier index, then finger index ---
+        def _sort_key(node):
+            elec = node.get("electrical", {})
+            mi = elec.get("multiplier_index") or 0
+            fi = elec.get("finger_index") or 0
+            return (mi, fi)
+        children.sort(key=_sort_key)
+
+        # --- Two-level tree: multiplier groups with finger children ---
+        if m_count > 1 and nf_per_mult > 1:
+            # Group children by multiplier index
+            mult_groups = {}
+            for child in children:
+                elec = child.get("electrical", {})
+                mi = elec.get("multiplier_index", 1)
+                mult_groups.setdefault(mi, []).append(child)
+
+            for mi in sorted(mult_groups.keys()):
+                m_children = mult_groups[mi]
+                m_children.sort(key=lambda n: n.get("electrical", {}).get("finger_index", 0))
+
+                m_label = f"🔸 {name}_m{mi} (nf={len(m_children)})"
+                m_item = QTreeWidgetItem(parent_item, [m_label])
+                m_item.setFont(0, QFont("Segoe UI", 10, QFont.Weight.DemiBold))
+                m_item.setForeground(0, QColor("#c0a060"))
+                m_item.setData(0, Qt.ItemDataRole.UserRole, None)
+                m_item.setData(0, Qt.ItemDataRole.UserRole + 1, m_children[0].get("id", ""))
+                m_item.setExpanded(False)
+
+                for child in m_children:
+                    self._add_finger_item(m_item, child)
+
+        # --- One-level tree: multiplier/array copies only ---
+        elif m_count > 1 and nf_per_mult == 1:
+            for child in children:
+                self._add_device_item(parent_item, child)
+
+        # --- One-level tree: fingers only ---
+        elif m_count == 1 and nf_per_mult > 1:
+            for child in children:
+                self._add_device_item(parent_item, child)
+
+    def _add_finger_item(self, parent, dev):
+        """Add a finger device item with its terminal connections."""
+        dev_id = dev.get("id", "unknown")
+        elec = dev.get("electrical", {})
+        nf = elec.get("nf", 1)
+        nfin = elec.get("nfin", "?")
+        info = f"🔹 {dev_id}  (nf={nf}, nfin={nfin})"
+        item = QTreeWidgetItem(parent, [info])
+        item.setData(0, Qt.ItemDataRole.UserRole, dev_id)
+        item.setFont(0, QFont("Segoe UI", 11))
+
+        self._add_terminal_connections(item, dev_id)
 
     def _add_device_item(self, parent, dev):
         """Add a device and its terminal connections as tree items."""
         dev_id = dev.get("id", "unknown")
         elec = dev.get("electrical", {})
-        info = f"🔷 {dev_id}  (nf={elec.get('nf', 1)}, nfin={elec.get('nfin', '?')})"
+        info = f"🔹 {dev_id}  (nf={elec.get('nf', 1)}, nfin={elec.get('nfin', '?')})"
         item = QTreeWidgetItem(parent, [info])
         item.setData(0, Qt.ItemDataRole.UserRole, dev_id)
         item.setFont(0, QFont("Segoe UI", 11))
 
+        self._add_terminal_connections(item, dev_id)
+
+    def _add_terminal_connections(self, item, dev_id):
+        """Add terminal net and connection sub-items under a device item."""
         term_nets = self._terminal_nets.get(dev_id, {})
         connections = self._conn_map.get(dev_id, [])
 
@@ -294,8 +486,7 @@ class DeviceTreePanel(QWidget):
             sub = QTreeWidgetItem(item, [text])
             sub.setForeground(0, QColor("#8899aa"))
             sub.setFont(0, QFont("Segoe UI", 10))
-            # Store data for click-to-highlight
-            sub.setData(0, Qt.ItemDataRole.UserRole, None)  # not a device
+            sub.setData(0, Qt.ItemDataRole.UserRole, None)
             sub.setData(0, Qt.ItemDataRole.UserRole + 1, dev_id)
             sub.setData(0, Qt.ItemDataRole.UserRole + 2, net_name)
 
@@ -307,7 +498,13 @@ class DeviceTreePanel(QWidget):
         def _search(parent):
             for i in range(parent.childCount()):
                 child = parent.child(i)
+                # Check direct device role
                 if child.data(0, Qt.ItemDataRole.UserRole) == dev_id:
+                    child.setSelected(True)
+                    self.tree.scrollToItem(child)
+                    return True
+                # Check fallback role (hierarchy groups)
+                if child.data(0, Qt.ItemDataRole.UserRole + 1) == dev_id:
                     child.setSelected(True)
                     self.tree.scrollToItem(child)
                     return True
@@ -328,6 +525,13 @@ class DeviceTreePanel(QWidget):
             block_inst = item.data(0, Qt.ItemDataRole.UserRole + 3)
             if block_inst:
                 self.block_selected.emit(block_inst)
+                return
+
+            # Check if this is a hierarchy group item (parent/mult/array)
+            # These store the first child's device id in UserRole+1
+            fallback_dev = item.data(0, Qt.ItemDataRole.UserRole + 1)
+            if fallback_dev:
+                self.device_selected.emit(fallback_dev)
                 return
 
             # Connection sub-item clicked
