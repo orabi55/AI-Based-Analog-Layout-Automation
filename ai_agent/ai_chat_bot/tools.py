@@ -45,7 +45,7 @@ def tool_score_net_crossings(nodes, edges, terminal_nets):
         dict: see routing_previewer.score_routing() for schema.
     """
     try:
-        from ai_agent.routing_previewer import score_routing
+        from ai_agent.ai_chat_bot.agents.routing_previewer import score_routing
         return score_routing(nodes, edges or [], terminal_nets or {})
     except Exception as exc:
         print(f"[TOOLS] tool_score_net_crossings failed: {exc}")
@@ -59,7 +59,7 @@ def tool_run_drc(nodes, gap_px=0.0):
         dict: see drc_critic.run_drc_check() for schema.
     """
     try:
-        from ai_agent.drc_critic import run_drc_check
+        from ai_agent.ai_chat_bot.agents.drc_critic import run_drc_check
         return run_drc_check(nodes, gap_px=gap_px)
     except Exception as exc:
         print(f"[TOOLS] tool_run_drc failed: {exc}")

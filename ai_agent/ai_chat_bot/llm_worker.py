@@ -28,15 +28,33 @@ from pathlib import Path
 import uuid
 from typing import cast
 from langgraph.types import Command
-from ai_agent.graph import app as langgraph_app
+from ai_agent.ai_chat_bot.graph import app as langgraph_app
 from dotenv import load_dotenv
 from PySide6.QtCore import QObject, Signal, Slot
 from langchain_core.runnables import RunnableConfig
-from ai_agent.run_llm import run_llm
+from ai_agent.ai_chat_bot.run_llm import run_llm
 
-# Load .env from the project root so API keys are available
-_env_path = Path(__file__).resolve().parent.parent / ".env"
-load_dotenv(_env_path)
+# Load .env from repository root so API keys are available regardless of
+# package depth after folder moves.
+_this_file = Path(__file__).resolve()
+_env_loaded = False
+
+# Prefer a parent that looks like repo root in the current layout.
+for _parent in _this_file.parents:
+    if (_parent / "README.md").is_file() and (_parent / "ai_agent").is_dir():
+        _env_path = _parent / ".env"
+        if _env_path.is_file():
+            load_dotenv(_env_path)
+            _env_loaded = True
+        break
+
+# Fallback: first .env found while walking upward.
+if not _env_loaded:
+    for _parent in _this_file.parents:
+        _env_path = _parent / ".env"
+        if _env_path.is_file():
+            load_dotenv(_env_path)
+            break
 
 
 # -----------------------------------------------------------------
@@ -260,7 +278,7 @@ class OrchestratorWorker(LLMWorker):
             layout_context = {}
 
         try:
-            from ai_agent.classifier_agent import classify_intent
+            from ai_agent.ai_chat_bot.agents.classifier_agent import classify_intent
             project_root = Path(__file__).resolve().parent.parent
 
             sp_file = _resolve_sp_file(layout_context, project_root)

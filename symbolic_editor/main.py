@@ -1678,7 +1678,8 @@ class MainWindow(QMainWindow):
                 else:
                     n["geometry"]["x"] = x_cursor
                     n["geometry"]["y"] = nmos_y
-                x_cursor += w
+                x_cursor += w
+
 
         return {
             "nodes": nodes,
@@ -1694,7 +1695,7 @@ class MainWindow(QMainWindow):
         Updates x/y coordinates in the nodes and returns the updated data.
         """
         import tempfile
-        from ai_agent.gemini_placer import gemini_generate_placement, sanitize_json
+        from ai_agent.ai_initial_placement.gemini_placer import gemini_generate_placement, sanitize_json
 
         # Write to temp file for the placer
         with tempfile.NamedTemporaryFile(
@@ -1711,7 +1712,7 @@ class MainWindow(QMainWindow):
                 raw_placed = json.load(f)
 
             # Normalise: LLM might save a bare JSON array — wrap it
-            from ai_agent.gemini_placer import _ensure_placement_dict
+            from ai_agent.ai_initial_placement.gemini_placer import _ensure_placement_dict
             placed = _ensure_placement_dict(raw_placed)
 
             # Merge placed coordinates back into original data
@@ -1904,7 +1905,7 @@ class MainWindow(QMainWindow):
         # ---- Choose which device IDs to highlight ----
         if stage_index == 2:
             # DRC stage: highlight overlapping pairs only
-            from ai_agent.drc_critic import run_drc_check
+            from ai_agent.ai_chat_bot.agents.drc_critic import run_drc_check
             nodes = []
             for dev_id, item in device_items.items():
                 try:

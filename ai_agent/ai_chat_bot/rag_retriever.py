@@ -10,7 +10,7 @@ Usage (called inside orchestrator.py at Stage 2):
     # then inject rag_context into specialist_user string
 """
 
-from ai_agent.rag_store import RAGStore
+from ai_agent.ai_chat_bot.rag_store import RAGStore
 
 # Singleton store — loaded once, reused across all runs
 _store: RAGStore | None = None

@@ -4,24 +4,24 @@ LangGraph nodes
 import copy
 import json
 from pathlib import Path
-from ai_agent.run_llm import run_llm
+from ai_agent.ai_chat_bot.run_llm import run_llm
 from langgraph.types import interrupt
-from ai_agent.state import LayoutState
-from ai_agent.finger_grouping import aggregate_to_logical_devices
+from ai_agent.ai_chat_bot.state import LayoutState
+from ai_agent.ai_chat_bot.finger_grouping import aggregate_to_logical_devices
 # Domain logic & Prompts
-import ai_agent.topology_analyst as topology_analyst
-import ai_agent.strategy_selector as strategy_selector
-from ai_agent.tools import tool_resolve_overlaps
-from ai_agent.strategy_selector import parse_placement_mode
-from ai_agent.placement_specialist import PLACEMENT_SPECIALIST_PROMPT, build_placement_context
-from ai_agent.drc_critic import DRC_CRITIC_PROMPT, run_drc_check, format_drc_violations_for_llm, compute_prescriptive_fixes
-from ai_agent.routing_previewer import ROUTING_PREVIEWER_PROMPT, score_routing, format_routing_for_llm
-from ai_agent.tools import tool_validate_device_count
-from ai_agent.finger_grouping import expand_logical_to_fingers, validate_finger_integrity
-from ai_agent.cmd_utils import _extract_cmd_blocks, _apply_cmds_to_nodes
+import ai_agent.ai_chat_bot.agents.topology_analyst as topology_analyst
+import ai_agent.ai_chat_bot.agents.strategy_selector as strategy_selector
+from ai_agent.ai_chat_bot.tools import tool_resolve_overlaps
+from ai_agent.ai_chat_bot.agents.strategy_selector import parse_placement_mode
+from ai_agent.ai_chat_bot.agents.placement_specialist import PLACEMENT_SPECIALIST_PROMPT, build_placement_context
+from ai_agent.ai_chat_bot.agents.drc_critic import DRC_CRITIC_PROMPT, run_drc_check, format_drc_violations_for_llm, compute_prescriptive_fixes
+from ai_agent.ai_chat_bot.agents.routing_previewer import ROUTING_PREVIEWER_PROMPT, score_routing, format_routing_for_llm
+from ai_agent.ai_chat_bot.tools import tool_validate_device_count
+from ai_agent.ai_chat_bot.finger_grouping import expand_logical_to_fingers, validate_finger_integrity
+from ai_agent.ai_chat_bot.cmd_utils import _extract_cmd_blocks, _apply_cmds_to_nodes
 # Optional: Import your RAG save function if you have it
 # from ai_agent.rag_manager import save_run_as_example
-from ai_agent.rag_retriever import build_rag_context
+from ai_agent.ai_chat_bot.rag_retriever import build_rag_context
 
 CHAT_HISTORY_JSON_PATH = Path(__file__).resolve().parents[1] / "chat_history.json"
 

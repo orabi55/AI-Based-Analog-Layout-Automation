@@ -23,7 +23,7 @@ import math
 from collections import defaultdict
 from typing import Dict, List, Optional, Tuple
 
-from ai_agent.analog_kb import ANALOG_LAYOUT_RULES
+from ai_agent.ai_chat_bot.analog_kb import ANALOG_LAYOUT_RULES
 
 # ---------------------------------------------------------------------------
 # Constants

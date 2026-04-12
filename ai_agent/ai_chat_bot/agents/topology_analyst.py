@@ -26,7 +26,7 @@ from collections import defaultdict
 from math import gcd
 from typing import Dict, List, Optional, Tuple
 
-from ai_agent.analog_kb import ANALOG_LAYOUT_RULES
+from ai_agent.ai_chat_bot.analog_kb import ANALOG_LAYOUT_RULES
 
 
 # ---------------------------------------------------------------------------
@@ -37,6 +37,15 @@ You are an expert Analog IC Layout Engineer specialising in topology analysis.
 You are part of a multi-agent team. Your goal is to analyze the structural representation 
 of the following layout circuit and identify fundamental analog and digital building blocks.
 State any possible topologies you can identify, and the reasoning behind them.
+
+STEP 1 — IDENTIFY THE CIRCUIT:
+Read the device list and net connections below CAREFULLY.
+Determine what kind of circuit this actually is by examining:
+  - Which devices share gate/drain/source nets
+  - The number of NMOS vs PMOS devices
+  - Signal flow patterns (inputs -> logic -> outputs)
+State your conclusion
+
 """
 
 TOPOLOGY_ANALYST_PROMPT2 = """\

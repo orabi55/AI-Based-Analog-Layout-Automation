@@ -28,8 +28,8 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal, QTimer, QThread, Slot
 from PySide6.QtGui import QFont
 
-from ai_agent.llm_worker import OrchestratorWorker, build_system_prompt
-from ai_agent.cmd_utils import _extract_cmd_blocks
+from ai_agent.ai_chat_bot.llm_worker import OrchestratorWorker, build_system_prompt
+from ai_agent.ai_chat_bot.cmd_utils import _extract_cmd_blocks
 from icons import icon_panel_toggle
 
 # ---------------------------------------------------------------------------

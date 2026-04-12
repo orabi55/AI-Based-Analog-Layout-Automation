@@ -11,7 +11,7 @@ Enhanced with prescriptive geometry hints and a pure-Python fix generator
 
 from itertools import groupby
 
-from ai_agent.analog_kb import ANALOG_LAYOUT_RULES
+from ai_agent.ai_chat_bot.analog_kb import ANALOG_LAYOUT_RULES
 
 
 # ---------------------------------------------------------------------------

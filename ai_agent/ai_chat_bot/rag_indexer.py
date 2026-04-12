@@ -18,7 +18,7 @@ import json
 import glob
 from pathlib import Path
 
-from ai_agent.rag_store import RAGStore
+from ai_agent.ai_chat_bot.rag_store import RAGStore
 
 
 # ---------------------------------------------------------------------------

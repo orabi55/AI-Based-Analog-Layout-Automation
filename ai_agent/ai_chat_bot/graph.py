@@ -1,8 +1,8 @@
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
-from ai_agent.state import LayoutState
-from ai_agent.nodes import *
-from ai_agent.edges import *
+from ai_agent.ai_chat_bot.state import LayoutState
+from ai_agent.ai_chat_bot.nodes import *
+from ai_agent.ai_chat_bot.edges import *
 
 # Initialize checkpointer (required for human-in-the-loop interrupts)
 memory = MemorySaver()

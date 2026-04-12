@@ -28,13 +28,32 @@ from collections import defaultdict
 from google import genai
 from google.genai import types
 
-# Load .env from project root so GEMINI_API_KEY is available
-# even when this module is imported standalone (e.g. from the Design menu),
-# not through llm_worker which already calls load_dotenv().
+# Load .env from the repository root so GEMINI_API_KEY is available
+# even when this module is imported standalone (e.g. from the Design menu).
+# The file now lives under ai_agent/ai_initial_placement/, so project root is
+# not a fixed two-level parent anymore.
 try:
     from dotenv import load_dotenv as _load_dotenv
-    _env_path = Path(__file__).resolve().parent.parent / ".env"
-    _load_dotenv(_env_path)
+
+    _this_file = Path(__file__).resolve()
+    _env_loaded = False
+
+    # Prefer a parent that looks like repo root in the new layout.
+    for _parent in _this_file.parents:
+        if (_parent / "README.md").is_file() and (_parent / "ai_agent").is_dir():
+            _env_path = _parent / ".env"
+            if _env_path.is_file():
+                _load_dotenv(_env_path)
+                _env_loaded = True
+            break
+
+    # Fallback: first .env found while walking upward.
+    if not _env_loaded:
+        for _parent in _this_file.parents:
+            _env_path = _parent / ".env"
+            if _env_path.is_file():
+                _load_dotenv(_env_path)
+                break
 except ImportError:
     pass  # python-dotenv not installed; rely on shell environment
 
