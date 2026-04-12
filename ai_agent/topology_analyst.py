@@ -33,6 +33,13 @@ from ai_agent.analog_kb import ANALOG_LAYOUT_RULES
 # System prompt
 # ---------------------------------------------------------------------------
 TOPOLOGY_ANALYST_PROMPT = """\
+You are an expert Analog IC Layout Engineer specialising in topology analysis.
+You are part of a multi-agent team. Your goal is to analyze the structural representation 
+of the following layout circuit and identify fundamental analog and digital building blocks.
+State any possible topologies you can identify, and the reasoning behind them.
+"""
+
+TOPOLOGY_ANALYST_PROMPT2 = """\
 ### I. ROLE PLAY
 You are an expert Analog IC Layout Engineer specialising in topology analysis.
 You are part of a multi-agent team. Your specialty is reading SPICE netlists
@@ -220,6 +227,49 @@ def analyze_json(nodes: List[dict], terminal_nets: dict) -> str:
     safe_terminal_nets = terminal_nets if isinstance(terminal_nets, dict) else {}
     safe_nodes = nodes if isinstance(nodes, list) else []
 
+    def _lookup_nets(dev_key: str) -> dict:
+        for key in (dev_key, dev_key.upper(), dev_key.lower()):
+            value = safe_terminal_nets.get(key)
+            if isinstance(value, dict):
+                return value
+        return {}
+
+    def _resolve_node_nets(node: dict) -> dict:
+        dev_id = str(node.get("id", ""))
+        if not dev_id:
+            return {}
+
+        # Direct net mapping (physical or already-aggregated logical net entry)
+        direct = _lookup_nets(dev_id)
+        if direct:
+            return direct
+
+        # Logical-node fallback: aggregate per-pin nets from all fingers.
+        finger_ids = node.get("_fingers", [])
+        if not isinstance(finger_ids, list) or not finger_ids:
+            return {}
+
+        merged = {"D": set(), "G": set(), "S": set()}
+        for fid in finger_ids:
+            if not fid:
+                continue
+            fnets = _lookup_nets(str(fid))
+            if not fnets:
+                continue
+            for pin in ("D", "G", "S"):
+                net = fnets.get(pin)
+                if net not in (None, ""):
+                    merged[pin].add(str(net))
+
+        resolved = {}
+        for pin, values in merged.items():
+            if len(values) == 1:
+                resolved[pin] = next(iter(values))
+            elif len(values) > 1:
+                # Keep conflicts visible for debug/readability in summaries.
+                resolved[pin] = "|".join(sorted(values))
+        return resolved
+
     lines: List[str] = []
     lines.append("=== LAYOUT JSON SUMMARY ===")
     lines.append(
@@ -260,13 +310,7 @@ def analyze_json(nodes: List[dict], terminal_nets: dict) -> str:
         nf = elec.get("nf", "?")
         nfin = elec.get("nfin", "?")
 
-        # Resolve terminal nets by trying common key variants directly.
-        nets = {}
-        for key in (dev_id, dev_id.upper(), dev_id.lower()):
-            value = safe_terminal_nets.get(key)
-            if isinstance(value, dict):
-                nets = value
-                break
+        nets = _resolve_node_nets(node)
         g_net = nets.get("G", "?")
         d_net = nets.get("D", "?")
         s_net = nets.get("S", "?")
@@ -289,32 +333,22 @@ def analyze_json(nodes: List[dict], terminal_nets: dict) -> str:
     drain_groups: Dict[str, List[str]] = defaultdict(list)
     source_groups: Dict[str, List[str]] = defaultdict(list)
 
-    supply_nets = {
-        "VDD", "VSS", "GND", "AVDD", "AVSS",
-        "DVDD", "DVSS", "VCC", "AGND", "DGND"
-    }
-
     for node in safe_nodes:
         dev_id = str(node.get("id", ""))
         if not dev_id:
             continue
 
-        nets = {}
-        for key in (dev_id, dev_id.upper(), dev_id.lower()):
-            value = safe_terminal_nets.get(key)
-            if isinstance(value, dict):
-                nets = value
-                break
+        nets = _resolve_node_nets(node)
 
         g_net = str(nets.get("G", "")).upper()
         d_net = str(nets.get("D", "")).upper()
         s_net = str(nets.get("S", "")).upper()
 
-        if g_net and g_net not in supply_nets:
+        if g_net:
             gate_groups[g_net].append(dev_id)
-        if d_net and d_net not in supply_nets:
+        if d_net:
             drain_groups[d_net].append(dev_id)
-        if s_net and s_net not in supply_nets:
+        if s_net:
             source_groups[s_net].append(dev_id)
 
     any_group = False
@@ -337,3 +371,4 @@ def analyze_json(nodes: List[dict], terminal_nets: dict) -> str:
         lines.append("- No shared gate/drain/source groups found")
 
     return "\n".join(lines)
+

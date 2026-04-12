@@ -106,10 +106,10 @@ def node_topology_analyst(state: LayoutState):
     user_message = state.get("user_message", "Please analyze the layout topology.")
     chat_history = state.get("chat_history", [])
 
-    #logical_nodes = aggregate_to_logical_devices(nodes)
+    logical_nodes = aggregate_to_logical_devices(nodes)
     
     constraint_text = topology_analyst.analyze_json(
-        nodes, terminal_nets
+        logical_nodes, terminal_nets
     )
     print(f"[TOPO] Extracted Constraints:\n{constraint_text}")
     constraints = [line for line in constraint_text.splitlines() if line.strip()]
