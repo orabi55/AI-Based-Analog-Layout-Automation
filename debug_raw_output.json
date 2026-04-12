@@ -2,340 +2,314 @@
 {
   "nodes": [
     {
-      "id": "MM0_f1",
-      "type": "nmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 0.000,
-        "y": 0.0,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": false,
-        "abut_right": true
-      }
+      "id": "MM0_m1",
+      "geometry": { "x": 0.266, "y": 3.340, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
     },
     {
-      "id": "MM0_f2",
-      "type": "nmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 0.070,
-        "y": 0.0,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
+      "id": "MM0_m2",
+      "geometry": { "x": 0.560, "y": 3.340, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
     },
     {
-      "id": "MM0_f3",
-      "type": "nmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 0.140,
-        "y": 0.0,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
+      "id": "MM0_m3",
+      "geometry": { "x": 0.854, "y": 3.340, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
     },
     {
-      "id": "MM0_f4",
-      "type": "nmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 0.210,
-        "y": 0.0,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
+      "id": "MM0_m4",
+      "geometry": { "x": 1.148, "y": 3.340, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
     },
     {
-      "id": "MM0_f5",
-      "type": "nmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 0.280,
-        "y": 0.0,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
+      "id": "MM0_m5",
+      "geometry": { "x": 1.442, "y": 3.340, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
     },
     {
-      "id": "MM0_f6",
-      "type": "nmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 0.350,
-        "y": 0.0,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
+      "id": "MM0_m6",
+      "geometry": { "x": 1.736, "y": 3.340, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
     },
     {
-      "id": "MM0_f7",
-      "type": "nmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 0.420,
-        "y": 0.0,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
+      "id": "MM0_m7",
+      "geometry": { "x": 2.030, "y": 3.340, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
     },
     {
-      "id": "MM0_f8",
-      "type": "nmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 0.490,
-        "y": 0.0,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": false
-      }
+      "id": "MM0_m8",
+      "geometry": { "x": 2.324, "y": 3.340, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
     },
     {
-      "id": "MM1_f1",
-      "type": "nmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 0.784,
-        "y": 0.0,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": false,
-        "abut_right": true
-      }
+      "id": "MM1_m1",
+      "geometry": { "x": 0.266, "y": 2.672, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
     },
     {
-      "id": "MM1_f2",
-      "type": "nmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 0.854,
-        "y": 0.0,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
+      "id": "MM1_m2",
+      "geometry": { "x": 0.560, "y": 2.672, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
     },
     {
-      "id": "MM1_f3",
-      "type": "nmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 0.924,
-        "y": 0.0,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
+      "id": "MM1_m3",
+      "geometry": { "x": 0.854, "y": 2.672, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
     },
     {
-      "id": "MM1_f4",
-      "type": "nmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 0.994,
-        "y": 0.0,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": false
-      }
+      "id": "MM1_m4",
+      "geometry": { "x": 1.148, "y": 2.672, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
     },
     {
-      "id": "MM2_f1",
-      "type": "nmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 1.288,
-        "y": 0.0,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": false,
-        "abut_right": true
-      }
+      "id": "MM1_m5",
+      "geometry": { "x": 1.442, "y": 2.672, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
     },
     {
-      "id": "MM2_f2",
-      "type": "nmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 1.358,
-        "y": 0.0,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
+      "id": "MM1_m6",
+      "geometry": { "x": 1.736, "y": 2.672, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
     },
     {
-      "id": "MM2_f3",
-      "type": "nmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 1.428,
-        "y": 0.0,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": true
-      }
+      "id": "MM1_m7",
+      "geometry": { "x": 2.030, "y": 2.672, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
     },
     {
-      "id": "MM2_f4",
-      "type": "nmos",
-      "electrical": {
-        "l": 1.4e-08,
-        "nf": 1,
-        "nfin": 2.0,
-        "w": 0
-      },
-      "geometry": {
-        "x": 1.498,
-        "y": 0.0,
-        "width": 0.294,
-        "height": 0.5680000000000001,
-        "orientation": "R0"
-      },
-      "abutment": {
-        "abut_left": true,
-        "abut_right": false
-      }
+      "id": "MM1_m8",
+      "geometry": { "x": 2.324, "y": 2.672, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
+    },
+    {
+      "id": "MM2_m1",
+      "geometry": { "x": 0.266, "y": 2.004, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
+    },
+    {
+      "id": "MM2_m2",
+      "geometry": { "x": 0.560, "y": 2.004, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
+    },
+    {
+      "id": "MM2_m3",
+      "geometry": { "x": 0.854, "y": 2.004, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
+    },
+    {
+      "id": "MM2_m4",
+      "geometry": { "x": 1.148, "y": 2.004, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
+    },
+    {
+      "id": "MM2_m5",
+      "geometry": { "x": 1.442, "y": 2.004, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
+    },
+    {
+      "id": "MM2_m6",
+      "geometry": { "x": 1.736, "y": 2.004, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
+    },
+    {
+      "id": "MM2_m7",
+      "geometry": { "x": 2.030, "y": 2.004, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
+    },
+    {
+      "id": "MM2_m8",
+      "geometry": { "x": 2.324, "y": 2.004, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
+    },
+    {
+      "id": "MM3_m1",
+      "geometry": { "x": 0.266, "y": 1.336, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
+    },
+    {
+      "id": "MM3_m2",
+      "geometry": { "x": 0.560, "y": 1.336, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
+    },
+    {
+      "id": "MM3_m3",
+      "geometry": { "x": 0.854, "y": 1.336, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
+    },
+    {
+      "id": "MM3_m4",
+      "geometry": { "x": 1.148, "y": 1.336, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
+    },
+    {
+      "id": "MM3_m5",
+      "geometry": { "x": 1.442, "y": 1.336, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
+    },
+    {
+      "id": "MM3_m6",
+      "geometry": { "x": 1.736, "y": 1.336, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
+    },
+    {
+      "id": "MM3_m7",
+      "geometry": { "x": 2.030, "y": 1.336, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
+    },
+    {
+      "id": "MM3_m8",
+      "geometry": { "x": 2.324, "y": 1.336, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
+    },
+    {
+      "id": "MM4_m1",
+      "geometry": { "x": 1.442, "y": 0.668, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
+    },
+    {
+      "id": "MM4_m2",
+      "geometry": { "x": 1.736, "y": 0.668, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
+    },
+    {
+      "id": "MM4_m3",
+      "geometry": { "x": 2.030, "y": 0.668, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
+    },
+    {
+      "id": "MM4_m4",
+      "geometry": { "x": 2.324, "y": 0.668, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
+    },
+    {
+      "id": "MM5_m1",
+      "geometry": { "x": 0.266, "y": 0.668, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
+    },
+    {
+      "id": "MM5_m2",
+      "geometry": { "x": 0.560, "y": 0.668, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
+    },
+    {
+      "id": "MM5_m3",
+      "geometry": { "x": 0.854, "y": 0.668, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
+    },
+    {
+      "id": "MM5_m4",
+      "geometry": { "x": 1.148, "y": 0.668, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": false }
+    },
+    {
+      "id": "MM10_m1",
+      "geometry": { "x": 0.210, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
+    },
+    {
+      "id": "MM10_m2",
+      "geometry": { "x": 0.826, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
+    },
+    {
+      "id": "MM10_m3",
+      "geometry": { "x": 1.442, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
+    },
+    {
+      "id": "MM10_m4",
+      "geometry": { "x": 2.058, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
+    },
+    {
+      "id": "MM6",
+      "geometry": { "x": 2.604, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": false }
+    },
+    {
+      "id": "MM7",
+      "geometry": { "x": 0.000, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": true }
+    },
+    {
+      "id": "MM8_m1",
+      "geometry": { "x": 0.070, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
+    },
+    {
+      "id": "MM8_m2",
+      "geometry": { "x": 0.686, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": true }
+    },
+    {
+      "id": "MM8_m3",
+      "geometry": { "x": 1.302, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": true }
+    },
+    {
+      "id": "MM8_m4",
+      "geometry": { "x": 1.918, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": false, "abut_right": true }
+    },
+    {
+      "id": "MM8_m5",
+      "geometry": { "x": 0.140, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
+    },
+    {
+      "id": "MM8_m6",
+      "geometry": { "x": 0.756, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
+    },
+    {
+      "id": "MM8_m7",
+      "geometry": { "x": 1.372, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
+    },
+    {
+      "id": "MM8_m8",
+      "geometry": { "x": 1.988, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
+    },
+    {
+      "id": "MM9_m1",
+      "geometry": { "x": 0.350, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": false }
+    },
+    {
+      "id": "MM9_m2",
+      "geometry": { "x": 0.966, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": false }
+    },
+    {
+      "id": "MM9_m3",
+      "geometry": { "x": 1.582, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": false }
+    },
+    {
+      "id": "MM9_m4",
+      "geometry": { "x": 2.198, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
+    },
+    {
+      "id": "MM9_m5",
+      "geometry": { "x": 0.280, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
+    },
+    {
+      "id": "MM9_m6",
+      "geometry": { "x": 0.896, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
+    },
+    {
+      "id": "MM9_m7",
+      "geometry": { "x": 1.512, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
+    },
+    {
+      "id": "MM9_m8",
+      "geometry": { "x": 2.128, "y": 0.000, "orientation": "R0" },
+      "abutment": { "abut_left": true, "abut_right": true }
     }
   ]
 }
