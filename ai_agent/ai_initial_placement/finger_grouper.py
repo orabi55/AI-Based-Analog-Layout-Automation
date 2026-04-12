@@ -37,10 +37,14 @@ ROW_PITCH    = 0.668   # µm — standard row-to-row pitch
 FINGER_PITCH = 0.070   # µm — abutted finger-to-finger pitch
 STD_PITCH    = 0.294   # µm — non-abutted device pitch (diffusion break)
 
-# Regex: split "MM9<3>_f4" → ("MM9", "3", "4")
+# Regex: split "MM9<3>_f4" → ("MM9", "3", "4")  (legacy array-bus)
 _BUS_RE   = re.compile(r'^(.+?)<(\d+)>(?:_f(\d+))?$')
-# Regex: split "MM5_f2"    → ("MM5", None, "2")
-_PLAIN_RE = re.compile(r'^(.+?)_f(\d+)$')
+# Regex: split "MM6_m2_f3" → ("MM6", "2", "3")  (multiplier + finger)
+_MULTI_FINGER_RE = re.compile(r'^(.+?)_m(\d+)_f(\d+)$')
+# Regex: split "MM6_m3"    → ("MM6", "3", None)  (multiplier/array only)
+_MULTI_ONLY_RE = re.compile(r'^(.+?)_m(\d+)$')
+# Regex: split "MM5_f2"    → ("MM5", None, "2")  (finger-only, legacy)
+_PLAIN_FINGER_RE = re.compile(r'^(.+?)_f(\d+)$')
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -48,15 +52,36 @@ _PLAIN_RE = re.compile(r'^(.+?)_f(\d+)$')
 
 def _parse_id(node_id: str) -> Tuple[str, int | None, int | None]:
     """
-    Parse a node id into (parent_name, bus_index, finger_index).
+    Parse a node id into (parent_name, multiplier_index, finger_index).
 
-    Examples
-    --------
-    "MM9<3>_f4"  → ("MM9", 3, 4)
-    "MM9<3>"     → ("MM9", 3, None)   ← single-finger bus member
-    "MM5_f2"     → ("MM5", None, 2)
-    "MM5"        → ("MM5", None, None) ← single-device, no fingers
+    Handles multiple naming conventions:
+
+    New naming (from updated parse_mos):
+        "MM6_m2_f3"  → ("MM6", 2, 3)    ← multiplier 2, finger 3
+        "MM6_m3"     → ("MM6", 3, None)  ← multiplier/array child 3
+        "MM9_m8"     → ("MM9", 8, None)  ← array copy 8
+        "MM5_f2"     → ("MM5", None, 2)  ← finger 2 (finger-only)
+        "MM1"        → ("MM1", None, None) ← single device
+
+    Legacy array-bus naming (from old data / layout files):
+        "MM9<3>_f4"  → ("MM9", 3, 4)
+        "MM9<3>"     → ("MM9", 3, None)
+
+    Returns
+    -------
+    (parent_name, multiplier_index, finger_index)
     """
+    # Try new multi+finger pattern first: "MM6_m2_f3"
+    m = _MULTI_FINGER_RE.match(node_id)
+    if m:
+        return m.group(1), int(m.group(2)), int(m.group(3))
+
+    # Try new multi-only pattern: "MM6_m3"
+    m = _MULTI_ONLY_RE.match(node_id)
+    if m:
+        return m.group(1), int(m.group(2)), None
+
+    # Try legacy array-bus pattern: "MM9<3>_f4"
     m = _BUS_RE.match(node_id)
     if m:
         parent = m.group(1)
@@ -64,7 +89,8 @@ def _parse_id(node_id: str) -> Tuple[str, int | None, int | None]:
         finger_idx = int(m.group(3)) if m.group(3) else None
         return parent, bus_idx, finger_idx
 
-    m = _PLAIN_RE.match(node_id)
+    # Try legacy finger-only pattern: "MM5_f2"
+    m = _PLAIN_FINGER_RE.match(node_id)
     if m:
         return m.group(1), None, int(m.group(2))
 
@@ -1278,6 +1304,21 @@ def expand_groups(
     """
     Expand group-level LLM placement back to individual finger nodes.
 
+    Hierarchy handling
+    ------------------
+    The finger_map members may come from several naming conventions:
+      - Legacy array-bus:    "MM9<3>_f4"  (array copy 3, finger 4)
+      - Simple finger:       "MM5_f2"     (single parent, finger 2)
+      - Two-level hierarchy: "MM6_2_f3"   (multiplier child 2, finger 3)
+      - Multiplier-only:     "MM6_2"      (multiplier child 2)
+
+    Members within each group are sorted by _parse_id() which yields
+    (parent, bus/multiplier_idx, finger_idx).  This guarantees that:
+      - Sibling devices at the same hierarchy level are placed consecutively
+      - All siblings are **abutted** (adjacent with FINGER_PITCH spacing)
+      - The parent device's bounding box spans from the first child's edge
+        to the last child's edge during placement
+
     Multi-row support
     -----------------
     The LLM may assign any valid row Y (a non-negative multiple of ROW_PITCH).
@@ -1314,28 +1355,96 @@ def expand_groups(
     # Build lookup: group_id -> placed geometry (from LLM output)
     placed = {n["id"]: n for n in group_placement}
 
-    # --- Pass 1: collect snapped Y per group and determine PMOS/NMOS row sets
+    # --- Pass 1: collect snapped Y per group and enforce PMOS/NMOS separation
+    #
+    # Row separation rules:
+    #   - NMOS rows: Y = 0, ROW_PITCH, 2*ROW_PITCH, ...
+    #   - PMOS rows: Y must be STRICTLY above all NMOS bounding boxes
+    #   - No overlap allowed: PMOS bottom edge >= max(NMOS top edge)
+    #   - Device heights vary with fin count (nfin) — taller devices need more space
+    #   - Height is computed from nfin: height ≈ 0.5 + nfin × 0.04 µm
     group_ys: Dict[str, float] = {}   # group_id -> snapped Y
+    group_types: Dict[str, str] = {}   # group_id -> device type
+    group_heights: Dict[str, float] = {}  # group_id -> computed device height in µm
+
     for grp_id, members in finger_map.items():
         grp_geom = placed.get(grp_id, {}).get("geometry", {})
         raw_y = grp_geom.get("y", NMOS_Y)
-        group_ys[grp_id] = _snap_to_row_grid(raw_y)
-
-    nmos_ys_used = {y for grp_id, y in group_ys.items()
-                    if finger_map[grp_id][0].get("type", "nmos") == "nmos"}
-
-    # Safety: compute the minimum valid Y for a PMOS row
-    max_nmos_y = max(nmos_ys_used) if nmos_ys_used else -ROW_PITCH
-    min_pmos_y = max_nmos_y + ROW_PITCH
-
-    # --- Pass 2: fix any PMOS group that ended up at or below the NMOS zone
-    for grp_id, members in finger_map.items():
         dev_type = members[0].get("type", "nmos")
-        if dev_type == "pmos":
-            if group_ys[grp_id] <= max_nmos_y:
+        rep_elec = members[0].get("electrical", {})
+
+        # Compute height from nfin (number of fins in the vertical direction)
+        # FinFET device height scales linearly with nfin.
+        # Conservative estimate: base=0.55 µm, fin_pitch=0.05 µm
+        # This accounts for the actual OAS PCell height which is often larger
+        # than the nominal geometric bounding box.
+        nfin = rep_elec.get("nfin", 2)
+        computed_height = 0.55 + nfin * 0.05
+        # Also check the LLM-provided height — use the larger of the two
+        llm_height = grp_geom.get("height", 0.0)
+        # Add a safety margin of 0.05 µm to prevent any edge overlap
+        group_heights[grp_id] = max(computed_height, llm_height, 0.5) + 0.05
+
+        group_types[grp_id] = dev_type
+
+        # Snap to row grid
+        snapped_y = _snap_to_row_grid(raw_y)
+        group_ys[grp_id] = snapped_y
+
+    # --- Pass 2: enforce strict PMOS/NMOS bounding box separation --------
+    # Compute the maximum top edge of any NMOS device: max(nmos_y + nmos_height)
+    nmos_top_edges = []
+    for grp_id, y in group_ys.items():
+        if group_types.get(grp_id) == "nmos":
+            h = group_heights.get(grp_id, 0.668)
+            # The top edge of the NMOS bounding box is y + height
+            nmos_top_edges.append(y + h)
+
+    max_nmos_top = max(nmos_top_edges) if nmos_top_edges else 0.0
+
+    # PMOS bottom edge must be at or above max NMOS top edge
+    min_pmos_y = max_nmos_top
+
+    # Also ensure NMOS and PMOS are on different row grid levels
+    # (prevents same-row overlap even with height check)
+    nmos_ys_used = {y for grp_id, y in group_ys.items()
+                    if group_types.get(grp_id) == "nmos"}
+    max_nmos_y = max(nmos_ys_used) if nmos_ys_used else 0.0
+    # PMOS must be on a row strictly above the highest NMOS row
+    min_pmos_row = max_nmos_y + ROW_PITCH
+    # Take the larger of the two constraints
+    min_pmos_y = max(min_pmos_y, min_pmos_row)
+
+    for grp_id, y in group_ys.items():
+        if group_types.get(grp_id) == "pmos":
+            if y < min_pmos_y:
                 group_ys[grp_id] = min_pmos_y
 
+    # If PMOS ended up below NMOS (LLM gave it a lower Y), shift ALL PMOS up
+    pmos_ys = [y for grp_id, y in group_ys.items()
+               if group_types.get(grp_id) == "pmos"]
+    if pmos_ys and nmos_ys_used:
+        current_min_pmos = min(pmos_ys)
+        if current_min_pmos < min_pmos_y:
+            shift = min_pmos_y - current_min_pmos
+            for grp_id, y in group_ys.items():
+                if group_types.get(grp_id) == "pmos":
+                    group_ys[grp_id] = round(y + shift, 6)
+
     # --- Pass 3: expand each group to individual fingers --------------------
+    #
+    # Abutment behavior for hierarchy siblings:
+    #   All members within a single group are siblings at the same hierarchy
+    #   level (or at the leaf level of a two-level hierarchy).  They MUST be
+    #   abutted — placed directly adjacent with no gap (FINGER_PITCH = 0.070 µm).
+    #
+    #   For a two-level hierarchy (e.g. m=3, nf=5 = 15 leaves), the members
+    #   list is sorted so that multiplier child 1's fingers come first,
+    #   followed by multiplier child 2's fingers, etc.  All 15 are placed
+    #   consecutively with abutment spacing.
+    #
+    #   The parent device's bounding box (set during group placement) spans
+    #   from the origin X to origin X + total_fingers × pitch.
     for grp_id, members in finger_map.items():
         grp_placed = placed.get(grp_id, {})
         grp_geom = grp_placed.get("geometry", {})
@@ -1354,6 +1463,8 @@ def expand_groups(
 
         for finger_idx, orig_node in enumerate(members):
             node = copy.deepcopy(orig_node)
+            # Place each sibling at consecutive positions with the group's pitch
+            # This ensures abutment for all hierarchy leaves within the group
             fx = round(origin_x + finger_idx * pitch, 6)
             node["geometry"].update({
                 "x":           fx,
@@ -1371,7 +1482,11 @@ def expand_groups(
                     "abut_right": False,
                 }
             else:
-                # Abutment flags: first finger has no left neighbor; last has no right
+                # Abutment flags for hierarchy siblings:
+                #   First leaf:  no left neighbor, has right neighbor
+                #   Middle leaf: has both left and right neighbors
+                #   Last leaf:   has left neighbor, no right neighbor
+                # This creates a continuous abutment chain across all siblings
                 node["abutment"] = {
                     "abut_left":  finger_idx > 0,
                     "abut_right": finger_idx < (total - 1),
@@ -1387,14 +1502,22 @@ def expand_groups(
 
 def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[dict]:
     """
-    Guarantee no two devices in the same row overlap.
+    Guarantee no two devices in the same row overlap while preserving
+    abutment chains for hierarchy siblings.
 
-    Groups all nodes by their snapped Y coordinate, sorts each row by X,
-    and pushes any overlapping device to the right of its left neighbor.
+    Key insight: devices belonging to the same logical transistor (same parent)
+    form an abutment chain that must NOT be broken.  We identify chains by
+    extracting the parent name from each device ID, then place each chain
+    as an atomic unit.
 
-    Spacing used:
-      - If two adjacent fingers share an abutment bond -> FINGER_PITCH (0.070)
-      - Otherwise -> device width (typically STD_PITCH = 0.294)
+    Devices are also separated by type (PMOS vs NMOS) so they are never
+    placed in the same chain bucket.
+
+    Algorithm:
+      1. Group devices by (type, parent name) — ensures PMOS/NMOS never mix
+      2. Within each chain, place devices consecutively at FINGER_PITCH
+      3. Place chains left-to-right ordered by each chain's leftmost original X
+      4. Separate different chains by device width (STD_PITCH if width unknown)
     """
     if not nodes:
         return nodes
@@ -1402,43 +1525,67 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
     pitch_abut = FINGER_PITCH  # 0.070
     pitch_std  = STD_PITCH     # 0.294
 
-    # Group by Y (rounded to avoid float drift)
-    rows: Dict[float, List[dict]] = defaultdict(list)
+    # Group by (Y, type) — PMOS and NMOS are always in separate buckets
+    type_rows: Dict[Tuple[float, str], List[dict]] = defaultdict(list)
     for n in nodes:
         y = round(n.get("geometry", {}).get("y", 0.0), 6)
-        rows[y].append(n)
+        dev_type = n.get("type", "nmos")
+        type_rows[(y, dev_type)].append(n)
 
-    for y_key, row_nodes in rows.items():
-        # Sort by X (use original X for initial ordering)
-        row_nodes.sort(key=lambda n: n.get("geometry", {}).get("x", 0.0))
+    for (y_key, _dev_type), row_nodes in type_rows.items():
+        # --- Step 1: Identify chains by parent name -----------------------
+        chains: Dict[str, List[dict]] = defaultdict(list)
+        for node in row_nodes:
+            nid = node.get("id", "")
+            parent = _transistor_key(nid)
+            chains[parent].append(node)
 
-        for i in range(1, len(row_nodes)):
-            prev = row_nodes[i - 1]
-            curr = row_nodes[i]
-            prev_geo = prev.get("geometry", {})
-            curr_geo = curr.get("geometry", {})
+        # --- Step 2: Sort each chain's devices by their internal index ------
+        for parent, chain_devices in chains.items():
+            chain_devices.sort(key=lambda n: n.get("geometry", {}).get("x", 0.0))
 
-            # Always read the already-updated (pushed) X from prev
-            prev_x = prev_geo.get("x", 0.0)
-            curr_x = curr_geo.get("x", 0.0)
+        # --- Step 3: Sort chains by their leftmost device's original X ------
+        sorted_chains = sorted(
+            chains.values(),
+            key=lambda ch: ch[0].get("geometry", {}).get("x", 0.0),
+        )
 
-            # Determine required spacing
-            if no_abutment:
-                min_spacing = pitch_std
-            else:
-                # Check if these two are abutted (right of prev, left of curr)
-                prev_abut = prev.get("abutment", {}).get("abut_right", False)
-                curr_abut = curr.get("abutment", {}).get("abut_left", False)
-                if prev_abut and curr_abut:
-                    min_spacing = pitch_abut
+        # --- Step 4: Place chains left-to-right ---------------------------
+        if not sorted_chains:
+            continue
+
+        cursor = sorted_chains[0][0].get("geometry", {}).get("x", 0.0)
+
+        for chain in sorted_chains:
+            for dev_idx, dev in enumerate(chain):
+                geo = dev.get("geometry", {})
+                geo["x"] = round(cursor, 6)
+                geo["y"] = round(float(y_key), 6)
+
+                is_last = (dev_idx == len(chain) - 1)
+
+                if not is_last:
+                    # Within chain: abut spacing
+                    cursor = round(cursor + pitch_abut, 6)
+                    dev.setdefault("abutment", {})["abut_right"] = True
+                    next_dev = chain[dev_idx + 1]
+                    next_dev.setdefault("abutment", {})["abut_left"] = True
                 else:
-                    # Use the device width as spacing, or STD_PITCH as fallback
-                    min_spacing = prev_geo.get("width", pitch_std)
+                    # End of chain: advance by device width for next chain
+                    dev_w = geo.get("width", pitch_std)
+                    if dev_w < pitch_std * 0.5:
+                        dev_w = pitch_std
+                    cursor = round(cursor + dev_w, 6)
 
-            # Push current device right if it overlaps with the previous one
-            min_x = round(prev_x + min_spacing, 6)
-            if curr_x < min_x - 1e-9:
-                curr_geo["x"] = min_x
+        # Clean abutment flags for standalone (single-device) chains
+        for chain in chains.values():
+            if len(chain) == 1:
+                dev = chain[0]
+                abut = dev.get("abutment", {})
+                dev["abutment"] = {
+                    "abut_left":  abut.get("abut_left", False),
+                    "abut_right": abut.get("abut_right", False),
+                }
 
     return nodes
 
