@@ -21,6 +21,7 @@ from PySide6.QtGui import QPainter, QPen, QPainterPath, QColor, QBrush, QAction
 from device_item import DeviceItem
 from passive_item import ResistorItem, CapacitorItem
 from block_item import BlockItem
+from hierarchy_group_item import HierarchyGroupItem
 try:
     from abutment_engine import find_abutment_candidates, build_edge_highlight_map
 except ImportError:
@@ -110,11 +111,17 @@ class SymbolicEditor(QGraphicsView):
         self._block_items = []       # list of actual BlockItem instances (symbol view)
         self._block_overlays_visible = True
         self._view_level = "symbol"   # 'symbol' or 'transistor'
+
+        # Block colors
         # --- Fix 2: Single uniform color for ALL blocks ---
         self._block_fill_color = QColor(60, 130, 190, 45)      # steel blue, semi-transparent (overlay)
         self._block_border_color = QColor(80, 160, 220, 130)   # lighter steel border (overlay)
         self._block_fill_solid = QColor(60, 130, 190, 180)     # opaque fill (symbol view)
         self._block_border_solid = QColor(80, 160, 220, 220)   # opaque border (symbol view)
+
+        # Hierarchy group items (arrays, multipliers, fingers)
+        self._hierarchy_groups = []  # list of top-level HierarchyGroupItem
+        self._hierarchy_visible = True  # whether hierarchy groups are shown
 
         # Completely disable scrollbars (policy is more reliable than CSS)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -327,6 +334,16 @@ class SymbolicEditor(QGraphicsView):
             self.scene.addItem(item)
             self.device_items[node.get("id", "unknown")] = item
 
+        # ── Build hierarchy groups ──────────────────────────────────────
+        # Only build if there are actually hierarchical devices
+        has_hierarchy = any(
+            n.get("electrical", {}).get("parent") and
+            n.get("id") in self.device_items
+            for n in nodes
+        )
+        if has_hierarchy:
+            self._build_hierarchy_groups(nodes)
+
         # Compute grid metrics from device sizes (used for UI snap / row pitch).
         if widths:
             min_w = min(widths)
@@ -372,6 +389,201 @@ class SymbolicEditor(QGraphicsView):
                 -pos.y() / self.scale_factor,
             )
         return positions
+
+    # -------------------------------------------------
+    # Hierarchy Group Building
+    # -------------------------------------------------
+
+    def _build_hierarchy_groups(self, nodes):
+        """Group devices by parent and create HierarchyGroupItems.
+
+        Only creates groups for devices with m>1, nf>1, or array suffix.
+        Single devices are not grouped.
+        """
+        # Clear old groups
+        for g in self._hierarchy_groups:
+            try:
+                self.scene.removeItem(g)
+            except Exception:
+                pass
+        self._hierarchy_groups.clear()
+
+        # ── Step 1: Group devices by parent ──────────────────────────────
+        parent_groups = {}  # parent_name -> list of (node, device_item)
+        for node in nodes:
+            try:
+                elec = node.get("electrical", {})
+                parent = elec.get("parent")
+                dev_id = node.get("id", "unknown")
+                item = self.device_items.get(dev_id)
+                if parent and item:
+                    parent_groups.setdefault(parent, []).append((node, item))
+            except Exception:
+                continue
+
+        # ── Step 2: Build hierarchy info for each group ──────────────────
+        _hierarchy_colors = [
+            (QColor(40, 60, 100, 50), QColor(80, 140, 220, 160)),   # blue
+            (QColor(60, 40, 100, 50), QColor(140, 100, 220, 160)),   # purple
+            (QColor(40, 80, 60, 50), QColor(80, 200, 140, 160)),     # teal
+            (QColor(80, 60, 40, 50), QColor(200, 140, 80, 160)),     # amber
+        ]
+        color_idx = 0
+
+        for parent_name, members in list(parent_groups.items()):
+            try:
+                if len(members) <= 1:
+                    continue  # single device, no grouping needed
+
+                # Sort by multiplier/finger index for correct ordering
+                def _sort_key(m):
+                    node, item = m
+                    elec = node.get("electrical", {})
+                    mi = elec.get("multiplier_index") or 0
+                    fi = elec.get("finger_index") or 0
+                    return (mi, fi)
+                members.sort(key=_sort_key)
+
+                nodes_list = [m[0] for m in members]
+                items_list = [m[1] for m in members]
+
+                # Determine hierarchy structure
+                has_mult = any(
+                    n.get("electrical", {}).get("multiplier_index") is not None
+                    for n in nodes_list
+                )
+                has_finger = any(
+                    n.get("electrical", {}).get("finger_index") is not None
+                    for n in nodes_list
+                )
+
+                # Count unique multipliers and fingers per multiplier
+                if has_mult:
+                    mult_indices = set()
+                    for n in nodes_list:
+                        mi = n.get("electrical", {}).get("multiplier_index")
+                        if mi is not None:
+                            mult_indices.add(mi)
+                    m_count = len(mult_indices)
+                else:
+                    m_count = 1
+
+                # Fingers per multiplier
+                if has_finger:
+                    fingers_per_mult = {}
+                    for n in nodes_list:
+                        mi = n.get("electrical", {}).get("multiplier_index", 0)
+                        fi = n.get("electrical", {}).get("finger_index")
+                        if fi is not None:
+                            fingers_per_mult.setdefault(mi, set()).add(fi)
+                    nf_per_mult = max(len(v) for v in fingers_per_mult.values()) if fingers_per_mult else 1
+                else:
+                    nf_per_mult = 1
+
+                # For finger-only (no m-level), nf = total members
+                if not has_mult:
+                    nf_per_mult = len(members)
+
+                # Skip single-device groups
+                if m_count == 1 and nf_per_mult == 1:
+                    continue
+
+                # Determine if array
+                is_array = any(
+                    n.get("electrical", {}).get("array_index") is not None
+                    for n in nodes_list
+                )
+
+                # Build hierarchy info
+                hierarchy_info = {
+                    "m": m_count,
+                    "nf": nf_per_mult,
+                    "is_array": is_array,
+                }
+
+                # ── Create child groups for two-level hierarchy ──────────────
+                child_groups = []
+                if m_count > 1 and nf_per_mult > 1:
+                    # Group by multiplier index
+                    mult_buckets = {}
+                    for node, item in members:
+                        mi = node.get("electrical", {}).get("multiplier_index", 1)
+                        mult_buckets.setdefault(mi, []).append((node, item))
+
+                    for mi in sorted(mult_buckets.keys()):
+                        bucket = mult_buckets[mi]
+                        bucket.sort(key=lambda m: m[0].get("electrical", {}).get("finger_index", 0))
+                        bucket_items = [m[1] for m in bucket]
+                        child_name = f"{parent_name}_m{mi}"
+                        child_hi = {"m": 1, "nf": len(bucket), "is_array": False}
+
+                        fill, border = _hierarchy_colors[(color_idx + mi) % len(_hierarchy_colors)]
+                        child_group = HierarchyGroupItem(
+                            child_name, bucket_items, child_hi,
+                            color=fill, border_color=border,
+                        )
+                        child_group.setVisible(False)  # start hidden
+                        self.scene.addItem(child_group)
+                        child_groups.append(child_group)
+
+                # ── Create the parent group ──────────────────────────────────
+                fill, border = _hierarchy_colors[color_idx % len(_hierarchy_colors)]
+                color_idx += 1
+
+                group_item = HierarchyGroupItem(
+                    parent_name, items_list, hierarchy_info,
+                    color=fill, border_color=border,
+                )
+
+                # Wire up child groups
+                if child_groups:
+                    group_item._child_groups = child_groups
+                    for child in child_groups:
+                        child._parent_group = group_item
+
+                # Wire up signals
+                group_item.signals.drag_finished.connect(self._on_hierarchy_drag_finished)
+                group_item.signals.descend_requested.connect(self._on_hierarchy_descend)
+                group_item.signals.ascend_requested.connect(self._on_hierarchy_ascend)
+
+                self.scene.addItem(group_item)
+                self._hierarchy_groups.append(group_item)
+            except Exception:
+                continue
+
+    def _on_hierarchy_drag_finished(self, group):
+        """After moving a hierarchy group, sync positions back to node data."""
+        try:
+            self._sync_hierarchy_to_nodes(group)
+        except Exception:
+            pass
+
+    def _on_hierarchy_descend(self, group):
+        pass
+
+    def _on_hierarchy_ascend(self, group):
+        pass
+
+    def _sync_hierarchy_to_nodes(self, group):
+        """Update node data when a hierarchy group is moved."""
+        try:
+            self._sync_node_positions()
+        except Exception:
+            pass
+
+    def keyPressEvent(self, event):
+        """Handle keyboard shortcuts."""
+        if event.key() == Qt.Key.Key_Escape:
+            # Ascend from any descended hierarchy groups
+            try:
+                for g in self._hierarchy_groups:
+                    if g._is_descended:
+                        g.ascend()
+                        event.accept()
+                        return
+            except Exception:
+                pass
+        super().keyPressEvent(event)
 
     def _abut_pair_score(self, left_item, right_item):
         """Score how desirable it is to place left_item immediately before right_item."""
@@ -958,6 +1170,9 @@ class SymbolicEditor(QGraphicsView):
 
     def _on_selection_changed(self):
         """Emit device_clicked when user selects a device on the canvas."""
+        # Prevent recursive selection updates
+        if getattr(self, '_selection_updating', False):
+            return
         try:
             selected = [s for s in self.scene.selectedItems()
                         if hasattr(s, 'device_name')]
@@ -975,6 +1190,16 @@ class SymbolicEditor(QGraphicsView):
         if not self.device_items:
             return
         rects = [item.sceneBoundingRect() for item in self.device_items.values()]
+        # Also include hierarchy group bounding rects
+        try:
+            for g in self._hierarchy_groups:
+                if g.isVisible():
+                    rects.append(g.sceneBoundingRect())
+                for child in g._child_groups:
+                    if child.isVisible():
+                        rects.append(child.sceneBoundingRect())
+        except Exception:
+            pass
         union = rects[0]
         for r in rects[1:]:
             union = union.united(r)
@@ -994,6 +1219,20 @@ class SymbolicEditor(QGraphicsView):
         if item:
             item.setSelected(True)
         self.scene.blockSignals(False)
+
+    def keyPressEvent(self, event):
+        """Handle global keyboard shortcuts."""
+        if event.key() == Qt.Key.Key_Escape:
+            # Ascend from any descended hierarchy groups
+            try:
+                for g in self._hierarchy_groups:
+                    if g._is_descended:
+                        g.ascend()
+                        event.accept()
+                        return
+            except Exception:
+                pass
+        super().keyPressEvent(event)
 
     # -------------------------------------------------
     # Block Overlays
