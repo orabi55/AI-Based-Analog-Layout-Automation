@@ -5,7 +5,10 @@
       "Bash(type *)",
       "Bash(powershell *)",
       "Bash(timeout *)",
-      "Bash(del *)"
+      "Bash(del *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)"
     ]
   },
   "$version": 3

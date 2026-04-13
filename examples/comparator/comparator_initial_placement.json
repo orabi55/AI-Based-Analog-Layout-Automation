@@ -6,7 +6,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM5",
                 "m": 4,
@@ -16,10 +16,14 @@
             },
             "geometry": {
                 "x": 0.0,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             }
         },
         {
@@ -28,7 +32,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM5",
                 "m": 4,
@@ -38,10 +42,14 @@
             },
             "geometry": {
                 "x": 0.07,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             }
         },
         {
@@ -50,7 +58,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM5",
                 "m": 4,
@@ -60,10 +68,14 @@
             },
             "geometry": {
                 "x": 0.14,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             }
         },
         {
@@ -72,7 +84,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM5",
                 "m": 4,
@@ -82,10 +94,14 @@
             },
             "geometry": {
                 "x": 0.21,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": false
             }
         },
         {
@@ -94,7 +110,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM4",
                 "m": 4,
@@ -104,10 +120,14 @@
             },
             "geometry": {
                 "x": 3.64,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
             }
         },
         {
@@ -116,7 +136,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM4",
                 "m": 4,
@@ -126,10 +146,14 @@
             },
             "geometry": {
                 "x": 3.71,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             }
         },
         {
@@ -138,7 +162,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM4",
                 "m": 4,
@@ -148,10 +172,14 @@
             },
             "geometry": {
                 "x": 3.78,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             }
         },
         {
@@ -160,7 +188,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM4",
                 "m": 4,
@@ -170,10 +198,14 @@
             },
             "geometry": {
                 "x": 3.85,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             }
         },
         {
@@ -182,7 +214,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM3",
                 "m": 8,
@@ -192,10 +224,14 @@
             },
             "geometry": {
                 "x": 0.504,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
             }
         },
         {
@@ -204,7 +240,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM3",
                 "m": 8,
@@ -214,10 +250,14 @@
             },
             "geometry": {
                 "x": 0.574,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             }
         },
         {
@@ -226,7 +266,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM3",
                 "m": 8,
@@ -236,10 +276,14 @@
             },
             "geometry": {
                 "x": 0.644,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             }
         },
         {
@@ -248,7 +292,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM3",
                 "m": 8,
@@ -258,10 +302,14 @@
             },
             "geometry": {
                 "x": 0.714,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             }
         },
         {
@@ -270,7 +318,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM3",
                 "m": 8,
@@ -280,10 +328,14 @@
             },
             "geometry": {
                 "x": 0.784,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             }
         },
         {
@@ -292,7 +344,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM3",
                 "m": 8,
@@ -302,10 +354,14 @@
             },
             "geometry": {
                 "x": 0.854,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             }
         },
         {
@@ -314,7 +370,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM3",
                 "m": 8,
@@ -324,10 +380,14 @@
             },
             "geometry": {
                 "x": 0.924,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             }
         },
         {
@@ -336,7 +396,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM3",
                 "m": 8,
@@ -346,10 +406,14 @@
             },
             "geometry": {
                 "x": 0.994,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": false
             }
         },
         {
@@ -358,7 +422,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM2",
                 "m": 8,
@@ -368,10 +432,14 @@
             },
             "geometry": {
                 "x": 1.288,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
             }
         },
         {
@@ -380,7 +448,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM2",
                 "m": 8,
@@ -390,10 +458,14 @@
             },
             "geometry": {
                 "x": 1.358,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             }
         },
         {
@@ -402,7 +474,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM2",
                 "m": 8,
@@ -412,10 +484,14 @@
             },
             "geometry": {
                 "x": 1.428,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             }
         },
         {
@@ -424,7 +500,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM2",
                 "m": 8,
@@ -434,10 +510,14 @@
             },
             "geometry": {
                 "x": 1.498,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": false
             }
         },
         {
@@ -446,7 +526,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM2",
                 "m": 8,
@@ -456,10 +536,14 @@
             },
             "geometry": {
                 "x": 1.568,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
             }
         },
         {
@@ -468,7 +552,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM2",
                 "m": 8,
@@ -478,10 +562,14 @@
             },
             "geometry": {
                 "x": 1.638,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             }
         },
         {
@@ -490,7 +578,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM2",
                 "m": 8,
@@ -500,10 +588,14 @@
             },
             "geometry": {
                 "x": 1.708,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             }
         },
         {
@@ -512,7 +604,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM2",
                 "m": 8,
@@ -522,10 +614,14 @@
             },
             "geometry": {
                 "x": 1.778,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": false
             }
         },
         {
@@ -534,7 +630,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM1",
                 "m": 8,
@@ -544,10 +640,14 @@
             },
             "geometry": {
                 "x": 2.072,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
             }
         },
         {
@@ -556,7 +656,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM1",
                 "m": 8,
@@ -566,10 +666,14 @@
             },
             "geometry": {
                 "x": 2.142,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             }
         },
         {
@@ -578,7 +682,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM1",
                 "m": 8,
@@ -588,10 +692,14 @@
             },
             "geometry": {
                 "x": 2.212,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             }
         },
         {
@@ -600,7 +708,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM1",
                 "m": 8,
@@ -610,10 +718,14 @@
             },
             "geometry": {
                 "x": 2.282,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             }
         },
         {
@@ -622,7 +734,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM1",
                 "m": 8,
@@ -632,10 +744,14 @@
             },
             "geometry": {
                 "x": 2.352,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             }
         },
         {
@@ -644,7 +760,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM1",
                 "m": 8,
@@ -654,10 +770,14 @@
             },
             "geometry": {
                 "x": 2.422,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             }
         },
         {
@@ -666,7 +786,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM1",
                 "m": 8,
@@ -676,10 +796,14 @@
             },
             "geometry": {
                 "x": 2.492,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             }
         },
         {
@@ -688,7 +812,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM1",
                 "m": 8,
@@ -698,10 +822,14 @@
             },
             "geometry": {
                 "x": 2.562,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": false
             }
         },
         {
@@ -710,7 +838,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM0",
                 "m": 8,
@@ -720,10 +848,14 @@
             },
             "geometry": {
                 "x": 2.856,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
             }
         },
         {
@@ -732,7 +864,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM0",
                 "m": 8,
@@ -742,10 +874,14 @@
             },
             "geometry": {
                 "x": 2.926,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             }
         },
         {
@@ -754,7 +890,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM0",
                 "m": 8,
@@ -764,10 +900,14 @@
             },
             "geometry": {
                 "x": 2.996,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             }
         },
         {
@@ -776,7 +916,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM0",
                 "m": 8,
@@ -786,10 +926,14 @@
             },
             "geometry": {
                 "x": 3.066,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             }
         },
         {
@@ -798,7 +942,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM0",
                 "m": 8,
@@ -808,10 +952,14 @@
             },
             "geometry": {
                 "x": 3.136,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             }
         },
         {
@@ -820,7 +968,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM0",
                 "m": 8,
@@ -830,10 +978,14 @@
             },
             "geometry": {
                 "x": 3.206,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             }
         },
         {
@@ -842,7 +994,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM0",
                 "m": 8,
@@ -852,10 +1004,14 @@
             },
             "geometry": {
                 "x": 3.276,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             }
         },
         {
@@ -864,7 +1020,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM0",
                 "m": 8,
@@ -874,10 +1030,14 @@
             },
             "geometry": {
                 "x": 3.346,
-                "y": -4.252,
+                "y": -2.029,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": false
             }
         },
         {
@@ -895,11 +1055,15 @@
                 "array_index": 7
             },
             "geometry": {
-                "x": 2.268,
-                "y": -5.032,
-                "width": 0.336,
+                "x": 2.142,
+                "y": -2.979,
+                "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": false
             }
         },
         {
@@ -917,11 +1081,15 @@
                 "array_index": 6
             },
             "geometry": {
-                "x": 2.198,
-                "y": -5.032,
-                "width": 0.336,
+                "x": 2.072,
+                "y": -2.979,
+                "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
             }
         },
         {
@@ -939,11 +1107,15 @@
                 "array_index": 5
             },
             "geometry": {
-                "x": 2.128,
-                "y": -5.032,
-                "width": 0.336,
+                "x": 2.002,
+                "y": -2.979,
+                "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": false
             }
         },
         {
@@ -961,11 +1133,15 @@
                 "array_index": 4
             },
             "geometry": {
-                "x": 2.058,
-                "y": -5.032,
-                "width": 0.336,
+                "x": 1.932,
+                "y": -2.979,
+                "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
             }
         },
         {
@@ -983,11 +1159,15 @@
                 "array_index": 3
             },
             "geometry": {
-                "x": 1.988,
-                "y": -5.032,
-                "width": 0.336,
+                "x": 1.862,
+                "y": -2.979,
+                "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             }
         },
         {
@@ -1005,11 +1185,15 @@
                 "array_index": 2
             },
             "geometry": {
-                "x": 1.918,
-                "y": -5.032,
-                "width": 0.336,
+                "x": 1.792,
+                "y": -2.979,
+                "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
             }
         },
         {
@@ -1027,11 +1211,15 @@
                 "array_index": 1
             },
             "geometry": {
-                "x": 1.848,
-                "y": -5.032,
-                "width": 0.336,
+                "x": 1.722,
+                "y": -2.979,
+                "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             }
         },
         {
@@ -1049,11 +1237,15 @@
                 "array_index": 0
             },
             "geometry": {
-                "x": 1.778,
-                "y": -5.032,
-                "width": 0.336,
+                "x": 1.652,
+                "y": -2.979,
+                "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
             }
         },
         {
@@ -1072,8 +1264,8 @@
             },
             "geometry": {
                 "x": 0.49,
-                "y": -5.032,
-                "width": 0.336,
+                "y": -2.979,
+                "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
             }
@@ -1094,8 +1286,8 @@
             },
             "geometry": {
                 "x": 0.42,
-                "y": -5.032,
-                "width": 0.336,
+                "y": -2.979,
+                "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
             }
@@ -1116,8 +1308,8 @@
             },
             "geometry": {
                 "x": 0.35,
-                "y": -5.032,
-                "width": 0.336,
+                "y": -2.979,
+                "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
             }
@@ -1138,8 +1330,8 @@
             },
             "geometry": {
                 "x": 0.28,
-                "y": -5.032,
-                "width": 0.336,
+                "y": -2.979,
+                "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
             }
@@ -1160,8 +1352,8 @@
             },
             "geometry": {
                 "x": 0.21,
-                "y": -5.032,
-                "width": 0.336,
+                "y": -2.979,
+                "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
             }
@@ -1182,9 +1374,9 @@
             },
             "geometry": {
                 "x": 0.14,
-                "y": -5.032,
+                "y": -2.979,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
             }
         },
@@ -1204,10 +1396,14 @@
             },
             "geometry": {
                 "x": 0.07,
-                "y": -5.032,
+                "y": -2.979,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": false
             }
         },
         {
@@ -1226,10 +1422,14 @@
             },
             "geometry": {
                 "x": 0.0,
-                "y": -5.032,
-                "width": 0.336,
+                "y": -2.979,
+                "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
             }
         },
         {
@@ -1238,7 +1438,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM10",
                 "m": 1,
@@ -1247,11 +1447,15 @@
                 "array_index": 3
             },
             "geometry": {
-                "x": 1.372,
-                "y": -5.032,
-                "width": 0.336,
+                "x": 1.288,
+                "y": -2.979,
+                "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             }
         },
         {
@@ -1260,7 +1464,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM10",
                 "m": 1,
@@ -1269,11 +1473,15 @@
                 "array_index": 2
             },
             "geometry": {
-                "x": 1.302,
-                "y": -5.032,
+                "x": 1.218,
+                "y": -2.979,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
             }
         },
         {
@@ -1282,7 +1490,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM10",
                 "m": 1,
@@ -1291,11 +1499,15 @@
                 "array_index": 1
             },
             "geometry": {
-                "x": 1.232,
-                "y": -5.032,
+                "x": 1.148,
+                "y": -2.979,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             }
         },
         {
@@ -1304,7 +1516,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": "MM10",
                 "m": 1,
@@ -1313,11 +1525,15 @@
                 "array_index": 0
             },
             "geometry": {
-                "x": 1.162,
-                "y": -5.032,
+                "x": 1.078,
+                "y": -2.979,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
             }
         },
         {
@@ -1326,7 +1542,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": null,
                 "m": 1,
@@ -1335,11 +1551,15 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 0.826,
-                "y": -5.032,
-                "width": 0.336,
+                "x": 0.784,
+                "y": -2.979,
+                "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": false
             }
         },
         {
@@ -1348,7 +1568,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 2.0,
+                "nfin": 7.0,
                 "w": 0,
                 "parent": null,
                 "m": 1,
@@ -1357,11 +1577,15 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.708,
-                "y": -5.032,
+                "x": 1.582,
+                "y": -2.979,
                 "width": 0.294,
-                "height": 0.5680000000000001,
+                "height": 0.8180000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
             }
         }
     ],
