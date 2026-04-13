@@ -29,10 +29,10 @@ class SymbolicEditor(QGraphicsView):
         super().__init__()
 
         # Create scene
-        self.scene = QGraphicsScene()
-        self.setScene(self.scene)
-        self.scene.selectionChanged.connect(self._on_selection_changed)
-        self.scene.changed.connect(self._on_scene_changed)
+        self._scene = QGraphicsScene()
+        self.setScene(self._scene)
+        self._scene.selectionChanged.connect(self._on_selection_changed)
+        self._scene.changed.connect(self._on_scene_changed)
 
         # Better rendering
         self.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -60,20 +60,19 @@ class SymbolicEditor(QGraphicsView):
         self._terminal_nets = {}  # {dev_id: {'D': net, 'G': net, 'S': net}}
 
         # Net color palette
-        self._net_colors = {
-            '__palette': [
-                QColor("#e74c3c"),  # red
-                QColor("#3498db"),  # blue
-                QColor("#2ecc71"),  # green
-                QColor("#9b59b6"),  # purple
-                QColor("#f39c12"),  # orange
-                QColor("#1abc9c"),  # teal
-                QColor("#e67e22"),  # dark orange
-                QColor("#e84393"),  # pink
-                QColor("#00cec9"),  # cyan
-                QColor("#6c5ce7"),  # indigo
-            ]
-        }
+        self._net_palette = [
+            QColor("#e74c3c"),  # red
+            QColor("#3498db"),  # blue
+            QColor("#2ecc71"),  # green
+            QColor("#9b59b6"),  # purple
+            QColor("#f39c12"),  # orange
+            QColor("#1abc9c"),  # teal
+            QColor("#e67e22"),  # dark orange
+            QColor("#e84393"),  # pink
+            QColor("#00cec9"),  # cyan
+            QColor("#6c5ce7"),  # indigo
+        ]
+        self._net_colors = {}  # net_name -> QColor
 
         # Grid settings
         self._grid_size = 20   # base grid spacing in scene coords
@@ -202,8 +201,8 @@ class SymbolicEditor(QGraphicsView):
     def _clear_dummy_preview(self):
         if self._dummy_preview is not None:
             try:
-                if self._dummy_preview.scene() is self.scene:
-                    self.scene.removeItem(self._dummy_preview)
+                if self._dummy_preview.scene() is self._scene:
+                    self._scene.removeItem(self._dummy_preview)
             except RuntimeError:
                 pass
             self._dummy_preview = None
@@ -236,7 +235,7 @@ class SymbolicEditor(QGraphicsView):
                 QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False
             )
             self._dummy_preview.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
-            self.scene.addItem(self._dummy_preview)
+            self._scene.addItem(self._dummy_preview)
         else:
             # Update type colours if we crossed a row boundary
             if getattr(self._dummy_preview, 'device_type', '') != candidate["type"]:
@@ -268,7 +267,7 @@ class SymbolicEditor(QGraphicsView):
                      (e.g. after an AI swap/move command).
         """
         self._clear_dummy_preview()
-        self.scene.clear()
+        self._scene.clear()
         self.device_items.clear()
 
         self.scale_factor = 80  # visual scaling
@@ -301,7 +300,7 @@ class SymbolicEditor(QGraphicsView):
                 nf=nf,
             )
 
-            self.scene.addItem(item)
+            self._scene.addItem(item)
             self.device_items[node.get("id", "unknown")] = item
 
         # Abutted rows horizontally + visible spacing between rows.
@@ -328,7 +327,7 @@ class SymbolicEditor(QGraphicsView):
             self._skip_compaction = True
 
         # Practically unlimited canvas.
-        self.scene.setSceneRect(-1000000, -1000000, 2000000, 2000000)
+        self._scene.setSceneRect(-1000000, -1000000, 2000000, 2000000)
 
     def get_updated_positions(self):
         """Return a dict mapping device id -> (x, y) in original coordinates."""
@@ -541,11 +540,11 @@ class SymbolicEditor(QGraphicsView):
 
     def ensure_grid_extent(self, row_count, col_count):
         """Ensure scene rect is large enough for requested row/col counts."""
-        rect = self.scene.sceneRect()
+        rect = self._scene.sceneRect()
         margin = 120
         min_right = max(rect.right(), (max(col_count, 1) + 1) * self._snap_grid + margin)
         min_bottom = max(rect.bottom(), (max(row_count, 1) + 1) * self._row_pitch + margin)
-        self.scene.setSceneRect(rect.left(), rect.top(), min_right - rect.left(), min_bottom - rect.top())
+        self._scene.setSceneRect(rect.left(), rect.top(), min_right - rect.left(), min_bottom - rect.top())
 
     def set_virtual_extents(self, row_count, col_count):
         """Set virtual grid extents; empty bands are drawn for extra rows/cols."""
@@ -572,9 +571,10 @@ class SymbolicEditor(QGraphicsView):
     def selected_device_ids(self):
         ids = []
         try:
-            for it in self.scene.selectedItems():
-                if hasattr(it, "device_name"):
-                    ids.append(it.device_name)
+            for it in self._scene.selectedItems():
+                dev_id = getattr(it, "device_name", None)
+                if dev_id is not None:
+                    ids.append(dev_id)
         except RuntimeError:
             return []
         return ids
@@ -680,19 +680,18 @@ class SymbolicEditor(QGraphicsView):
     def _get_net_color(self, net_name):
         """Return a consistent color for a given net name."""
         if net_name not in self._net_colors:
-            palette = self._net_colors['__palette']
-            idx = (len(self._net_colors) - 1) % len(palette)
-            self._net_colors[net_name] = palette[idx]
+            idx = len(self._net_colors) % len(self._net_palette)
+            self._net_colors[net_name] = self._net_palette[idx]
         return self._net_colors[net_name]
 
     def _clear_connections(self):
         """Remove all connection lines and labels from the scene."""
         if self._conn_lines:
-            self.scene.blockSignals(True)
+            self._scene.blockSignals(True)
             for item in self._conn_lines:
-                self.scene.removeItem(item)
+                self._scene.removeItem(item)
             self._conn_lines.clear()
-            self.scene.blockSignals(False)
+            self._scene.blockSignals(False)
 
     def _show_connections(self, dev_id):
         """Draw curved lines from dev_id terminals to connected device terminals."""
@@ -707,7 +706,7 @@ class SymbolicEditor(QGraphicsView):
 
         src_anchors = src_item.terminal_anchors()
 
-        self.scene.blockSignals(True)
+        self._scene.blockSignals(True)
         for i, (other_id, net_name) in enumerate(connections):
             tgt_item = self.device_items.get(other_id)
             if not tgt_item:
@@ -742,9 +741,9 @@ class SymbolicEditor(QGraphicsView):
             path_item.setPen(pen)
             path_item.setZValue(10)
             path_item.setFlag(QGraphicsPathItem.GraphicsItemFlag.ItemIsSelectable, False)
-            self.scene.addItem(path_item)
+            self._scene.addItem(path_item)
             self._conn_lines.append(path_item)
-        self.scene.blockSignals(False)
+        self._scene.blockSignals(False)
 
     def _show_net_connections(self, dev_id, net_name):
         """Highlight only connections for a specific net from a device."""
@@ -762,7 +761,7 @@ class SymbolicEditor(QGraphicsView):
         src_term = self._get_terminal_for_net(dev_id, net_name)
         color = self._get_net_color(net_name)
 
-        self.scene.blockSignals(True)
+        self._scene.blockSignals(True)
         for i, (other_id, _) in enumerate(connections):
             tgt_item = self.device_items.get(other_id)
             if not tgt_item:
@@ -791,16 +790,16 @@ class SymbolicEditor(QGraphicsView):
             pen = QPen(color, 0.5, Qt.PenStyle.DashLine)
             path_item.setPen(pen)
             path_item.setZValue(10)
-            self.scene.addItem(path_item)
+            self._scene.addItem(path_item)
             self._conn_lines.append(path_item)
-        self.scene.blockSignals(False)
+        self._scene.blockSignals(False)
 
     def highlight_net_by_name(self, net_name, color):
         """Highlight all connections for a specific net across the layout using a custom color."""
         if not getattr(self, "_edges", None):
             return
 
-        self.scene.blockSignals(True)
+        self._scene.blockSignals(True)
         drawn = set()
         for i, edge in enumerate(self._edges):
             if edge.get("net") == net_name:
@@ -849,22 +848,23 @@ class SymbolicEditor(QGraphicsView):
                 path_item.setPen(pen)
                 path_item.setZValue(15)
                 path_item.setFlag(QGraphicsPathItem.GraphicsItemFlag.ItemIsSelectable, False)
-                self.scene.addItem(path_item)
+                self._scene.addItem(path_item)
                 self._conn_lines.append(path_item)
-        self.scene.blockSignals(False)
+        self._scene.blockSignals(False)
 
 
     def _on_selection_changed(self):
         """Emit device_clicked when user selects a device on the canvas."""
         try:
-            selected = [s for s in self.scene.selectedItems()
+            selected = [s for s in self._scene.selectedItems()
                         if hasattr(s, 'device_name')]
         except RuntimeError:
             return  # scene deleted during shutdown
         if selected:
-            dev_id = selected[0].device_name
-            self.device_clicked.emit(dev_id)
-            self._show_connections(dev_id)
+            dev_id = getattr(selected[0], 'device_name', None)
+            if dev_id is not None:
+                self.device_clicked.emit(dev_id)
+                self._show_connections(dev_id)
         else:
             self._clear_connections()
 
@@ -886,12 +886,12 @@ class SymbolicEditor(QGraphicsView):
 
     def highlight_device(self, dev_id):
         """Highlight a device by its id without moving the view."""
-        self.scene.blockSignals(True)
-        self.scene.clearSelection()
+        self._scene.blockSignals(True)
+        self._scene.clearSelection()
         item = self.device_items.get(dev_id)
         if item:
             item.setSelected(True)
-        self.scene.blockSignals(False)
+        self._scene.blockSignals(False)
 
     # -------------------------------------------------
     # Block Overlays
@@ -905,15 +905,15 @@ class SymbolicEditor(QGraphicsView):
         self._blocks = blocks or {}
         
         # Clean up existing block items
-        self.scene.blockSignals(True)
+        self._scene.blockSignals(True)
         for bitm in self._block_items:
             try:
-                if bitm.scene() is self.scene:
-                    self.scene.removeItem(bitm)
+                if bitm.scene() is self._scene:
+                    self._scene.removeItem(bitm)
             except RuntimeError:
                 pass
         self._block_items.clear()
-        self.scene.blockSignals(False)
+        self._scene.blockSignals(False)
         
         self._clear_block_overlays()
         
@@ -967,7 +967,7 @@ class SymbolicEditor(QGraphicsView):
 
                 bitm = BlockItem(inst_name, subckt, member_items, fill_color, border_color)
                 bitm.set_snap_grid(self._snap_grid, self._row_pitch)
-                self.scene.addItem(bitm)
+                self._scene.addItem(bitm)
                 self._block_items.append(bitm)
         
         # Apply the correct view state visibility
@@ -976,7 +976,7 @@ class SymbolicEditor(QGraphicsView):
     def set_view_level(self, level):
         """Toggle between symbol view and transistor view."""
         self._view_level = level
-        self.scene.blockSignals(True)
+        self._scene.blockSignals(True)
         
         if level == "symbol":
             # Show BlockItems, hide block overlays, hide internal DeviceItems
@@ -999,7 +999,7 @@ class SymbolicEditor(QGraphicsView):
             if self._block_overlays_visible:
                 self._draw_block_overlays()
                 
-        self.scene.blockSignals(False)
+        self._scene.blockSignals(False)
         # Force a refresh of connections
         self.resetCachedContent()
 
@@ -1007,15 +1007,15 @@ class SymbolicEditor(QGraphicsView):
     def _clear_block_overlays(self):
         """Remove all block overlay items from the scene."""
         if self._block_overlays:
-            self.scene.blockSignals(True)
+            self._scene.blockSignals(True)
             for item in self._block_overlays:
                 try:
-                    if item.scene() is self.scene:
-                        self.scene.removeItem(item)
+                    if item.scene() is self._scene:
+                        self._scene.removeItem(item)
                 except RuntimeError:
                     pass
             self._block_overlays.clear()
-            self.scene.blockSignals(False)
+            self._scene.blockSignals(False)
 
     def _draw_block_overlays(self):
         """Draw semi-transparent colored rectangles around each block's devices."""
@@ -1025,7 +1025,7 @@ class SymbolicEditor(QGraphicsView):
         from PySide6.QtGui import QFont
         from PySide6.QtCore import QRectF
 
-        self.scene.blockSignals(True)
+        self._scene.blockSignals(True)
         for idx, (inst_name, info) in enumerate(self._blocks.items()):
             devices = info.get("devices", [])
             subckt = info.get("subckt", "?")
@@ -1055,7 +1055,7 @@ class SymbolicEditor(QGraphicsView):
             rect_item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
             rect_item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, False)
             rect_item.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
-            self.scene.addItem(rect_item)
+            self._scene.addItem(rect_item)
             self._block_overlays.append(rect_item)
 
             # --- Fix 4: Label with subtle pill background for readability ---
@@ -1067,7 +1067,7 @@ class SymbolicEditor(QGraphicsView):
             label_item.setZValue(-9)
             label_item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
             label_item.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
-            self.scene.addItem(label_item)
+            self._scene.addItem(label_item)
             self._block_overlays.append(label_item)
 
             # Pill background behind label text
@@ -1081,10 +1081,10 @@ class SymbolicEditor(QGraphicsView):
             pill.setZValue(-9.5)
             pill.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
             pill.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
-            self.scene.addItem(pill)
+            self._scene.addItem(pill)
             self._block_overlays.append(pill)
 
-        self.scene.blockSignals(False)
+        self._scene.blockSignals(False)
 
     def toggle_block_overlays(self, visible=None):
         """Toggle block overlay visibility.
@@ -1109,13 +1109,13 @@ class SymbolicEditor(QGraphicsView):
         devices = info.get("devices", [])
         if not devices:
             return
-        self.scene.blockSignals(True)
-        self.scene.clearSelection()
+        self._scene.blockSignals(True)
+        self._scene.clearSelection()
         for dev_id in devices:
             item = self.device_items.get(dev_id)
             if item:
                 item.setSelected(True)
-        self.scene.blockSignals(False)
+        self._scene.blockSignals(False)
 
     # -------------------------------------------------
     # Background Grid
@@ -1197,7 +1197,7 @@ class SymbolicEditor(QGraphicsView):
 
             painter.setPen(track_pen)
             painter.setBrush(empty_fill if is_empty else track_fill)
-            painter.drawRoundedRect(band_x, band_y, band_w, band_h, 1.5, 1.5)
+            painter.drawRoundedRect(int(band_x), int(band_y), int(band_w), int(band_h), 1.5, 1.5)
 
             # Draw column slot markers in extended / empty regions
             if self._virtual_col_count > 0:

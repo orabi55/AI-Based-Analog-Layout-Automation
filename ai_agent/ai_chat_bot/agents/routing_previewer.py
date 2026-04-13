@@ -221,7 +221,7 @@ def score_routing(nodes, edges, terminal_nets):
                 crossings[net_b] = crossings.get(net_b, 0) + 1
 
     total_score = sum(crossings.values()) // 2
-    worst_nets  = sorted(crossings, key=crossings.get, reverse=True)[:5]
+    worst_nets = sorted(crossings, key=lambda k: crossings[k], reverse=True)[:5]
 
     # ── Total wire length estimate ────────────────────────────────
     total_wire = round(sum(d["wire_length"] for d in net_details.values()), 4)

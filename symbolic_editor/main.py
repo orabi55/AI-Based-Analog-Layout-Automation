@@ -235,8 +235,8 @@ class MainWindow(QMainWindow):
         self._rows_virtual_min = 0
         self._cols_virtual_min = 0
         self._ignore_grid_spin_change = False
-        self._original_data = None  # raw loaded JSON (for edges + terminals)
-        self.nodes = None
+        self._original_data = {}  # raw loaded JSON (for edges + terminals)
+        self.nodes = []
 
 
         # Load placement data
@@ -336,7 +336,7 @@ class MainWindow(QMainWindow):
         # Connect canvas selection to tree highlight
         self.editor.device_clicked.connect(self.device_tree.highlight_device)
         self.editor.device_clicked.connect(self._on_canvas_device_clicked)
-        self.editor.scene.selectionChanged.connect(self._on_selection_count_changed)
+        self.editor._scene.selectionChanged.connect(self._on_selection_count_changed)
 
         # Connect AI command execution
         # command_requested carries ONE cmd dict at a time; we batch-collect
@@ -839,8 +839,8 @@ class MainWindow(QMainWindow):
                 self._exit_move_mode()
                 released = True
             try:
-                if self.editor and self.editor.scene.selectedItems():
-                    self.editor.scene.clearSelection()
+                if self.editor and self.editor._scene.selectedItems():
+                    self.editor._scene.clearSelection()
                     self._on_selection_count_changed()
                     released = True
             except RuntimeError:
@@ -1101,16 +1101,23 @@ class MainWindow(QMainWindow):
     def _on_device_drag_end(self):
         """Called when drag ends; snap dragged items to nearest free slot."""
         try:
-            for it in self.editor.scene.selectedItems():
+            for it in self.editor._scene.selectedItems():
                 if not hasattr(it, "device_name"):
                     continue
                 row_y = self.editor._snap_row(it.pos().y())
                 target_x = self.editor._snap_value(it.pos().x())
+                # Safe attribute retrieval with defaults
+                width = 0
+                try:
+                    width = it.rect().width()  # type: ignore
+                except (AttributeError, TypeError):
+                    pass
+                device_name = getattr(it, 'device_name', None)
                 free_x = self.editor.find_nearest_free_x(
                     row_y=row_y,
-                    width=it.rect().width(),
+                    width=width,
                     target_x=target_x,
-                    exclude_id=it.device_name,
+                    exclude_id=device_name,
                 )
                 it.setPos(free_x, row_y)
         except RuntimeError:
@@ -1261,21 +1268,23 @@ class MainWindow(QMainWindow):
 
     def _delete_selected(self):
         """Remove selected devices from the canvas and data."""
-        selected = self.editor.scene.selectedItems()
+        selected = self.editor._scene.selectedItems()
         if not selected:
             return
         self._sync_node_positions()
         self._push_undo()
         for item in selected:
             if hasattr(item, 'device_name'):
-                dev_id = item.device_name
+                dev_id = getattr(item, 'device_name', None)
+                if dev_id is None:
+                    continue
                 self.nodes = [
                     n for n in self.nodes if n.get('id') != dev_id
                 ]
                 self._original_data['nodes'] = self.nodes
                 if dev_id in self.editor.device_items:
                     del self.editor.device_items[dev_id]
-                self.editor.scene.removeItem(item)
+                self.editor._scene.removeItem(item)
         self.device_tree.load_devices(self.nodes)
         self._update_undo_redo_state()
 
@@ -1383,7 +1392,7 @@ class MainWindow(QMainWindow):
         oas_path = dlg.oas_path
 
         # Show progress
-        progress = QProgressDialog("Parsing design files...", None, 0, 0, self)
+        progress = QProgressDialog("Parsing design files...", "", 0, 0, self)
         progress.setWindowTitle("Import")
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(0)
@@ -1448,7 +1457,7 @@ class MainWindow(QMainWindow):
         if "terminal_nets" not in data:
             data["terminal_nets"] = self._terminal_nets
 
-        progress = QProgressDialog("Running AI initial placement...", None, 0, 0, self)
+        progress = QProgressDialog("Running AI initial placement...", "", 0, 0, self)
         progress.setWindowTitle("AI Placement")
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(0)

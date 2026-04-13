@@ -6,7 +6,7 @@ Supports both flat and hierarchical layouts:
 - Hierarchical: top cell references sub-cells that contain PCells
   (recursively descends to find leaf transistor instances)
 """
-
+from typing import cast
 import gdstk
 import math
 
@@ -137,7 +137,7 @@ def extract_layout_instances(layout_file):
         raise ValueError("Unsupported layout format")
 
     top_cell = lib.top_level()[0]
-
+    top_cell = cast(gdstk.Cell, top_cell)
     # Check if the top cell directly contains transistor PCells (flat layout)
     has_direct_transistors = any(
         _is_transistor_cell(ref.cell.name if hasattr(ref.cell, 'name') else str(ref.cell))

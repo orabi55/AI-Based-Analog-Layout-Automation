@@ -87,8 +87,10 @@ def update_oas_placement(oas_path, sp_path, nodes, output_path,
     else:
         lib = gdstk.read_oas(oas_path)
 
-    top_cell = lib.top_level()[0]
+    top_cells = [c for c in lib.top_level() if isinstance(c, gdstk.Cell)]
+    top_cell = top_cells[0]
     refs = list(top_cell.references)
+    
 
     # ---- build device_id → layout_ref_index mapping ---------------------
     layout_devices = extract_layout_instances(oas_path)

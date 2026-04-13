@@ -227,35 +227,3 @@ def tool_validate_inventory(original_nodes, proposed_nodes):
     is_valid = len(missing) == 0 and len(extra) == 0
     return is_valid, missing, extra
 
-
-def tool_validate_device_count(original_nodes, proposed_nodes):
-    """Extended conservation check — returns a dict instead of a tuple.
-
-    Wraps tool_validate_inventory for backward compatibility with the
-    orchestrator's count-guard path.
-
-    Returns:
-        dict: {pass, missing, extra, original_count, proposed_count, summary}
-    """
-    is_valid, missing, extra = tool_validate_inventory(original_nodes, proposed_nodes)
-
-    orig_active = [n for n in original_nodes if not n.get("is_dummy")]
-    if is_valid:
-        summary = (
-            f"Device conservation OK — all {len(orig_active)} active device(s) present."
-        )
-    else:
-        summary = (
-            f"DEVICE CONSERVATION FAILURE: "
-            f"{len(missing)} device(s) missing: {', '.join(missing)}."
-            + (f"  {len(extra)} unknown device(s): {', '.join(extra)}." if extra else "")
-        )
-
-    return {
-        "pass": is_valid,
-        "missing": missing,
-        "extra": extra,
-        "original_count": len([n for n in original_nodes if not n.get("is_dummy")]),
-        "proposed_count": len([n for n in proposed_nodes if not n.get("is_dummy")]),
-        "summary": summary,
-    }

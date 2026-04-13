@@ -21,7 +21,7 @@ from ai_agent.ai_chat_bot.finger_grouping import expand_logical_to_fingers, vali
 from ai_agent.ai_chat_bot.cmd_utils import _extract_cmd_blocks, _apply_cmds_to_nodes
 # Optional: Import your RAG save function if you have it
 # from ai_agent.rag_manager import save_run_as_example
-from ai_agent.ai_chat_bot.rag_retriever import build_rag_context
+
 
 CHAT_HISTORY_JSON_PATH = Path(__file__).resolve().parents[1] / "chat_history.json"
 
@@ -254,15 +254,13 @@ def node_placement_specialist(state: LayoutState):
 
     # If no pending manual edits, proceed with normal LLM generation
     #logical_nodes = aggregate_to_logical_devices(nodes)
-    rag_context = build_rag_context(nodes, edges, terminal_nets, top_k=3)
+    
     context_text = build_placement_context(
         nodes,
         constraint_text,
         terminal_nets=terminal_nets,
         edges=edges,
     )
-
-    print(f"[PLACEMENT] Context for LLM:\n{context_text}\n\nRAG Context:\n{rag_context}")
 
     placer_user = (
         f"Initial User request: {user_message}\n\n"
