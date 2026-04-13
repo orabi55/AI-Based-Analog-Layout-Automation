@@ -20,6 +20,7 @@ FIXES APPLIED:
 """
 
 import math
+import re
 from collections import defaultdict
 from typing import Dict, List, Optional, Tuple
 
@@ -38,6 +39,141 @@ PMOS_ROW_0_Y        = -ROW_HEIGHT_UM   # first  PMOS row  y-coordinate
 # ---------------------------------------------------------------------------
 # System Prompt
 # ---------------------------------------------------------------------------
+PLACEMENT_SPECIALIST_PROMPT2 = """\
+ROLE:
+You are the PLACEMENT SPECIALIST. Your task is to reposition devices on a grid to improve symmetry, matching, and routing.
+
+You receive:
+- Device inventory (IDs, type, positions, connections)
+- Topology constraints
+- Optional user strategy (highest priority)
+
+You must output ONLY valid [CMD] blocks followed by a short explanation.
+
+---
+CORE PRIORITY
+1) Apply user-requested strategy (if any)
+2) Enforce all rules below
+3) Avoid overlaps
+
+---
+FINGER RULE
+- Use nf ONLY (ignore nfin)
+- Every finger instance must be placed
+
+---
+RULE 0: DEVICE CONSERVATION
+- Every device in IMMUTABLE TRANSISTORS must appear exactly once
+- No adding, removing, renaming
+- Dummies cannot be deleted
+- If not moved → position unchanged
+
+---
+RULE 1: ROW ASSIGNMENT
+- PMOS only in PMOS rows, NMOS only in NMOS rows
+- PMOS above NMOS
+
+Valid rows:
+PMOS:  y =  0.000, -0.668, -1.336
+NMOS:  y = -2.004, -2.672, -3.340, -4.008
+
+---
+RULE 1b: COMMON-CENTROID (STRICT)
+
+Apply for current mirrors or when requested.
+
+GOAL:
+All matched devices must share the SAME centroid.
+
+DEFINITIONS:
+- Use nf → expand all fingers
+- Work in 1D row (default)
+
+CONSTRUCTION:
+1) List all devices and their fingers
+2) Build a symmetric sequence around row center
+
+Placement rules:
+- Odd nf → 1 finger at center, rest symmetric
+- Even nf → split into two equal halves (left/right)
+- Add devices progressively OUTWARD from center
+- Final sequence MUST be mirror symmetric
+
+CENTROID CHECK (MANDATORY):
+- Assign positions: 1,2,3,...N
+- centroid = average(position indices)
+- ALL devices must have identical centroid
+- If not equal → INVALID → recompute
+
+VALID EXAMPLE:
+A B B A  → centroids match → OK
+
+INVALID:
+A A B B → centroids differ → REJECT
+
+DUMMIES:
+- Place ONLY at row edges
+- Pattern: Dummy – active – Dummy
+- Never between active devices
+
+---
+RULE 2: NO OVERLAPS
+- One device per x-slot
+- x = 0.294 * n
+- No duplicate (x,y)
+
+---
+RULE 3: DUMMIES
+- Only at far left/right
+- DUMMYP → PMOS rows
+- DUMMYN → NMOS rows
+
+---
+RULE 4: ROUTING PRIORITY
+1) Matched pairs adjacent
+2) PMOS/NMOS vertical alignment
+3) Inputs left, outputs right
+
+---
+EXECUTION STEPS (MANDATORY)
+
+1) Read inventory
+2) Detect topology (mirrors, diff pairs)
+3) Apply requested strategy (override defaults)
+4) Compute full finger sequence (CRITICAL STEP)
+5) Assign x positions (no overlaps)
+6) Place dummies at edges
+7) VERIFY:
+   - All devices placed
+   - No overlaps
+   - Common-centroid symmetry satisfied
+   - Sequence changed from original (if CC requested)
+
+If verification fails → recompute BEFORE output.
+
+---
+OUTPUT FORMAT
+
+Write commands FIRST, then explanation.
+
+Allowed:
+[CMD]{"action":"move","device":"MM1","x":0.588,"y":0.000}[/CMD]
+[CMD]{"action":"swap","device_a":"MM1","device_b":"MM2"}[/CMD]
+
+RULES:
+- Use MOVE for common-centroid and interdigitation
+- Use SWAP only for simple exchanges
+- Only use valid device IDs
+
+---
+FAIL CONDITIONS (MUST AVOID)
+- Missing device
+- Overlap
+- Broken symmetry
+- Wrong row type
+- No actual change when CC requested
+"""
+
 PLACEMENT_SPECIALIST_PROMPT = """\
 You are the PLACEMENT SPECIALIST in a multi-agent analog IC layout system.
 Your task is to reposition existing devices on a symbolic grid to improve
@@ -82,7 +218,7 @@ Row type rules:
 - NMOS rows contain ONLY NMOS devices.
 - Never mix PMOS and NMOS in the same row.
 - PMOS sits ABOVE NMOS on the chip. Because y = 0 is at the top and becomes
-  more negative going down, PMOS rows have LESS negative y-values than NMOS rows.
+  more negative going down, PMOS rows have GREATER y-values than NMOS rows.
 - Adjacent rows are spaced 0.668 µm apart.
  
 Standard y-coordinates to use in move commands:
@@ -107,35 +243,29 @@ RULE 1b: COMMON-CENTROID MATCHING FOR CURRENT MIRRORS
 When you detect a current mirror (especially ratio mirrors with different nf),
 you must place the fingers in a common-centroid arrangement rather than group them by device.
  
-SINGLE-ROW COMMON-CENTROID MATCHING
-  The full array is split into a left half and a mirrored right half so that
-  every mirror device has the same centroid as the reference. (Right half = Left half reversed)
- 
-  Example: MM2_f1 MM0_f1 MM1_f1 MM0_f2 MM0_f3 MM1_f2 MM0_f4 MM2_f2 MM2_f3 MM0_f5 MM1_f3 MM0_f6 MM0_f7 MM1_f4 MM0_f8 MM2_f4
- 
-  Full row (x increases left to right, one slot per finger):
-    x=0.000  x=0.294  x=0.588  x=0.882  x=1.176  x=1.470  x=1.764  x=2.058 ...
-    MM2_f1   MM0_f1   MM1_f1   MM0_f2   MM0_f3   MM1_f2   MM0_f4   MM2_f2  ...
- 
-  Goal: MM0 centroid == MM1 centroid == MM2 centroid == array center.
- 
-  Common-centroid intentionally splits a device's
-  fingers into non-contiguous subgroups — this is expected and correct.
- 
-MULTI-ROW COMMON-CENTROID (total fingers > 16) — forward/reverse (AB) across 2 rows:
-  Each device's fingers are split evenly across both rows. Row 0 uses forward
-  order; Row 1 uses reversed order to achieve ABBA-style symmetry.
- 
-  For Example If we have the following devices: MM0(nf=10), MM1(nf=6), MM2(nf=4), total=20 fingers, 2 rows of 10
-  Their fingers would be arranged like this across the two rows to achieve multi-row common-centroid matching:
-    Row 0 (y = NMOS row 0, forward):
-      MM2_f1 MM0_f1 MM1_f1 MM0_f2 MM1_f2 MM0_f3 MM1_f3 MM0_f4 MM0_f5 MM2_f2
-    Row 1 (y = NMOS row 1, reversed):
-      MM2_f3 MM0_f10 MM1_f6 MM0_f9 MM1_f5 MM0_f8 MM1_f4 MM0_f7 MM0_f6 MM2_f4
- 
-  Each row is itself interdigitated using the same symmetric pattern algorithm.
-  Row 1 is the mirror image of Row 0 so that gradient effects cancel vertically.
- 
+The full array is split into a left half and a mirrored right half so that
+every mirror device has the same centroid as the reference. (Right half = Left half reversed)
+
+Steps:
+1) Identify the logical devices to be matched in a common-centroid arrangement (e.g. MM0, MM1, MM2)
+2) Identify the finger groups for each device (e.g. MM0_f1, MM0_f2, etc. are all fingers of MM0)
+3) If a device has odd number of fingers start with it, otherwise start with any device. 
+4) Place the first device's fingers in a mirror-symmetric pattern around the center of the row.
+5) For the next device:
+- If the device has an even number of fingers, split them evenly into two subgroups
+- Place the first subgroup immediately to the left of the previous device, and place the second subgroup immediately to the right of the previous device. This maintains the mirror-symmetric pattern across devices with the axis of symmetry at the center of the row.
+6) Repeat step 5 for all devices until all fingers are placed. The result is a fully interdigitated common-centroid pattern where each device's fingers are symmetrically distributed around the center of the row, ensuring optimal matching.
+7) Verification: Confirm the geometric center (centroid) of every device occupies the same coordinate point (the row center).
+
+Example:
+1) Devices: MM0(nf=3), MM1(nf=4), MM2(nf=4)
+2) Finger groups: - MM0_f1, MM0_f2, MM0_f3 
+                - MM1_f1, MM1_f2, MM1_f3, MM1_f4
+                - MM2_f1, MM2_f2, MM2_f3, MM2_f4
+3) Start with MM0 (odd nf=3): place MM0_f1 at center, MM0_f2 to the left, MM0_f3 to the right -> MM0_f2, MM0_f1, MM0_f3
+4) Next MM1 (even nf=4): split into two subgroups of 2 fingers each. Place first subgroup (MM1_f1, MM1_f2) to the left of MM0, and second subgroup (MM1_f3, MM1_f4) to the right of MM0. -> MM1_f1, MM1_f2, MM0_f2, MM0_f1, MM0_f3, MM1_f3, MM1_f4
+5) Next MM2 (even nf=4): split into two subgroups of 2 fingers each. Place first subgroup (MM2_f1, MM2_f2) to the left of MM1, and second subgroup (MM2_f3, MM2_f4) to the right of MM1. -> MM2_f1, MM2_f2, MM1_f1, MM1_f2, MM0_f2, MM0_f1, MM0_f3, MM1_f3, MM1_f4, MM2_f3, MM2_f4
+
 ---
 RULE 2: NO OVERLAPS
  
@@ -156,20 +286,8 @@ RULE 3: DUMMY PLACEMENT
 RULE 4: ROUTING-AWARE PLACEMENT (ordered by priority)
  
 Priority 1 — Matched pairs: place in adjacent consecutive x-slots.
-Priority 2 — Net adjacency: minimize the x-span of wires on each shared net.
-Priority 3 — Vertical alignment: place paired PMOS/NMOS at the same x-slot.
-Priority 4 — Signal flow: inputs at left, outputs at right, bias in center.
- 
----
-RULE 5: MULTI-FINGER DEVICE PLACEMENT
- 
-- Within a contiguous group, all fingers of the same device occupy consecutive
-  x-slots. Exception: common-centroid intentionally splits a device's fingers
-  into non-contiguous subgroups across the array — this is correct behaviour.
-- Within each contiguous subgroup, fingers are ordered numerically left to right:
-  f1 < f2 < f3, etc.
-- All fingers of a device must share the same orientation.
-- All fingers in a contiguous group must share the same y (row).
+Priority 2 — Vertical alignment: place paired PMOS/NMOS at the same x-slot.
+Priority 3 — Signal flow: inputs at left, outputs at right, bias in center.
  
 ---
 THINKING PROTOCOL — follow these steps before writing any commands
@@ -183,7 +301,8 @@ Step 5: Place dummies at the leftmost or rightmost positions in their row.
 Step 6: Write ALL [CMD] blocks. Use move commands for interdigitated and
         common-centroid patterns. Only use swap for simple positional exchanges
         where no specific x-slot target is required.
-Step 7: Self-check — make sure that all your commands are different from the current positions, and that no two devices end up in the same (x, y).
+Step 7: Verify that the finger sequence you computed in Step 3 actually reflects the requested strategy. 
+        If the resulting x-assignments are identical to the current positions, you have not applied common-centroid — restart from Step 3.
  
 ---
 OUTPUT FORMAT
@@ -200,7 +319,10 @@ Use move for interdigitated and common-centroid placement — swap cannot place
 fingers at specific x-slot targets. Only use swap for simple adjacent reordering
 where exact position does not matter.
 Only use device IDs that appear in the IMMUTABLE TRANSISTORS list.
-"""
+
+### EXTERNAL RESOURCES ###
+
+""" + ANALOG_LAYOUT_RULES
 
 
 # ---------------------------------------------------------------------------
@@ -213,222 +335,180 @@ def build_placement_context(
     edges=None,
     spice_nets=None,
 ):
-    """
-    Build a rich context string for the Placement Specialist LLM.
-
-    Includes:
-      - Multi-row NMOS row reporting
-      - Net adjacency and routing cost tables
-            - Topology constraints context
-    """
+    """Build a context string for the Placement Specialist LLM."""
     lines = ["=" * 60, "CURRENT LAYOUT INVENTORY", "=" * 60]
 
-    # ── Separate active vs dummy ─────────────────────────────────────────
+    finger_pattern = re.compile(r"^(?P<base>.+)_f(?P<idx>\d+)$", re.IGNORECASE)
+
+    def _split_finger_id(device_id):
+      match = finger_pattern.match(str(device_id))
+      if not match:
+        return str(device_id), None
+      return match.group("base"), int(match.group("idx"))
+
     active_devices = sorted(
-        [n for n in nodes if not n.get("is_dummy")],
-        key=lambda n: (n.get("type", ""), n["id"]),
+      [n for n in nodes if not n.get("is_dummy")],
+      key=lambda n: (n.get("type", ""), n["id"]),
     )
     dummy_devices = sorted(
-        [n for n in nodes if n.get("is_dummy")],
-        key=lambda n: n["id"],
+      [n for n in nodes if n.get("is_dummy")],
+      key=lambda n: n["id"],
     )
-    active_ids = [n["id"] for n in active_devices]
-    dummy_ids  = [n["id"] for n in dummy_devices]
 
-    # ── Compute actual row y-values from data ────────────────────────────
-    pmos_ys = sorted(set(
+    active_ids = [n["id"] for n in active_devices]
+    dummy_ids = [n["id"] for n in dummy_devices]
+
+    logical_groups = defaultdict(list)
+    for node in active_devices:
+      base_id, finger_idx = _split_finger_id(node["id"])
+      logical_groups[base_id].append((finger_idx, node))
+
+    logical_ids = sorted(logical_groups.keys())
+
+    pmos_ys = sorted(
+      set(
         round(n["geometry"]["y"], 6)
         for n in active_devices
         if str(n.get("type", "")).lower().startswith("p")
-    ))
-    nmos_ys = sorted(set(
+      )
+    )
+    nmos_ys = sorted(
+      set(
         round(n["geometry"]["y"], 6)
         for n in active_devices
         if str(n.get("type", "")).lower().startswith("n")
-    ))
+      )
+    )
 
-    # ── Conservation anchors ─────────────────────────────────────────────
-    lines.append(f"\nTOTAL DEVICE COUNT : {len(nodes)}")
+    lines.append(f"\nTOTAL FINGER INSTANCE COUNT : {len(active_ids)}")
+    lines.append(f"TOTAL LOGICAL DEVICE COUNT  : {len(logical_ids)}")
     lines.append(
-        f"IMMUTABLE TRANSISTORS ({len(active_ids)}): "
-        + ", ".join(active_ids)
+      f"IMMUTABLE TRANSISTORS ({len(active_ids)}) [finger instances]: "
+      + ", ".join(active_ids)
     )
     lines.append(
-        f"FLUID DUMMIES ({len(dummy_ids)}): "
-        + (", ".join(dummy_ids) if dummy_ids else "none")
+      f"LOGICAL TRANSISTORS ({len(logical_ids)}): " + ", ".join(logical_ids)
+    )
+    lines.append(
+      f"FLUID DUMMIES ({len(dummy_ids)}): "
+      + (", ".join(dummy_ids) if dummy_ids else "none")
     )
     lines.append("")
 
-    # ── Row y-value reference ────────────────────────────────────────────
-    lines.append(
-        "ROW Y-VALUE REFERENCE "
-        "(copy these exactly into move CMDs):"
-    )
+    lines.append("DEVICE -> FINGER INSTANCES MAP:")
+    for dev_id in logical_ids:
+      grouped = sorted(
+        logical_groups[dev_id],
+        key=lambda t: (t[0] is None, t[0] if t[0] is not None else 10**9, t[1]["id"]),
+      )
+      finger_ids = [node["id"] for _, node in grouped]
+      lines.append(
+        f"  {dev_id:<14} fingers={len(finger_ids):<2} -> "
+        + ", ".join(finger_ids)
+      )
+    lines.append("")
+
+    lines.append("ROW Y-VALUE REFERENCE (copy these exactly into move CMDs):")
 
     if pmos_ys:
-        for y in pmos_ys:
-            devs = [
-                n["id"] for n in active_devices
-                if str(n.get("type", "")).lower().startswith("p")
-                and abs(n["geometry"]["y"] - y) < 1e-4
-            ]
-            lines.append(
-                f"  PMOS row  y = {y:.6f}   "
-                f"(devices: {', '.join(devs)})"
-            )
+      for y in pmos_ys:
+        row_nodes = [
+          n["id"]
+          for n in active_devices
+          if str(n.get("type", "")).lower().startswith("p")
+          and abs(n["geometry"]["y"] - y) < 1e-4
+        ]
+        row_logical = sorted({_split_finger_id(dev_id)[0] for dev_id in row_nodes})
+        lines.append(
+          f"  PMOS row  y = {y:.6f}   "
+          f"(logical devices: {', '.join(row_logical)}; "
+          f"finger instances: {', '.join(row_nodes)})"
+        )
     else:
-        lines.append("  PMOS row  — no PMOS devices found")
+      lines.append("  PMOS row  — no PMOS devices found")
 
     if nmos_ys:
-        for y in nmos_ys:
-            devs = [
-                n["id"] for n in active_devices
-                if str(n.get("type", "")).lower().startswith("n")
-                and abs(n["geometry"]["y"] - y) < 1e-4
-            ]
-            lines.append(
-                f"  NMOS row  y = {y:.6f}   "
-                f"(devices: {', '.join(devs)})"
-            )
+      for y in nmos_ys:
+        row_nodes = [
+          n["id"]
+          for n in active_devices
+          if str(n.get("type", "")).lower().startswith("n")
+          and abs(n["geometry"]["y"] - y) < 1e-4
+        ]
+        row_logical = sorted({_split_finger_id(dev_id)[0] for dev_id in row_nodes})
+        lines.append(
+          f"  NMOS row  y = {y:.6f}   "
+          f"(logical devices: {', '.join(row_logical)}; "
+          f"finger instances: {', '.join(row_nodes)})"
+        )
     else:
-        lines.append("  NMOS row  — no NMOS devices found")
+      lines.append("  NMOS row  — no NMOS devices found")
 
     lines.append("")
 
-    # ── Per-device inventory ─────────────────────────────────────────────
-    def _fmt(n):
-        geo   = n.get("geometry",   {})
-        elec  = n.get("electrical", {})
-        nets  = (terminal_nets or {}).get(n["id"], {})
-        net_str = (
-            " | ".join(
-                f"{t}={v}"
-                for t, v in sorted(nets.items())
-                if v
-            )
-            if nets else ""
-        )
-        return (
-            f"  {n['id']:<14} type={n.get('type','?'):<5}  "
-            f"x={geo.get('x', 0):>8.4f}  "
-            f"y={geo.get('y', 0):>9.6f}  "
-            f"nf={elec.get('nf', 1)}  "
-            + (f"nets=[{net_str}]" if net_str else "")
-        )
+    def _fmt(node):
+      geo = node.get("geometry", {})
+      elec = node.get("electrical", {})
+      base_id, finger_idx = _split_finger_id(node["id"])
 
-    lines.append(
-        "PMOS DEVICES (current row/y values):"
-    )
+      nets = (terminal_nets or {}).get(node["id"], {})
+      if not nets and base_id != node["id"]:
+        nets = (terminal_nets or {}).get(base_id, {})
+
+      net_str = (
+        " | ".join(f"{term}={net}" for term, net in sorted(nets.items()) if net)
+        if nets
+        else ""
+      )
+      finger_label = f"f{finger_idx}" if finger_idx is not None else "-"
+
+      return (
+        f"  {node['id']:<14} type={node.get('type', '?'):<5}  "
+        f"logical={base_id:<10} "
+        f"finger={finger_label:<4} "
+        f"x={geo.get('x', 0):>8.4f}  "
+        f"y={geo.get('y', 0):>9.6f}  "
+        f"nf={elec.get('nf', 1)}  "
+        + (f"nets=[{net_str}]" if net_str else "")
+      )
+
+    lines.append("PMOS DEVICES (current row/y values):")
     pmos_nodes = [
-        n for n in active_devices
-        if str(n.get("type", "")).lower().startswith("p")
+      n for n in active_devices if str(n.get("type", "")).lower().startswith("p")
     ]
     if pmos_nodes:
-        lines.extend(_fmt(n) for n in pmos_nodes)
+      lines.extend(_fmt(n) for n in pmos_nodes)
     else:
-        lines.append("  (none)")
+      lines.append("  (none)")
     lines.append("")
 
-    lines.append(
-        "NMOS DEVICES (current row/y values):"
-    )
+    lines.append("NMOS DEVICES (current row/y values):")
     nmos_nodes = [
-        n for n in active_devices
-        if str(n.get("type", "")).lower().startswith("n")
+      n for n in active_devices if str(n.get("type", "")).lower().startswith("n")
     ]
     if nmos_nodes:
-        nmos_by_row = defaultdict(list)
-        for n in nmos_nodes:
-            y = round(float(n["geometry"]["y"]), 3)
-            nmos_by_row[y].append(n)
-        for y_val in sorted(nmos_by_row.keys()):
-            lines.append(f"  [NMOS row y={y_val:.3f}]")
-            for n in nmos_by_row[y_val]:
-                lines.append(_fmt(n))
+      nmos_by_row = defaultdict(list)
+      for n in nmos_nodes:
+        y = round(float(n["geometry"]["y"]), 3)
+        nmos_by_row[y].append(n)
+      for y_val in sorted(nmos_by_row.keys()):
+        lines.append(f"  [NMOS row y={y_val:.3f}]")
+        for n in nmos_by_row[y_val]:
+          lines.append(_fmt(n))
     else:
-        lines.append("  (none)")
+      lines.append("  (none)")
     lines.append("")
 
     if dummy_devices:
-        lines.append("EXISTING DUMMIES:")
-        lines.extend(_fmt(n) for n in dummy_devices)
-        lines.append("")
+      lines.append("EXISTING DUMMIES:")
+      lines.extend(_fmt(n) for n in dummy_devices)
+      lines.append("")
 
-    # ── Net adjacency table ──────────────────────────────────────────────
-    if terminal_nets:
-        net_to_devs: dict = {}
-        supply = {"VDD", "VSS", "GND", "VCC", "AVDD", "AVSS"}
-        for dev_id, nets in terminal_nets.items():
-            for _, net_name in nets.items():
-                if net_name and net_name.upper() not in supply:
-                    net_to_devs.setdefault(net_name, set()).add(dev_id)
-
-        shared_nets = {
-            net: devs
-            for net, devs in net_to_devs.items()
-            if len(devs) >= 2
-        }
-        if shared_nets:
-            lines.append(
-                "NET ADJACENCY TABLE "
-                "(devices sharing a net):"
-            )
-            pos_x = {n["id"]: n["geometry"].get("x", 0) for n in nodes}
-            for net_name in sorted(shared_nets):
-                devs = sorted(shared_nets[net_name])
-                xs   = [pos_x.get(d, 0) for d in devs]
-                span = (
-                    round(max(xs) - min(xs), 4)
-                    if len(xs) > 1 else 0
-                )
-                lines.append(
-                    f"  {net_name:<20} -> "
-                    f"{', '.join(devs):<40} "
-                    f"(current x-span: {span:.4f} um)"
-                )
-            lines.append("")
-
-    # ── Routing cost summary ─────────────────────────────────────────────
-    if terminal_nets and nodes:
-        pos_x     = {n["id"]: n["geometry"].get("x", 0) for n in nodes}
-        net_spans = {}
-        supply    = {"VDD", "VSS", "GND", "VCC", "AVDD", "AVSS"}
-        for dev_id, nets in terminal_nets.items():
-            for _, net_name in nets.items():
-                if net_name and net_name.upper() not in supply:
-                    net_spans.setdefault(net_name, []).append(
-                        pos_x.get(dev_id, 0)
-                    )
-
-        worst = sorted(
-            [
-                (net, max(xs) - min(xs))
-                for net, xs in net_spans.items()
-                if len(xs) >= 2
-            ],
-            key=lambda t: -t[1],
-        )[:5]
-
-        if worst:
-            lines.append(
-                "ROUTING COST — worst 5 nets by x-span "
-                "(reduce these spans):"
-            )
-            for net_name, span in worst:
-                lines.append(
-                    f"  {net_name:<20} current span = {span:.4f} um"
-                )
-            lines.append("")
-
-    # ── Topology constraints ─────────────────────────────────────────────
     if constraints_text:
-        lines.append("=" * 60)
-        lines.append(
-            "TOPOLOGY CONSTRAINTS "
-            "(from Topology Analyst — Stage 1)"
-        )
-        lines.append("=" * 60)
-        lines.append(constraints_text)
-        lines.append("")
+      lines.append("=" * 60)
+      lines.append("TOPOLOGY CONSTRAINTS (from Topology Analyst — Stage 1)")
+      lines.append("=" * 60)
+      lines.append(constraints_text)
+      lines.append("")
 
     return "\n".join(lines)

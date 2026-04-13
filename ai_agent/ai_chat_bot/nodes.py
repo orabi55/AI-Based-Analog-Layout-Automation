@@ -262,6 +262,8 @@ def node_placement_specialist(state: LayoutState):
         edges=edges,
     )
 
+    print(f"[PLACEMENT] Context for LLM:\n{context_text}\n\nRAG Context:\n{rag_context}")
+
     placer_user = (
         f"Initial User request: {user_message}\n\n"
         f"Selected Strategy: {selected_strategy}\n\n"
