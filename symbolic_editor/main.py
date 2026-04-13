@@ -1091,8 +1091,10 @@ class MainWindow(QMainWindow):
     @staticmethod
     def _parse_spice_terminals(json_path):
         """Parse .sp files in the same directory to extract terminal-net mapping.
-        MOSFET format: name drain gate source bulk model ...
-        Returns: {dev_id: {'D': net, 'G': net, 'S': net}}
+                Supports:
+                    - MOSFET: Mname D G S B model ...
+                    - Passive 2-terminal: R/C/L/D name n1 n2 ...
+        Returns: {dev_id: {'D': net, 'G': net, 'S': net} or {'1': net, '2': net}}
         """
         terminal_nets = {}
         sp_dir = os.path.dirname(json_path)
@@ -1105,12 +1107,22 @@ class MainWindow(QMainWindow):
                         if not line or line.startswith('*') or line.startswith('.'):
                             continue
                         tokens = line.split()
-                        if len(tokens) >= 5 and tokens[0].startswith('M'):
-                            dev_name = tokens[0]
+                        if not tokens:
+                            continue
+
+                        dev_name = tokens[0]
+                        lead = dev_name[:1].upper()
+
+                        if lead == 'M' and len(tokens) >= 5:
                             terminal_nets[dev_name] = {
                                 'D': tokens[1],
                                 'G': tokens[2],
                                 'S': tokens[3],
+                            }
+                        elif lead in ('R', 'C', 'L', 'D') and len(tokens) >= 3:
+                            terminal_nets[dev_name] = {
+                                '1': tokens[1],
+                                '2': tokens[2],
                             }
             except Exception:
                 pass
@@ -1939,13 +1951,32 @@ class MainWindow(QMainWindow):
         # 3. Build nodes
         PITCH_UM = 0.294
         ROW_HEIGHT_UM = 0.668
-        nmos_idx = 0
-        pmos_idx = 0
+        type_x_index = {}
+        type_y_default = {
+            "nmos": 0.0,
+            "pmos": ROW_HEIGHT_UM,
+            "res": 2.0 * ROW_HEIGHT_UM,
+            "cap": 3.0 * ROW_HEIGHT_UM,
+            "ind": 4.0 * ROW_HEIGHT_UM,
+            "dio": 5.0 * ROW_HEIGHT_UM,
+        }
         nodes = []
         terminal_nets = {}
 
         for dev_name, dev in netlist.devices.items():
-            dev_type = "nmos" if "n" in dev.type.lower() else "pmos"
+            dtype_raw = str(getattr(dev, "type", "")).strip().lower()
+            if dtype_raw in ("nmos", "pmos"):
+                dev_type = dtype_raw
+            elif dtype_raw in ("res", "resistor"):
+                dev_type = "res"
+            elif dtype_raw in ("cap", "capacitor"):
+                dev_type = "cap"
+            elif dtype_raw in ("ind", "inductor"):
+                dev_type = "ind"
+            elif dtype_raw in ("dio", "diode"):
+                dev_type = "dio"
+            else:
+                dev_type = dtype_raw or "unknown"
 
             # Try to get geometry from layout via device matcher
             layout_idx = device_mapping.get(dev_name)
@@ -1960,24 +1991,15 @@ class MainWindow(QMainWindow):
                 }
             else:
                 # Grid-based default placement
-                if dev_type == "pmos":
-                    geom = {
-                        "x": pmos_idx * PITCH_UM,
-                        "y": ROW_HEIGHT_UM,
-                        "width": PITCH_UM,
-                        "height": ROW_HEIGHT_UM,
-                        "orientation": "R0",
-                    }
-                    pmos_idx += 1
-                else:
-                    geom = {
-                        "x": nmos_idx * PITCH_UM,
-                        "y": 0.0,
-                        "width": PITCH_UM,
-                        "height": ROW_HEIGHT_UM,
-                        "orientation": "R0",
-                    }
-                    nmos_idx += 1
+                idx = type_x_index.get(dev_type, 0)
+                geom = {
+                    "x": idx * PITCH_UM,
+                    "y": type_y_default.get(dev_type, 0.0),
+                    "width": PITCH_UM,
+                    "height": ROW_HEIGHT_UM,
+                    "orientation": "R0",
+                }
+                type_x_index[dev_type] = idx + 1
 
             electrical = {
                 "l": dev.params.get("l", 1.4e-08),
@@ -1994,11 +2016,17 @@ class MainWindow(QMainWindow):
 
             # Build terminal nets
             if hasattr(dev, 'pins') and dev.pins:
-                terminal_nets[dev_name] = {
-                    "D": dev.pins.get("D", ""),
-                    "G": dev.pins.get("G", ""),
-                    "S": dev.pins.get("S", ""),
-                }
+                if "1" in dev.pins or "2" in dev.pins:
+                    terminal_nets[dev_name] = {
+                        "1": dev.pins.get("1", ""),
+                        "2": dev.pins.get("2", ""),
+                    }
+                else:
+                    terminal_nets[dev_name] = {
+                        "D": dev.pins.get("D", ""),
+                        "G": dev.pins.get("G", ""),
+                        "S": dev.pins.get("S", ""),
+                    }
 
         # 4. Build edges from circuit graph
         G = build_circuit_graph(netlist)

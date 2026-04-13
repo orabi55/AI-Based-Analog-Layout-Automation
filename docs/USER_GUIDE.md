@@ -683,7 +683,7 @@ pip install -r requirements.txt
 
 **Possible causes:**
 - Rate limiting on the API (especially Gemini free tier). Wait 30-60 seconds and try again.
-- The `gemma-3-27b-it` model is being used. It is free but may have higher latency.
+- The `gemma-4-31b-it` model is being used. It is free but may have higher latency.
 
 ### The canvas is blank after loading
 

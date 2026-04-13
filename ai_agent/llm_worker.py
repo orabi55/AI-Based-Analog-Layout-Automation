@@ -234,7 +234,7 @@ def run_llm(chat_messages, full_prompt):
     gemini_key = os.environ.get("GEMINI_API_KEY", "")
     if gemini_key:
         gemini_models = [
-            "gemma-3-27b-it",
+            "gemma-4-31b-it",
         ]
         _gemini_key_invalid = False
         for model_name in gemini_models:

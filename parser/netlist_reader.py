@@ -81,24 +81,87 @@ def parse_mos(tokens):
 
 def parse_cap(tokens):
     """
-    Cname node1 node2 value
+    Cname node1 node2 value | Cname node1 node2 model params...
     """
-    name = tokens[0]
-    n1, n2, val = tokens[1], tokens[2], tokens[3]
-
-    return Device(name, "cap", {"1": n1, "2": n2},
-                  {"value": parse_value(val)})
+    return _parse_two_terminal_passive(tokens, "cap")
 
 
 def parse_res(tokens):
     """
-    Rname node1 node2 value
+    Rname node1 node2 value | Rname node1 node2 model params...
     """
-    name = tokens[0]
-    n1, n2, val = tokens[1], tokens[2], tokens[3]
+    return _parse_two_terminal_passive(tokens, "res")
 
-    return Device(name, "res", {"1": n1, "2": n2},
-                  {"value": parse_value(val)})
+
+def parse_ind(tokens):
+    """Lname node1 node2 value | Lname node1 node2 model params..."""
+    return _parse_two_terminal_passive(tokens, "ind")
+
+
+def parse_diode(tokens):
+    """Dname anode cathode model params..."""
+    return _parse_two_terminal_passive(tokens, "dio")
+
+
+def _parse_token_value(value):
+    """Try parsing numeric/unit value; return original string on failure."""
+    try:
+        return parse_value(value)
+    except Exception:
+        return value
+
+
+def _is_numeric_like(value):
+    """True if token parses as a numeric/unit quantity."""
+    try:
+        parse_value(value)
+        return True
+    except Exception:
+        return False
+
+
+def _parse_two_terminal_passive(tokens, dtype):
+    """Parse generic two-terminal passives with value-based or model-based syntax."""
+    if len(tokens) < 3:
+        return None
+
+    name = tokens[0]
+    n1, n2 = tokens[1], tokens[2]
+    tail = tokens[3:]
+
+    params = {}
+    model = ""
+    value_set = False
+
+    if tail:
+        head = tail[0]
+        if "=" in head:
+            # parameter-only tail (e.g., C1 n1 n2 w=... l=...)
+            pass
+        elif _is_numeric_like(head):
+            params["value"] = _parse_token_value(head)
+            value_set = True
+            tail = tail[1:]
+        else:
+            model = head
+            tail = tail[1:]
+
+    for t in tail:
+        if "=" in t:
+            k, v = t.split("=", 1)
+            params[k.lower()] = _parse_token_value(v)
+            continue
+
+        if not value_set and _is_numeric_like(t):
+            params["value"] = _parse_token_value(t)
+            value_set = True
+        elif not model:
+            model = t
+
+    if model:
+        params["model"] = model
+
+    return Device(name, dtype, {"1": n1, "2": n2}, params)
 
 
 # -------------------------------------------------
@@ -113,19 +176,29 @@ def parse_line(line):
     if not tokens:
         return None
 
-    # MOS detection: must have at least 6 tokens
-    if len(tokens) >= 6:
+    lead = tokens[0][0].upper()
+
+    # MOS detection: must be M-device with at least 6 tokens
+    if lead == "M" and len(tokens) >= 6:
         model = tokens[5].lower()
         if model.startswith("n") or model.startswith("p"):
             return parse_mos(tokens)
 
     # Capacitor
-    if tokens[0][0].upper() == 'C' and len(tokens) >= 4:
+    if lead == 'C' and len(tokens) >= 3:
         return parse_cap(tokens)
 
     # Resistor
-    if tokens[0][0].upper() == 'R' and len(tokens) >= 4:
+    if lead == 'R' and len(tokens) >= 3:
         return parse_res(tokens)
+
+    # Inductor
+    if lead == 'L' and len(tokens) >= 3:
+        return parse_ind(tokens)
+
+    # Diode
+    if lead == 'D' and len(tokens) >= 3:
+        return parse_diode(tokens)
 
     return None
 

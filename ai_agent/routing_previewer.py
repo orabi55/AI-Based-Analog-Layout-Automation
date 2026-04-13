@@ -189,9 +189,13 @@ def score_routing(nodes, edges, terminal_nets):
         x_min, x_max = min(xs), max(xs)
         span      = x_max - x_min
         cross_row = bool(pmos_devs and nmos_devs)
+        # Wire length = horizontal span + vertical component for cross-row nets.
+        # Cross-row nets require a ~ROW_HEIGHT_UM vertical jog; previously ignored.
+        _ROW_HEIGHT_UM = 0.668
+        wire_length = span + (_ROW_HEIGHT_UM if cross_row else 0.0)
         net_details[net_name] = {
             "span":        round(span, 4),
-            "wire_length": round(span, 4),   # Manhattan horizontal component
+            "wire_length": round(wire_length, 4),
             "criticality": _classify_net(net_name),
             "cross_row":   cross_row,
             "devices":     sorted(devs),
@@ -217,7 +221,7 @@ def score_routing(nodes, edges, terminal_nets):
                 crossings[net_b] = crossings.get(net_b, 0) + 1
 
     total_score = sum(crossings.values()) // 2
-    worst_nets  = sorted(crossings, key=crossings.get, reverse=True)[:5]
+    worst_nets = sorted(crossings, key=lambda k: crossings[k], reverse=True)[:5]
 
     # ── Total wire length estimate ────────────────────────────────
     total_wire = round(sum(d["wire_length"] for d in net_details.values()), 4)
@@ -232,7 +236,9 @@ def score_routing(nodes, edges, terminal_nets):
             total_cost += (span ** 2) * 3
         else:
             total_cost += span * 1
-    placement_cost = round(total_cost, 4)
+    # Normalize by net count so the cost is comparable across different circuit sizes
+    n_nets = max(1, len(net_details))
+    placement_cost = round(total_cost / n_nets, 4)
 
     # ── Summary string ────────────────────────────────────────────
     if total_score == 0 and total_wire < 2.0:

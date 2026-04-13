@@ -15,6 +15,10 @@ class DeviceSignals(QObject):
 
 
 class DeviceItem(QGraphicsRectItem):
+    PASSIVE_TYPES = {
+        "res", "cap", "ind", "dio",
+        "resistor", "capacitor", "inductor", "diode",
+    }
 
     # All possible colors for device-name text. Prefixes are mapped into this list.
     NAME_COLOR_PALETTE = [
@@ -87,12 +91,19 @@ class DeviceItem(QGraphicsRectItem):
             self._border = QColor("#2d5986")
             self._label_color = QColor("#1a365d")
             self._terminal_label_color = QColor("#ffffff")
-        else:  # pmos
+        elif dtype == "pmos":
             self._source_color = QColor("#ffcccc")    # light red/pink
             self._gate_color = QColor("#d94a4a")      # red
             self._drain_color = QColor("#ffcccc")
             self._border = QColor("#8b2d2d")
             self._label_color = QColor("#5d1a1a")
+            self._terminal_label_color = QColor("#ffffff")
+        else:
+            self._source_color = QColor("#ffe4b5")
+            self._gate_color = QColor("#d9a14a")
+            self._drain_color = QColor("#ffe4b5")
+            self._border = QColor("#8b5a2b")
+            self._label_color = QColor("#5a3a1a")
             self._terminal_label_color = QColor("#ffffff")
 
         # Shared diffusion color (green like in reference)
@@ -157,6 +168,20 @@ class DeviceItem(QGraphicsRectItem):
 
         color_index = hash_value % len(self.NAME_COLOR_PALETTE)
         return QColor(self.NAME_COLOR_PALETTE[color_index])
+
+    def _is_passive_device(self):
+        return self.device_type in self.PASSIVE_TYPES
+
+    def _passive_kind(self):
+        if self.device_type in {"res", "resistor"}:
+            return "res"
+        if self.device_type in {"cap", "capacitor"}:
+            return "cap"
+        if self.device_type in {"ind", "inductor"}:
+            return "ind"
+        if self.device_type in {"dio", "diode"}:
+            return "dio"
+        return "passive"
 
     def set_boundary_label_visibility(self, show_left=True, show_right=True):
         """Control whether left/right terminal labels are drawn."""
@@ -254,6 +279,15 @@ class DeviceItem(QGraphicsRectItem):
         # Determine visual abut state (flip reverses left/right)
         visual_abut_left = self._abut_right if self._flip_h else self._abut_left
         visual_abut_right = self._abut_left if self._flip_h else self._abut_right
+
+        if self._is_passive_device():
+            self._paint_passive(painter, rect)
+            if self.isSelected():
+                sel_pen = QPen(QColor("#ffcc00"), 2.5, Qt.PenStyle.SolidLine)
+                painter.setPen(sel_pen)
+                painter.setBrush(QBrush(QColor(255, 204, 0, 40)))
+                painter.drawRect(rect.adjusted(1, 1, -1, -1))
+            return
 
         # ── Apply flip transform for drawing ─────────────────────
         painter.save()
@@ -451,6 +485,122 @@ class DeviceItem(QGraphicsRectItem):
             painter.setBrush(QBrush(QColor(255, 204, 0, 40)))
             painter.drawRect(rect.adjusted(1, 1, -1, -1))
 
+    def _paint_passive(self, painter: QPainter, rect: QRectF):
+        """Draw two-terminal symbols with distinct shapes for passive types."""
+        from PySide6.QtGui import QPainterPath
+
+        x0 = rect.x()
+        y0 = rect.y()
+        w = rect.width()
+        h = rect.height()
+
+        painter.setPen(QPen(self._border, 1.35))
+        painter.setBrush(QBrush(self._source_color.lighter(110)))
+        painter.drawRect(rect.adjusted(0.75, 0.75, -0.75, -0.75))
+
+        mid_y = y0 + h * 0.52
+        lead_left = x0 + w * 0.10
+        lead_right = x0 + w * 0.90
+        body_left = x0 + w * 0.34
+        body_right = x0 + w * 0.66
+        painter.setPen(QPen(self._border, 1.5))
+        painter.drawLine(QPointF(lead_left, mid_y), QPointF(body_left, mid_y))
+        painter.drawLine(QPointF(body_right, mid_y), QPointF(lead_right, mid_y))
+
+        kind = self._passive_kind()
+        if kind == "res":
+            zig = QPainterPath(QPointF(body_left, mid_y))
+            step = (body_right - body_left) / 8.0
+            amp = h * 0.16
+            for i in range(1, 8):
+                x = body_left + i * step
+                y = mid_y - amp if i % 2 else mid_y + amp
+                zig.lineTo(x, y)
+            zig.lineTo(body_right, mid_y)
+            painter.drawPath(zig)
+        elif kind == "cap":
+            x1 = x0 + w * 0.47
+            x2 = x0 + w * 0.53
+            y1 = y0 + h * 0.28
+            y2 = y0 + h * 0.76
+            painter.drawLine(QPointF(x1, y1), QPointF(x1, y2))
+            painter.drawLine(QPointF(x2, y1), QPointF(x2, y2))
+            painter.drawLine(QPointF(body_left, mid_y), QPointF(x1, mid_y))
+            painter.drawLine(QPointF(x2, mid_y), QPointF(body_right, mid_y))
+        elif kind == "ind":
+            coils = 4
+            coil_w = (body_right - body_left) / coils
+            arc_h = h * 0.28
+            top = mid_y - arc_h
+            for i in range(coils):
+                x = body_left + i * coil_w
+                painter.drawArc(QRectF(x, top, coil_w, arc_h * 2.0), 0, 180 * 16)
+        elif kind == "dio":
+            tri = QPainterPath()
+            tri.moveTo(body_left + (body_right - body_left) * 0.10, y0 + h * 0.30)
+            tri.lineTo(body_left + (body_right - body_left) * 0.10, y0 + h * 0.74)
+            tri.lineTo(body_left + (body_right - body_left) * 0.62, mid_y)
+            tri.closeSubpath()
+            painter.setBrush(QBrush(self._gate_color))
+            painter.drawPath(tri)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            bar_x = body_left + (body_right - body_left) * 0.72
+            painter.drawLine(QPointF(bar_x, y0 + h * 0.28), QPointF(bar_x, y0 + h * 0.76))
+        else:
+            painter.drawRect(QRectF(body_left, y0 + h * 0.33, body_right - body_left, h * 0.34))
+
+        term_font = QFont("Segoe UI", 4, QFont.Weight.Bold)
+        net_font = QFont("Segoe UI", 5)
+        name_font = QFont("Segoe UI", 3, QFont.Weight.Bold)
+
+        painter.setFont(name_font)
+        prefix, sep, suffix = self.device_name.partition("_")
+        painter.setPen(self._name_color_from_prefix(prefix))
+        name_rect = QRectF(x0, y0, w, 8)
+        painter.drawText(name_rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, prefix)
+        if sep and suffix:
+            suffix_rect = QRectF(x0, y0 + 8, w, 8)
+            painter.drawText(suffix_rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, suffix)
+
+        net_1 = self._net_labels.get("1", "")
+        net_2 = self._net_labels.get("2", "")
+
+        left_rect = QRectF(x0, y0, w * 0.5, h)
+        right_rect = QRectF(x0 + w * 0.5, y0, w * 0.5, h)
+
+        painter.setFont(term_font)
+        painter.setPen(self._label_color)
+        painter.drawText(
+            QRectF(left_rect.x(), left_rect.y() + h - 10, left_rect.width(), 8),
+            Qt.AlignmentFlag.AlignCenter,
+            "1",
+        )
+        painter.drawText(
+            QRectF(right_rect.x(), right_rect.y() + h - 10, right_rect.width(), 8),
+            Qt.AlignmentFlag.AlignCenter,
+            "2",
+        )
+
+        if net_1:
+            painter.save()
+            painter.translate(left_rect.x() + left_rect.width() / 2, left_rect.y() + h * 0.50)
+            painter.rotate(90)
+            painter.setFont(net_font)
+            painter.setPen(QColor("#000000"))
+            v_rect = QRectF(-h * 0.30, -left_rect.width() / 2, h * 0.60, left_rect.width())
+            painter.drawText(v_rect, Qt.AlignmentFlag.AlignCenter, net_1)
+            painter.restore()
+
+        if net_2:
+            painter.save()
+            painter.translate(right_rect.x() + right_rect.width() / 2, right_rect.y() + h * 0.50)
+            painter.rotate(90)
+            painter.setFont(net_font)
+            painter.setPen(QColor("#000000"))
+            v_rect = QRectF(-h * 0.30, -right_rect.width() / 2, h * 0.60, right_rect.width())
+            painter.drawText(v_rect, Qt.AlignmentFlag.AlignCenter, net_2)
+            painter.restore()
+
     def terminal_anchors(self):
         """Return scene positions for S, G, D terminal centers.
 
@@ -464,6 +614,21 @@ class DeviceItem(QGraphicsRectItem):
 
         diff_w = w * 0.30
         gate_w = w * 0.40
+
+        if self._is_passive_device():
+            t1_local = QPointF(x0 + w * 0.25, y0 + h / 2)
+            t2_local = QPointF(x0 + w * 0.75, y0 + h / 2)
+            center = QPointF(x0 + w * 0.5, y0 + h / 2)
+            t1_scene = self.mapToScene(t1_local)
+            t2_scene = self.mapToScene(t2_local)
+            c_scene = self.mapToScene(center)
+            return {
+                "1": t1_scene,
+                "2": t2_scene,
+                "S": t1_scene,
+                "D": t2_scene,
+                "G": c_scene,
+            }
 
         if self._flip_h:
             # Flipped: Source visually on the right, Drain on the left
@@ -494,6 +659,21 @@ class DeviceItem(QGraphicsRectItem):
 
         diff_w = w * 0.30
         gate_w = w * 0.40
+
+        if self._is_passive_device():
+            t1_local = QRectF(x0, y0, w * 0.5, h)
+            t2_local = QRectF(x0 + w * 0.5, y0, w * 0.5, h)
+            center_local = QRectF(x0 + w * 0.4, y0, w * 0.2, h)
+            t1_scene = self.mapRectToScene(t1_local)
+            t2_scene = self.mapRectToScene(t2_local)
+            c_scene = self.mapRectToScene(center_local)
+            return {
+                "1": t1_scene,
+                "2": t2_scene,
+                "S": t1_scene,
+                "D": t2_scene,
+                "G": c_scene,
+            }
 
         if self._flip_h:
             # Flipped: Source visually on the right, Drain on the left

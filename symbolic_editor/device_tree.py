@@ -252,6 +252,7 @@ class DeviceTreePanel(QWidget):
             # Classify devices
             nmos_real, nmos_dummy = [], []
             pmos_real, pmos_dummy = [], []
+            passives = []
             for node in nodes:
                 dev_type = str(node.get("type", "unknown")).lower()
                 is_dummy = node.get("is_dummy", False) or str(node.get("id", "")).upper().startswith("DUMMY")
@@ -259,6 +260,8 @@ class DeviceTreePanel(QWidget):
                     (nmos_dummy if is_dummy else nmos_real).append(node)
                 elif "pmos" in dev_type or dev_type == "pmos":
                     (pmos_dummy if is_dummy else pmos_real).append(node)
+                elif dev_type in {"res", "cap", "ind", "dio", "resistor", "capacitor", "inductor", "diode"}:
+                    passives.append(node)
 
             # NMOS folder
             if nmos_real or nmos_dummy:
@@ -297,6 +300,16 @@ class DeviceTreePanel(QWidget):
                         self._add_instance_item(dummy_folder, dev, "dummy")
 
                 pmos_folder.setExpanded(True)
+
+            # Passive folder
+            if passives:
+                pass_folder = QTreeWidgetItem(self.tree, [f"Passives ({len(passives)})"])
+                pass_folder.setFont(0, QFont("Segoe UI", 10, QFont.Weight.Bold))
+                pass_folder.setForeground(0, QColor("#f0b772"))
+                pass_folder.setData(0, Qt.ItemDataRole.UserRole, "__passives__")
+                for dev in sorted(passives, key=lambda d: d.get("id", "")):
+                    self._add_instance_item(pass_folder, dev, "passive")
+                pass_folder.setExpanded(True)
 
         # ═══════════════════════════════════════════════════════════
         # NETS TAB
@@ -432,6 +445,9 @@ class DeviceTreePanel(QWidget):
         if dev_type == "dummy":
             text = f"  {dev_id}"
             color = QColor("#999999")
+        elif dev_type == "passive":
+            text = f"  {dev_id}"
+            color = QColor("#f0b772")
         else:
             # In finger subgroup, keep row compact by omitting nf text.
             text = f"  {dev_id}" if in_finger_group else f"  {dev_id}  │  nf={nf}"
@@ -444,7 +460,8 @@ class DeviceTreePanel(QWidget):
 
         # Add terminal sub-items with better visual hierarchy
         term_nets = self._terminal_nets.get(dev_id, {})
-        for term in ["S", "G", "D"]:
+        terms = ["1", "2"] if dev_type == "passive" else ["S", "G", "D"]
+        for term in terms:
             net_name = term_nets.get(term, "—")
             # Use bullet point for visual hierarchy
             sub_text = f"    • {term}: {net_name}"

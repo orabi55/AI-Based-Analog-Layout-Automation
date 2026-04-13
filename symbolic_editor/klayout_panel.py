@@ -46,7 +46,7 @@ class KLayoutPanel(QWidget):
         header = QWidget()
         header.setFixedHeight(34)
         header.setStyleSheet(
-            "background-color: #1a1f2b; border-bottom: 1px solid #2d3548;"
+            "background-color: #141a23; border-bottom: 1px solid #2d3a4f;"
         )
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(10, 0, 6, 0)
@@ -54,7 +54,7 @@ class KLayoutPanel(QWidget):
 
         title = QLabel("KLayout Preview")
         title.setStyleSheet(
-            "color: #8899aa; font-family: 'Segoe UI'; font-size: 10pt; "
+            "color: #9fb0c7; font-family: 'Segoe UI'; font-size: 10pt; "
             "font-weight: 600; border: none;"
         )
         header_layout.addWidget(title)
@@ -90,20 +90,20 @@ class KLayoutPanel(QWidget):
         self._scroll.setStyleSheet(
             """
             QScrollArea {
-                background-color: #0e1219;
+                background-color: #0d121a;
                 border: none;
             }
             QScrollBar:vertical {
-                background: #12161f; width: 8px; border: none;
+                background: #111722; width: 8px; border: none;
             }
             QScrollBar::handle:vertical {
-                background: #2d3548; border-radius: 4px; min-height: 30px;
+                background: #31435d; border-radius: 4px; min-height: 30px;
             }
             QScrollBar:horizontal {
-                background: #12161f; height: 8px; border: none;
+                background: #111722; height: 8px; border: none;
             }
             QScrollBar::handle:horizontal {
-                background: #2d3548; border-radius: 4px; min-width: 30px;
+                background: #31435d; border-radius: 4px; min-width: 30px;
             }
             QScrollBar::add-line, QScrollBar::sub-line {
                 width: 0; height: 0;
@@ -113,7 +113,7 @@ class KLayoutPanel(QWidget):
 
         self._image_label = QLabel()
         self._image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._image_label.setStyleSheet("background-color: #0e1219; border: none;")
+        self._image_label.setStyleSheet("background-color: #0d121a; border: none;")
         self._image_label.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
@@ -121,8 +121,8 @@ class KLayoutPanel(QWidget):
         # Placeholder text
         self._image_label.setText("No layout rendered yet.\nUse Export to OAS, then Refresh.")
         self._image_label.setStyleSheet(
-            "color: #556677; font-family: 'Segoe UI'; font-size: 10pt; "
-            "background-color: #0e1219; border: none; padding: 20px;"
+            "color: #8a9bb1; font-family: 'Segoe UI'; font-size: 10pt; "
+            "background-color: #0d121a; border: none; padding: 20px;"
         )
 
         self._scroll.setWidget(self._image_label)
@@ -132,8 +132,8 @@ class KLayoutPanel(QWidget):
         self._status = QLabel("")
         self._status.setFixedHeight(22)
         self._status.setStyleSheet(
-            "color: #556677; font-family: 'Segoe UI'; font-size: 8pt; "
-            "background-color: #12161f; border-top: 1px solid #2d3548; "
+            "color: #8797ad; font-family: 'Segoe UI'; font-size: 8pt; "
+            "background-color: #111722; border-top: 1px solid #2d3a4f; "
             "padding: 0 8px;"
         )
         layout.addWidget(self._status)
@@ -142,21 +142,21 @@ class KLayoutPanel(QWidget):
     def _button_style():
         return """
             QPushButton {
-                background-color: #232a38;
-                color: #c8d0dc;
-                border: 1px solid #3d5066;
+                background-color: #1f2a3a;
+                color: #d7e1ef;
+                border: 1px solid #364a67;
                 border-radius: 4px;
                 font-family: 'Segoe UI';
                 font-size: 8pt;
                 padding: 2px 8px;
             }
             QPushButton:hover {
-                background-color: #2d3f54;
-                border-color: #4a90d9;
+                background-color: #2a3b53;
+                border-color: #5a9bff;
                 color: #ffffff;
             }
             QPushButton:pressed {
-                background-color: #4a90d9;
+                background-color: #3f7fdd;
             }
         """
 
@@ -180,8 +180,8 @@ class KLayoutPanel(QWidget):
                 "Export to OAS first (File > Export to OAS)."
             )
             self._image_label.setStyleSheet(
-                "color: #556677; font-family: 'Segoe UI'; font-size: 10pt; "
-                "background-color: #0e1219; border: none; padding: 20px;"
+                "color: #8a9bb1; font-family: 'Segoe UI'; font-size: 10pt; "
+                "background-color: #0d121a; border: none; padding: 20px;"
             )
             self._status.setText("No file")
             return
@@ -200,7 +200,7 @@ class KLayoutPanel(QWidget):
                 self._image_label.setPixmap(pixmap)
                 self._image_label.setText("")
                 self._image_label.setStyleSheet(
-                    "background-color: #0e1219; border: none;"
+                    "background-color: #0d121a; border: none;"
                 )
                 self._status.setText(
                     f"File: {os.path.basename(self._oas_path)}  |  "
@@ -213,8 +213,8 @@ class KLayoutPanel(QWidget):
         except Exception as e:
             self._image_label.setText(f"Error: {e}")
             self._image_label.setStyleSheet(
-                "color: #aa4444; font-family: 'Segoe UI'; font-size: 9pt; "
-                "background-color: #0e1219; border: none; padding: 20px;"
+                "color: #d46a6a; font-family: 'Segoe UI'; font-size: 9pt; "
+                "background-color: #0d121a; border: none; padding: 20px;"
             )
             self._status.setText("Error")
             import traceback

@@ -21,8 +21,15 @@ import hashlib
 from datetime import datetime
 from pathlib import Path
 
-import chromadb
-from sentence_transformers import SentenceTransformer
+try:
+    import chromadb
+except ImportError:
+    chromadb = None
+
+try:
+    from sentence_transformers import SentenceTransformer
+except ImportError:
+    SentenceTransformer = None
 
 
 # ---------------------------------------------------------------------------
@@ -40,6 +47,16 @@ class RAGStore:
     """Persistent vector store for successful analog layout placements."""
 
     def __init__(self, db_path: str = _DB_PATH):
+        if chromadb is None:
+            raise ModuleNotFoundError(
+                "RAG dependency missing: chromadb. Install with: pip install chromadb"
+            )
+        if SentenceTransformer is None:
+            raise ModuleNotFoundError(
+                "RAG dependency missing: sentence-transformers. "
+                "Install with: pip install sentence-transformers"
+            )
+
         self._client     = chromadb.PersistentClient(path=db_path)
         self._collection = self._client.get_or_create_collection(
             name=_COLLECTION,

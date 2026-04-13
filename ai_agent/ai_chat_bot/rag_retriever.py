@@ -20,7 +20,11 @@ def get_store() -> RAGStore:
     """Return the singleton RAGStore, initialising it on first call."""
     global _store
     if _store is None:
-        _store = RAGStore()
+        try:
+            _store = RAGStore()
+        except ModuleNotFoundError as exc:
+            print(f"[RAG] Disabled: {exc}")
+            return None
     return _store
 
 
@@ -46,6 +50,8 @@ def build_rag_context(
         Returns empty string if no examples are available yet.
     """
     store    = get_store()
+    if store is None:
+        return ""
     examples = store.retrieve_similar(nodes, terminal_nets, edges=edges, top_k=top_k)
 
     if not examples:
@@ -134,6 +140,8 @@ def save_run_as_example(
         example_id (str)
     """
     store = get_store()
+    if store is None:
+        return ""
     return store.save_example(
         nodes, edges, terminal_nets,
         drc_result, routing_result,

@@ -50,6 +50,8 @@ class SymbolicEditor(QGraphicsView):
         # Zoom parameters
         self.zoom_factor = 1.15
         self._zoom_level = 1.0
+        self._min_zoom = 0.15
+        self._max_zoom = 8.0
 
         # Device items lookup by id
         self.device_items = {}
@@ -129,12 +131,21 @@ class SymbolicEditor(QGraphicsView):
             flip_h = bool(getattr(item, "is_flip_h", lambda: False)())
 
         side = str(side).lower().strip()
-        if side == "left":
-            term = "D" if flip_h else "S"
-        elif side == "right":
-            term = "S" if flip_h else "D"
+        has_mos_terms = ("S" in nets) or ("D" in nets)
+        if has_mos_terms:
+            if side == "left":
+                term = "D" if flip_h else "S"
+            elif side == "right":
+                term = "S" if flip_h else "D"
+            else:
+                return ""
         else:
-            return ""
+            if side == "left":
+                term = "2" if flip_h else "1"
+            elif side == "right":
+                term = "1" if flip_h else "2"
+            else:
+                return ""
         return self._norm_net_name(nets.get(term, ""))
 
     def _pair_interface_score(self, left_item, left_flip, right_item, right_flip):
@@ -233,6 +244,30 @@ class SymbolicEditor(QGraphicsView):
     def _snap_point(self, x, y):
         return QPointF(self._snap_value(x), self._snap_row(y))
 
+    def _safe_remove_scene_item(self, item):
+        """Best-effort removal for QGraphicsItem wrappers with uncertain Qt lifetime."""
+        if item is None:
+            return
+        try:
+            owner_scene = item.scene()
+        except RuntimeError:
+            # Underlying C++ object already deleted.
+            return
+        if owner_scene is None:
+            return
+        try:
+            owner_scene.removeItem(item)
+        except RuntimeError:
+            pass
+
+    def _clear_scene_item_list(self, items):
+        """Remove all items in a tracked list and clear the Python registry."""
+        if not items:
+            return
+        for item in list(items):
+            self._safe_remove_scene_item(item)
+        items.clear()
+
     def _on_scene_changed(self, _regions):
         """Keep occupancy guides fresh when devices move/add/remove."""
         self.resetCachedContent()
@@ -314,11 +349,7 @@ class SymbolicEditor(QGraphicsView):
 
     def _clear_dummy_preview(self):
         if self._dummy_preview is not None:
-            try:
-                if self._dummy_preview.scene() is self.scene:
-                    self.scene.removeItem(self._dummy_preview)
-            except RuntimeError:
-                pass
+            self._safe_remove_scene_item(self._dummy_preview)
             self._dummy_preview = None
 
     def _update_dummy_preview(self, scene_pos):
@@ -382,6 +413,11 @@ class SymbolicEditor(QGraphicsView):
                      (e.g. after an AI swap/move command).
         """
         self._clear_dummy_preview()
+        # Clear tracked overlays before scene reset to avoid stale wrappers.
+        self._clear_scene_item_list(self._conn_lines)
+        self._clear_scene_item_list(self._terminal_highlights)
+        self._clear_scene_item_list(self._shared_net_labels)
+        self._clear_scene_item_list(self._group_items)
         self.scene.clear()
         self.device_items.clear()
 
@@ -816,12 +852,7 @@ class SymbolicEditor(QGraphicsView):
 
     def _clear_abut_groups(self):
         """Clear legacy group items list (no longer used in new approach)."""
-        for grp in self._group_items:
-            try:
-                self.scene.removeItem(grp)
-            except RuntimeError:
-                pass
-        self._group_items.clear()
+        self._clear_scene_item_list(self._group_items)
         for item in self.device_items.values():
             item.setVisible(True)
 
@@ -837,12 +868,7 @@ class SymbolicEditor(QGraphicsView):
         Works for ANY circuit - analyzes actual net labels automatically.
         """
         # Clear previous shared net labels
-        for label in self._shared_net_labels:
-            try:
-                self.scene.removeItem(label)
-            except RuntimeError:
-                pass
-        self._shared_net_labels.clear()
+        self._clear_scene_item_list(self._shared_net_labels)
 
         if not self._terminal_nets:
             # No net info available - reset all abut states
@@ -1195,6 +1221,8 @@ class SymbolicEditor(QGraphicsView):
         for term, net in term_map.items():
             if net == net_name:
                 return term
+        if term_map:
+            return next(iter(term_map.keys()))
         return "G"  # fallback
 
     def _get_net_color(self, net_name):
@@ -1207,20 +1235,23 @@ class SymbolicEditor(QGraphicsView):
 
     def _clear_connections(self):
         """Remove all connection lines, labels, and terminal highlights from the scene."""
-        if self._conn_lines:
-            self.scene.blockSignals(True)
-            for item in self._conn_lines:
-                self.scene.removeItem(item)
+        scene = self.scene
+        try:
+            scene.blockSignals(True)
+        except RuntimeError:
+            # Scene was already destroyed during shutdown.
             self._conn_lines.clear()
-            self.scene.blockSignals(False)
+            self._terminal_highlights.clear()
+            return
 
-        # Also clear terminal highlights
-        for highlight in self._terminal_highlights:
+        try:
+            self._clear_scene_item_list(self._conn_lines)
+            self._clear_scene_item_list(self._terminal_highlights)
+        finally:
             try:
-                self.scene.removeItem(highlight)
+                scene.blockSignals(False)
             except RuntimeError:
                 pass
-        self._terminal_highlights.clear()
 
     def _show_connections(self, dev_id):
         """Draw curved lines from dev_id terminals to connected device terminals."""
@@ -1442,12 +1473,7 @@ class SymbolicEditor(QGraphicsView):
             return
 
         # Clear previous terminal highlights
-        for highlight in self._terminal_highlights:
-            try:
-                self.scene.removeItem(highlight)
-            except RuntimeError:
-                pass
-        self._terminal_highlights.clear()
+        self._clear_scene_item_list(self._terminal_highlights)
 
         # Find all devices and their specific terminals connected to this net
         terminals_on_net = []  # [(dev_id, terminal), ...]
@@ -1629,22 +1655,47 @@ class SymbolicEditor(QGraphicsView):
     # Zoom with Mouse Wheel
     # -------------------------------------------------
     def wheelEvent(self, event):
-        if event.angleDelta().y() > 0:
-            self.scale(self.zoom_factor, self.zoom_factor)
-        else:
-            self.scale(1 / self.zoom_factor, 1 / self.zoom_factor)
-        self._zoom_level = self.transform().m11()
+        delta = event.angleDelta().y()
+        if delta == 0:
+            delta = event.pixelDelta().y()
+        if delta == 0:
+            event.ignore()
+            return
+
+        # Respect OS natural scrolling while keeping zoom direction intuitive.
+        if event.inverted():
+            delta = -delta
+
+        # 120 units ~= one wheel notch. Fractional values are common on touchpads.
+        zoom_step = float(delta) / 120.0
+        factor = self.zoom_factor ** zoom_step
+        self._apply_zoom_factor(factor)
+        event.accept()
+
+    def _apply_zoom_factor(self, factor):
+        """Apply zoom with hard limits to keep navigation controllable."""
+        current = self.transform().m11()
+        target = current * factor
+
+        if target < self._min_zoom:
+            factor = self._min_zoom / current
+            target = self._min_zoom
+        elif target > self._max_zoom:
+            factor = self._max_zoom / current
+            target = self._max_zoom
+
+        if abs(factor - 1.0) < 1e-12:
+            return
+
+        self.scale(factor, factor)
+        self._zoom_level = target
         self.resetCachedContent()
 
     def zoom_in(self):
-        self.scale(self.zoom_factor, self.zoom_factor)
-        self._zoom_level = self.transform().m11()
-        self.resetCachedContent()
+        self._apply_zoom_factor(self.zoom_factor)
 
     def zoom_out(self):
-        self.scale(1 / self.zoom_factor, 1 / self.zoom_factor)
-        self._zoom_level = self.transform().m11()
-        self.resetCachedContent()
+        self._apply_zoom_factor(1 / self.zoom_factor)
 
     def zoom_reset(self):
         self.resetTransform()

@@ -25,8 +25,13 @@ import json
 import re
 from pathlib import Path
 from collections import defaultdict
-from google import genai
-from google.genai import types
+
+try:
+    from google import genai
+    from google.genai import types
+except ImportError:
+    genai = None
+    types = None
 
 # Load .env from project root so GEMINI_API_KEY is available
 # even when this module is imported standalone (e.g. from the Design menu),
@@ -405,6 +410,11 @@ def gemini_generate_placement(input_json: str, output_json: str):
     Generates initial transistor placement using Gemini API.
     Retries on JSON parse failure up to MAX_RETRIES times.
     """
+
+    if genai is None or types is None:
+        raise ModuleNotFoundError(
+            "Gemini SDK is not installed. Install it with: pip install google-genai"
+        )
 
     api_key = os.getenv("GEMINI_API_KEY")
 
