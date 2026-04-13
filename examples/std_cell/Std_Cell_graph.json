@@ -7,13 +7,18 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 5.0,
-                "w": 0
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
             },
             "geometry": {
-                "x": 3.2440000000000007,
-                "y": 11.318000000000001,
-                "width": 0.368,
-                "height": 0.6680000000000001,
+                "x": 0.15000000000000002,
+                "y": -0.395,
+                "width": 0.294,
+                "height": 0.718,
                 "orientation": "R0"
             },
             "block": {
@@ -28,14 +33,19 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 5.0,
-                "w": 0
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
             },
             "geometry": {
-                "x": 3.3320000000000007,
-                "y": 10.42,
-                "width": 0.368,
-                "height": 0.6680000000000001,
-                "orientation": "R180"
+                "x": 0.877,
+                "y": -1.123,
+                "width": 0.294,
+                "height": 0.718,
+                "orientation": "R0"
             },
             "block": {
                 "instance": "XI1",
@@ -49,11 +59,16 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 5.0,
-                "w": 0
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
             },
             "geometry": {
-                "x": 0.9830000000000005,
-                "y": 8.505,
+                "x": 0.15000000000000002,
+                "y": -4.032,
                 "width": 0.294,
                 "height": 0.718,
                 "orientation": "R0"
@@ -70,11 +85,16 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 5.0,
-                "w": 0
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
             },
             "geometry": {
-                "x": 1.7100000000000004,
-                "y": 7.777,
+                "x": 0.877,
+                "y": -4.76,
                 "width": 0.294,
                 "height": 0.718,
                 "orientation": "R0"
@@ -91,10 +111,15 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI3_MM28",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
             },
             "geometry": {
-                "x": 0.0,
+                "x": 3.055,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.668,
@@ -112,10 +137,15 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI3_MM28",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
             },
             "geometry": {
-                "x": 0.0,
+                "x": 3.6430000000000002,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.668,
@@ -133,10 +163,15 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI3_MM5",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
             },
             "geometry": {
-                "x": 0.0,
+                "x": 4.231,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.668,
@@ -154,10 +189,15 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI3_MM5",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
             },
             "geometry": {
-                "x": 0.0,
+                "x": 4.819,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.668,
@@ -175,10 +215,15 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI3_MM4",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
             },
             "geometry": {
-                "x": 0.0,
+                "x": 5.407,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.668,
@@ -196,10 +241,15 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI3_MM4",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
             },
             "geometry": {
-                "x": 0.0,
+                "x": 5.995,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.668,
@@ -217,10 +267,15 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI3_MM3",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
             },
             "geometry": {
-                "x": 0.0,
+                "x": 6.583,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.668,
@@ -238,10 +293,15 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI3_MM3",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
             },
             "geometry": {
-                "x": 0.0,
+                "x": 7.171,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.668,
@@ -259,10 +319,15 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI3_MM2",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
             },
             "geometry": {
-                "x": 0.0,
+                "x": 7.759,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.668,
@@ -280,10 +345,15 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI3_MM2",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
             },
             "geometry": {
-                "x": 0.0,
+                "x": 8.347,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.668,
@@ -301,10 +371,15 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI3_MM25",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
             },
             "geometry": {
-                "x": 0.0,
+                "x": 8.934999999999999,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.668,
@@ -322,10 +397,15 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI3_MM25",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
             },
             "geometry": {
-                "x": 0.0,
+                "x": 9.522999999999998,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.668,
@@ -343,10 +423,15 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI3_MM29",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
             },
             "geometry": {
-                "x": 0.0,
+                "x": 10.110999999999997,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.668,
@@ -364,10 +449,15 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI3_MM29",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
             },
             "geometry": {
-                "x": 0.0,
+                "x": 10.698999999999996,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.668,
@@ -385,10 +475,15 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI3_MM9",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
             },
             "geometry": {
-                "x": 0.0,
+                "x": 11.286999999999995,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.668,
@@ -406,10 +501,15 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI3_MM9",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
             },
             "geometry": {
-                "x": 0.0,
+                "x": 11.874999999999995,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.668,
@@ -427,10 +527,15 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI3_MM8",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
             },
             "geometry": {
-                "x": 0.0,
+                "x": 12.462999999999994,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.668,
@@ -448,10 +553,15 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI3_MM8",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
             },
             "geometry": {
-                "x": 0.0,
+                "x": 13.050999999999993,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.668,
@@ -469,10 +579,15 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI3_MM7",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
             },
             "geometry": {
-                "x": 0.0,
+                "x": 13.638999999999992,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.668,
@@ -490,10 +605,15 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI3_MM7",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
             },
             "geometry": {
-                "x": 0.0,
+                "x": 14.226999999999991,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.668,
@@ -511,10 +631,15 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI3_MM6",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
             },
             "geometry": {
-                "x": 0.0,
+                "x": 14.81499999999999,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.668,
@@ -532,10 +657,15 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI3_MM6",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
             },
             "geometry": {
-                "x": 0.0,
+                "x": 15.40299999999999,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.668,
@@ -553,10 +683,15 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI3_MM24",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
             },
             "geometry": {
-                "x": 0.0,
+                "x": 15.990999999999989,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.668,
@@ -574,10 +709,15 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI3_MM24",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
             },
             "geometry": {
-                "x": 0.0,
+                "x": 16.57899999999999,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.668,
@@ -595,17 +735,22 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI2_MM28",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
             },
             "geometry": {
-                "x": 3.880000000000001,
-                "y": 10.42,
+                "x": 1.521,
+                "y": -4.468,
                 "width": 0.368,
                 "height": 0.6680000000000001,
                 "orientation": "MX"
             },
             "abutment": {
-                "abut_left": true,
+                "abut_left": false,
                 "abut_right": true
             },
             "block": {
@@ -620,18 +765,23 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI2_MM28",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
             },
             "geometry": {
-                "x": 4.0280000000000005,
-                "y": 10.42,
+                "x": 1.521,
+                "y": -3.012,
                 "width": 0.368,
                 "height": 0.6680000000000001,
                 "orientation": "MX"
             },
             "abutment": {
-                "abut_left": true,
-                "abut_right": false
+                "abut_left": false,
+                "abut_right": true
             },
             "block": {
                 "instance": "XI2",
@@ -645,11 +795,16 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI2_MM5",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
             },
             "geometry": {
-                "x": 5.92,
-                "y": 10.42,
+                "x": 2.3930000000000002,
+                "y": -4.468,
                 "width": 0.368,
                 "height": 0.6680000000000001,
                 "orientation": "R180"
@@ -666,14 +821,19 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI2_MM5",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
             },
             "geometry": {
-                "x": 7.754000000000001,
-                "y": 7.777,
-                "width": 0.294,
-                "height": 0.718,
-                "orientation": "R0"
+                "x": 2.3930000000000002,
+                "y": -3.012,
+                "width": 0.368,
+                "height": 0.6680000000000001,
+                "orientation": "R180"
             },
             "block": {
                 "instance": "XI2",
@@ -687,18 +847,23 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI2_MM4",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
             },
             "geometry": {
-                "x": 5.344,
-                "y": 10.42,
+                "x": 1.9649999999999999,
+                "y": -4.468,
                 "width": 0.368,
                 "height": 0.6680000000000001,
                 "orientation": "MX"
             },
             "abutment": {
                 "abut_left": true,
-                "abut_right": true
+                "abut_right": false
             },
             "block": {
                 "instance": "XI2",
@@ -712,11 +877,16 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI2_MM4",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
             },
             "geometry": {
-                "x": 5.492,
-                "y": 10.42,
+                "x": 1.9649999999999999,
+                "y": -3.012,
                 "width": 0.368,
                 "height": 0.6680000000000001,
                 "orientation": "MX"
@@ -737,17 +907,22 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI2_MM3",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
             },
             "geometry": {
-                "x": 5.048,
-                "y": 10.42,
+                "x": 1.8170000000000002,
+                "y": -4.468,
                 "width": 0.368,
                 "height": 0.6680000000000001,
                 "orientation": "MX"
             },
             "abutment": {
-                "abut_left": false,
+                "abut_left": true,
                 "abut_right": true
             },
             "block": {
@@ -762,11 +937,16 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI2_MM3",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
             },
             "geometry": {
-                "x": 5.196,
-                "y": 10.42,
+                "x": 1.8170000000000002,
+                "y": -3.012,
                 "width": 0.368,
                 "height": 0.6680000000000001,
                 "orientation": "MX"
@@ -787,14 +967,23 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI2_MM2",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
             },
             "geometry": {
-                "x": 4.456000000000001,
-                "y": 10.42,
+                "x": 1.669,
+                "y": -4.468,
                 "width": 0.368,
                 "height": 0.6680000000000001,
-                "orientation": "R180"
+                "orientation": "MX"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             },
             "block": {
                 "instance": "XI2",
@@ -808,14 +997,23 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI2_MM2",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
             },
             "geometry": {
-                "x": 4.796,
-                "y": 10.42,
+                "x": 1.669,
+                "y": -3.012,
                 "width": 0.368,
                 "height": 0.6680000000000001,
-                "orientation": "R180"
+                "orientation": "MX"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             },
             "block": {
                 "instance": "XI2",
@@ -829,18 +1027,19 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI2_MM25",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
             },
             "geometry": {
-                "x": 3.5840000000000005,
-                "y": 10.42,
+                "x": 1.2690000000000001,
+                "y": -4.468,
                 "width": 0.368,
                 "height": 0.6680000000000001,
-                "orientation": "MX"
-            },
-            "abutment": {
-                "abut_left": false,
-                "abut_right": true
+                "orientation": "R180"
             },
             "block": {
                 "instance": "XI2",
@@ -854,18 +1053,19 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI2_MM25",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
             },
             "geometry": {
-                "x": 3.7320000000000007,
-                "y": 10.42,
+                "x": 1.2690000000000001,
+                "y": -3.012,
                 "width": 0.368,
                 "height": 0.6680000000000001,
-                "orientation": "MX"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
+                "orientation": "R180"
             },
             "block": {
                 "instance": "XI2",
@@ -879,17 +1079,22 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI2_MM29",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
             },
             "geometry": {
-                "x": 3.880000000000001,
-                "y": 11.318000000000001,
+                "x": 1.521,
+                "y": -3.5700000000000003,
                 "width": 0.368,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
             },
             "abutment": {
-                "abut_left": true,
+                "abut_left": false,
                 "abut_right": true
             },
             "block": {
@@ -904,18 +1109,23 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI2_MM29",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
             },
             "geometry": {
-                "x": 4.0280000000000005,
-                "y": 11.318000000000001,
+                "x": 1.521,
+                "y": -2.114,
                 "width": 0.368,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
             },
             "abutment": {
-                "abut_left": true,
-                "abut_right": false
+                "abut_left": false,
+                "abut_right": true
             },
             "block": {
                 "instance": "XI2",
@@ -929,11 +1139,16 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI2_MM9",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
             },
             "geometry": {
-                "x": 5.832,
-                "y": 11.318000000000001,
+                "x": 2.3049999999999997,
+                "y": -3.5700000000000003,
                 "width": 0.368,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
@@ -950,13 +1165,18 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI2_MM9",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
             },
             "geometry": {
-                "x": 7.027000000000001,
-                "y": 8.505,
-                "width": 0.294,
-                "height": 0.718,
+                "x": 2.3049999999999997,
+                "y": -2.114,
+                "width": 0.368,
+                "height": 0.6680000000000001,
                 "orientation": "R0"
             },
             "block": {
@@ -971,18 +1191,23 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI2_MM8",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
             },
             "geometry": {
-                "x": 5.344,
-                "y": 11.318000000000001,
+                "x": 1.965,
+                "y": -3.5700000000000003,
                 "width": 0.368,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
             },
             "abutment": {
                 "abut_left": true,
-                "abut_right": true
+                "abut_right": false
             },
             "block": {
                 "instance": "XI2",
@@ -996,11 +1221,16 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI2_MM8",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
             },
             "geometry": {
-                "x": 5.492,
-                "y": 11.318000000000001,
+                "x": 1.965,
+                "y": -2.114,
                 "width": 0.368,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
@@ -1021,17 +1251,22 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI2_MM7",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
             },
             "geometry": {
-                "x": 5.048,
-                "y": 11.318000000000001,
+                "x": 1.8170000000000002,
+                "y": -3.5700000000000003,
                 "width": 0.368,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
             },
             "abutment": {
-                "abut_left": false,
+                "abut_left": true,
                 "abut_right": true
             },
             "block": {
@@ -1046,11 +1281,16 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI2_MM7",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
             },
             "geometry": {
-                "x": 5.196,
-                "y": 11.318000000000001,
+                "x": 1.8170000000000002,
+                "y": -2.114,
                 "width": 0.368,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
@@ -1071,14 +1311,23 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI2_MM6",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
             },
             "geometry": {
-                "x": 4.368,
-                "y": 11.318000000000001,
+                "x": 1.669,
+                "y": -3.5700000000000003,
                 "width": 0.368,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             },
             "block": {
                 "instance": "XI2",
@@ -1092,14 +1341,23 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI2_MM6",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
             },
             "geometry": {
-                "x": 4.708,
-                "y": 11.318000000000001,
+                "x": 1.669,
+                "y": -2.114,
                 "width": 0.368,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
             },
             "block": {
                 "instance": "XI2",
@@ -1113,18 +1371,19 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI2_MM24",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
             },
             "geometry": {
-                "x": 3.5840000000000005,
-                "y": 11.318000000000001,
+                "x": 1.181,
+                "y": -3.5700000000000003,
                 "width": 0.368,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": false,
-                "abut_right": true
             },
             "block": {
                 "instance": "XI2",
@@ -1138,18 +1397,19 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": "XI2_MM24",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
             },
             "geometry": {
-                "x": 3.7320000000000007,
-                "y": 11.318000000000001,
+                "x": 1.181,
+                "y": -2.114,
                 "width": 0.368,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
             },
             "block": {
                 "instance": "XI2",
