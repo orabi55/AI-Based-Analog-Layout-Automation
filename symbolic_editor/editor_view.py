@@ -29,6 +29,48 @@ except ImportError:
     build_edge_highlight_map = None
 
 
+class HierarchyAwareScene(QGraphicsScene):
+    """Custom QGraphicsScene that blocks selection of devices in non-descended hierarchies."""
+    
+    def __init__(self, editor):
+        super().__init__()
+        self._editor = editor
+    
+    def selectionChanged(self):
+        """Override selection to block devices in non-descended hierarchies."""
+        # First, call parent implementation
+        super().selectionChanged()
+        
+        # Now enforce hierarchy selection rules
+        if self._editor is None:
+            return
+        
+        try:
+            selected = [s for s in self.selectedItems()
+                        if hasattr(s, 'device_name')]
+            
+            if not selected:
+                return
+            
+            # Block selection for devices in non-descended hierarchies
+            should_block = []
+            for item in selected:
+                if hasattr(item, 'device_name'):
+                    if not self._editor.can_select_device(item):
+                        should_block.append(item)
+            
+            if should_block:
+                # Block signals to prevent recursive calls
+                self.blockSignals(True)
+                try:
+                    for item in should_block:
+                        item.setSelected(False)
+                finally:
+                    self.blockSignals(False)
+        except Exception:
+            pass  # Fail silently to avoid breaking selection
+
+
 class SymbolicEditor(QGraphicsView):
 
     device_clicked = Signal(str)
@@ -36,8 +78,8 @@ class SymbolicEditor(QGraphicsView):
     def __init__(self):
         super().__init__()
 
-        # Create scene
-        self.scene = QGraphicsScene()
+        # Create scene with hierarchy-aware custom scene
+        self.scene = HierarchyAwareScene(self)
         self.setScene(self.scene)
         self.scene.selectionChanged.connect(self._on_selection_changed)
         self.scene.changed.connect(self._on_scene_changed)
@@ -334,15 +376,9 @@ class SymbolicEditor(QGraphicsView):
             self.scene.addItem(item)
             self.device_items[node.get("id", "unknown")] = item
 
-        # ── Build hierarchy groups ──────────────────────────────────────
-        # Only build if there are actually hierarchical devices
-        has_hierarchy = any(
-            n.get("electrical", {}).get("parent") and
-            n.get("id") in self.device_items
-            for n in nodes
-        )
-        if has_hierarchy:
-            self._build_hierarchy_groups(nodes)
+        # ── Build hierarchy groups for ALL devices ──────────────────────
+        # Always build hierarchy groups, even for standalone devices
+        self._build_hierarchy_groups(nodes)
 
         # Compute grid metrics from device sizes (used for UI snap / row pitch).
         if widths:
@@ -410,14 +446,23 @@ class SymbolicEditor(QGraphicsView):
 
         # ── Step 1: Group devices by parent ──────────────────────────────
         parent_groups = {}  # parent_name -> list of (node, device_item)
+        standalone_devices = []  # devices without parent field
+        
         for node in nodes:
             try:
                 elec = node.get("electrical", {})
                 parent = elec.get("parent")
                 dev_id = node.get("id", "unknown")
                 item = self.device_items.get(dev_id)
-                if parent and item:
+                
+                if not item:
+                    continue
+                    
+                if parent:
                     parent_groups.setdefault(parent, []).append((node, item))
+                else:
+                    # Device has no parent - treat it as its own hierarchy group
+                    standalone_devices.append((node, item))
             except Exception:
                 continue
 
@@ -432,8 +477,8 @@ class SymbolicEditor(QGraphicsView):
 
         for parent_name, members in list(parent_groups.items()):
             try:
-                if len(members) <= 1:
-                    continue  # single device, no grouping needed
+                # Include ALL devices in hierarchy groups, even single devices
+                # (removed: if len(members) <= 1: continue)
 
                 # Sort by multiplier/finger index for correct ordering
                 def _sort_key(m):
@@ -484,9 +529,7 @@ class SymbolicEditor(QGraphicsView):
                 if not has_mult:
                     nf_per_mult = len(members)
 
-                # Skip single-device groups
-                if m_count == 1 and nf_per_mult == 1:
-                    continue
+                # Include ALL devices, even single (m=1, nf=1)
 
                 # Determine if array
                 is_array = any(
@@ -522,7 +565,7 @@ class SymbolicEditor(QGraphicsView):
                             child_name, bucket_items, child_hi,
                             color=fill, border_color=border,
                         )
-                        child_group.setVisible(False)  # start hidden
+                        # Don't manually set visibility - will be managed by parent's _update_child_visibility()
                         self.scene.addItem(child_group)
                         child_groups.append(child_group)
 
@@ -535,11 +578,9 @@ class SymbolicEditor(QGraphicsView):
                     color=fill, border_color=border,
                 )
 
-                # Wire up child groups
+                # Wire up child groups using the new setter method
                 if child_groups:
-                    group_item._child_groups = child_groups
-                    for child in child_groups:
-                        child._parent_group = group_item
+                    group_item.set_child_groups(child_groups)
 
                 # Wire up signals
                 group_item.signals.drag_finished.connect(self._on_hierarchy_drag_finished)
@@ -548,7 +589,52 @@ class SymbolicEditor(QGraphicsView):
 
                 self.scene.addItem(group_item)
                 self._hierarchy_groups.append(group_item)
-            except Exception:
+            except Exception as e:
+                print(f"[HIERARCHY ERROR] Failed to create group for {parent_name}: {e}")
+                import traceback
+                traceback.print_exc()
+                continue
+
+        # ── Step 3: Create hierarchy groups for standalone devices ─────────
+        print(f"[HIERARCHY] Processing {len(standalone_devices)} standalone devices")
+        for node, item in standalone_devices:
+            try:
+                dev_id = node.get("id", "unknown")
+                
+                # Get m and nf from the node data
+                m = node.get("parameters", {}).get("m", 1)
+                nf = node.get("parameters", {}).get("nf", 1)
+                
+                print(f"[HIERARCHY] Standalone {dev_id}: m={m}, nf={nf}")
+                
+                hierarchy_info = {
+                    "m": m,
+                    "nf": nf,
+                    "is_array": False,
+                }
+                
+                fill, border = _hierarchy_colors[color_idx % len(_hierarchy_colors)]
+                color_idx += 1
+                
+                group_item = HierarchyGroupItem(
+                    dev_id, [item], hierarchy_info,
+                    color=fill, border_color=border,
+                )
+                
+                print(f"[HIERARCHY] Created group for {dev_id}: _is_descended={group_item._is_descended}, device visible={item.isVisible()}")
+                
+                # Wire up signals
+                group_item.signals.drag_finished.connect(self._on_hierarchy_drag_finished)
+                group_item.signals.descend_requested.connect(self._on_hierarchy_descend)
+                group_item.signals.ascend_requested.connect(self._on_hierarchy_ascend)
+                
+                self.scene.addItem(group_item)
+                self._hierarchy_groups.append(group_item)
+            except Exception as e:
+                dev_id = node.get("id", "unknown")
+                print(f"[HIERARCHY ERROR] Failed to create standalone group for {dev_id}: {e}")
+                import traceback
+                traceback.print_exc()
                 continue
 
     def _on_hierarchy_drag_finished(self, group):
@@ -564,6 +650,102 @@ class SymbolicEditor(QGraphicsView):
     def _on_hierarchy_ascend(self, group):
         pass
 
+    def can_select_device(self, device_item):
+        """Check if a device item can be selected based on hierarchy state.
+        
+        Returns True only if the device is accessible at the current hierarchy level.
+        Returns False if the device is hidden inside a non-descended hierarchy group.
+        """
+        try:
+            # Check if this device item is currently visible in the scene
+            if not device_item.isVisible():
+                return False
+            
+            # Find if this device belongs to any hierarchy group
+            for group in self._hierarchy_groups:
+                # If this group is visible and NOT descended, block ALL its descendants
+                if group.isVisible() and not group._is_descended:
+                    # Check if device is in this group's descendants
+                    if device_item in group._all_descendant_devices:
+                        return False
+            
+            # Device is not blocked by any hierarchy group
+            return True
+        except Exception:
+            # On any error, allow selection (fallback to old behavior)
+            return True
+
+    def _is_hierarchy_descended(self, device_item, owning_group):
+        """Check if the hierarchy chain from device to root is fully descended.
+        
+        Traverses up the hierarchy tree to ensure all parent groups are descended.
+        Returns True if the device CAN be selected, False if it should be blocked.
+        """
+        current_group = owning_group
+        
+        # Walk up the hierarchy tree
+        while current_group is not None:
+            # If this group is not descended, check if it's a top-level group
+            if not current_group._is_descended:
+                # If this group has a parent, it means we need to block selection
+                # because the parent is not descended
+                if current_group._parent_group is not None:
+                    return False
+                # This is a top-level group (no parent), allow selection
+                return True
+            # Move to parent group
+            current_group = current_group._parent_group
+        
+        # Reached root without issues
+        return True
+
+    def descend_selected_hierarchy(self):
+        """Descend into the hierarchy group that contains the selected device(s).
+        
+        If a device is selected that belongs to a non-descended hierarchy group,
+        this will descend into that group to allow child selection.
+        """
+        try:
+            selected = [s for s in self.scene.selectedItems() 
+                       if hasattr(s, 'device_name')]
+            if not selected:
+                return
+            
+            # Get the first selected device
+            device_item = selected[0]
+            
+            # Find its hierarchy group
+            for group in self._hierarchy_groups:
+                if device_item in group._all_descendant_devices:
+                    # Found the owning group
+                    if not group._is_descended:
+                        # Descend into this group
+                        if group.has_children():
+                            group.descend()
+                    return
+        except Exception:
+            pass
+
+    def descend_nearest_hierarchy(self):
+        """Descend into the currently selected hierarchy group."""
+        try:
+            # Find which hierarchy group is selected
+            for group in self._hierarchy_groups:
+                if group.isSelected() and not group._is_descended:
+                    group.descend()
+                    return
+        except Exception:
+            pass
+
+    def ascend_all_hierarchy(self):
+        """Ascend from all descended hierarchy groups."""
+        try:
+            for group in self._hierarchy_groups:
+                if group._is_descended:
+                    group.ascend()
+        except Exception:
+            pass
+
     def _sync_hierarchy_to_nodes(self, group):
         """Update node data when a hierarchy group is moved."""
         try:
@@ -571,19 +753,8 @@ class SymbolicEditor(QGraphicsView):
         except Exception:
             pass
 
-    def keyPressEvent(self, event):
-        """Handle keyboard shortcuts."""
-        if event.key() == Qt.Key.Key_Escape:
-            # Ascend from any descended hierarchy groups
-            try:
-                for g in self._hierarchy_groups:
-                    if g._is_descended:
-                        g.ascend()
-                        event.accept()
-                        return
-            except Exception:
-                pass
-        super().keyPressEvent(event)
+    # NOTE: keyPressEvent is defined later in the class (line ~1351)
+    # The actual keyPressEvent handles both Escape (ascend) and D (descend)
 
     def _abut_pair_score(self, left_item, right_item):
         """Score how desirable it is to place left_item immediately before right_item."""
@@ -1169,21 +1340,49 @@ class SymbolicEditor(QGraphicsView):
 
 
     def _on_selection_changed(self):
-        """Emit device_clicked when user selects a device on the canvas."""
+        """Emit device_clicked when user selects a device on the canvas.
+        
+        Also enforces hierarchy selection rules - devices cannot be selected
+        if their parent hierarchy group is not descended.
+        """
         # Prevent recursive selection updates
         if getattr(self, '_selection_updating', False):
             return
+        
         try:
             selected = [s for s in self.scene.selectedItems()
                         if hasattr(s, 'device_name')]
         except RuntimeError:
             return  # scene deleted during shutdown
-        if selected:
-            dev_id = selected[0].device_name
-            self.device_clicked.emit(dev_id)
-            self._show_connections(dev_id)
-        else:
+        
+        if not selected:
             self._clear_connections()
+            return
+        
+        # Block selection of devices whose hierarchy is not descended
+        self.scene.blockSignals(True)
+        try:
+            for item in list(selected):
+                if hasattr(item, 'device_name'):
+                    if not self.can_select_device(item):
+                        # Deselect this item - it's not accessible at current hierarchy level
+                        item.setSelected(False)
+            
+            # Re-fetch the selection after blocking
+            selected = [s for s in self.scene.selectedItems()
+                        if hasattr(s, 'device_name')]
+        finally:
+            self.scene.blockSignals(False)
+        
+        # If no devices remain selectable, clear connections and return
+        if not selected:
+            self._clear_connections()
+            return
+        
+        # Emit the signal for the first selectable device
+        dev_id = selected[0].device_name
+        self.device_clicked.emit(dev_id)
+        self._show_connections(dev_id)
 
     def fit_to_view(self):
         """Zoom and pan to fit all devices in the viewport."""
@@ -1230,6 +1429,14 @@ class SymbolicEditor(QGraphicsView):
                         g.ascend()
                         event.accept()
                         return
+            except Exception:
+                pass
+        elif event.key() == Qt.Key.Key_D and not event.modifiers():
+            # 'D' key (without modifiers) - descend into hierarchy
+            try:
+                self.descend_nearest_hierarchy()
+                event.accept()
+                return
             except Exception:
                 pass
         super().keyPressEvent(event)

@@ -1347,14 +1347,12 @@ class MainWindow(QMainWindow):
 
         toolbar.addSeparator()
 
-
-
-        # Add Dummy mode
+        # Add Dummy mode - changed to Shift+D to free up D for hierarchy descend
         self._act_add_dummy = QAction(icon_add_dummy(), "Dummy", self)
         self._act_add_dummy.setCheckable(True)
-        self._act_add_dummy.setShortcut(QKeySequence("D"))
+        self._act_add_dummy.setShortcut(QKeySequence("Shift+D"))
         self._act_add_dummy.setToolTip(
-            "Toggle dummy placement mode (D)\nHover a row and click to place."
+            "Toggle dummy placement mode (Shift+D)\nHover a row and click to place."
         )
         self._act_add_dummy.toggled.connect(self._on_toggle_add_dummy)
         toolbar.addAction(self._act_add_dummy)
@@ -1450,7 +1448,7 @@ class MainWindow(QMainWindow):
             self.klayout_panel._on_open_klayout()
 
     def keyPressEvent(self, event):
-        """Esc releases active modes and selection.  M enters move mode."""
+        """Esc releases active modes and selection. D descends hierarchy. M enters move mode."""
         if event.key() == Qt.Key.Key_Escape:
             released = False
             if hasattr(self, "_act_add_dummy") and self._act_add_dummy.isChecked():
@@ -1470,6 +1468,15 @@ class MainWindow(QMainWindow):
             if released:
                 event.accept()
                 return
+        # D key → descend into hierarchy
+        if event.key() == Qt.Key.Key_D and not event.modifiers():
+            try:
+                if self.editor:
+                    self.editor.descend_nearest_hierarchy()
+                    event.accept()
+                    return
+            except Exception:
+                pass
         # M key → toggle move mode (pick up selected device)
         if event.key() == Qt.Key.Key_M and not event.modifiers():
             self._toggle_move_mode()
@@ -2929,6 +2936,10 @@ class MainWindow(QMainWindow):
 
         # Sync current canvas positions into self.nodes
         self._sync_node_positions()
+        
+        # CRITICAL: Before export, ensure ALL devices are visible
+        # Hierarchy groups hide devices, but OAS export needs all finger devices
+        saved_hierarchy_state = self._expand_all_for_export()
 
         try:
             from export.oas_writer import update_oas_placement
@@ -2993,6 +3004,66 @@ class MainWindow(QMainWindow):
             )
             import traceback
             traceback.print_exc()
+        finally:
+            # Always restore hierarchy state (whether export succeeded or failed)
+            self._restore_hierarchy_state(saved_hierarchy_state)
+
+    def _expand_all_for_export(self):
+        """Temporarily expand all hierarchy groups so all devices are visible for export.
+        
+        OAS export needs all finger devices visible. This ensures positions are
+        correctly synced before writing the file.
+        
+        Returns: dict mapping group -> (group._is_descended, child_groups states)
+        """
+        saved_state = {}
+        try:
+            for group in self.editor._hierarchy_groups:
+                # Save parent group state
+                saved_state[group] = group._is_descended
+                
+                # Save child group states
+                saved_state[group] = (group._is_descended, 
+                                     [(child, child._is_descended) for child in group._child_groups])
+                
+                # Expand if not already descended
+                if not group._is_descended:
+                    group.descend()
+                    # Also descend child groups to show devices
+                    for child in group._child_groups:
+                        if not child._is_descended and child._device_items:
+                            child.descend()
+        except Exception as e:
+            print(f"[WARNING] Failed to expand hierarchy for export: {e}")
+        
+        return saved_state
+    
+    def _restore_hierarchy_state(self, saved_state):
+        """Restore hierarchy groups to their previous descended/ascended state."""
+        try:
+            for group, state in saved_state.items():
+                if isinstance(state, tuple):
+                    parent_descended, child_states = state
+                else:
+                    # Backwards compat
+                    parent_descended = state
+                    child_states = []
+                
+                # Restore parent state
+                if parent_descended and not group._is_descended:
+                    group.descend()
+                elif not parent_descended and group._is_descended:
+                    group.ascend()
+                
+                # Restore child states
+                if isinstance(state, tuple):
+                    for child, child_descended in child_states:
+                        if child_descended and not child._is_descended:
+                            child.descend()
+                        elif not child_descended and child._is_descended:
+                            child.ascend()
+        except Exception as e:
+            print(f"[WARNING] Failed to restore hierarchy state: {e}")
 
 
 

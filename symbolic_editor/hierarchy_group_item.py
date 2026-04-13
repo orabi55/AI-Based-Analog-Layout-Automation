@@ -37,16 +37,19 @@ class HierarchyGroupItem(QGraphicsRectItem):
 
     def __init__(self, parent_name, device_items, hierarchy_info,
                  color=None, border_color=None):
-        self._device_items = device_items
+        self._device_items = list(device_items)  # Direct child devices
         self._hierarchy_info = hierarchy_info
         self._parent_name = parent_name
 
-        # Compute bounding box from children
+        # Compute bounding box from children (or use a default size if no devices)
         union = QRectF()
         if device_items:
             union = device_items[0].sceneBoundingRect()
             for it in device_items[1:]:
                 union = union.united(it.sceneBoundingRect())
+        else:
+            # Default size for symbolic view (no devices visible yet)
+            union = QRectF(0, 0, 120, 80)
 
         # Header height for click detection
         self._header_height = min(20.0, union.height() * 0.35)
@@ -58,9 +61,9 @@ class HierarchyGroupItem(QGraphicsRectItem):
 
         self.signals = HierarchyGroupSignals()
 
-        # Colors
+        # Colors - default red border for symbolic view
         self._fill_color = color or QColor(30, 40, 60, 60)
-        self._border_color = border_color or QColor(100, 140, 200, 180)
+        self._border_color = border_color or QColor(220, 60, 60, 200)  # Red border
 
         # State
         self._drag_active = False
@@ -70,34 +73,81 @@ class HierarchyGroupItem(QGraphicsRectItem):
         self._child_groups = []
         self._parent_group = None
 
+        # Build a flat list of ALL descendant device items (recursive)
+        self._all_descendant_devices = self._collect_all_descendant_devices()
+
         # Flags — movable, selectable, below DeviceItems in Z-order
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
-        self.setZValue(1)  # BELOW DeviceItems (default Z=0 for devices is actually scene-default)
-        # Actually put it BELOW: negative Z
-        self.setZValue(-1)
+        self.setZValue(-1)  # BELOW DeviceItems
 
         self.setVisible(True)
+        
+        # CRITICAL: When created, hide all child devices (symbolic view)
+        # They will only be visible when this group is descended
+        self._update_child_visibility()
+
+    def _collect_all_descendant_devices(self):
+        """Recursively collect all device items from child groups."""
+        devices = list(self._device_items)
+        for child_group in self._child_groups:
+            devices.extend(child_group._all_descendant_devices)
+        return devices
+
+    def get_all_descendant_devices(self):
+        """Return all device items that are descendants of this group."""
+        return self._all_descendant_devices
+
+    def _update_child_visibility(self):
+        """Update visibility of child devices and groups based on descent state."""
+        if self._is_descended:
+            # When descended: hide this group, show children
+            self.setVisible(False)
+            # Show child groups if they exist, otherwise show devices
+            if self._child_groups:
+                for child in self._child_groups:
+                    child.setVisible(True)
+            else:
+                for dev in self._device_items:
+                    dev.setVisible(True)
+        else:
+            # When NOT descended: show this group, hide children
+            self.setVisible(True)
+            # Hide child groups and devices
+            for child in self._child_groups:
+                child.setVisible(False)
+            for dev in self._device_items:
+                # CRITICAL: Do NOT change device position when hiding!
+                # Just change visibility flag - position must stay intact
+                dev.setVisible(False)
 
     def has_children(self):
         return bool(self._child_groups)
 
     def descend(self):
-        if not self.has_children():
+        """Descend into this group - hide group, show children/devices."""
+        # Allow descend if has child groups OR direct devices
+        if not self.has_children() and not self._device_items:
             return
         self._is_descended = True
-        self.setVisible(False)
-        for child in self._child_groups:
-            child.setVisible(True)
+        self._update_child_visibility()
         self.signals.descend_requested.emit(self)
 
     def ascend(self):
+        """Ascend from this group - show group, hide children."""
         self._is_descended = False
-        self.setVisible(True)
-        for child in self._child_groups:
-            child.setVisible(False)
+        self._update_child_visibility()
         self.signals.ascend_requested.emit(self)
+
+    def set_child_groups(self, child_groups):
+        """Set child groups and rebuild descendant list."""
+        self._child_groups = child_groups
+        for child in self._child_groups:
+            child._parent_group = self
+        self._all_descendant_devices = self._collect_all_descendant_devices()
+        # Update visibility based on current descent state
+        self._update_child_visibility()
 
     def _is_in_header(self, pos):
         """Check if a local position is in the header bar."""
@@ -139,11 +189,13 @@ class HierarchyGroupItem(QGraphicsRectItem):
     def mouseDoubleClickEvent(self, event):
         """Double-click header bar to descend/ascend."""
         if self._is_in_header(event.pos()):
+            # If already descended and has a parent, ascend to parent
             if self._is_descended and self._parent_group:
                 self._parent_group.ascend()
                 event.accept()
                 return
-            if self._child_groups:
+            # If has children or devices, descend
+            if self._child_groups or self._device_items:
                 self.descend()
                 event.accept()
                 return
@@ -157,57 +209,27 @@ class HierarchyGroupItem(QGraphicsRectItem):
         rect = self.rect()
         is_selected = self.isSelected()
 
-        # Main fill
-        painter.setBrush(QBrush(self._fill_color))
-        border = self._border_color.lighter(150) if is_selected else self._border_color
-        pen = QPen(border, 2.0 if is_selected else 1.5, Qt.PenStyle.DashLine)
+        # Simple empty rectangle with RED border
+        border_color = QColor(220, 60, 60, 255)  # Pure red
+        border_width = 2.5
+        
+        if is_selected:
+            border_color = QColor(255, 100, 100, 255)  # Lighter red when selected
+            border_width = 3.5
+
+        # Empty fill (transparent inside)
+        painter.setBrush(QBrush(Qt.BrushStyle.NoBrush))
+        
+        # Red border
+        pen = QPen(border_color, border_width, Qt.PenStyle.SolidLine)
         painter.setPen(pen)
-        painter.drawRoundedRect(rect, 4.0, 4.0)
+        painter.drawRect(rect)
 
-        # Header bar
-        hh = self._header_height
-        header_rect = QRectF(rect.x(), rect.y(), rect.width(), hh)
-
-        painter.setBrush(QBrush(border))
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawRoundedRect(header_rect, 4.0, 4.0)
-        if hh < rect.height():
-            painter.drawRect(QRectF(rect.x(), rect.y() + hh - 4.0,
-                                     rect.width(), 4.0))
-
-        # Label
-        hi = self._hierarchy_info
-        m = hi.get("m", 1)
-        nf = hi.get("nf", 1)
-        is_array = hi.get("is_array", False)
-
-        if is_array:
-            label = f"  {self._parent_name}  (array={m})"
-        elif m > 1 and nf > 1:
-            label = f"  {self._parent_name}  (m={m}, nf={nf})"
-        elif m > 1:
-            label = f"  {self._parent_name}  (m={m})"
-        elif nf > 1:
-            label = f"  {self._parent_name}  (nf={nf})"
-        else:
-            label = f"  {self._parent_name}"
-
+        # Device name centered in the rectangle
         painter.setPen(QPen(QColor("#ffffff")))
-        font_size = max(7, min(10, int(hh * 0.6)))
+        font_size = max(10, min(16, int(min(rect.width(), rect.height()) * 0.15)))
         font = QFont("Segoe UI", font_size, QFont.Weight.Bold)
         painter.setFont(font)
-        painter.drawText(header_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, label)
-
-        # Drill-down indicator
-        indicator = ""
-        if self._is_descended:
-            indicator = "▲"
-        elif self._child_groups or len(self._device_items) > 1:
-            indicator = "▼"
-
-        if indicator:
-            painter.setPen(QPen(QColor("#aaddff")))
-            painter.setFont(QFont("Segoe UI", font_size, QFont.Weight.Bold))
-            painter.drawText(
-                QRectF(rect.x() + rect.width() - 28, rect.y(), 24, hh),
-                Qt.AlignmentFlag.AlignCenter, indicator)
+        
+        # Draw name in center
+        painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, self._parent_name)
