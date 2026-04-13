@@ -25,11 +25,11 @@ from PySide6.QtWidgets import (
     QLabel,
     QFrame,
 )
-from PySide6.QtCore import Qt, Signal, QTimer, QThread
+from PySide6.QtCore import Qt, Signal, QTimer, QThread, Slot
 from PySide6.QtGui import QFont
 
-from ai_agent.llm_worker import LLMWorker, OrchestratorWorker, build_system_prompt
-from ai_agent.orchestrator import _extract_cmd_blocks
+from ai_agent.ai_chat_bot.llm_worker import OrchestratorWorker, build_system_prompt
+from ai_agent.ai_chat_bot.cmd_utils import _extract_cmd_blocks
 from icons import icon_panel_toggle
 
 # ---------------------------------------------------------------------------
@@ -108,6 +108,9 @@ class ChatPanel(QWidget):
     request_inference = Signal(str, list)
     # Multi-agent path (orchestrator pipeline)
     request_orchestrated = Signal(str, str, list)  # (user_message, layout_context_json, chat_history)
+    # Resume paths for LangGraph interrupts
+    request_resume_strategy = Signal(str)
+    request_resume_viewer = Signal(dict)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -118,6 +121,8 @@ class ChatPanel(QWidget):
         self._thinking_dots = 0
         self._thinking_stage = 0          # which pipeline stage label to show
         self._is_orchestrated = False     # True when orchestrator path is active
+        self._awaiting_strategy_resume = False
+        self._awaiting_visual_resume = False
 
         # --- Worker-Object Pattern: QThread + OrchestratorWorker ---
         self._worker_thread = QThread()
@@ -128,12 +133,15 @@ class ChatPanel(QWidget):
         self.request_inference.connect(self._llm_worker.process_request)
         # Multi-agent (orchestrator) path
         self.request_orchestrated.connect(self._llm_worker.process_orchestrated_request)
+        self.request_resume_strategy.connect(self._llm_worker.resume_with_strategy)
+        self.request_resume_viewer.connect(self._llm_worker.resume_from_viewer)
         # Shared response signals back to GUI
         self._llm_worker.response_ready.connect(self._on_llm_response)
         self._llm_worker.error_occurred.connect(self._on_llm_error)
         
         # Human-in-the-loop pause signal
         self._llm_worker.topology_ready_for_review.connect(self._on_topology_review)
+        self._llm_worker.visual_viewer_signal.connect(self._on_visual_viewer_signal)  # reuse same handler for viewer interrupts
 
         # Start the worker thread's event loop
         self._worker_thread.start()
@@ -468,9 +476,27 @@ class ChatPanel(QWidget):
         # to resume the pipeline, regardless of keywords.
         # If a layout is loaded, always use the Orchestrator — it contains the
         # Classifier Agent which does fine-grained intent routing internally.
-        is_resuming = getattr(self._llm_worker, "pending_topology", None) is not None
-
         if self._layout_context:
+            if self._awaiting_strategy_resume:
+                self._is_orchestrated = True
+                self._start_thinking()
+                self.request_resume_strategy.emit(text)
+                self._awaiting_strategy_resume = False
+                return
+
+            if self._awaiting_visual_resume:
+                self._is_orchestrated = True
+                viewer_response = {
+                    "approved": self._ai_response_is_affirmative(text),
+                    "edits": [],
+                }
+                if not viewer_response["approved"]:
+                    viewer_response["edits"] = self._infer_commands_from_text(text)
+                self._start_thinking()
+                self.request_resume_viewer.emit(viewer_response)
+                self._awaiting_visual_resume = False
+                return
+
             # Layout loaded → always orchestrate (classifier handles routing)
             self._is_orchestrated = True
             self._call_orchestrator(text)
@@ -761,6 +787,22 @@ class ChatPanel(QWidget):
     def _on_llm_response(self, text):
         self._stop_thinking()
         self._remove_last_message()
+        self._awaiting_strategy_resume = False
+        self._awaiting_visual_resume = False
+
+        # Normalize payloads defensively: worker/UI integrations may emit
+        # dict/list payloads in some paths instead of plain strings.
+        if isinstance(text, dict):
+            if isinstance(text.get("content"), str):
+                text = text.get("content", "")
+            else:
+                text = json.dumps(text, ensure_ascii=False, indent=2)
+        elif isinstance(text, list):
+            text = json.dumps(text, ensure_ascii=False, indent=2)
+        elif text is None:
+            text = ""
+        else:
+            text = str(text)
 
         print(f"[CHAT] Raw LLM response: {text[:300]}")
 
@@ -795,14 +837,48 @@ class ChatPanel(QWidget):
         self._stop_thinking()
         self._remove_last_message()
         self._user_cmds_executed = False          # reset so next turn works
+        self._awaiting_strategy_resume = False
+        self._awaiting_visual_resume = False
         err_msg = f"⚠️ Error: {error_text}"
         self._chat_history.append({"role": "assistant", "content": err_msg})
         self._append_bubble("ai", err_msg)
+
+    @Slot(dict)
+    def _on_visual_viewer_signal(self, payload):
+        """Handle visual-viewer command payloads directly (no CMD text parsing)."""
+        self._stop_thinking()
+        self._remove_last_message()
+        self._awaiting_strategy_resume = False
+        self._awaiting_visual_resume = False
+
+        cmd_list = []
+        if isinstance(payload, dict):
+            if isinstance(payload.get("commands"), list):
+                cmd_list = [c for c in payload.get("commands", []) if isinstance(c, dict)]
+            elif isinstance(payload.get("placement"), list):
+                # Backward-compatible path used by existing worker payloads.
+                cmd_list = [c for c in payload.get("placement", []) if isinstance(c, dict)]
+            elif payload.get("action"):
+                cmd_list = [payload]
+
+        if cmd_list:
+            print(f"[CHAT] Visual viewer commands: {cmd_list}")
+            for cmd in cmd_list:
+                self.command_requested.emit(cmd)
+            info = f"Applied {len(cmd_list)} visual-review command(s)."
+        else:
+            info = "Visual review update received (no commands)."
+
+        self._user_cmds_executed = False
+        self._chat_history.append({"role": "assistant", "content": info})
+        self._append_bubble("ai", info)
         
     def _on_topology_review(self, question):
         """Handler for when Stage 1 completes and asks for confirmation."""
         self._stop_thinking()
         self._remove_last_message()
+        self._awaiting_strategy_resume = True
+        self._awaiting_visual_resume = False
         
         # Don't reset user cmds here since we are pausing
         self._chat_history.append({"role": "assistant", "content": question})
