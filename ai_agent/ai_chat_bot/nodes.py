@@ -127,8 +127,6 @@ def node_topology_analyst(state: LayoutState):
     analyst_user = (
         f"User request: {user_message}\n\n"
         f"Extracted Constraints:\n{constraint_text}\n\n"
-        "Formulate a brief response confirming these constraints and "
-        "ask the user if they look correct."
     )
 
     analyst_msgs = _build_llm_messages(

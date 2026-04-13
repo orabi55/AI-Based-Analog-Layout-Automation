@@ -38,14 +38,16 @@ You are part of a multi-agent team. Your goal is to analyze the structural repre
 of the following layout circuit and identify fundamental analog and digital building blocks.
 State any possible topologies you can identify, and the reasoning behind them.
 
-STEP 1 — IDENTIFY THE CIRCUIT:
-Read the device list and net connections below CAREFULLY.
-Determine what kind of circuit this actually is by examining:
-  - Which devices share gate/drain/source nets
-  - The number of NMOS vs PMOS devices
-  - Signal flow patterns (inputs -> logic -> outputs)
-State your conclusion
-
+IDENTIFY THE CIRCUIT:
+1) Read the device list and net connections below CAREFULLY.
+2) Determine what kind of circuit this actually is by examining:
+    - Which devices share gate/drain/source nets
+    - The number of NMOS vs PMOS devices
+    - Signal flow patterns (inputs -> logic -> outputs)
+    - Any biasing structures 
+3) State your conclusion about which topologies are present (e.g., current mirror, differential pair, cascode, logic gate, etc.)
+4) For each identified topology, explain your reasoning based on the connectivity and device types.
+5) Then identify the overall circuit function (e.g., amplifier, comparator, logic function) based on the topologies you found.
 """
 
 TOPOLOGY_ANALYST_PROMPT2 = """\
