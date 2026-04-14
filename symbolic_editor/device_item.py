@@ -412,7 +412,7 @@ class DeviceItem(QGraphicsRectItem):
             # Use black for better visibility on any background
             painter.setPen(QColor("#000000"))
             # Draw text centered at origin (after rotation)
-            v_rect = QRectF(-h * 0.30, -left_rect.width() / 2, h * 0.60, left_rect.width())
+            v_rect = QRectF(-h * 0.44, -left_rect.width() / 2, h * 0.88, left_rect.width())
             painter.drawText(v_rect, Qt.AlignmentFlag.AlignCenter, left_net)
             painter.restore()
 
@@ -434,7 +434,7 @@ class DeviceItem(QGraphicsRectItem):
             painter.setFont(net_font)
             # Use black for better visibility
             painter.setPen(QColor("#000000"))
-            v_rect = QRectF(-h * 0.30, -center_rect.width() / 2, h * 0.60, center_rect.width())
+            v_rect = QRectF(-h * 0.44, -center_rect.width() / 2, h * 0.88, center_rect.width())
             painter.drawText(v_rect, Qt.AlignmentFlag.AlignCenter, gate_net)
             painter.restore()
 
@@ -457,7 +457,7 @@ class DeviceItem(QGraphicsRectItem):
             painter.rotate(90)
             painter.setFont(net_font)
             painter.setPen(QColor("#000000"))
-            v_rect = QRectF(-h * 0.30, -right_rect.width() / 2, h * 0.60, right_rect.width())
+            v_rect = QRectF(-h * 0.44, -right_rect.width() / 2, h * 0.88, right_rect.width())
             painter.drawText(v_rect, Qt.AlignmentFlag.AlignCenter, right_net)
             painter.restore()
             
@@ -467,14 +467,16 @@ class DeviceItem(QGraphicsRectItem):
         shared_net = self._shared_net_right or right_net
         if shared_net and self._abut_right:
             painter.save()
-            # Position inside the left device's right diffusion section.
-            text_x = right_rect.x() + right_rect.width() * 0.5
+            # Place the label at the exact boundary between the two devices so
+            # it is symmetric across both green shared-diff sections.
+            text_x = right_rect.x() + right_rect.width()   # device boundary
             text_y = right_rect.y() + h * 0.50
             painter.translate(text_x, text_y)
             painter.rotate(90)
             painter.setFont(net_font)
             painter.setPen(QColor("#000000"))
-            v_rect = QRectF(-h * 0.30, -right_rect.width() / 2, h * 0.60, right_rect.width())
+            # Spans one full section width to each side of the boundary
+            v_rect = QRectF(-h * 0.44, -right_rect.width(), h * 0.88, right_rect.width() * 2)
             painter.drawText(v_rect, Qt.AlignmentFlag.AlignCenter, shared_net)
             painter.restore()
 
@@ -587,7 +589,7 @@ class DeviceItem(QGraphicsRectItem):
             painter.rotate(90)
             painter.setFont(net_font)
             painter.setPen(QColor("#000000"))
-            v_rect = QRectF(-h * 0.30, -left_rect.width() / 2, h * 0.60, left_rect.width())
+            v_rect = QRectF(-h * 0.44, -left_rect.width() / 2, h * 0.88, left_rect.width())
             painter.drawText(v_rect, Qt.AlignmentFlag.AlignCenter, net_1)
             painter.restore()
 
@@ -597,7 +599,7 @@ class DeviceItem(QGraphicsRectItem):
             painter.rotate(90)
             painter.setFont(net_font)
             painter.setPen(QColor("#000000"))
-            v_rect = QRectF(-h * 0.30, -right_rect.width() / 2, h * 0.60, right_rect.width())
+            v_rect = QRectF(-h * 0.44, -right_rect.width() / 2, h * 0.88, right_rect.width())
             painter.drawText(v_rect, Qt.AlignmentFlag.AlignCenter, net_2)
             painter.restore()
 

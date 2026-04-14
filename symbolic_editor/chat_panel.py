@@ -182,8 +182,8 @@ class ChatPanel(QWidget):
         header.setFixedHeight(44)
         header.setStyleSheet(
             "background: qlineargradient(x1:0,y1:0,x2:1,y2:0,"
-            "stop:0 #1a2330, stop:1 #243347);"
-            "border-bottom: 1px solid #5a9bff;"
+            "stop:0 #0a0e14, stop:1 #141c28);"
+            "border-bottom: 1px solid #2a3a52;"
         )
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(12, 0, 8, 0)
@@ -252,12 +252,12 @@ class ChatPanel(QWidget):
         self.chat_display.setStyleSheet(
             """
             QTextEdit {
-                background-color: #0f131a;
+                background-color: #0a0e14;
                 border: none;
                 padding: 10px;
                 font-family: 'Segoe UI', sans-serif;
                 font-size: 13px;
-                color: #d8e1ee;
+                color: #e8edf3;
             }
             QScrollBar:vertical {
                 width: 6px;
@@ -265,12 +265,12 @@ class ChatPanel(QWidget):
                 border-radius: 3px;
             }
             QScrollBar::handle:vertical {
-                background: #31435d;
+                background: #2a3a52;
                 border-radius: 3px;
                 min-height: 30px;
             }
             QScrollBar::handle:vertical:hover {
-                background: #436086;
+                background: #3d8bfd;
             }
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
                 height: 0px;
@@ -282,7 +282,7 @@ class ChatPanel(QWidget):
         # Input area
         input_frame = QFrame()
         input_frame.setStyleSheet(
-            "background-color: #141a23; border-top: 1px solid #2d3a4f;"
+            "background-color: #0a0e14; border-top: 1px solid #2a3a52;"
         )
         input_layout = QHBoxLayout(input_frame)
         input_layout.setContentsMargins(10, 10, 10, 10)
@@ -292,16 +292,16 @@ class ChatPanel(QWidget):
         self.input_field.setStyleSheet(
             """
             QTextEdit {
-                border: 1px solid #33435b;
+                border: 1px solid #2a3a52;
                 border-radius: 12px;
                 padding: 8px 14px;
                 font-size: 13px;
                 font-family: 'Segoe UI';
-                background: #1e2837;
-                color: #e6edf8;
+                background: #141c28;
+                color: #e8edf3;
             }
             QTextEdit:focus {
-                border-color: #5a9bff;
+                border-color: #3d8bfd;
             }
             """
         )
@@ -313,17 +313,17 @@ class ChatPanel(QWidget):
         send_btn.setStyleSheet(
             """
             QPushButton {
-                background-color: #5a9bff;
+                background-color: #3d8bfd;
                 color: white;
                 border: none;
                 border-radius: 19px;
                 font-size: 17px;
             }
             QPushButton:hover {
-                background-color: #78aeff;
+                background-color: #5a9bff;
             }
             QPushButton:pressed {
-                background-color: #3f7fdd;
+                background-color: #2e6cd1;
             }
             """
         )
@@ -342,14 +342,14 @@ class ChatPanel(QWidget):
         # Code blocks
         text = re.sub(
             r'```(\w*)\n(.*?)```',
-            r'<pre style="background:#1b2432;color:#e6edf8;padding:8px;'
+            r'<pre style="background:#141c28;color:#e8edf3;padding:8px;'
             r'border-radius:6px;font-size:12px;overflow-x:auto;">\2</pre>',
             text, flags=re.DOTALL,
         )
         # Inline code
         text = re.sub(
             r'`([^`]+)`',
-            r'<code style="background:#233148;color:#d8e1ee;padding:1px 5px;'
+            r'<code style="background:#1a2738;color:#e8edf3;padding:1px 5px;'
             r'border-radius:3px;font-size:12px;">\1</code>',
             text,
         )
@@ -402,7 +402,7 @@ class ChatPanel(QWidget):
             <div style="text-align:right; margin:6px 0;">
                 <div style="display:inline-block; max-width:82%; text-align:left;">
                     <div style="
-                        background-color: #5a9bff;
+                        background-color: #3d8bfd;
                         color: white;
                         padding: 10px 16px;
                         border-radius: 16px 16px 4px 16px;
@@ -419,9 +419,9 @@ class ChatPanel(QWidget):
             """
         else:
             avatar = "🤖" if role == "ai" else "ℹ️"
-            bg = "#162031" if role == "ai" else "#2a2518"
-            border_col = "#2f435e" if role == "ai" else "#4a4020"
-            text_col = "#d8e1ee" if role == "ai" else "#e8ddb8"
+            bg = "#141c28" if role == "ai" else "#1a222d"
+            border_col = "#2a3a52" if role == "ai" else "#31435d"
+            text_col = "#e8edf3" if role == "ai" else "#d8e1ee"
             html = f"""
             <div style="text-align:left; margin:6px 0;">
                 <div style="display:inline-block; max-width:88%; text-align:left;">

@@ -4,6 +4,10 @@ import os
 import json
 import copy
 import glob
+import subprocess
+import contextlib
+import hashlib
+import io
 
 # ---------------------------------------------------------------------------
 # Ensure the project root is on sys.path so that cross-package imports
@@ -46,8 +50,9 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QDialogButtonBox,
     QLineEdit,
+    QStackedWidget,
 )
-from PySide6.QtCore import Qt, QTimer, QSize, QObject, Signal, Slot, QThread
+from PySide6.QtCore import Qt, QTimer, QSize, QObject, Signal, Slot, QThread, QSettings
 from PySide6.QtGui import QFont, QAction, QKeySequence, QColor, QPalette
 
 # Local GUI modules (same directory)
@@ -55,6 +60,9 @@ from chat_panel import ChatPanel
 from device_tree import DeviceTreePanel
 from editor_view import SymbolicEditor
 from klayout_panel import KLayoutPanel
+from view_toggle import SegmentedToggle, ViewTransitionHelper
+from design_tabs import DesignTabBar, RecentDesignsDashboard
+from properties_panel import PropertiesPanel
 from icons import (
     icon_undo, icon_redo, icon_fit_view,
     icon_zoom_in, icon_zoom_out, icon_zoom_reset,
@@ -62,6 +70,8 @@ from icons import (
     icon_flip_h, icon_flip_v,
     icon_merge_ss, icon_merge_dd, icon_add_dummy, icon_realize,
     icon_tree_toggle, icon_optimize_2d,
+    icon_sparkle, icon_home, icon_circuit,
+    icon_layout_view, icon_both_view,
 )
 
 
@@ -303,7 +313,21 @@ class MainWindow(QMainWindow):
         self._original_data = None  # raw loaded JSON (for edges + terminals)
         self.nodes = None
         self._background_jobs = []
+        self._view_mode = "layout"  # "layout", "klayout", "both"
+        self._both_splitter_sizes = None  # remembered splitter ratio for "both"
+        self._last_klayout_oas = None
+        self._live_klayout_oas = None
+        self._live_klayout_source_file = None
+        self._live_klayout_signature = None
+        self._live_klayout_force_pending = False
+        self._live_klayout_timer = QTimer(self)
+        self._live_klayout_timer.setSingleShot(True)
+        self._live_klayout_timer.setInterval(220)
+        self._live_klayout_timer.timeout.connect(self._render_live_klayout_preview)
 
+        # Tab state management — each tab stores its full design state
+        self._tab_states = []  # [{nodes, original_data, terminal_nets, file_path, undo_stack, redo_stack}, ...]
+        self._active_tab_index = -1  # -1 = home
 
         # Load placement data
         self._load_data(placement_file)
@@ -313,20 +337,109 @@ class MainWindow(QMainWindow):
         self.editor = SymbolicEditor()
         self.chat_panel = ChatPanel()
         self.klayout_panel = KLayoutPanel()
-        self.klayout_panel.setVisible(True)
+        self.klayout_panel.setVisible(False)
 
-        # --- Toolbar ---
+        # --- Properties panel (goes below hierarchy on left) ---
+        self.properties_panel = PropertiesPanel()
+
+        # --- Center stacked widget (Layout, KLayout, Both) ---
+        self._center_stack = QStackedWidget()
+        self._page_layout = 0
+        self._page_klayout = 1
+        self._page_both = 2
+        self._page_home = 3
+
+        # Page 0: Layout editor
+        self._center_stack.addWidget(self.editor)
+
+        # Page 1: KLayout preview
+        self._center_stack.addWidget(self.klayout_panel)
+
+        # Page 2: Both (splitter) — created lazily
+        self._both_splitter_widget = QSplitter(Qt.Orientation.Horizontal)
+        # We'll move editor/klayout in and out of the splitter on mode change
+        self._both_placeholder_editor = QWidget()
+        self._both_placeholder_klayout = QWidget()
+        self._both_splitter_widget.addWidget(self._both_placeholder_editor)
+        self._both_splitter_widget.addWidget(self._both_placeholder_klayout)
+        self._center_stack.addWidget(self._both_splitter_widget)
+
+        # --- Home dashboard --- 
+        self._home_dashboard = RecentDesignsDashboard()
+        self._home_dashboard.open_design.connect(self._on_open_design_from_dashboard)
+        self._home_dashboard.setStyleSheet("background-color: #0f1318;")
+        self._center_stack.addWidget(self._home_dashboard)  # Page 3
+
+        # Start on home if no file, else layout
+        if placement_file:
+            self._center_stack.setCurrentIndex(self._page_layout)
+        else:
+            self._center_stack.setCurrentIndex(self._page_home)
+
+        # --- Design Tabs ---
+        self._design_tab_bar = DesignTabBar()
+        self._design_tab_bar.tab_selected.connect(self._on_design_tab_selected)
+        self._design_tab_bar.tab_closed.connect(self._on_design_tab_closed)
+        self._design_tab_bar.tab_added.connect(self._on_design_tab_add)
+        self._design_tab_bar.home_clicked.connect(self._on_home_tab)
+
+        # If we have an initial file, create a tab for it
+        if placement_file:
+            name = os.path.splitext(os.path.basename(placement_file))[0]
+            idx = self._design_tab_bar.add_tab(name, placement_file)
+            self._tab_states.append({
+                "nodes": self.nodes,
+                "original_data": self._original_data,
+                "terminal_nets": self._terminal_nets,
+                "file_path": placement_file,
+                "undo_stack": [],
+                "redo_stack": [],
+            })
+            self._active_tab_index = idx
+            RecentDesignsDashboard.add_recent(placement_file)
+
+        # --- Toolbar & Menu ---
         self._create_menu_bar()
         self._create_toolbar()
 
-        # --- Left Splitter ---
+        # --- Design tabs bar below menu ---
+        # We insert it as a toolbar so it sits between menu and main toolbar
+        self._tab_toolbar = QToolBar("Design Tabs")
+        self._tab_toolbar.setMovable(False)
+        self._tab_toolbar.setFloatable(False)
+        self._tab_toolbar.setStyleSheet(
+            "QToolBar { background-color: #0f1318; border-bottom: 1px solid #1a1f2b; padding: 4px; spacing: 0; }"
+        )
+        # Left side: Design Tabs
+        self._tab_toolbar.addWidget(self._design_tab_bar)
+        
+        from PySide6.QtWidgets import QSizePolicy
+        
+        # Spacer
+        spacer1 = QWidget()
+        spacer1.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self._tab_toolbar.addWidget(spacer1)
+
+        # Center: View Mode Toggle (Layout | KLayout | Both)
+        self._view_toggle = SegmentedToggle(self)
+        self._view_toggle.mode_changed.connect(self._on_view_mode_changed)
+        self._tab_toolbar.addWidget(self._view_toggle)
+
+        # Spacer
+        spacer2 = QWidget()
+        spacer2.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self._tab_toolbar.addWidget(spacer2)
+        self.addToolBar(Qt.ToolBarArea.TopToolBarArea, self._tab_toolbar)
+        self.insertToolBarBreak(self._tab_toolbar)
+
+        # --- Left Splitter (Hierarchy + Properties) ---
         self._left_splitter = QSplitter(Qt.Orientation.Vertical)
         self._left_splitter.addWidget(self.device_tree)
-        self._left_splitter.addWidget(self.klayout_panel)
+        self._left_splitter.addWidget(self.properties_panel)
         self._left_splitter.setChildrenCollapsible(False)
         self._left_splitter.setStretchFactor(0, 1)
         self._left_splitter.setStretchFactor(1, 1)
-        self._left_splitter.setSizes([1, 1])
+        self._left_splitter.setSizes([200, 200])
         self._left_splitter.setStyleSheet(
             """
             QSplitter::handle {
@@ -339,29 +452,35 @@ class MainWindow(QMainWindow):
             """
         )
 
+        # --- Right panel (AI Chat only) ---
+        self._right_tabs = self.chat_panel
+        self._right_tabs.setStyleSheet(
+            "background-color: #0f131a; border-left: 1px solid #1a1f2b;"
+        )
+
         # --- Splitter layout ---
         self._splitter = QSplitter(Qt.Orientation.Horizontal)
         self._splitter.addWidget(self._left_splitter)
-        self._splitter.addWidget(self.editor)
-        self._splitter.addWidget(self.chat_panel)
+        self._splitter.addWidget(self._center_stack)
+        self._splitter.addWidget(self._right_tabs)
 
-        # Set proportions: left ~260px, center stretches, right ~320px
+        # Set proportions: left ~280px, center stretches, right ~320px
         self._splitter.setStretchFactor(0, 0)
         self._splitter.setStretchFactor(1, 1)
         self._splitter.setStretchFactor(2, 0)
-        self._splitter.setSizes([260, 860, 320])
+        self._splitter.setSizes([280, 860, 320])
 
         # Remember default sizes for restore-after-collapse
         self._tree_default_width = 260
         self._chat_default_width = 320
 
         # --- Collapsed-panel reopen strips ---
-        # Two separate strips for device tree and KLayout, stacked in a vertical widget
+        # Two separate strips for device tree and properties, stacked in a vertical widget
         self._tree_reopen_btn = self._make_reopen_icon_btn(icon_tree_toggle(), "Show Device Hierarchy")
         self._tree_reopen_btn.clicked.connect(self._toggle_device_tree)
         self._tree_reopen_btn.setVisible(False)
 
-        self._klayout_reopen_btn = self._make_reopen_icon_btn(icon_realize(), "Show KLayout Viewer")
+        self._klayout_reopen_btn = self._make_reopen_icon_btn(icon_realize(), "Show Properties Panel")
         self._klayout_reopen_btn.clicked.connect(self._toggle_klayout_panel)
         self._klayout_reopen_btn.setVisible(False)
 
@@ -417,6 +536,7 @@ class MainWindow(QMainWindow):
 
         # Connect device tree selection to canvas highlight
         self.device_tree.device_selected.connect(self.editor.highlight_device)
+        self.device_tree.device_selected.connect(self._on_device_selected_for_properties)
 
         # Connect tree connection click to canvas net highlight
         self.device_tree.connection_selected.connect(self._on_connection_selected)
@@ -430,7 +550,12 @@ class MainWindow(QMainWindow):
         # Connect canvas selection to tree highlight
         self.editor.device_clicked.connect(self.device_tree.highlight_device)
         self.editor.device_clicked.connect(self._on_canvas_device_clicked)
+        self.editor.device_clicked.connect(self._on_device_selected_for_properties)
         self.editor.scene.selectionChanged.connect(self._on_selection_count_changed)
+        self.editor.scene.changed.connect(self._on_editor_scene_changed)
+        self.klayout_panel.refresh_requested.connect(
+            lambda: self._schedule_live_klayout_refresh(force=True, delay_ms=60)
+        )
 
         # Connect AI command execution
         # command_requested carries ONE cmd dict at a time; we batch-collect
@@ -450,8 +575,38 @@ class MainWindow(QMainWindow):
         # Connect panel toggle buttons (in each panel header)
         self.device_tree.toggle_requested.connect(self._toggle_device_tree)
         self.chat_panel.toggle_requested.connect(self._toggle_chat_panel)
-        if hasattr(self.klayout_panel, 'toggle_requested'):
-            self.klayout_panel.toggle_requested.connect(self._toggle_klayout_panel)
+
+        # Setup keyboard shortcuts for view toggle
+        self._view_toggle.setup_shortcuts(self)
+        self._design_tab_bar.setup_shortcuts(self)
+
+        # Set initial state: default to symbolic editor
+        self._view_toggle.set_mode("layout", emit=False)
+
+        # Initially hide row/col/sel helper widgets in the compact left toolbar.
+        self._update_toolbar_for_view_mode()
+
+    def _enforce_left_panel_split(self):
+        """Set balanced split between panels in the left splitter."""
+        total = self._left_splitter.height()
+        vis_count = sum(1 for w in [self.device_tree, self.properties_panel]
+                        if w.isVisible())
+        if vis_count > 0:
+            portion = total // vis_count
+            sizes = [portion if w.isVisible() else 0
+                     for w in [self.device_tree, self.properties_panel]]
+            self._left_splitter.setSizes(sizes)
+
+    def _update_toolbar_for_view_mode(self):
+        """Show/hide toolbar controls based on current view mode."""
+        # Left toolbar is icon-only: hide non-icon helper widgets.
+        show = False
+        if hasattr(self, '_row_spin'):
+            self._row_spin.setVisible(show)
+        if hasattr(self, '_col_spin'):
+            self._col_spin.setVisible(show)
+        if hasattr(self, '_sel_label'):
+            self._sel_label.setVisible(show)
 
     # -------------------------------------------------
     # QThread cleanup on close
@@ -552,7 +707,7 @@ class MainWindow(QMainWindow):
 
         file_menu.addSeparator()
 
-        self._act_view_klayout = QAction("View in KLayout", self)
+        self._act_view_klayout = QAction("Open in KLayout", self)
         self._act_view_klayout.triggered.connect(self._on_view_in_klayout)
         file_menu.addAction(self._act_view_klayout)
 
@@ -572,7 +727,7 @@ class MainWindow(QMainWindow):
 
         view_menu = mb.addMenu("View")
 
-        self._act_toggle_klayout_view = QAction("Show KLayout Viewer", self)
+        self._act_toggle_klayout_view = QAction("Show Properties Panel", self)
         self._act_toggle_klayout_view.setCheckable(True)
         self._act_toggle_klayout_view.setChecked(True)
         self._act_toggle_klayout_view.triggered.connect(self._toggle_klayout_panel)
@@ -612,8 +767,9 @@ class MainWindow(QMainWindow):
     def _create_toolbar(self):
         toolbar = QToolBar("Main Toolbar")
         toolbar.setMovable(False)
-        toolbar.setIconSize(QSize(22, 22))
+        toolbar.setIconSize(QSize(20, 20))
         toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+        toolbar.setFixedWidth(42)
         toolbar.setStyleSheet(
             """
             QToolBar {
@@ -621,21 +777,25 @@ class MainWindow(QMainWindow):
                 border: none;
                 border-bottom: 1px solid #2d3548;
                 spacing: 2px;
-                padding: 4px 8px;
+                padding: 2px 0px;
+                min-width: 42px;
+                max-width: 42px;
             }
             QToolBar::separator {
                 width: 1px;
                 background-color: #2d3548;
-                margin: 4px 6px;
+                margin: 3px 6px;
             }
             QToolButton {
                 color: #c8d0dc;
                 background: transparent;
                 border: 1px solid transparent;
                 border-radius: 6px;
-                padding: 4px;
-                min-width: 28px;
-                min-height: 28px;
+                padding: 2px;
+                min-width: 34px;
+                max-width: 34px;
+                min-height: 30px;
+                max-height: 30px;
             }
             QToolButton:hover {
                 background-color: #2a3345;
@@ -653,53 +813,15 @@ class MainWindow(QMainWindow):
             QToolButton:disabled {
                 opacity: 0.35;
             }
-            QSpinBox {
-                font-family: 'Segoe UI';
-                font-size: 11px;
-                padding: 2px 4px;
-                min-height: 24px;
-                background-color: #232a38;
-                color: #c8d0dc;
-                border: 1px solid #2d3548;
-                border-radius: 6px;
-                selection-background-color: #4a90d9;
-            }
-            QSpinBox:focus {
-                border-color: #4a90d9;
-            }
-            QSpinBox::up-button, QSpinBox::down-button {
-                width: 16px;
-                background: transparent;
-                border: none;
-            }
-            QSpinBox::up-arrow {
-                image: none;
-                border-left: 4px solid transparent;
-                border-right: 4px solid transparent;
-                border-bottom: 5px solid #7b8a9c;
-                width: 0; height: 0;
-            }
-            QSpinBox::down-arrow {
-                image: none;
-                border-left: 4px solid transparent;
-                border-right: 4px solid transparent;
-                border-top: 5px solid #7b8a9c;
-                width: 0; height: 0;
-            }
-            QLabel {
-                color: #8899aa;
-                font-family: 'Segoe UI';
-                font-size: 11px;
-            }
             """
         )
-        self.addToolBar(toolbar)
+        self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, toolbar)
 
-        # Realize (toggle KLayout panel) — leftmost toolbar action
-        self._act_realize = QAction(icon_realize(), "Realize", self)
+        # Toggle properties panel (left bottom)
+        self._act_realize = QAction(icon_realize(), "Properties", self)
         self._act_realize.setCheckable(True)
         self._act_realize.setChecked(True)
-        self._act_realize.setToolTip("Toggle KLayout Realization Panel")
+        self._act_realize.setToolTip("Toggle Properties Panel")
         self._act_realize.triggered.connect(self._toggle_klayout_panel)
         toolbar.addAction(self._act_realize)
 
@@ -710,6 +832,8 @@ class MainWindow(QMainWindow):
         self._act_tree_toggle.setToolTip("Toggle Device Hierarchy Panel")
         self._act_tree_toggle.triggered.connect(self._toggle_device_tree)
         toolbar.addAction(self._act_tree_toggle)
+
+        # Note: _view_toggle is now in the top toolbar.
 
         toolbar.addSeparator()
 
@@ -737,7 +861,7 @@ class MainWindow(QMainWindow):
         act_fit = QAction(icon_fit_view(), "Fit View", self)
         act_fit.setShortcut(QKeySequence("F"))
         act_fit.setToolTip("Fit all devices in view  (F)")
-        act_fit.triggered.connect(self.editor.fit_to_view)
+        act_fit.triggered.connect(self._fit_current_view)
         toolbar.addAction(act_fit)
 
         toolbar.addSeparator()
@@ -781,8 +905,8 @@ class MainWindow(QMainWindow):
 
         # Swap selected (need exactly 2)
         act_swap = QAction(icon_swap(), "Swap", self)
-        act_swap.setShortcut(QKeySequence("Ctrl+W"))
-        act_swap.setToolTip("Swap 2 Selected  (Ctrl+W)")
+        act_swap.setShortcut(QKeySequence("Ctrl+Shift+W"))
+        act_swap.setToolTip("Swap 2 Selected  (Ctrl+Shift+W)")
         act_swap.triggered.connect(self._swap_selected_devices)
         toolbar.addAction(act_swap)
 
@@ -818,25 +942,21 @@ class MainWindow(QMainWindow):
         )
         toolbar.addAction(self._act_opt_2d_btn)
 
-        self._sel_label = QLabel("  Sel: 0  ", self)
-        toolbar.addWidget(self._sel_label)
+        # Keep helper widgets alive for existing logic, but do not place them in the icon strip.
+        self._sel_label = QLabel("Sel: 0", self)
+        self._sel_label.hide()
 
-        toolbar.addSeparator()
-
-        # Row / Col controls
         self._row_spin = QSpinBox(self)
         self._row_spin.setRange(0, 9999)
         self._row_spin.setPrefix("Row ")
-        self._row_spin.setFixedWidth(100)
         self._row_spin.valueChanged.connect(self._on_row_target_changed)
-        toolbar.addWidget(self._row_spin)
+        self._row_spin.hide()
 
         self._col_spin = QSpinBox(self)
         self._col_spin.setRange(0, 9999)
         self._col_spin.setPrefix("Col ")
-        self._col_spin.setFixedWidth(100)
         self._col_spin.valueChanged.connect(self._on_col_target_changed)
-        toolbar.addWidget(self._col_spin)
+        self._col_spin.hide()
 
         toolbar.addSeparator()
 
@@ -907,11 +1027,11 @@ class MainWindow(QMainWindow):
     def _update_left_reopen_strip(self):
         """Show/hide the individual reopen buttons and their container.
 
-        When both device tree and KLayout are hidden, collapse the left
+        When both device tree and properties are hidden, collapse the left
         splitter entirely so no empty dark area remains.
         """
         tree_hidden = not self.device_tree.isVisible()
-        klayout_hidden = not self.klayout_panel.isVisible()
+        klayout_hidden = not self.properties_panel.isVisible()
         self._tree_reopen_btn.setVisible(tree_hidden)
         self._klayout_reopen_btn.setVisible(klayout_hidden)
         self._left_reopen_strip.setVisible(tree_hidden or klayout_hidden)
@@ -923,8 +1043,8 @@ class MainWindow(QMainWindow):
             self._splitter.setSizes(sizes)
 
     def _enforce_left_panel_split(self):
-        """Set 50/50 split between device tree and KLayout in the left splitter."""
-        if self.device_tree.isVisible() and self.klayout_panel.isVisible():
+        """Set 50/50 split between device tree and properties in the left splitter."""
+        if self.device_tree.isVisible() and self.properties_panel.isVisible():
             total = self._left_splitter.height()
             half = max(total // 2, 100)
             self._left_splitter.setSizes([half, half])
@@ -935,67 +1055,276 @@ class MainWindow(QMainWindow):
             self.device_tree.setVisible(False)
         else:
             self.device_tree.setVisible(True)
-            # Ensure left pane has width in the main splitter
             sizes = self._splitter.sizes()
             if sizes[0] < 50:
                 sizes[0] = self._tree_default_width
                 self._splitter.setSizes(sizes)
-            # Re-balance the left splitter if both panels are visible
-            if self.klayout_panel.isVisible():
-                total = self._left_splitter.height()
-                half = max(total // 2, 100)
-                self._left_splitter.setSizes([half, half])
+            self._enforce_left_panel_split()
         self._update_left_reopen_strip()
         if hasattr(self, "_act_tree_toggle"):
             self._act_tree_toggle.setChecked(self.device_tree.isVisible())
 
     def _toggle_chat_panel(self):
-        """Collapse or expand the AI chat panel."""
-        if self.chat_panel.isVisible():
-            self.chat_panel.setVisible(False)
+        """Collapse or expand the right AI Assistant panel."""
+        if self._right_tabs.isVisible():
+            self._right_tabs.setVisible(False)
             self._chat_reopen_strip.setVisible(True)
         else:
-            self.chat_panel.setVisible(True)
+            self._right_tabs.setVisible(True)
             self._chat_reopen_strip.setVisible(False)
             sizes = self._splitter.sizes()
             sizes[2] = self._chat_default_width
             self._splitter.setSizes(sizes)
 
     def _toggle_klayout_panel(self):
-        """Show or hide the integrated KLayout preview panel on the left."""
-        if self.klayout_panel.isVisible():
-            self.klayout_panel.setVisible(False)
+        """Show or hide the properties panel on the left."""
+        if self.properties_panel.isVisible():
+            self.properties_panel.setVisible(False)
         else:
-            self.klayout_panel.setVisible(True)
-            # Ensure left pane has width in the main splitter
+            self.properties_panel.setVisible(True)
             sizes = self._splitter.sizes()
             if sizes[0] < 50:
                 sizes[0] = self._tree_default_width
                 self._splitter.setSizes(sizes)
-            # Re-balance the left splitter if both panels are visible
-            if self.device_tree.isVisible():
-                total = self._left_splitter.height()
-                half = max(total // 2, 100)
-                self._left_splitter.setSizes([half, half])
+            self._enforce_left_panel_split()
 
         self._update_left_reopen_strip()
 
         if hasattr(self, "_act_toggle_klayout_view"):
-            self._act_toggle_klayout_view.setChecked(self.klayout_panel.isVisible())
+            self._act_toggle_klayout_view.setChecked(self.properties_panel.isVisible())
         if hasattr(self, "_act_realize"):
-            self._act_realize.setChecked(self.klayout_panel.isVisible())
+            self._act_realize.setChecked(self.properties_panel.isVisible())
 
     def _on_view_in_klayout(self):
-        """Find the sibling OAS file and open it in KLayout."""
-        if not self._current_file:
+        """Open the sibling OAS file in external KLayout."""
+        oas_path = None
+        if (
+            self._live_klayout_oas
+            and self._live_klayout_source_file == self._current_file
+            and os.path.isfile(self._live_klayout_oas)
+        ):
+            oas_path = self._live_klayout_oas
+        if not oas_path:
+            oas_path = self._guess_current_oas_file()
+        if not oas_path:
+            self.chat_panel._append_message(
+                "AI", "No .oas file found next to the loaded JSON.", "#fde8e8", "#a00"
+            )
             return
-        json_dir = os.path.dirname(os.path.abspath(self._current_file))
-        oas_files = glob.glob(os.path.join(json_dir, "*.oas"))
-        if oas_files:
-            if not self.klayout_panel.isVisible():
-                self._toggle_klayout_panel()
-            self.klayout_panel._oas_path = oas_files[0]
-            self.klayout_panel._on_open_klayout()
+
+        try:
+            klayout_exe = KLayoutPanel._find_klayout_exe()
+            if klayout_exe:
+                subprocess.Popen(
+                    [klayout_exe, oas_path],
+                    creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+                )
+            else:
+                if sys.platform == "win32":
+                    os.startfile(oas_path)
+                else:
+                    subprocess.Popen(["xdg-open", oas_path])
+        except Exception as exc:
+            self.chat_panel._append_message(
+                "AI", f"Could not open KLayout: {exc}", "#fde8e8", "#a00"
+            )
+
+    # -------------------------------------------------
+    # View Mode Switching (Layout / KLayout / Both)
+    # -------------------------------------------------
+    def _on_view_mode_changed(self, mode):
+        """Handle view mode toggle: layout, klayout, both."""
+        old_mode = self._view_mode
+        self._view_mode = mode
+
+        if mode == "layout":
+            # Move editor back to stack page 0 if needed
+            if self.editor.parent() != self._center_stack:
+                self._center_stack.insertWidget(self._page_layout, self.editor)
+            self._center_stack.setCurrentWidget(self.editor)
+            self.editor.setVisible(True)
+            self.klayout_panel.setVisible(False)
+        elif mode == "klayout":
+            if self.klayout_panel.parent() != self._center_stack:
+                self._center_stack.insertWidget(self._page_klayout, self.klayout_panel)
+            self._center_stack.setCurrentWidget(self.klayout_panel)
+            self.editor.setVisible(False)
+            self.klayout_panel.setVisible(True)
+            self._sync_klayout_preview(force=True)
+            self._schedule_live_klayout_refresh(force=True, delay_ms=80)
+        elif mode == "both":
+            # Show Symbolic Editor + KLayout side by side.
+            self._both_splitter_widget.insertWidget(0, self.editor)
+            self._both_splitter_widget.insertWidget(1, self.klayout_panel)
+            self.editor.setVisible(True)
+            self.klayout_panel.setVisible(True)
+            self._center_stack.setCurrentWidget(self._both_splitter_widget)
+            # Restore previously saved splitter ratio
+            if self._both_splitter_sizes:
+                self._both_splitter_widget.setSizes(self._both_splitter_sizes)
+            else:
+                self._both_splitter_widget.setSizes([500, 500])
+            self._sync_klayout_preview(force=True)
+            self._schedule_live_klayout_refresh(force=True, delay_ms=80)
+
+        # Save splitter ratio when leaving "both" mode
+        if old_mode == "both" and mode != "both":
+            self._both_splitter_sizes = self._both_splitter_widget.sizes()
+            # Detach widgets back from splitter into stack
+            self._center_stack.insertWidget(self._page_layout, self.editor)
+            self._center_stack.insertWidget(self._page_klayout, self.klayout_panel)
+
+        # Update toolbar visibility for row/col/sel
+        self._update_toolbar_for_view_mode()
+
+    def _fit_current_view(self):
+        """Fit the active view (layout, klayout, or both) to its contents."""
+        if self._view_mode == "layout":
+            self.editor.fit_to_view()
+        elif self._view_mode == "klayout":
+            self._sync_klayout_preview(force=True)
+        elif self._view_mode == "both":
+            self.editor.fit_to_view()
+            self._sync_klayout_preview(force=True)
+
+    # -------------------------------------------------
+    # Design Tabs Management
+    # -------------------------------------------------
+    def _save_current_tab_state(self):
+        """Save current design state to the active tab."""
+        if 0 <= self._active_tab_index < len(self._tab_states):
+            self._sync_node_positions()
+            state = self._tab_states[self._active_tab_index]
+            state["nodes"] = copy.deepcopy(self.nodes) if self.nodes else None
+            state["original_data"] = copy.deepcopy(self._original_data) if self._original_data else None
+            state["terminal_nets"] = copy.deepcopy(self._terminal_nets)
+            state["file_path"] = self._current_file
+            state["undo_stack"] = copy.deepcopy(self._undo_stack)
+            state["redo_stack"] = copy.deepcopy(self._redo_stack)
+
+    def _restore_tab_state(self, index):
+        """Restore design state from a tab."""
+        if 0 <= index < len(self._tab_states):
+            state = self._tab_states[index]
+            self.nodes = state["nodes"]
+            self._original_data = state["original_data"]
+            self._terminal_nets = state["terminal_nets"]
+            self._current_file = state["file_path"]
+            self._undo_stack = state["undo_stack"]
+            self._redo_stack = state["redo_stack"]
+            self._reset_live_klayout_state()
+            self._refresh_panels()
+            self._update_undo_redo_state()
+            name = os.path.basename(self._current_file) if self._current_file else "Untitled"
+            self.setWindowTitle(f"Symbolic Layout Editor — {name}")
+            if self._view_mode == "klayout":
+                QTimer.singleShot(100, lambda: self._sync_klayout_preview(force=True))
+            else:
+                QTimer.singleShot(100, self.editor.fit_to_view)
+
+    def _on_design_tab_selected(self, index):
+        """Switch to a different design tab."""
+        self._save_current_tab_state()
+        self._active_tab_index = index
+        self._restore_tab_state(index)
+        # Ensure we're not on the home dashboard
+        if self._view_mode == "layout":
+            self._center_stack.setCurrentWidget(self.editor)
+        elif self._view_mode == "klayout":
+            self._center_stack.setCurrentWidget(self.klayout_panel)
+        elif self._view_mode == "both":
+            self._center_stack.setCurrentWidget(self._both_splitter_widget)
+
+    def _on_design_tab_closed(self, index):
+        """Close a design tab."""
+        if 0 <= index < len(self._tab_states):
+            self._tab_states.pop(index)
+            self._design_tab_bar.remove_tab(index)
+            if not self._tab_states:
+                self._active_tab_index = -1
+                self._center_stack.setCurrentWidget(self._home_dashboard)
+            elif index <= self._active_tab_index:
+                self._active_tab_index = max(0, self._active_tab_index - 1)
+
+    def _on_design_tab_add(self):
+        """Open file dialog to add a new design tab."""
+        fpath, _ = QFileDialog.getOpenFileName(
+            self, "Open Placement JSON", "", "JSON Files (*.json)"
+        )
+        if fpath:
+            self._open_design_in_new_tab(fpath)
+
+    def _on_home_tab(self):
+        """Switch to home dashboard."""
+        self._save_current_tab_state()
+        self._active_tab_index = -1
+        self._center_stack.setCurrentWidget(self._home_dashboard)
+
+    def _on_open_design_from_dashboard(self, fpath):
+        """Open a design from the home dashboard."""
+        self._open_design_in_new_tab(fpath)
+
+    def _open_design_in_new_tab(self, fpath):
+        """Load a design file and create a new tab for it."""
+        # Check if already open
+        for i, state in enumerate(self._tab_states):
+            if state["file_path"] == fpath:
+                self._design_tab_bar.set_active_tab(i)
+                return
+
+        # Save current state
+        self._save_current_tab_state()
+
+        # Load new data
+        self._load_data(fpath)
+        self._current_file = fpath
+        self._undo_stack = []
+        self._redo_stack = []
+        self._refresh_panels()
+
+        # Create tab
+        name = os.path.splitext(os.path.basename(fpath))[0]
+        idx = self._design_tab_bar.add_tab(name, fpath)
+        self._tab_states.append({
+            "nodes": self.nodes,
+            "original_data": self._original_data,
+            "terminal_nets": self._terminal_nets,
+            "file_path": fpath,
+            "undo_stack": [],
+            "redo_stack": [],
+        })
+        self._active_tab_index = idx
+
+        # Ensure we're showing the design, not home
+        if self._view_mode == "klayout":
+            self._center_stack.setCurrentWidget(self.klayout_panel)
+            self._sync_klayout_preview(force=True)
+        elif self._view_mode == "both":
+            self._center_stack.setCurrentWidget(self._both_splitter_widget)
+            self._sync_klayout_preview(force=True)
+        else:
+            self._center_stack.setCurrentWidget(self.editor)
+        self.setWindowTitle(f"Symbolic Layout Editor — {name}")
+        if self._view_mode == "klayout":
+            QTimer.singleShot(100, lambda: self._sync_klayout_preview(force=True))
+        else:
+            QTimer.singleShot(100, self.editor.fit_to_view)
+        RecentDesignsDashboard.add_recent(fpath)
+
+    # -------------------------------------------------
+    # Properties Panel Wiring
+    # -------------------------------------------------
+    def _on_device_selected_for_properties(self, dev_id):
+        """Update properties panel when a device is selected."""
+        node_data = None
+        if self.nodes:
+            node_data = next((n for n in self.nodes if n.get("id") == dev_id), None)
+        if node_data:
+            self.properties_panel.show_device_properties(
+                dev_id, node_data, self._terminal_nets
+            )
+
+
 
     def keyPressEvent(self, event):
         """Esc releases active modes and selection.  M enters move mode."""
@@ -1079,6 +1408,7 @@ class MainWindow(QMainWindow):
         """Load placement JSON into internal state."""
         if filepath == None or not os.path.isfile(filepath): 
             return
+        self._reset_live_klayout_state()
         with open(filepath) as f:
             data = json.load(f)
         if "nodes" not in data:
@@ -1128,6 +1458,182 @@ class MainWindow(QMainWindow):
                 pass
         return terminal_nets
 
+    def _infer_design_name(self):
+        """Infer a readable circuit name from the active file name."""
+        if not self._current_file:
+            return "Circuit"
+        stem = os.path.splitext(os.path.basename(self._current_file))[0]
+        for suffix in ("_graph", "_placed", "_initial_placement", "_updated"):
+            if stem.lower().endswith(suffix):
+                stem = stem[: -len(suffix)]
+                break
+        return stem or "Circuit"
+
+    def _guess_current_oas_file(self):
+        """Pick the best matching sibling OAS file for the current JSON."""
+        if not self._current_file:
+            return None
+
+        json_dir = os.path.dirname(os.path.abspath(self._current_file))
+        candidates = sorted(glob.glob(os.path.join(json_dir, "*.oas")))
+        if not candidates:
+            return None
+
+        stem = os.path.splitext(os.path.basename(self._current_file))[0].lower()
+        aliases = {stem}
+        for suffix in ("_graph", "_placed", "_initial_placement", "_updated"):
+            if stem.endswith(suffix):
+                aliases.add(stem[: -len(suffix)])
+
+        def _score(path):
+            name = os.path.splitext(os.path.basename(path))[0].lower()
+            best = 0
+            for alias in aliases:
+                if not alias:
+                    continue
+                if name == alias:
+                    best = max(best, 1000)
+                if name.startswith(alias) or alias.startswith(name):
+                    best = max(best, 800)
+                best = max(best, len(os.path.commonprefix([name, alias])))
+            return best
+
+        return max(candidates, key=_score)
+
+    def _find_layout_companion_files(self):
+        """Return sibling (oas, sp) files for the active design JSON."""
+        if not self._current_file:
+            return None, None
+        json_dir = os.path.dirname(os.path.abspath(self._current_file))
+        oas_files = sorted(glob.glob(os.path.join(json_dir, "*.oas")))
+        sp_files = sorted(glob.glob(os.path.join(json_dir, "*.sp")))
+        oas_path = oas_files[0] if oas_files else None
+        sp_path = sp_files[0] if sp_files else None
+        return oas_path, sp_path
+
+    def _reset_live_klayout_state(self):
+        """Drop cached live-preview artifacts for the active design."""
+        self._live_klayout_oas = None
+        self._live_klayout_source_file = None
+        self._live_klayout_signature = None
+        self._live_klayout_force_pending = False
+        if hasattr(self, "_live_klayout_timer"):
+            self._live_klayout_timer.stop()
+
+    def _live_preview_oas_path(self):
+        """Build a deterministic temp path for auto-updated preview OAS."""
+        source = os.path.abspath(self._current_file or "untitled")
+        digest = hashlib.sha1(source.encode("utf-8")).hexdigest()[:10]
+        stem = os.path.splitext(os.path.basename(source))[0] or "design"
+        safe_stem = "".join(
+            ch if ch.isalnum() or ch in ("-", "_") else "_"
+            for ch in stem
+        )
+        out_dir = os.path.join(tempfile.gettempdir(), "analog_layout_live_preview")
+        os.makedirs(out_dir, exist_ok=True)
+        return os.path.join(out_dir, f"{safe_stem}_{digest}.oas")
+
+    def _current_editor_signature(self):
+        """Capture current device geometry signature from the editor canvas."""
+        if not hasattr(self, "editor") or not self.editor.device_items:
+            return ()
+        scale = float(getattr(self.editor, "scale_factor", 80.0) or 80.0)
+        signature = []
+        for dev_id in sorted(self.editor.device_items.keys()):
+            item = self.editor.device_items[dev_id]
+            x = round(item.pos().x() / scale, 6)
+            y = round(-item.pos().y() / scale, 6)
+            orient = item.orientation_string() if hasattr(item, "orientation_string") else "R0"
+            signature.append((dev_id, x, y, orient))
+        return tuple(signature)
+
+    def _schedule_live_klayout_refresh(self, force=False, delay_ms=220):
+        """Debounce expensive OAS regeneration while edits are streaming in."""
+        if not self._current_file or not self.nodes:
+            return
+        if force:
+            self._live_klayout_force_pending = True
+            self._live_klayout_timer.start(max(40, int(delay_ms)))
+            return
+        if not self._live_klayout_timer.isActive():
+            self._live_klayout_timer.start(max(40, int(delay_ms)))
+
+    def _on_editor_scene_changed(self, _regions):
+        """Schedule live preview updates whenever the symbolic canvas changes."""
+        self._schedule_live_klayout_refresh()
+
+    def _render_live_klayout_preview(self):
+        """Generate a temporary OAS from current positions and refresh preview."""
+        if not self._current_file or not self.nodes:
+            return
+
+        force = self._live_klayout_force_pending
+        self._live_klayout_force_pending = False
+
+        signature = self._current_editor_signature()
+        if (
+            not force
+            and signature == self._live_klayout_signature
+            and self._live_klayout_source_file == self._current_file
+        ):
+            return
+
+        oas_path, sp_path = self._find_layout_companion_files()
+        if not oas_path or not sp_path:
+            if force:
+                self._sync_klayout_preview(force=True)
+            return
+
+        self._sync_node_positions(
+            update_chat_context=False,
+            schedule_live_preview=False,
+        )
+
+        try:
+            from export.oas_writer import update_oas_placement
+
+            output_path = self._live_preview_oas_path()
+            with contextlib.redirect_stdout(io.StringIO()):
+                update_oas_placement(
+                    oas_path=oas_path,
+                    sp_path=sp_path,
+                    nodes=self.nodes,
+                    output_path=output_path,
+                )
+        except Exception as exc:
+            print(f"[KLayout Live Preview] update failed: {exc}")
+            if force:
+                self._sync_klayout_preview(force=True)
+            return
+
+        self._live_klayout_oas = output_path
+        self._live_klayout_source_file = self._current_file
+        self._live_klayout_signature = signature
+        self._sync_klayout_preview(force=True, oas_path=output_path)
+
+    def _sync_klayout_preview(self, force=False, oas_path=None):
+        """Sync the center KLayout preview panel with the active design OAS."""
+        if not hasattr(self, "klayout_panel"):
+            return
+
+        if oas_path is None:
+            if (
+                self._live_klayout_oas
+                and self._live_klayout_source_file == self._current_file
+                and os.path.isfile(self._live_klayout_oas)
+            ):
+                oas_path = self._live_klayout_oas
+            else:
+                oas_path = self._guess_current_oas_file()
+
+        changed = oas_path != self._last_klayout_oas
+        if not changed and not force:
+            return
+
+        self._last_klayout_oas = oas_path
+        self.klayout_panel.set_oas_path(oas_path)
+        self.klayout_panel.refresh_preview(oas_path)
+
     def _refresh_panels(self, compact=True):
         """Refresh all panels from self.nodes.
 
@@ -1148,6 +1654,8 @@ class MainWindow(QMainWindow):
             self.nodes, self._original_data.get("edges"),
             self._terminal_nets,
         )
+        self._sync_klayout_preview()
+        self._schedule_live_klayout_refresh(delay_ms=320)
         # Wire up drag signals on each device for undo tracking
         for item in self.editor.device_items.values():
             item.signals.drag_started.connect(self._on_device_drag_start)
@@ -2087,6 +2595,7 @@ class MainWindow(QMainWindow):
         self.nodes = data["nodes"]
         self._terminal_nets = data.get("terminal_nets", {})
         self._current_file = file_path
+        self._reset_live_klayout_state()
         self._refresh_panels()
         self.setWindowTitle(
             f"Symbolic Layout Editor \u2014 {os.path.basename(file_path)}"
@@ -2157,29 +2666,24 @@ class MainWindow(QMainWindow):
             )
             return
 
-        json_dir = os.path.dirname(os.path.abspath(self._current_file))
-
-        # Find sibling .oas file
-        oas_files = glob.glob(os.path.join(json_dir, "*.oas"))
-        if not oas_files:
+        oas_path, sp_path = self._find_layout_companion_files()
+        if not oas_path:
             self.chat_panel._append_message(
                 "AI",
                 "No .oas file found next to the loaded JSON.",
                 "#fde8e8", "#a00",
             )
             return
-        oas_path = oas_files[0]
 
-        # Find sibling .sp file
-        sp_files = glob.glob(os.path.join(json_dir, "*.sp"))
-        if not sp_files:
+        if not sp_path:
             self.chat_panel._append_message(
                 "AI",
                 "No .sp netlist file found next to the loaded JSON.",
                 "#fde8e8", "#a00",
             )
             return
-        sp_path = sp_files[0]
+
+        json_dir = os.path.dirname(os.path.abspath(self._current_file))
 
         # Ask user where to save
         default_name = os.path.splitext(os.path.basename(oas_path))[0] + "_updated.oas"
@@ -2207,8 +2711,10 @@ class MainWindow(QMainWindow):
                 f"Layout exported to **{os.path.basename(output_path)}**",
                 "#e8f4fd", "#1a1a2e",
             )
-            # Auto-refresh KLayout preview
-            self.klayout_panel.refresh_preview(output_path)
+            self._live_klayout_oas = output_path
+            self._live_klayout_source_file = self._current_file
+            self._live_klayout_signature = self._current_editor_signature()
+            self._sync_klayout_preview(force=True, oas_path=output_path)
         except Exception as e:
             self.chat_panel._append_message(
                 "AI",
@@ -2678,7 +3184,7 @@ class MainWindow(QMainWindow):
                 "AI", f"Could not execute command: {e}", "#fde8e8", "#a00"
             )
 
-    def _sync_node_positions(self):
+    def _sync_node_positions(self, update_chat_context=True, schedule_live_preview=True):
         """Sync canvas positions back to self.nodes and update layout context."""
         positions = self.editor.get_updated_positions()
         for node in self.nodes:
@@ -2690,12 +3196,15 @@ class MainWindow(QMainWindow):
                 if item and hasattr(item, "orientation_string"):
                     node["geometry"]["orientation"] = item.orientation_string()
         # Refresh the chat panel's context with updated positions
-        self.chat_panel.set_layout_context(
-            self.nodes, self._original_data.get("edges"),
-            self._terminal_nets,
-        )
+        if update_chat_context:
+            self.chat_panel.set_layout_context(
+                self.nodes, self._original_data.get("edges"),
+                self._terminal_nets,
+            )
         self._update_grid_counts()
         self._on_selection_count_changed()
+        if schedule_live_preview:
+            self._schedule_live_klayout_refresh()
 
 
 # -------------------------------------------------
@@ -2720,8 +3229,8 @@ if __name__ == "__main__":
     palette.setColor(QPalette.ColorRole.Button, QColor("#1a1f2b"))
     palette.setColor(QPalette.ColorRole.ButtonText, QColor("#c8d0dc"))
     palette.setColor(QPalette.ColorRole.BrightText, QColor("#ffffff"))
-    palette.setColor(QPalette.ColorRole.Link, QColor("#4a90d9"))
-    palette.setColor(QPalette.ColorRole.Highlight, QColor("#4a90d9"))
+    palette.setColor(QPalette.ColorRole.Link, QColor("#8a919c"))
+    palette.setColor(QPalette.ColorRole.Highlight, QColor("#6b7280"))
     palette.setColor(QPalette.ColorRole.HighlightedText, QColor("#ffffff"))
     palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, QColor("#556677"))
     palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, QColor("#556677"))

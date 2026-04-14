@@ -28,13 +28,80 @@ from parser.device_matcher import match_devices
 
 
 # ------------------------------------------------------------------
+# Diffusion merge helper
+# ------------------------------------------------------------------
+
+def _merge_diffusion(top_cell, diff_layer, diff_datatype=0):
+    """
+    Flatten *top_cell* and merge all touching/overlapping polygons on
+    *diff_layer* into the minimum set of non-overlapping shapes.
+
+    This makes abutted transistor fingers render as one continuous
+    shared-diffusion region in KLayout instead of collinear separate
+    rectangles — exactly the physical behaviour you want for an abutted
+    layout.
+
+    NOTE: This flattens the cell hierarchy (all sub-cell geometry is
+    inlined into top_cell, references are removed).  Only call this on
+    the *export* copy of the layout, not on the source OAS for editing.
+
+    Args:
+        top_cell:      gdstk.Cell — top-level cell to process (modified
+                                    in-place).
+        diff_layer:    int  — GDS layer of the diffusion/active region.
+                              Common values:
+                                65  — FinFET ACTIVE (FreePDK45 / generic FinFET)
+                                22  — SKY130 diff
+                                1   — generic / mock PDK
+                              Must match the layer used in your PDK cells.
+        diff_datatype: int  — GDS datatype (default 0).
+    """
+    # Collect ALL diff polygons from the full hierarchy with transforms applied
+    all_diff = top_cell.get_polygons(layer=diff_layer, datatype=diff_datatype)
+
+    if not all_diff:
+        print(f"[OAS Writer] _merge_diffusion: no polygons on "
+              f"layer {diff_layer}/{diff_datatype} — skipping.")
+        return
+
+    print(f"[OAS Writer] Merging {len(all_diff)} DIFF polygon(s) "
+          f"(layer {diff_layer}/{diff_datatype}) ...")
+
+    # Boolean OR merges all overlapping / edge-touching polygons
+    merged = gdstk.boolean(
+        all_diff, [],
+        "or",
+        layer=diff_layer,
+        datatype=diff_datatype,
+    )
+
+    # Flatten so sub-cell polygons are now owned by top_cell directly
+    top_cell.flatten()
+
+    # Remove the now-inlined (un-merged) diff polygons
+    old_diff = [p for p in top_cell.polygons
+                if p.layer == diff_layer and p.datatype == diff_datatype]
+    for p in old_diff:
+        top_cell.remove(p)
+
+    # Insert the merged result
+    for p in merged:
+        top_cell.add(p)
+
+    print(f"[OAS Writer] Merge complete: "
+          f"{len(all_diff)} raw → {len(merged)} merged polygon(s).")
+
+
+# ------------------------------------------------------------------
 # Orientation helpers
 # ------------------------------------------------------------------
 _ORIENT_TO_GDSTK = {
     # orientation_string -> (rotation_degrees, x_reflection)
     "R0":        (0,   False),
-    "R0_FH":     (0,   True),    # flipped horizontally = x_reflection
-    "R0_FV":     (180, True),    # flipped vertically   = 180° + x_reflection
+    # gdstk applies x_reflection first (mirror across X-axis), then rotation.
+    # So for left/right (horizontal) mirror we need 180° + x_reflection.
+    "R0_FH":     (180, True),    # flipped horizontally (left/right)
+    "R0_FV":     (0,   True),    # flipped vertically   (top/bottom)
     "R0_FH_FV":  (180, False),   # both flips           = 180° rotation
     "MX":        (0,   True),    # gdstk mirror convention
     "MY":        (180, True),
@@ -55,7 +122,8 @@ def _orient_to_gdstk(orient_str):
 # Main API
 # ------------------------------------------------------------------
 def update_oas_placement(oas_path, sp_path, nodes, output_path,
-                         output_format=None):
+                         output_format=None,
+                         merge_diff_layer=None):
     """Read the original OAS, apply new positions from *nodes*, write output.
 
     Args:
@@ -131,6 +199,10 @@ def update_oas_placement(oas_path, sp_path, nodes, output_path,
                   f"({new_x:.4f}, {new_y:.4f})  orient={orient}")
 
     print(f"[OAS Writer] Updated {updated_count}/{len(mapping)} devices.")
+
+    # ---- merge abutted diffusion (optional) -----------------------------
+    if merge_diff_layer is not None:
+        _merge_diffusion(top_cell, diff_layer=int(merge_diff_layer))
 
     # ---- determine output format ----------------------------------------
     if output_format is None:

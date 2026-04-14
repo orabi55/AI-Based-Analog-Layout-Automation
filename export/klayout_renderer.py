@@ -9,8 +9,12 @@ import os
 import sys
 import tempfile
 
-import klayout.db as kdb
-import klayout.lay as klay
+try:
+    import klayout.db as kdb
+    import klayout.lay as klay
+    _HAS_KLAYOUT = True
+except ImportError:
+    _HAS_KLAYOUT = False
 
 
 def render_oas_to_file(oas_path, output_png, width=800, height=600):
@@ -25,6 +29,11 @@ def render_oas_to_file(oas_path, output_png, width=800, height=600):
     Returns:
         output_png path on success.
     """
+    if not _HAS_KLAYOUT:
+        raise ImportError(
+            "klayout Python package is not installed.\n"
+            "Install it with: pip install klayout"
+        )
     if not os.path.isfile(oas_path):
         raise FileNotFoundError(f"Layout file not found: {oas_path}")
 

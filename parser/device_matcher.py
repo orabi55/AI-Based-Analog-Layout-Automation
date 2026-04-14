@@ -88,30 +88,32 @@ def match_devices(netlist, layout_devices):
     layout_nmos, layout_pmos = split_layout_by_type(layout_devices)
     netlist_nmos, netlist_pmos = split_netlist_by_type(netlist)
 
-    # 2) Validate counts
+    # 2) Validate counts (warn instead of error for multi-finger mismatches)
     if len(layout_nmos) != len(netlist_nmos):
-        raise ValueError(
-            f"NMOS count mismatch: netlist={len(netlist_nmos)}, "
-            f"layout={len(layout_nmos)}"
-        )
+        print(f"[Device Matcher] WARNING: NMOS count mismatch: "
+              f"netlist={len(netlist_nmos)}, layout={len(layout_nmos)}. "
+              f"Proceeding with best-effort matching.")
 
     if len(layout_pmos) != len(netlist_pmos):
-        raise ValueError(
-            f"PMOS count mismatch: netlist={len(netlist_pmos)}, "
-            f"layout={len(layout_pmos)}"
-        )
+        print(f"[Device Matcher] WARNING: PMOS count mismatch: "
+              f"netlist={len(netlist_pmos)}, layout={len(layout_pmos)}. "
+              f"Proceeding with best-effort matching.")
 
     # 3) Sort layout by geometry
     layout_nmos_sorted = sort_layout_by_position(layout_nmos)
     layout_pmos_sorted = sort_layout_by_position(layout_pmos)
 
-    # 4) Assign parent devices to layout indices
+    # 4) Assign parent devices to layout indices (match by position order)
     parent_mapping = {}
 
-    for (layout_idx, _), net_name in zip(layout_nmos_sorted, netlist_nmos):
+    for i in range(min(len(layout_nmos_sorted), len(netlist_nmos))):
+        layout_idx = layout_nmos_sorted[i][0]
+        net_name = netlist_nmos[i]
         parent_mapping[net_name] = layout_idx
 
-    for (layout_idx, _), net_name in zip(layout_pmos_sorted, netlist_pmos):
+    for i in range(min(len(layout_pmos_sorted), len(netlist_pmos))):
+        layout_idx = layout_pmos_sorted[i][0]
+        net_name = netlist_pmos[i]
         parent_mapping[net_name] = layout_idx
 
     # 5) Expand mapping to include finger-expanded names
