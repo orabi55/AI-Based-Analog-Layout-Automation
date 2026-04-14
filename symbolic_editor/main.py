@@ -658,7 +658,7 @@ class AIModelSelectionDialog(QDialog):
         self.ollama_model_combo = QComboBox()
         self.ollama_model_combo.setEditable(True)
         self.ollama_model_combo.addItems([
-            "qwen2.5-coder:3b", "llama3.2", "phi4-mini:3.8b", "gemma3:4b"
+            "qwen3.5", "llama3.2", "deepseek-coder:6.7b", "phi4-mini:3.8b", "gemma3:4b"
         ])
         self.card_ollama, self.check_ollama = make_card(
             "Ollama (Local — Private)",
@@ -2279,23 +2279,43 @@ class MainWindow(QMainWindow):
     def _on_import_completed(self, data, sp_path):
         self.overlay.hide_overlay()
 
-        # Save the generated graph JSON next to the .sp file
+        # Save the full graph JSON for GUI loading (needs 'nodes' key)
         base_name = os.path.splitext(os.path.basename(sp_path))[0]
         sp_dir = os.path.dirname(os.path.abspath(sp_path))
         out_path = os.path.join(sp_dir, f"{base_name}_graph.json")
+        
+        # Save full format to disk first
         with open(out_path, "w") as f:
             json.dump(data, f, indent=4)
+        original_size = os.path.getsize(out_path)
+        
+        # Also save compressed version for AI prompts
+        compressed_path = os.path.join(sp_dir, f"{base_name}_graph_compressed.json")
+        try:
+            compressed_data = self._compress_graph_for_storage(data)
+            with open(compressed_path, "w") as f:
+                json.dump(compressed_data, f, indent=4)
+            compressed_size = os.path.getsize(compressed_path)
+            reduction = (1 - compressed_size / original_size) * 100 if original_size > 0 else 0
+        except Exception as e:
+            compressed_path = out_path  # Fallback
+            reduction = 0
 
-        # Load into the GUI - PRESERVE existing layout coordinates
+        # Load into the GUI using full format
         self._load_from_data_dict(data, out_path, False)
 
         num_nodes = len(data.get('nodes', []))
-        self.chat_panel._append_message(
-            "AI",
+        msg = (
             f"Imported {num_nodes} devices from "
             f"{os.path.basename(sp_path)}\n"
-            f"Saved graph to: {os.path.basename(out_path)}\n\n"
-            f"To run AI initial placement: Design > Run AI Initial Placement (Ctrl+P)",
+            f"Saved graph to: {os.path.basename(out_path)}\n"
+            f"Saved compressed graph to: {os.path.basename(compressed_path)}\n"
+            f"Size reduction: {reduction:.1f}% (for AI prompts)\n\n"
+            f"To run AI initial placement: Design > Run AI Initial Placement (Ctrl+P)"
+        )
+        self.chat_panel._append_message(
+            "AI",
+            msg,
             "#e8f4fd", "#1a1a2e",
         )
     def _on_import_error(self, err_msg):
@@ -2654,6 +2674,91 @@ class MainWindow(QMainWindow):
             "terminal_nets": terminal_nets,
             "blocks": blocks,
         }
+    
+    @staticmethod
+    def _compress_graph_for_storage(data: dict) -> dict:
+        """
+        Create a compressed version of the graph JSON for storage.
+        Keeps full detail for output but provides optimized view for AI prompts.
+        """
+        import re
+        from collections import defaultdict
+        
+        compressed = {
+            "version": "2.0",
+            "device_types": {
+                "pmos": {"y_row": 0.668, "default_width": 0.294, "default_height": 0.818},
+                "nmos": {"y_row": 0.0, "default_width": 0.294, "default_height": 0.668},
+                "res": {"y_row": 1.630, "default_width": 0.294, "default_height": 0.1},
+                "cap": {"y_row": 1.630, "default_width": 0.294, "default_height": 0.668}
+            },
+            "devices": {},
+            "connectivity": {"nets": defaultdict(list)},
+            "drc_rules": {
+                "fin_pitch": 0.014,
+                "row_pitch": 0.668,
+                "device_pitch": 0.294,
+                "abut_pitch": 0.070
+            }
+        }
+        
+        # Collapse finger instances into parent devices
+        terminal_nets = data.get("terminal_nets", {})
+        for node in data.get("nodes", []):
+            node_id = node["id"]
+            electrical = node.get("electrical", {})
+            parent_id = electrical.get("parent")
+            
+            # Extract parent from node_id if not in electrical
+            if not parent_id:
+                parent_id = re.sub(r'_[mf]\d+$', '', node_id)
+            
+            # Skip if already processed
+            if parent_id in compressed["devices"]:
+                continue
+            
+            dev_type = node.get("type", "nmos")
+            dev_terminal_nets = terminal_nets.get(node_id, {})
+            
+            compressed["devices"][parent_id] = {
+                "type": dev_type,
+                "m": electrical.get("m", 1),
+                "nf": electrical.get("nf", 1),
+                "nfin": electrical.get("nfin", 1),
+                "l": electrical.get("l", 0.0),
+                "terminal_nets": dev_terminal_nets
+            }
+            
+            # Add block info if present
+            if node.get("block"):
+                compressed["devices"][parent_id]["block"] = node["block"]
+        
+        # Build net-centric connectivity
+        for edge in data.get("edges", []):
+            net = edge.get("net", "")
+            if not net or net.upper() in {"VDD", "VSS", "GND", "VCC"}:
+                continue
+            
+            source = re.sub(r'_[mf]\d+$', '', edge.get("source", ""))
+            target = re.sub(r'_[mf]\d+$', '', edge.get("target", ""))
+            
+            if source and target:
+                compressed["connectivity"]["nets"][net].append(source)
+                compressed["connectivity"]["nets"][net].append(target)
+        
+        # Deduplicate and sort net lists
+        for net in compressed["connectivity"]["nets"]:
+            compressed["connectivity"]["nets"][net] = sorted(
+                set(compressed["connectivity"]["nets"][net])
+            )
+        
+        # Convert defaultdict to dict for JSON serialization
+        compressed["connectivity"]["nets"] = dict(compressed["connectivity"]["nets"])
+        
+        # Add blocks summary
+        compressed["blocks"] = data.get("blocks", {})
+        
+        return compressed
 
     @staticmethod
     def _run_ai_initial_placement(data, model_choice="Gemini", submodel=None):

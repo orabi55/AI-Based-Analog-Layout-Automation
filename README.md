@@ -38,8 +38,11 @@ python symbolic_editor/main.py
 
 1. Open the GUI: `python symbolic_editor/main.py`
 2. **File > Import from Netlist + Layout** (`Ctrl+I`) — select your `.sp` and `.oas` files.
-3. **Design > Run AI Initial Placement** (`Ctrl+P`) — AI-optimized device positions.
-4. Edit, refine, save, and export.
+3. System automatically generates:
+   - `_graph.json` — Full format (for GUI display)
+   - `_graph_compressed.json` — Optimized format (for AI prompts, 95% smaller)
+4. **Design > Run AI Initial Placement** (`Ctrl+P`) — AI-optimized device positions.
+5. Edit, refine, save, and export.
 
 ### Load an Existing Example
 
@@ -140,21 +143,17 @@ AI-Based-Analog-Layout-Automation/
 |   \-- icons.py               #   Procedural vector icons
 |
 |-- ai_agent/                  # Multi-agent AI system
-|   |-- orchestrator.py        #   4-stage pipeline controller
-|   |-- llm_worker.py          #   LLM API worker (Qt thread)
-|   |-- gemini_placer.py       #   Gemini-based initial placement
-|   |-- topology_analyst.py    #   Stage 1: circuit constraint extraction
-|   |-- placement_specialist.py#   Stage 2: device placement
-|   |-- drc_critic.py          #   Stage 3: DRC violation checker
-|   |-- routing_previewer.py   #   Stage 4: routing cost optimizer
-|   |-- pipeline_optimizer.py  #   Deterministic placement optimizer
-|   |-- classifier_agent.py    #   User intent classifier
-|   |-- strategy_selector.py   #   Placement strategy selection
-|   |-- analog_kb.py           #   Analog layout knowledge base
-|   |-- finger_grouping.py     #   Multi-finger device grouping
-|   |-- rag_store.py           #   RAG vector store
-|   |-- rag_indexer.py         #   RAG example indexer
-|   \-- rag_retriever.py       #   RAG example retriever
+|   |-- ai_initial_placement/  #   AI initial placement module
+|   |   |-- placer_utils.py    #     Graph compression utilities
+|   |   |-- gemini_placer.py   #     Gemini-based placement
+|   |   |-- groq_placer.py     #     Groq-based placement
+|   |   |-- openai_placer.py   #     OpenAI-based placement
+|   |   |-- deepseek_placer.py #     DeepSeek-based placement
+|   |   |-- ollama_placer.py   #     Ollama-based placement
+|   |   \-- finger_grouper.py  #     Multi-finger device grouping
+|   \-- ai_chat_bot/           #   AI chat bot module
+|       |-- llm_worker.py      #     LLM API worker
+|       \-- agents/            #     Multi-agent pipeline
 |
 |-- parser/                    # Netlist & layout file readers
 |   |-- netlist_reader.py      #   SPICE netlist parser
@@ -178,15 +177,24 @@ AI-Based-Analog-Layout-Automation/
 |   |-- xor/                   #   CMOS XOR gate
 |   \-- std_cell/              #   Large standard cell
 |
-|-- tests/                     # Test suite
 |-- docs/                      # Documentation
 |   |-- USER_GUIDE.md          #   Comprehensive user guide
+|   |-- JSON_OPTIMIZATION_README.md       # JSON compression guide
+|   |-- JSON_OPTIMIZATION_SUMMARY.md      # Compression implementation details
+|   |-- SYMBOLIC_HIERARCHY.md             # Hierarchy documentation
+|   |-- HIERARCHY_SELECTION_UPDATE.md     # Hierarchy selection guide
 |   \-- images/                #   Screenshots
 |
 |-- .env.example               # API key template
 |-- requirements.txt           # Python dependencies
 \-- README.md                  # This file
 ```
+
+### Key Features
+
+- **Dual Graph JSON Format**: Imports generate both full format (`_graph.json` for GUI) and compressed format (`_graph_compressed.json` for AI prompts)
+- **AI-Ready Prompts**: Compressed format automatically used by AI placement agents (95% smaller)
+- **GUI Compatible**: Full format preserves device-level detail needed for interactive canvas display
 
 ---
 
