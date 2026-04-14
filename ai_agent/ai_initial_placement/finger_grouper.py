@@ -1495,7 +1495,23 @@ def expand_groups(
             expanded.append(node)
 
     # --- Pass 4: resolve inter-group overlaps per row ----------------------
+    print(f"[expand_groups] Before overlap resolution: {len(expanded)} devices expanded")
     expanded = _resolve_row_overlaps(expanded, no_abutment)
+    print(f"[expand_groups] After overlap resolution: returning {len(expanded)} devices")
+    
+    # POST-EXPANSION VALIDATION: Check for duplicate positions
+    from collections import defaultdict
+    pos_check = defaultdict(list)
+    for n in expanded:
+        x = n.get("geometry", {}).get("x", -1)
+        y = n.get("geometry", {}).get("y", -1)
+        pos_check[(x, y)].append(n.get("id", "?"))
+    
+    duplicates = {pos: ids for pos, ids in pos_check.items() if len(ids) > 1}
+    if duplicates:
+        print(f"[expand_groups] WARNING: {len(duplicates)} position(s) have multiple devices:")
+        for pos, ids in list(duplicates.items())[:5]:
+            print(f"  Position {pos}: {ids}")
 
     return expanded
 
@@ -1525,12 +1541,16 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
     pitch_abut = FINGER_PITCH  # 0.070
     pitch_std  = STD_PITCH     # 0.294
 
+    print(f"[resolve_overlaps] Starting with {len(nodes)} devices")
+
     # Group by (Y, type) — PMOS and NMOS are always in separate buckets
     type_rows: Dict[Tuple[float, str], List[dict]] = defaultdict(list)
     for n in nodes:
         y = round(n.get("geometry", {}).get("y", 0.0), 6)
         dev_type = n.get("type", "nmos")
         type_rows[(y, dev_type)].append(n)
+
+    print(f"[resolve_overlaps] Found {len(type_rows)} type-rows")
 
     for (y_key, _dev_type), row_nodes in type_rows.items():
         # --- Step 1: Identify chains by parent name -----------------------
@@ -1539,6 +1559,13 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
             nid = node.get("id", "")
             parent = _transistor_key(nid)
             chains[parent].append(node)
+
+        print(f"[resolve_overlaps] Row y={y_key} ({_dev_type}): {len(chains)} chains")
+        
+        # DEBUG: Show chain sizes
+        for parent, chain_devs in chains.items():
+            if len(chain_devs) > 1:
+                print(f"  Chain '{parent}': {len(chain_devs)} devices - {[d.get('id', '?') for d in chain_devs[:5]]}")
 
         # --- Step 2: Sort each chain's devices by their internal index ------
         for parent, chain_devices in chains.items():
@@ -1554,9 +1581,20 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
         if not sorted_chains:
             continue
 
-        cursor = sorted_chains[0][0].get("geometry", {}).get("x", 0.0)
+        # CRITICAL FIX: Validate that chains have valid starting X coordinates
+        # If all devices have X=0, we need to start at a reasonable position
+        first_x = sorted_chains[0][0].get("geometry", {}).get("x", 0.0)
+        cursor = first_x
+        
+        # If the first device has X=0 but has a width, ensure we don't start at negative
+        if cursor < 0:
+            cursor = 0.0
 
         for chain in sorted_chains:
+            # DEBUG: Log chain placement
+            chain_ids = [d.get("id", "?") for d in chain]
+            print(f"[resolve_overlaps] Placing chain at cursor={cursor:.4f}: {chain_ids[:3]}...")
+            
             for dev_idx, dev in enumerate(chain):
                 geo = dev.get("geometry", {})
                 geo["x"] = round(cursor, 6)
