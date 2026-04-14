@@ -1,0 +1,227 @@
+{
+    "version": "2.0",
+    "device_types": {
+        "pmos": {
+            "y_row": 0.668,
+            "default_width": 0.294,
+            "default_height": 0.818
+        },
+        "nmos": {
+            "y_row": 0.0,
+            "default_width": 0.294,
+            "default_height": 0.668
+        },
+        "res": {
+            "y_row": 1.63,
+            "default_width": 0.294,
+            "default_height": 0.1
+        },
+        "cap": {
+            "y_row": 1.63,
+            "default_width": 0.294,
+            "default_height": 0.668
+        }
+    },
+    "devices": {
+        "MM5": {
+            "type": "pmos",
+            "m": 4,
+            "nf": 1,
+            "nfin": 7.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "VOUTP",
+                "G": "VOUTN",
+                "S": "VDD"
+            }
+        },
+        "MM4": {
+            "type": "pmos",
+            "m": 4,
+            "nf": 1,
+            "nfin": 7.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "VOUTN",
+                "G": "VOUTP",
+                "S": "VDD"
+            }
+        },
+        "MM3": {
+            "type": "pmos",
+            "m": 8,
+            "nf": 1,
+            "nfin": 7.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "VY",
+                "G": "CLK",
+                "S": "VDD"
+            }
+        },
+        "MM2": {
+            "type": "pmos",
+            "m": 8,
+            "nf": 1,
+            "nfin": 7.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "VOUTP",
+                "G": "CLK",
+                "S": "VDD"
+            }
+        },
+        "MM1": {
+            "type": "pmos",
+            "m": 8,
+            "nf": 1,
+            "nfin": 7.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "VOUTN",
+                "G": "CLK",
+                "S": "VDD"
+            }
+        },
+        "MM0": {
+            "type": "pmos",
+            "m": 8,
+            "nf": 1,
+            "nfin": 7.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "VX",
+                "G": "CLK",
+                "S": "VDD"
+            }
+        },
+        "MM9": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 7.0,
+            "l": 2.8000000000000003e-08,
+            "terminal_nets": {
+                "D": "VY",
+                "G": "VINN",
+                "S": "net2<3>"
+            }
+        },
+        "MM8": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 7.0,
+            "l": 2.8000000000000003e-08,
+            "terminal_nets": {
+                "D": "VX",
+                "G": "VINP",
+                "S": "net2<3>"
+            }
+        },
+        "MM10": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 7.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "net2<3>",
+                "G": "CLK",
+                "S": "GND"
+            }
+        },
+        "MM7": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 7.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "VOUTN",
+                "G": "VOUTP",
+                "S": "VX"
+            }
+        },
+        "MM6": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 7.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "VOUTP",
+                "G": "VOUTN",
+                "S": "VY"
+            }
+        }
+    },
+    "connectivity": {
+        "nets": {
+            "VOUTN": [
+                "MM1",
+                "MM4",
+                "MM5",
+                "MM6",
+                "MM7"
+            ],
+            "VOUTP": [
+                "MM2",
+                "MM4",
+                "MM5",
+                "MM6",
+                "MM7"
+            ],
+            "CLK": [
+                "MM0",
+                "MM1",
+                "MM10",
+                "MM2",
+                "MM3"
+            ],
+            "VY": [
+                "MM3",
+                "MM6",
+                "MM9"
+            ],
+            "VX": [
+                "MM0",
+                "MM7",
+                "MM8"
+            ],
+            "VINN": [
+                "MM9"
+            ],
+            "net2<3>": [
+                "MM10",
+                "MM8",
+                "MM9"
+            ],
+            "net2<2>": [
+                "MM10",
+                "MM8",
+                "MM9"
+            ],
+            "net2<1>": [
+                "MM10",
+                "MM8",
+                "MM9"
+            ],
+            "net2<0>": [
+                "MM10",
+                "MM8",
+                "MM9"
+            ],
+            "VINP": [
+                "MM8"
+            ]
+        }
+    },
+    "drc_rules": {
+        "fin_pitch": 0.014,
+        "row_pitch": 0.668,
+        "device_pitch": 0.294,
+        "abut_pitch": 0.07
+    },
+    "blocks": {}
+}
