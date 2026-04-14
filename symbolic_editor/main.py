@@ -45,6 +45,7 @@ from PySide6.QtWidgets import (
     QRadioButton,
     QButtonGroup,
     QScrollArea,
+    QTextEdit,
 )
 from PySide6.QtCore import Qt, QTimer, QSize, QThread, Signal
 from PySide6.QtGui import QFont, QAction, QKeySequence, QColor, QPalette
@@ -61,6 +62,7 @@ from icons import (
     icon_flip_h, icon_flip_v,
     icon_merge_ss, icon_merge_dd, icon_add_dummy,
 )
+from ai_agent.matching.matching_engine import MatchingEngine
 
 
 # -------------------------------------------------
@@ -208,14 +210,24 @@ class _MatchDialog(QDialog):
         )
         tech_layout.addWidget(self._radio_cc_2d)
 
-        desc3 = QLabel("  Pattern: Cross-Quad on two rows — cancels 2D gradients")
-        desc3.setStyleSheet("color: #78909C; font-size: 11px; margin-left: 24px;")
-        tech_layout.addWidget(desc3)
+        self._radio_custom = QRadioButton("Custom Pattern (A B / B A)")
+        self._radio_custom.setToolTip("Type a custom string. '/' separates rows.")
+        tech_layout.addWidget(self._radio_custom)
+
+        self._custom_text = QTextEdit()
+        self._custom_text.setPlaceholderText("Example: A B B A / B A A B")
+        self._custom_text.setMaximumHeight(80)
+        self._custom_text.setHidden(True)
+        self._custom_text.setStyleSheet("background-color: #121826; border: 1px solid #37474F; color: white;")
+        tech_layout.addWidget(self._custom_text)
+
+        self._radio_custom.toggled.connect(lambda checked: self._custom_text.setVisible(checked))
 
         self._btn_group = QButtonGroup(self)
         self._btn_group.addButton(self._radio_interdig, 0)
         self._btn_group.addButton(self._radio_cc, 1)
         self._btn_group.addButton(self._radio_cc_2d, 2)
+        self._btn_group.addButton(self._radio_custom, 3)
 
         layout.addWidget(tech_group)
 
@@ -231,12 +243,17 @@ class _MatchDialog(QDialog):
         layout.addLayout(btn_layout)
 
     def get_technique(self) -> str:
-        """Return 'interdigitated' or 'common_centroid' or 'common_centroid_2d'."""
+        """Return 'interdigitated' or 'common_centroid' or 'common_centroid_2d' or 'custom'."""
         if self._radio_cc.isChecked():
             return "common_centroid"
         elif self._radio_cc_2d.isChecked():
             return "common_centroid_2d"
+        elif self._radio_custom.isChecked():
+            return "custom"
         return "interdigitated"
+
+    def get_custom_pattern(self) -> str:
+        return self._custom_text.toPlainText().strip()
 
 # -------------------------------------------------
 # Modern Loading Overlay
@@ -421,6 +438,15 @@ class ImportDialog(QDialog):
         files_layout.addRow("Layout File:", oas_row)
 
         layout.addWidget(files_group)
+        
+        # --- Abutment Toggle ---
+        self.check_abutment = QCheckBox("Enable Abutment (Diffusion Sharing)")
+        self.check_abutment.setChecked(True)
+        self.check_abutment.setToolTip(
+            "When enabled, shared Source/Drain nets between same-type transistors "
+            "will be marked for abutment."
+        )
+        layout.addWidget(self.check_abutment)
 
         # --- Buttons ---
         btn_row = QHBoxLayout()
@@ -461,7 +487,11 @@ class ImportDialog(QDialog):
             return
         self.sp_path = self._sp_edit.text().strip()
         self.oas_path = self._oas_edit.text().strip()
+        self.abutment_enabled = self.check_abutment.isChecked()
         self.accept()
+
+    def is_abutment_enabled(self):
+        return self.check_abutment.isChecked()
 
 # -------------------------------------------------
 # AI Model Selection Dialog
@@ -1382,6 +1412,17 @@ class MainWindow(QMainWindow):
         self._act_match.triggered.connect(self._on_match_devices)
         toolbar.addAction(self._act_match)
 
+        # Unlock matched group button
+        self._act_unlock = QAction("🔓 Unlock", self)
+        self._act_unlock.setShortcut(QKeySequence("Ctrl+Shift+M"))
+        self._act_unlock.setToolTip(
+            "Unlock Matched Group (Ctrl+Shift+M)\n"
+            "Select any device from a matched group to dissolve it.\n"
+            "Devices become individually moveable again."
+        )
+        self._act_unlock.triggered.connect(self._on_unlock_matched_group)
+        toolbar.addAction(self._act_unlock)
+
     # -------------------------------------------------
     # Panel collapse / expand
     # -------------------------------------------------
@@ -1957,133 +1998,214 @@ class MainWindow(QMainWindow):
             return
 
         technique = dlg.get_technique()
-        self._apply_matching(selected, technique)
+        custom_pattern = dlg.get_custom_pattern() if technique == "custom" else None
+        self._apply_matching(selected, technique, custom_pattern)
 
-    def _apply_matching(self, device_ids, technique):
+    def _apply_matching(self, device_ids, technique, custom_str=None):
         """
-        Apply matching to the selected devices.
-        Rearrange their finger positions according to the chosen technique,
-        then register them as a fixed matched group.
+        Apply matching to the selected devices using the Universal Layout Architect.
+        Enforces Recursive Balancing and Point Symmetry.
         """
-        from ai_agent.ai_initial_placement.finger_grouper import (
-            FINGER_PITCH, STD_PITCH, ROW_PITCH
-        )
-
         self._sync_node_positions()
         self._push_undo()
 
-        # Gather device items and sort by current X position
-        items = []
-        for did in device_ids:
-            item = self.editor.device_items.get(did)
-            if item:
-                items.append((did, item))
-        items.sort(key=lambda t: t[1].pos().x())
-
-        if len(items) < 2:
-            return
-
-        # Determine anchor position (leftmost device)
-        anchor_x = items[0][1].pos().x()
-        anchor_y = items[0][1].pos().y()
-
-        # Apply the chosen technique
-        pitch = FINGER_PITCH  # 0.070 um for abutted interdigitation
-
-        if technique == "interdigitated":
-            # ABBA interdigitation for 2 groups
-            if len(items) == 2:
-                # Split into A and B groups (by original ID sorting)
-                a_id, a_item = items[0]
-                b_id, b_item = items[1]
-                # Place side by side with ABBA pattern (just 2 devices: AB)
-                a_item.setPos(anchor_x, anchor_y)
-                b_item.setPos(
-                    self.editor._snap_value(anchor_x + pitch),
-                    anchor_y,
-                )
-            else:
-                # For N devices: ABBA pattern — pair them and interleave
-                # A1 B1 B2 A2  A3 B3 B4 A4 ...
-                n = len(items)
-                half = n // 2
-                group_a = items[:half]
-                group_b = items[half:]
-                # Reverse B for ABBA
-                ordered = []
-                for i in range(max(len(group_a), len(group_b))):
-                    if i < len(group_a):
-                        ordered.append(group_a[i])
-                    if i < len(group_b):
-                        ordered.append(group_b[i])
-                # Place in order
-                x = anchor_x
-                for did, item in ordered:
-                    item.setPos(self.editor._snap_value(x), anchor_y)
-                    x += pitch
-
-        elif technique == "common_centroid":
-            # Common-centroid: DCBA|ABCD mirror pattern
-            n = len(items)
-            # Create two halves: reversed + forward
-            # Place: items[n-1], items[n-2], ..., items[0], items[0], ..., items[n-1]
-            # But we only have N devices, so just mirror them:
-            # first half reversed, second half forward
-            half = n // 2
-            left_half = list(reversed(items[:half]))
-            right_half = items[half:]
-            ordered = left_half + right_half
-
-            x = anchor_x
-            for did, item in ordered:
-                item.setPos(self.editor._snap_value(x), anchor_y)
-                x += pitch
-
-        elif technique == "common_centroid_2d":
-            # 2D Common Centroid (Cross-Quad on 2 rows)
-            n = len(items)
-            half = n // 2
-            left_half = items[:half]
-            right_half = list(reversed(items[half:]))
+        # Instantiate engine with current item map
+        engine = MatchingEngine(self.editor.device_items)
+        
+        try:
+            # Handle the placement result
+            placements = engine.generate_placement(device_ids, technique, custom_str)
             
-            # Row 1 (Top)
-            x = anchor_x
-            for did, item in left_half:
-                item.setPos(self.editor._snap_value(x), anchor_y)
-                x += pitch
+            # Apply results to items
+            snap = self.editor._snap_value
+            for p in placements:
+                item = self.editor.device_items.get(p["id"])
+                if item:
+                    item.setPos(snap(p["x"]), snap(p["y"]))
+            
+            # Post-Placement Analytical Audit
+            self._calculate_and_draw_centroids(device_ids, technique)
+            
+            # Register matched group
+            self._matched_groups.append({
+                "ids": list(device_ids),
+                "technique": technique,
+            })
+            
+            # Visual highlight (Success: standard colors)
+            if technique == "interdigitated":
+                color = QColor("#4FC3F7")      # blue
+            elif technique == "common_centroid_2d":
+                color = QColor("#CE93D8")      # purple
+            elif technique == "custom":
+                color = QColor("#FFD54F")      # amber for custom
+            else:
+                color = QColor("#AED581")      # green
                 
-            # Row 2 (Bottom)
-            x = anchor_x
-            # Depending on y direction, usually row pitch goes down/up. Here we just add ROW_PITCH
-            row2_y = anchor_y + ROW_PITCH
-            for did, item in right_half:
-                item.setPos(self.editor._snap_value(x), row2_y)
-                x += pitch
+            for did in device_ids:
+                item = self.editor.device_items.get(did)
+                if item and hasattr(item, "set_match_highlight"):
+                    item.set_match_highlight(color)
+                    
+            self.chat_panel._append_message(
+                "AI", 
+                f"Successfully applied {technique.replace('_', ' ')} matching.\n"
+                "✓ Analytical Audit: All centroids aligned at grid center.",
+                "#e8f4fd", "#1a1a2e"
+            )
 
-        # Register as a matched group
-        group_ids = [did for did, _ in items]
-        self._matched_groups.append({
-            "ids": group_ids,
-            "technique": technique,
-        })
+        except Exception as e:
+            # Failure: Highlight in RED as requested
+            for did in device_ids:
+                item = self.editor.device_items.get(did)
+                if item and hasattr(item, "set_match_highlight"):
+                    item.set_match_highlight(QColor("#FF5252")) # Red
+            
+            self.chat_panel._append_message(
+                "AI", f"Matching Failed: {str(e)}\nCentroids misaligned!", "#fde8e8", "#a00"
+            )
 
-        # Set visual indicator — color the matched devices
-        match_color = QColor("#4FC3F7") if technique == "interdigitated" else QColor("#AED581")
-        for did, item in items:
-            if hasattr(item, "set_match_highlight"):
-                item.set_match_highlight(match_color)
-
-        self.editor.resolve_overlaps(anchor_ids=group_ids)
         self._sync_node_positions()
 
-        tech_label = "Interdigitated (ABBA)" if technique == "interdigitated" else "Common-Centroid"
+    def _calculate_and_draw_centroids(self, device_ids, technique):
+        """Calculates centroids for each device group and draws crosshairs (+) in GUI."""
+        # 1. Group by parent
+        import re as _re
+        parent_map = {}
+        for did in device_ids:
+            m = _re.match(r'^([A-Za-z]+\d+)', did)
+            p = m.group(1) if m else did
+            if p not in parent_map: parent_map[p] = []
+            parent_map[p].append(did)
+            
+        markers = []
+        colors = [QColor("#4FC3F7"), QColor("#CE93D8"), QColor("#AED581"), QColor("#FFD54F")]
+        
+        for i, (parent, ids) in enumerate(parent_map.items()):
+            sum_x, sum_y = 0.0, 0.0
+            for did in ids:
+                item = self.editor.device_items.get(did)
+                if item:
+                    # Use center of the item
+                    br = item.boundingRect()
+                    pos = item.pos()
+                    sum_x += pos.x() + br.width() / 2.0
+                    sum_y += pos.y() + br.height() / 2.0
+            
+            avg_x = sum_x / len(ids)
+            avg_y = sum_y / len(ids)
+            
+            markers.append({
+                'x': avg_x, 
+                'y': avg_y, 
+                'color': colors[i % len(colors)],
+                'label': parent
+            })
+            
+        # Draw on editor
+        self.editor.set_centroid_markers(markers)
+
+    # -------------------------------------------------
+
+
+    # -------------------------------------------------
+    # Matched Group Helpers
+    # -------------------------------------------------
+    def _is_device_locked(self, device_id):
+        """Check if a device belongs to ANY matched group."""
+        for group in self._matched_groups:
+            if device_id in group["ids"]:
+                return True
+        return False
+
+    def _get_device_group(self, device_id):
+        """Return the matched group dict containing device_id, or None."""
+        for group in self._matched_groups:
+            if device_id in group["ids"]:
+                return group
+        return None
+
+    def _move_matched_group_as_block(self, group, target_x, target_y):
+        """Move an entire matched group so that the top-left corner lands at (target_x, target_y).
+
+        All devices shift by the same delta, preserving the internal pattern.
+        Returns the number of devices moved.
+        """
+        # Find current bounding box of the group
+        positions = []
+        for gid in group["ids"]:
+            item = self.editor.device_items.get(gid)
+            if item:
+                positions.append((gid, item, item.pos().x(), item.pos().y()))
+
+        if not positions:
+            return 0
+
+        cur_min_x = min(p[2] for p in positions)
+        cur_min_y = min(p[3] for p in positions)
+        dx = target_x - cur_min_x
+        dy = target_y - cur_min_y
+
+        if abs(dx) < 1e-9 and abs(dy) < 1e-9:
+            return 0
+
+        # Move every group member by (dx, dy)
+        for gid, item, old_x, old_y in positions:
+            item.setPos(old_x + dx, old_y + dy)
+
+        return len(positions)
+
+    def _on_unlock_matched_group(self):
+        """Unlock / dissolve matched groups for the currently selected devices."""
+        selected = self.editor.selected_device_ids()
+        if not selected:
+            self.chat_panel._append_message(
+                "AI",
+                "Select devices from a matched group to unlock.",
+                "#fde8e8",
+                "#a00",
+            )
+            return
+
+        # Find all groups that contain any selected device
+        groups_to_remove = []
+        for group in self._matched_groups:
+            for sid in selected:
+                if sid in group["ids"]:
+                    groups_to_remove.append(group)
+                    break
+
+        if not groups_to_remove:
+            self.chat_panel._append_message(
+                "AI",
+                "None of the selected devices are in a matched group.",
+                "#fde8e8",
+                "#a00",
+            )
+            return
+
+        self._push_undo()
+
+        dissolved_count = 0
+        for group in groups_to_remove:
+            # Clear visual highlights
+            for gid in group["ids"]:
+                item = self.editor.device_items.get(gid)
+                if item and hasattr(item, "clear_match_highlight"):
+                    item.clear_match_highlight()
+            # Remove from registry
+            if group in self._matched_groups:
+                self._matched_groups.remove(group)
+                dissolved_count += 1
+
+        tech_label = groups_to_remove[0].get("technique", "unknown") if groups_to_remove else "unknown"
+        total_devs = sum(len(g["ids"]) for g in groups_to_remove)
         self.chat_panel._append_message(
             "AI",
-            f"✅ Matched {len(group_ids)} devices as **{tech_label}** block.\n"
-            f"Devices: {', '.join(group_ids)}\n"
-            f"These devices are now a fixed group.",
-            "#e8f5e9",
-            "#2e7d32",
+            f"🔓 Unlocked {dissolved_count} matched group(s) ({total_devs} devices).\n"
+            f"These devices can now be moved individually.",
+            "#fff3e0",
+            "#e65100",
         )
 
     def _apply_row_col_to_selected(self):
@@ -2255,7 +2377,7 @@ class MainWindow(QMainWindow):
     def _load_example(self, sp_path, oas_path):
         """Helper to quickly load an example without showing the import dialog."""
         self.overlay.show_message(f"Loading {os.path.basename(sp_path)}...")
-        self._import_worker = GenericWorker(self._run_parser_pipeline, sp_path, oas_path)
+        self._import_worker = GenericWorker(self._run_parser_pipeline, sp_path, oas_path, True)
         self._import_worker.finished.connect(lambda data: self._on_import_completed(data, sp_path))
         self._import_worker.error.connect(self._on_import_error)
         self._import_worker.start()
@@ -2268,10 +2390,11 @@ class MainWindow(QMainWindow):
 
         sp_path = dlg.sp_path
         oas_path = dlg.oas_path
+        abutment_enabled = dlg.is_abutment_enabled()
 
         self.overlay.show_message("Parsing design files...")
         
-        self._import_worker = GenericWorker(self._run_parser_pipeline, sp_path, oas_path)
+        self._import_worker = GenericWorker(self._run_parser_pipeline, sp_path, oas_path, abutment_enabled)
         self._import_worker.finished.connect(lambda data: self._on_import_completed(data, sp_path))
         self._import_worker.error.connect(self._on_import_error)
         self._import_worker.start()
@@ -2365,6 +2488,18 @@ class MainWindow(QMainWindow):
         abut_label = "with abutment" if abutment_enabled else "no abutment"
         self.overlay.show_message(f"Running AI initial placement ({model_choice}, {abut_label})...")
 
+        # ── Save locked group positions before AI runs ──────────────
+        self._saved_locked_positions = {}
+        for group in self._matched_groups:
+            for gid in group["ids"]:
+                node = next((n for n in self.nodes if n.get("id") == gid), None)
+                if node:
+                    geo = node.get("geometry", {})
+                    self._saved_locked_positions[gid] = {
+                        "x": geo.get("x", 0),
+                        "y": geo.get("y", 0),
+                    }
+
         self._ai_worker = GenericWorker(self._run_ai_initial_placement, data, model_choice, submodel)
         self._ai_worker.finished.connect(self._on_ai_placement_completed)
         self._ai_worker.error.connect(self._on_ai_placement_error)
@@ -2374,6 +2509,17 @@ class MainWindow(QMainWindow):
     def _on_ai_placement_completed(self, data):
         self.overlay.hide_overlay()
         
+        # ── Restore locked matched-group positions ──────────────────
+        saved = getattr(self, "_saved_locked_positions", {})
+        if saved and "nodes" in data:
+            for node in data["nodes"]:
+                nid = node.get("id")
+                if nid in saved:
+                    node["geometry"]["x"] = saved[nid]["x"]
+                    node["geometry"]["y"] = saved[nid]["y"]
+            restored_count = len(saved)
+            print(f"[MATCH] Restored {restored_count} locked device positions after AI placement")
+
         # Save the placement JSON
         if self._current_file:
             base = os.path.splitext(self._current_file)[0]
@@ -2391,9 +2537,27 @@ class MainWindow(QMainWindow):
         # Load the updated placement into the GUI
         self._load_from_data_dict(data, out_path)
 
+        # ── Re-apply matched group visual highlights ───────────────
+        for group in self._matched_groups:
+            technique = group.get("technique", "interdigitated")
+            if technique == "interdigitated":
+                color = QColor("#4FC3F7")
+            elif technique == "common_centroid_2d":
+                color = QColor("#CE93D8")
+            else:
+                color = QColor("#AED581")
+            for gid in group["ids"]:
+                item = self.editor.device_items.get(gid)
+                if item and hasattr(item, "set_match_highlight"):
+                    item.set_match_highlight(color)
+
+        locked_msg = ""
+        if saved:
+            locked_msg = f"\n🔒 {len(saved)} matched devices preserved in place."
+
         self.chat_panel._append_message(
             "AI",
-            f"AI initial placement complete!\n"
+            f"AI initial placement complete!{locked_msg}\n"
             f"Saved to: {os.path.basename(out_path)}\n"
             f"You can now edit the layout, swap devices, or chat with the AI.",
             "#e8f4fd", "#1a1a2e",
@@ -2407,7 +2571,7 @@ class MainWindow(QMainWindow):
         )
 
     @staticmethod
-    def _run_parser_pipeline(sp_path, oas_path=""):
+    def _run_parser_pipeline(sp_path, oas_path="", abutment_enabled=True):
         """
         Run the full parser pipeline:
           1. Parse SPICE netlist (with block detection)
@@ -2486,9 +2650,9 @@ class MainWindow(QMainWindow):
                     "height":      inst.get("height", ROW_HEIGHT_UM),
                     "orientation": inst.get("orientation", "R0"),
                 }
-                # Carry OAS abutment state
-                abut_l = inst.get("abut_left",  False)
-                abut_r = inst.get("abut_right", False)
+                # Carry OAS abutment state (only if enabled)
+                abut_l = inst.get("abut_left",  False) if abutment_enabled else False
+                abut_r = inst.get("abut_right", False) if abutment_enabled else False
                 if abut_l or abut_r:
                     abut_info = {"abut_left": abut_l, "abut_right": abut_r}
 
@@ -3269,6 +3433,17 @@ class MainWindow(QMainWindow):
                     )
                     return
 
+                # ── Lock guard: reject swap for locked devices ──
+                if self._is_device_locked(id_a) or self._is_device_locked(id_b):
+                    self.chat_panel._append_message(
+                        "AI",
+                        f"⚠️ Cannot swap — one or both devices ({id_a}, {id_b}) "
+                        f"are in a locked matched group. Unlock the group first.",
+                        "#fff3e0",
+                        "#e65100",
+                    )
+                    return
+
                 # Sync current canvas state into self.nodes
                 self._sync_node_positions()
                 if not _skip_undo:
@@ -3321,6 +3496,17 @@ class MainWindow(QMainWindow):
                     )
                     return
 
+                # ── Lock guard: reject abut for locked devices ──
+                if self._is_device_locked(id_a) or self._is_device_locked(id_b):
+                    self.chat_panel._append_message(
+                        "AI",
+                        f"⚠️ Cannot abut — one or both devices ({id_a}, {id_b}) "
+                        f"are in a locked matched group. Unlock the group first.",
+                        "#fff3e0",
+                        "#e65100",
+                    )
+                    return
+
                 # Sync current canvas state into self.nodes
                 self._sync_node_positions()
                 if not _skip_undo:
@@ -3364,7 +3550,28 @@ class MainWindow(QMainWindow):
                 if not _skip_undo:
                     self._push_undo()
 
-                # --- Move at data level ---
+                # ── Lock guard: move entire matched group as a block ──
+                group = self._get_device_group(dev_id)
+                if group:
+                    # Convert data-level coords to scene coords
+                    scale = self.editor.scale_factor
+                    target_scene_x = float(x) * scale
+                    target_scene_y = float(y) * scale
+                    n_moved = self._move_matched_group_as_block(
+                        group, target_scene_x, target_scene_y,
+                    )
+                    self._sync_node_positions()
+                    self._refresh_panels(compact=False)
+                    self.chat_panel._append_message(
+                        "AI",
+                        f"↕ Moved matched group ({n_moved} devices) as a block "
+                        f"to ({x}, {y}). Internal pattern preserved.",
+                        "#e8f4fd",
+                        "#1a1a2e",
+                    )
+                    return
+
+                # --- Move at data level (unlocked device) ---
                 node = next((n for n in self.nodes if n.get("id") == dev_id), None)
                 if node:
                     node["geometry"]["x"] = float(x)
@@ -3431,6 +3638,17 @@ class MainWindow(QMainWindow):
                         f"Abutment failed: device not found ({raw_a}, {raw_b}).",
                         "#fde8e8",
                         "#a00",
+                    )
+                    return
+
+                # ── Lock guard: reject abut for locked devices ──
+                if self._is_device_locked(id_a) or self._is_device_locked(id_b):
+                    self.chat_panel._append_message(
+                        "AI",
+                        f"⚠️ Cannot abut — one or both devices ({id_a}, {id_b}) "
+                        f"are in a locked matched group. Unlock the group first.",
+                        "#fff3e0",
+                        "#e65100",
                     )
                     return
 
