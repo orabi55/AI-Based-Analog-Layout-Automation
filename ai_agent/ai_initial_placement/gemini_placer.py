@@ -14,7 +14,8 @@ from ai_agent.ai_initial_placement.placer_utils import (
     sanitize_json, _ensure_placement_dict, _build_net_adjacency,
     _build_device_inventory, _build_block_info, _validate_placement,
     _normalise_coords, _restore_coords, generate_vlsi_prompt,
-    _format_abutment_candidates, _heal_abutment_positions
+    _format_abutment_candidates, _heal_abutment_positions,
+    _force_abutment_spacing
 )
 
 from ai_agent.ai_initial_placement.finger_grouper import (
@@ -147,6 +148,10 @@ def gemini_generate_placement(input_json: str, output_json: str):
             candidates = graph_data.get("abutment_candidates", [])
             expanded_nodes = _heal_abutment_positions(expanded_nodes, candidates,
                                                        no_abutment=no_abutment)
+            
+            # FAILSAFE: Force correct abutment spacing if healing didn't work
+            if not no_abutment:
+                expanded_nodes = _force_abutment_spacing(expanded_nodes, candidates)
 
             # Validate against original finger-level nodes
             val_errors = _validate_placement(norm_nodes, expanded_nodes)

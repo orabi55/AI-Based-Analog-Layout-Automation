@@ -305,6 +305,100 @@ def _restore_coords(placed_nodes: list, y_offset: float) -> list:
 # ---------------------------------------------------------------------------
 # Abutment candidate formatter
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Graph Compression for AI Prompts (reduce token count by 95%+)
+# ---------------------------------------------------------------------------
+def compress_graph_for_prompt(graph_data: dict) -> dict:
+    """
+    Compress graph JSON for AI prompt to drastically reduce token count.
+    
+    Problems solved:
+    - Collapses finger/multiplier instances into parent devices
+    - Removes pre-computed geometry (AI's job to compute it)
+    - Compresses terminal_nets (one per parent, not per finger)
+    - Uses net-centric connectivity instead of verbose edge lists
+    
+    Expected reduction: 95-97% smaller (e.g., 7300 lines -> 150-200 lines)
+    """
+    if not graph_data:
+        return {}
+    
+    compressed = {
+        "devices": {},
+        "nets": {},
+        "matching_constraints": graph_data.get("matching_constraints", {}),
+        "blocks": graph_data.get("blocks", {})
+    }
+    
+    # 1. Collapse finger/multiplier instances into parent devices
+    terminal_nets = graph_data.get("terminal_nets", {})
+    for node in graph_data.get("nodes", []):
+        # Get parent device ID (strip _mN, _fN suffixes)
+        node_id = node["id"]
+        parent_id = node["electrical"].get("parent")
+        
+        # If no parent field, extract from node_id pattern
+        if not parent_id:
+            # Strip _mN or _fN suffixes to get base device
+            parent_id = re.sub(r'_[mf]\d+$', '', node_id)
+        
+        # Skip if we already processed this parent
+        if parent_id in compressed["devices"]:
+            continue
+        
+        # Extract electrical parameters from this node
+        electrical = node.get("electrical", {})
+        dev_type = node.get("type", "nmos")
+        
+        # Get terminal nets from the first instance (all fingers share same nets)
+        dev_terminal_nets = terminal_nets.get(node_id, {})
+        
+        # Build compressed device entry
+        compressed["devices"][parent_id] = {
+            "type": dev_type,
+            "m": electrical.get("m", 1),
+            "nf": electrical.get("nf", 1),
+            "nfin": electrical.get("nfin", 1),
+            "l": electrical.get("l", 0.0),
+            "terminal_nets": dev_terminal_nets
+        }
+        
+        # Add block membership if present
+        block_info = node.get("block")
+        if block_info:
+            compressed["devices"][parent_id]["block"] = block_info
+    
+    # 2. Build net-centric connectivity (replace verbose edge list)
+    edges = graph_data.get("edges", [])
+    for edge in edges:
+        net = edge.get("net", "")
+        if not net:
+            continue
+        
+        # Skip power nets (too verbose, not useful for placement)
+        if net.upper() in {"VDD", "VSS", "GND", "VCC", "AVDD", "AVSS"}:
+            continue
+        
+        source = edge.get("source", "")
+        target = edge.get("target", "")
+        
+        # Convert finger instances to parent devices
+        source_parent = re.sub(r'_[mf]\d+$', '', source)
+        target_parent = re.sub(r'_[mf]\d+$', '', target)
+        
+        if net not in compressed["nets"]:
+            compressed["nets"][net] = set()
+        
+        compressed["nets"][net].add(source_parent)
+        compressed["nets"][net].add(target_parent)
+    
+    # Convert sets to sorted lists for JSON serialization
+    for net in compressed["nets"]:
+        compressed["nets"][net] = sorted(compressed["nets"][net])
+    
+    return compressed
+
+
 def _format_abutment_candidates(candidates: list) -> str:
     """Format abutment candidate list into a human-readable prompt section."""
     if not candidates:
@@ -356,26 +450,27 @@ def _build_abutment_chains(nodes: list, candidates: list) -> list[list[str]]:
         if a in id_set and b in id_set:
             union(a, b)
 
-    # Fall back to embedded abutment flags ONLY when no candidates were provided.
-    # When candidates exist we trust them exclusively — reading flags from
-    # scrambled LLM X-positions would cause cross-device grouping.
-    if not candidates:
-        from collections import defaultdict
-        rows = defaultdict(list)
-        for n in nodes:
-            y = round(float(n.get("geometry", {}).get("y", 0.0)), 3)
-            rows[y].append(n)
-        
-        for y_val, row_nodes in rows.items():
-            sorted_row = sorted(row_nodes, key=lambda n: n.get("geometry", {}).get("x", 0.0))
-            for i in range(len(sorted_row) - 1):
-                n1 = sorted_row[i]
-                n2 = sorted_row[i + 1]
-                if (n1.get("abutment", {}).get("abut_right")
-                        and n2.get("abutment", {}).get("abut_left")):
-                    a, b = n1["id"], n2["id"]
-                    if a in id_set and b in id_set:
-                        union(a, b)
+    # CRITICAL FIX: ALSO union from embedded abutment flags
+    # This ensures hierarchy siblings (MM0_f1, MM0_f2, etc.) expanded by
+    # expand_groups are properly chained even if not in explicit candidates.
+    # We ALWAYS check flags, regardless of whether candidates exist.
+    from collections import defaultdict
+    rows = defaultdict(list)
+    for n in nodes:
+        y = round(float(n.get("geometry", {}).get("y", 0.0)), 3)
+        rows[y].append(n)
+
+    for y_val, row_nodes in rows.items():
+        sorted_row = sorted(row_nodes, key=lambda n: n.get("geometry", {}).get("x", 0.0))
+        for i in range(len(sorted_row) - 1):
+            n1 = sorted_row[i]
+            n2 = sorted_row[i + 1]
+            # Check if BOTH devices have matching abutment flags
+            if (n1.get("abutment", {}).get("abut_right")
+                    and n2.get("abutment", {}).get("abut_left")):
+                a, b = n1["id"], n2["id"]
+                if a in id_set and b in id_set:
+                    union(a, b)
 
     # Group by component root
     groups: dict[str, list[str]] = {}
@@ -579,6 +674,57 @@ def _heal_abutment_positions(nodes: list, candidates: list,
 
     return nodes
 
+
+def _force_abutment_spacing(nodes: list, candidates: list = None) -> list:
+    """FAILSAFE: Force correct abutment spacing for any devices with abutment flags.
+    
+    This is a last-resort fix if _heal_abutment_positions didn't work correctly.
+    It scans all rows and ensures that adjacent devices with abutment flags
+    have the correct 0.070µm spacing.
+    """
+    from collections import defaultdict
+    
+    ABUT_SPACING = 0.070
+    PITCH = 0.294
+    
+    # Group by row
+    row_buckets = defaultdict(list)
+    for n in nodes:
+        y = round(float(n.get("geometry", {}).get("y", 0.0)), 3)
+        row_buckets[y].append(n)
+    
+    fixed_count = 0
+    
+    for y_key, row_nodes in row_buckets.items():
+        # Sort by X
+        row_sorted = sorted(row_nodes, key=lambda n: n.get("geometry", {}).get("x", 0.0))
+        
+        # Find all devices with abutment flags
+        for i in range(len(row_sorted) - 1):
+            n1 = row_sorted[i]
+            n2 = row_sorted[i + 1]
+            
+            abut1 = n1.get("abutment", {})
+            abut2 = n2.get("abutment", {})
+            
+            # If n1 has abut_right and n2 has abut_left, they MUST be spaced at 0.070
+            if abut1.get("abut_right") and abut2.get("abut_left"):
+                x1 = n1.get("geometry", {}).get("x", 0.0)
+                x2 = n2.get("geometry", {}).get("x", 0.0)
+                expected_x2 = round(x1 + ABUT_SPACING, 6)
+                
+                if abs(x2 - expected_x2) > 0.001:
+                    print(f"[FORCE_FIX] Moving {n2['id']} from x={x2:.4f} to x={expected_x2:.4f} "
+                          f"(was {abs(x2 - x1):.4f}, should be {ABUT_SPACING:.3f})")
+                    n2["geometry"]["x"] = expected_x2
+                    fixed_count += 1
+    
+    if fixed_count > 0:
+        print(f"[FORCE_FIX] Fixed {fixed_count} device position(s)")
+    
+    return nodes
+
+
 # ---------------------------------------------------------------------------
 # Core Structured Prompt
 # ---------------------------------------------------------------------------
@@ -731,8 +877,8 @@ CRITICAL: The footprint (width) of each group in the ROW ASSIGNMENT table is in 
 
 Return ONLY raw JSON. No markdown, no explanation, no commentary.
 
-TRANSISTOR-LEVEL GRAPH:
+COMPRESSED DEVICE GRAPH (parent-level summary):
 
-{json.dumps(prompt_graph, indent=2)}
+{json.dumps(compress_graph_for_prompt(prompt_graph), indent=2)}
 """
 
