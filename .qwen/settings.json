@@ -8,7 +8,14 @@
       "Bash(del *)",
       "Bash(git add *)",
       "Bash(git commit *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(move *)",
+      "Bash(rmdir *)",
+      "Bash(ollama *)",
+      "Bash(git pull *)",
+      "Bash(git merge *)",
+      "Bash(git reset *)",
+      "Bash(git clean *)"
     ]
   },
   "$version": 3
