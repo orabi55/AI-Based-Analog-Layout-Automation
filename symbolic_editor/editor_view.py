@@ -5,6 +5,7 @@ grid-snapped editing.
 """
 
 import math
+from typing import List, Dict
 
 from PySide6.QtWidgets import (
     QGraphicsView,
@@ -153,6 +154,7 @@ class SymbolicEditor(QGraphicsView):
         self._block_items = []       # list of actual BlockItem instances (symbol view)
         self._block_overlays_visible = True
         self._view_level = "symbol"   # 'symbol' or 'transistor'
+        self._centroid_items = []
 
         # Block colors
         # --- Fix 2: Single uniform color for ALL blocks ---
@@ -1768,6 +1770,37 @@ class SymbolicEditor(QGraphicsView):
     # -------------------------------------------------
     # Right-click context menu — per-device abutment
     # -------------------------------------------------
+    def set_centroid_markers(self, markers: List[Dict]):
+        """
+        Render crosshair (+) markers at given positions.
+        markers: [{'x': 100, 'y': 200, 'color': QColor, 'label': 'M0'}]
+        """
+        for item in self._centroid_items:
+            self.scene.removeItem(item)
+        self._centroid_items.clear()
+        
+        for m in markers:
+            x, y = m['x'], m['y']
+            color = m.get('color', QColor(Qt.GlobalColor.white))
+            
+            size = 15
+            # Vertical line
+            v_line = self.scene.addLine(x, y - size, x, y + size, QPen(color, 2))
+            v_line.setZValue(100)
+            self._centroid_items.append(v_line)
+            # Horizontal line
+            h_line = self.scene.addLine(x - size, y, x + size, y, QPen(color, 2))
+            h_line.setZValue(100)
+            self._centroid_items.append(h_line)
+            
+            # Label
+            if 'label' in m:
+                txt = self.scene.addSimpleText(m['label'])
+                txt.setBrush(QBrush(color))
+                txt.setPos(x + 5, y + 5)
+                txt.setZValue(100)
+                self._centroid_items.append(txt)
+
     def contextMenuEvent(self, event):
         """Show a right-click menu to manually toggle abutment on a device."""
         scene_pos = self.mapToScene(event.pos())

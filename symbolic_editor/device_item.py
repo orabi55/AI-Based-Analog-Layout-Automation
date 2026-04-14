@@ -38,6 +38,8 @@ class DeviceItem(QGraphicsRectItem):
         # Manual abutment override (user-set, amber stripe)
         self._manual_abut_left  = False
         self._manual_abut_right = False
+        # Match / lock highlight color (set when device is in a matched group)
+        self._match_color = None   # QColor or None
 
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
@@ -125,6 +127,21 @@ class DeviceItem(QGraphicsRectItem):
         self._manual_abut_left  = bool(left)
         self._manual_abut_right = bool(right)
         self.update()
+
+    # ── Match / Lock highlight ───────────────────────────────────────
+    def set_match_highlight(self, color: QColor):
+        """Set a persistent colour border to indicate this device is in a matched group."""
+        self._match_color = QColor(color) if color else None
+        self.update()
+
+    def clear_match_highlight(self):
+        """Remove the matched-group highlight."""
+        self._match_color = None
+        self.update()
+
+    def is_match_locked(self) -> bool:
+        """Return True if this device is visually marked as part of a matched group."""
+        return self._match_color is not None
 
     def flip_horizontal(self):
         """Mirror device left/right."""
@@ -359,6 +376,24 @@ class DeviceItem(QGraphicsRectItem):
             painter.setPen(sel_pen)
             painter.setBrush(QBrush(QColor(74, 144, 217, 35)))
             painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 2, 2)
+
+        # ── Matched-group (lock) highlight ───────────────────────────
+        if self._match_color is not None:
+            lock_pen = QPen(self._match_color, 2.5, Qt.PenStyle.SolidLine)
+            painter.setPen(lock_pen)
+            fill = QColor(self._match_color)
+            fill.setAlpha(28)
+            painter.setBrush(QBrush(fill))
+            painter.drawRoundedRect(rect.adjusted(0.5, 0.5, -0.5, -0.5), 3, 3)
+            # Lock icon badge (top-right corner)
+            badge_size = max(8, min(14, int(w * 0.10)))
+            bx = x0 + w - badge_size - 2
+            by = y0 + 2
+            badge_font = QFont("Segoe UI", badge_size - 2, QFont.Weight.Bold)
+            painter.setFont(badge_font)
+            painter.setPen(self._match_color)
+            painter.drawText(QRectF(bx, by, badge_size, badge_size),
+                             Qt.AlignmentFlag.AlignCenter, "🔒")
 
     def terminal_anchors(self):
         """Return scene positions for S, G, D terminal centers."""
