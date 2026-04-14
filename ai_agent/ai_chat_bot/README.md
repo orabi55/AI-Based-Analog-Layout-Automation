@@ -259,30 +259,38 @@ A comprehensive knowledge base injected **ONLY** into the Analyzer Agent. Covers
 ```mermaid
 flowchart TD
     A[User Input] --> B[Classifier Agent\nGatekeeper]
-    
+
     B -->|Regex Match| C{Intent?}
     B -->|LLM Call| C
-    
+
     C -->|chat| D[Chat Agent\nConversational Reply]
     C -->|question| D
     C -->|concrete| E[CodeGen Agent\nGenerate CMD Blocks]
     C -->|abstract| F[Analyzer Agent\nTopology ID + Strategies]
-    
+
     D --> G[Return Reply Text\nNo Commands]
     E --> H[Return Reply +\n[CMD] Blocks]
-    
+
     F --> I[Refiner Agent\nFormat Numbered Options]
     I --> J[Present Options to User\nState: WAITING]
-    
+
     J --> K[User Selects/Modifies\nOption]
     K --> L[Adapter Agent\nMap to Device IDs]
     L --> E
-    
+
     H --> M[Parse [CMD] Blocks\nin ChatPanel]
     M --> N[Execute Commands\non Layout Canvas]
-    
+
     G --> O[Display in Chat]
     N --> O
+    
+    classDef agent fill:#f9f0ff,stroke:#cc99ff,stroke-width:2px,color:#000
+    classDef io fill:#e1f5fe,stroke:#03a9f4,stroke-width:2px,color:#000
+    classDef decision fill:#fff3e0,stroke:#ffb74d,stroke-width:2px,color:#000
+    
+    class B,D,E,F,I,L agent
+    class A,G,H,J,K,M,N,O io
+    class C decision
 ```
 
 ---
