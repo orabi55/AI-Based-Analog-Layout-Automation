@@ -41,6 +41,14 @@ class DeviceItem(QGraphicsRectItem):
         # Match / lock highlight color (set when device is in a matched group)
         self._match_color = None   # QColor or None
 
+        # ── Hierarchical group movement ──
+        # These are set by the editor when loading a layout.
+        # _parent_id: the electrical parent (e.g. "MM0" for "MM0_f1")
+        # _sibling_group: list of other DeviceItem references sharing the same parent
+        self._parent_id = None
+        self._sibling_group = []    # populated by editor after all items are created
+        self._propagating_move = False  # guard against recursive move propagation
+
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
@@ -200,15 +208,32 @@ class DeviceItem(QGraphicsRectItem):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
+        old_pos = self.pos()
         super().mouseMoveEvent(event)
-        if not self._drag_active and self.pos() != self._drag_start_pos:
+        new_pos = self.pos()
+
+        if not self._drag_active and new_pos != self._drag_start_pos:
             self._drag_active = True
             self.signals.drag_started.emit()
+
+        # ── Hierarchical group movement ──
+        # If this item is part of a parent group, propagate the same
+        # delta to all siblings so the entire transistor moves as one.
+        if self._sibling_group and not self._propagating_move:
+            dx = new_pos.x() - old_pos.x()
+            dy = new_pos.y() - old_pos.y()
+            if dx != 0 or dy != 0:
+                for sibling in self._sibling_group:
+                    if sibling is not self:
+                        sibling._propagating_move = True
+                        sibling.moveBy(dx, dy)
+                        sibling._propagating_move = False
 
     def mouseReleaseEvent(self, event):
         if self._drag_active:
             self._drag_active = False
             self.signals.drag_finished.emit()
+        self._propagating_move = False
         super().mouseReleaseEvent(event)
 
     # --------------------------------------------------

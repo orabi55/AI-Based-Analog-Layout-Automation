@@ -1,0 +1,123 @@
+{
+  "metadata": {
+    "pdk": "generic",
+    "abstraction_level": "device"
+  },
+  "devices": {
+    "MM2": {
+      "type": "nmos",
+      "params": {
+        "l": 1.4e-08,
+        "nf": 4,
+        "nfin": 2.0
+      },
+      "nets": {
+        "G": "C"
+      },
+      "geometry": {
+        "x": 0.735,
+        "y": -1.617,
+        "w": 2.94,
+        "h": 0.568,
+        "orientation": "R0"
+      }
+    },
+    "MM1": {
+      "type": "nmos",
+      "params": {
+        "l": 1.4e-08,
+        "nf": 8,
+        "nfin": 2.0
+      },
+      "nets": {
+        "G": "B",
+        "D": "C"
+      },
+      "geometry": {
+        "x": 0.441,
+        "y": -1.617,
+        "w": 3.528,
+        "h": 0.568,
+        "orientation": "R0"
+      }
+    },
+    "MM0": {
+      "type": "nmos",
+      "params": {
+        "l": 1.4e-08,
+        "nf": 16,
+        "nfin": 2.0
+      },
+      "nets": {
+        "G": "C"
+      },
+      "geometry": {
+        "x": 0.147,
+        "y": -1.617,
+        "w": 4.116,
+        "h": 0.568,
+        "orientation": "R0"
+      }
+    },
+    "MM5": {
+      "type": "pmos",
+      "params": {
+        "l": 1.4e-08,
+        "nf": 4,
+        "nfin": 2.0
+      },
+      "nets": {
+        "G": "X"
+      },
+      "geometry": {
+        "x": 0.735,
+        "y": -0.588,
+        "w": 2.94,
+        "h": 0.568,
+        "orientation": "R0"
+      }
+    },
+    "MM4": {
+      "type": "pmos",
+      "params": {
+        "l": 1.4e-08,
+        "nf": 8,
+        "nfin": 2.0
+      },
+      "nets": {
+        "G": "X",
+        "D": "Y"
+      },
+      "geometry": {
+        "x": 0.441,
+        "y": -0.588,
+        "w": 3.528,
+        "h": 0.568,
+        "orientation": "R0"
+      }
+    },
+    "MM3": {
+      "type": "pmos",
+      "params": {
+        "l": 1.4e-08,
+        "nf": 16,
+        "nfin": 2.0
+      },
+      "nets": {
+        "G": "X"
+      },
+      "geometry": {
+        "x": 0.147,
+        "y": -0.588,
+        "w": 4.116,
+        "h": 0.568,
+        "orientation": "R0"
+      }
+    }
+  },
+  "topologies": [],
+  "decisions_cache": {
+    "last_known_good_placement": {},
+    "user_locked_constraints": []
+  }
+}

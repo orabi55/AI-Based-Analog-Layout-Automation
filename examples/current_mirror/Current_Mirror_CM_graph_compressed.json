@@ -58,6 +58,42 @@
                 "G": "C",
                 "S": "gnd"
             }
+        },
+        "MM5": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 2.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "Z",
+                "G": "X",
+                "S": "VDD"
+            }
+        },
+        "MM4": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 2.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "Y",
+                "G": "X",
+                "S": "VDD"
+            }
+        },
+        "MM3": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 2.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "X",
+                "G": "X",
+                "S": "VDD"
+            }
         }
     },
     "connectivity": {
@@ -69,6 +105,14 @@
             ],
             "B": [
                 "MM1"
+            ],
+            "X": [
+                "MM3",
+                "MM4",
+                "MM5"
+            ],
+            "Y": [
+                "MM4"
             ]
         }
     },
