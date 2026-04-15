@@ -117,12 +117,108 @@ class ChatPanel(QWidget):
     # Layout context
     # -----------------------------------------
     def set_layout_context(self, nodes, edges=None, terminal_nets=None):
-        """Store the layout data so the LLM can reference it."""
+        """Store the layout data so the LLM can reference it.
+
+        Performs inline Device/Block abstraction so the AI sees
+        hierarchical blocks instead of individual fingers.
+        This is the architectural fix: Python = Fingers, AI = Blocks.
+        """
+        # Keep raw context for internal command execution
         self._layout_context = {"nodes": nodes}
         if edges:
             self._layout_context["edges"] = edges
         if terminal_nets:
             self._layout_context["terminal_nets"] = terminal_nets
+
+        # ── Inline abstraction: Finger → Device → Block ──
+        # Group by parent, compute device bboxes, detect matched groups
+        from collections import defaultdict
+        devices = {}
+        for node in (nodes or []):
+            elec = node.get("electrical", {})
+            parent = elec.get("parent")
+            if not parent:
+                # Standalone device (no fingers) — keep as-is
+                nid = node.get("id", "unknown")
+                geo = node.get("geometry", {})
+                devices[nid] = {
+                    "type": node.get("type", "?"),
+                    "nf": elec.get("nf", 1),
+                    "x": geo.get("x", 0),
+                    "y": geo.get("y", 0),
+                    "w": geo.get("width", 0),
+                    "h": geo.get("height", 0),
+                    "nets": (terminal_nets or {}).get(nid, {}),
+                }
+                continue
+
+            if parent not in devices:
+                geo = node.get("geometry", {})
+                devices[parent] = {
+                    "type": node.get("type", "?"),
+                    "nf": 0,
+                    "_min_x": float('inf'),
+                    "_min_y": float('inf'),
+                    "_max_xw": float('-inf'),
+                    "_max_h": float('-inf'),
+                    "nets": {},
+                    "_first_finger": node.get("id"),
+                }
+            d = devices[parent]
+            d["nf"] += 1
+            geo = node.get("geometry", {})
+            d["_min_x"] = min(d["_min_x"], geo.get("x", 0))
+            d["_min_y"] = min(d["_min_y"], geo.get("y", 0))
+            d["_max_xw"] = max(d["_max_xw"],
+                               geo.get("x", 0) + geo.get("width", 0))
+            d["_max_h"] = max(d["_max_h"], geo.get("height", 0))
+
+        # Finalize geometry and extract nets
+        for did, d in devices.items():
+            if "_min_x" in d:
+                d["x"] = round(d.pop("_min_x"), 4)
+                d["y"] = round(d.pop("_min_y"), 4)
+                d["w"] = round(d.pop("_max_xw") - d["x"], 4)
+                d["h"] = round(d.pop("_max_h"), 4)
+                ff = d.pop("_first_finger", None)
+                if terminal_nets and ff and ff in terminal_nets:
+                    d["nets"] = terminal_nets[ff]
+
+        # Detect matched blocks (shared G+S nets)
+        gs_groups = defaultdict(list)
+        for did, d in devices.items():
+            g_net = d.get("nets", {}).get("G")
+            s_net = d.get("nets", {}).get("S")
+            if g_net and s_net:
+                gs_groups[(g_net, s_net)].append(did)
+
+        blocks = []
+        assigned = set()
+        for (g_net, s_net), members in gs_groups.items():
+            if len(members) > 1:
+                bx = min(devices[m]["x"] for m in members)
+                by = min(devices[m]["y"] for m in members)
+                bxw = max(devices[m]["x"] + devices[m]["w"] for m in members)
+                byh = max(devices[m]["y"] + devices[m]["h"] for m in members)
+                blocks.append({
+                    "id": f"Block_{g_net}_{s_net}",
+                    "status": "LOCKED",
+                    "behavior": "rigid",
+                    "members": sorted(members),
+                    "x": round(bx, 4), "y": round(by, 4),
+                    "w": round(bxw - bx, 4), "h": round(byh - by, 4),
+                })
+                assigned.update(members)
+
+        # Build the abstracted context for the AI
+        abstracted = {
+            "devices": devices,
+            "blocks": blocks,
+            "free_devices": [d for d in devices if d not in assigned],
+            "total_original_fingers": len(nodes or []),
+        }
+        self._layout_context["_abstracted"] = abstracted
+
         # Forward to multi-agent worker so orchestrator has fresh context
         self._llm_worker.set_layout_context(self._layout_context)
 

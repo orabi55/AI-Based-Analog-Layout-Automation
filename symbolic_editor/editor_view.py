@@ -494,6 +494,14 @@ class SymbolicEditor(QGraphicsView):
                 nodes_list = [m[0] for m in members]
                 items_list = [m[1] for m in members]
 
+                # ── Pass 1: Wire up parent-level group movement ──
+                # Every finger of this parent knows about ALL its siblings.
+                # Dragging any one finger will move the entire transistor.
+                for item in items_list:
+                    if hasattr(item, '_parent_id'):
+                        item._parent_id = parent_name
+                        item._sibling_group = list(items_list)
+
                 # Determine hierarchy structure
                 has_mult = any(
                     n.get("electrical", {}).get("multiplier_index") is not None
@@ -638,6 +646,87 @@ class SymbolicEditor(QGraphicsView):
                 import traceback
                 traceback.print_exc()
                 continue
+
+        # Save for later re-wiring when set_terminal_nets arrives
+        self._last_parent_groups = parent_groups
+        self._last_raw_nodes = nodes
+
+        # ── Pass 2: Matched Group Rigid-Body Locking ──────────────────────
+        # If terminal_nets are already available, detect current mirrors.
+        # Also supports manual MATCHED_GROUPS fallback.
+        self._wire_matched_group_locking(parent_groups, nodes)
+
+    def _wire_matched_group_locking(self, parent_groups, raw_nodes):
+        """Detect matched device groups and merge their sibling lists.
+
+        After this, dragging ANY finger from ANY device in a matched group
+        moves the ENTIRE group as one rigid body.
+
+        Detection methods (in priority order):
+          1. terminal_nets — auto-detect current mirrors (shared G+S)
+          2. Manual fallback — MATCHED_GROUPS dict (user-defined)
+        """
+        from collections import defaultdict
+
+        # ─── Method 1: Auto-detect from terminal_nets ────────────────
+        matched_sets = []  # list of sets of parent names
+
+        if hasattr(self, '_terminal_nets') and self._terminal_nets:
+            # Build parent→nets map: for each parent, get G and S nets
+            # from its first finger's terminal_nets entry
+            parent_gs = {}  # parent_name -> (G_net, S_net)
+            for parent_name, members in parent_groups.items():
+                for node, item in members:
+                    fid = node.get("id", "")
+                    tnets = self._terminal_nets.get(fid, {})
+                    if tnets.get("G") and tnets.get("S"):
+                        parent_gs[parent_name] = (tnets["G"], tnets["S"])
+                        break  # only need one finger to read nets
+
+            # Group parents sharing the same (G, S) nets
+            gs_groups = defaultdict(list)
+            for parent_name, (g, s) in parent_gs.items():
+                gs_groups[(g, s)].append(parent_name)
+
+            for (g_net, s_net), members in gs_groups.items():
+                if len(members) > 1:
+                    matched_sets.append(set(members))
+                    print(f"[MATCHED GROUP] Auto-detected: {members} "
+                          f"(shared G={g_net}, S={s_net})")
+
+        # ─── Method 2: Manual fallback for circuits without nets ─────
+        # Users can define this dict to hardcode matched groups
+        MANUAL_MATCHED_GROUPS = {
+            "Group_NMOS_Mirror": ["MM0", "MM1", "MM2"],
+            "Group_PMOS_Mirror": ["MM3", "MM4", "MM5"],
+        }
+        for group_name, members in MANUAL_MATCHED_GROUPS.items():
+            # Only add if all members exist in the current layout
+            if all(m in parent_groups for m in members):
+                matched_sets.append(set(members))
+                print(f"[MATCHED GROUP] Manual: {group_name} = {members}")
+
+        # ─── Merge sibling groups ────────────────────────────────────
+        for matched_parents in matched_sets:
+            # Collect ALL DeviceItems from all parents in this matched set
+            mega_group = []
+            for parent_name in matched_parents:
+                if parent_name in parent_groups:
+                    for node, item in parent_groups[parent_name]:
+                        if hasattr(item, '_sibling_group'):
+                            mega_group.append(item)
+
+            if len(mega_group) <= 1:
+                continue
+
+            # Replace the sibling_group of EVERY item in the matched set
+            # with the mega_group — so dragging any one item drags them all
+            for item in mega_group:
+                item._sibling_group = mega_group
+                item._match_locked = True  # flag for visual feedback
+
+            print(f"[MATCHED GROUP] Merged {len(mega_group)} items across "
+                  f"{len(matched_parents)} parents: {sorted(matched_parents)}")
 
     def _on_hierarchy_drag_finished(self, group):
         """After moving a hierarchy group, sync positions back to node data."""
@@ -1088,6 +1177,17 @@ class SymbolicEditor(QGraphicsView):
     def set_terminal_nets(self, terminal_nets):
         """Store terminal-net mapping: {dev_id: {'D': net, 'G': net, 'S': net}}"""
         self._terminal_nets = terminal_nets or {}
+
+        # ── Re-run matched group locking now that nets are available ──
+        # This fixes the timing bug: load_placement runs _build_hierarchy_groups
+        # before terminal_nets is set, so the auto-detection found nothing.
+        if (self._terminal_nets
+                and hasattr(self, '_last_parent_groups')
+                and self._last_parent_groups):
+            print("[TERMINAL NETS] Re-wiring matched groups with net data...")
+            self._wire_matched_group_locking(
+                self._last_parent_groups, self._last_raw_nodes)
+
         # Re-pack with net-aware adjacency — but NOT if compact was suppressed.
         if self._skip_compaction:
             self._skip_compaction = False

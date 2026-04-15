@@ -66,6 +66,17 @@ ANALOG_KB = """\
 - HIGH-FREQUENCY paths: minimise parasitic capacitance at sensitive nodes.
 - GUARD RINGS: For substrate noise isolation between analog and digital.
 - DUMMY DEVICES: Place at row edges to protect active devices from edge effects.
+
+## MATCHING PROTECTION RULE (CRITICAL)
+- If the layout data contains a "blocks" section with status "FIXED_INTERNAL",
+  those matched groups are PRE-ASSEMBLED by a specialized Python matching engine.
+- Treat them as RIGID BODIES. You may move the entire block by changing its
+  top-level x,y coordinates, but you are STRICTLY FORBIDDEN from:
+  * Moving individual fingers (_f1, _f2, etc.) inside these blocks.
+  * Changing the interdigitation style or internal arrangement.
+  * Rotating or flipping matched blocks unless specifically requested.
+- The AI's role for these blocks is FLOORPLANNER, not Designer.
+- Preserve all internal relative spacing and symmetry.
 """
 
 
@@ -161,8 +172,12 @@ def build_adapter_prompt(layout_context: dict | None) -> str:
         "2. Output a list of CONCRETE directives in plain English.\n"
         "   Example: 'Swap MM3 and MM5', 'Add 1 nmos dummy on the left'.\n"
         "3. Each directive must name real device IDs from the layout.\n"
-        "4. Do NOT generate [CMD] JSON blocks — the Code Generator "
+        "4. Do NOT generate [CMD] JSON blocks -- the Code Generator \n"
         "   will handle that.\n\n"
+        "MATCHING PROTECTION:\n"
+        "- Devices with a 'parent' field are inside FIXED_INTERNAL matched \n"
+        "  blocks. Do NOT suggest moving or rearranging individual devices \n"
+        "  within a matched group. You may suggest moving the entire block.\n\n"
     )
     prompt += _format_layout_context(layout_context)
     return prompt
@@ -215,6 +230,12 @@ def build_codegen_prompt(layout_context: dict | None) -> str:
         "- Write the [CMD] block FIRST, then 1-2 sentences confirming.\n"
         "- NEVER explain analog theory. NEVER hallucinate device IDs.\n"
         "- Only use device IDs that appear in the layout data below.\n\n"
+        "MATCHING PROTECTION (CRITICAL):\n"
+        "- If a device has a 'parent' field pointing to a block, it is inside\n"
+        "  a FIXED_INTERNAL matched group. DO NOT generate move/swap commands\n"
+        "  for individual devices inside a matched block.\n"
+        "- To move a matched group, move the BLOCK as a whole unit.\n"
+        "- NEVER change the internal arrangement of a matched block.\n\n"
     )
     prompt += _format_layout_context(layout_context)
     return prompt
@@ -264,18 +285,69 @@ def _compute_grid_info(layout_context: dict | None) -> dict:
 # Helper: format layout context into a compact text block
 # ─────────────────────────────────────────────────────────────────
 def _format_layout_context(layout_context: dict | None) -> str:
-    """Convert the layout context dict into a compact text summary."""
+    """Convert the layout context dict into a compact text summary.
+
+    Prefers the _abstracted hierarchy (devices + blocks) when available.
+    Falls back to the raw finger listing otherwise.
+    """
     if not layout_context:
         return "(No layout loaded)\n"
 
-    nodes         = layout_context.get("nodes",         [])
-    edges         = layout_context.get("edges",         [])
-    terminal_nets = layout_context.get("terminal_nets", {})
-    sp_file       = layout_context.get("sp_file_path",  "")
-
+    sp_file = layout_context.get("sp_file_path", "")
     lines = []
     if sp_file:
         lines.append(f"Active netlist: {Path(sp_file).name}")
+
+    # ── Use abstracted hierarchy if available ──
+    abstracted = layout_context.get("_abstracted")
+    if abstracted:
+        devices = abstracted.get("devices", {})
+        blocks = abstracted.get("blocks", [])
+        free_devs = abstracted.get("free_devices", [])
+        total_fingers = abstracted.get("total_original_fingers", 0)
+
+        lines.append(f"=== LAYOUT ({len(devices)} devices from "
+                     f"{total_fingers} fingers) ===")
+        lines.append("ROLE: You are the FLOORPLANNER. Python handled "
+                      "finger placement. You handle block placement.")
+
+        # List LOCKED blocks first
+        if blocks:
+            lines.append(f"\n--- LOCKED BLOCKS ({len(blocks)}) ---")
+            for b in blocks:
+                mids = ', '.join(b['members'])
+                lines.append(
+                    f"  {b['id']}: status={b['status']} behavior={b['behavior']} "
+                    f"members=[{mids}] "
+                    f"bbox=({b['x']:.4f},{b['y']:.4f},{b['w']:.4f}x{b['h']:.4f})"
+                )
+            lines.append("  >> RIGID: Move block x,y only. "
+                         "Internal arrangement is FROZEN.")
+
+        # Then list devices
+        lines.append(f"\n--- DEVICES ({len(devices)}) ---")
+        for did, d in sorted(devices.items()):
+            nets = d.get("nets", {})
+            net_parts = [f"{t}={nets[t]}" for t in ("D", "G", "S")
+                         if t in nets]
+            net_str = f"  nets({', '.join(net_parts)})" if net_parts else ""
+            locked = " [LOCKED]" if did not in free_devs else ""
+            lines.append(
+                f"  {did} ({d['type']}{locked}) nf={d['nf']} "
+                f"pos=({d['x']:.4f},{d['y']:.4f}) "
+                f"size=({d['w']:.4f}x{d['h']:.4f})"
+                f"{net_str}"
+            )
+
+        if free_devs:
+            lines.append(f"\nFree (movable) devices: {', '.join(free_devs)}")
+
+        return "\n".join(lines) + "\n"
+
+    # ── Fallback: raw finger listing ──
+    nodes         = layout_context.get("nodes",         [])
+    edges         = layout_context.get("edges",         [])
+    terminal_nets = layout_context.get("terminal_nets", {})
 
     lines.append(f"=== CURRENT LAYOUT ({len(nodes)} devices) ===")
     for n in nodes:
@@ -307,3 +379,4 @@ def _format_layout_context(layout_context: dict | None) -> str:
         lines.append(f"\nNets: {', '.join(all_nets)}")
 
     return "\n".join(lines) + "\n"
+
