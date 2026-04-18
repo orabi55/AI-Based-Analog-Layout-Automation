@@ -2,8 +2,14 @@
 Chat Panel — GUI widget for the AI assistant sidebar.
 
 Uses the Worker-Object Pattern: LLM inference runs on a dedicated
-QThread via ``LLMWorker``; the ChatPanel communicates with them
+QThread via ``OrchestratorWorker`` (multi-agent) or ``LLMWorker``
+(single-agent fallback); the ChatPanel communicates with them
 exclusively through Qt Signals/Slots.
+
+Keyword routing:
+  Words like "optimize", "improve", "auto-place", "fix drc", "reduce"
+  trigger the 4-stage OrchestratorWorker pipeline.
+  All other queries use the standard single-agent LLMWorker path.
 """
 
 import re
@@ -18,13 +24,33 @@ from PySide6.QtWidgets import (
     QPushButton,
     QLabel,
     QFrame,
-    QComboBox,
 )
-from PySide6.QtCore import Qt, Signal, QTimer, QThread
+from PySide6.QtCore import Qt, Signal, QTimer, QThread, Slot
 from PySide6.QtGui import QFont
 
-from ai_agent.ai_chat_bot.llm_worker import LLMWorker, build_system_prompt
+from ai_agent.ai_chat_bot.llm_worker import OrchestratorWorker, build_system_prompt
+from ai_agent.ai_chat_bot.cmd_utils import _extract_cmd_blocks
 from icons import icon_panel_toggle
+
+# ---------------------------------------------------------------------------
+# Keywords that trigger the multi-agent Orchestrator pipeline
+# ---------------------------------------------------------------------------
+_ORCHESTRATOR_KEYWORDS = re.compile(
+    r"\b("
+    r"optimi[sz]e|optimis|improve|auto.?place|auto.?layout|"
+    r"fix.?drc|drc.?fix|reduce.?crossings|reduce.?routing|"
+    r"rearrange|reorder|reorgani[sz]e|minimise|minimize|"
+    r"suggest.?placement|better.?placement|swap.?all|pipeline"
+    r")\b",
+    re.IGNORECASE,
+)
+
+_ORCHESTRATOR_STAGES = [
+    ("Topology Analyst",     "🔬 Stage 1/4 — Analysing circuit topology..."),
+    ("Placement Specialist", "📐 Stage 2/4 — Computing optimal placement..."),
+    ("DRC Critic",           "🔍 Stage 3/4 — Checking DRC violations..."),
+    ("Routing Pre-Viewer",   "🔀 Stage 4/4 — Previewing routing & crossings..."),
+]
 
 
 # -------------------------------------------------
@@ -69,14 +95,22 @@ class ChatPanel(QWidget):
     Signals:
         command_requested(dict): emitted when the AI response contains
             a [CMD]...[/CMD] block that was successfully parsed.
-        request_inference(str, list, str): dispatches to
-            LLM worker thread for chat.
+        request_inference(str, list): single-agent path — dispatches to
+            LLM worker thread for normal chat.
+        request_orchestrated(str, str): multi-agent path — dispatches to
+            OrchestratorWorker with (user_message, layout_context_json).
     """
 
     command_requested = Signal(dict)  # emits parsed command dicts
     toggle_requested = Signal()        # emitted when the user clicks the panel-toggle button
 
-    request_inference = Signal(str, list, str, str)
+    # Single-agent path (normal chat)
+    request_inference = Signal(str, list)
+    # Multi-agent path (orchestrator pipeline)
+    request_orchestrated = Signal(str, str, list)  # (user_message, layout_context_json, chat_history)
+    # Resume paths for LangGraph interrupts
+    request_resume_strategy = Signal(str)
+    request_resume_viewer = Signal(dict)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -85,18 +119,29 @@ class ChatPanel(QWidget):
         self._chat_history = []  # multi-turn: list of {"role", "content"}
         self._thinking_timer = None
         self._thinking_dots = 0
+        self._thinking_stage = 0          # which pipeline stage label to show
+        self._is_orchestrated = False     # True when orchestrator path is active
+        self._awaiting_strategy_resume = False
+        self._awaiting_visual_resume = False
 
-        # --- Worker-Object Pattern: QThread + LLMWorker ---
+        # --- Worker-Object Pattern: QThread + OrchestratorWorker ---
         self._worker_thread = QThread()
-        self._llm_worker = LLMWorker()
+        self._llm_worker = OrchestratorWorker()   # superset of LLMWorker
         self._llm_worker.moveToThread(self._worker_thread)
 
         # Single-agent path
         self.request_inference.connect(self._llm_worker.process_request)
+        # Multi-agent (orchestrator) path
+        self.request_orchestrated.connect(self._llm_worker.process_orchestrated_request)
+        self.request_resume_strategy.connect(self._llm_worker.resume_with_strategy)
+        self.request_resume_viewer.connect(self._llm_worker.resume_from_viewer)
         # Shared response signals back to GUI
         self._llm_worker.response_ready.connect(self._on_llm_response)
-        self._llm_worker.command_ready.connect(self.command_requested.emit)
         self._llm_worker.error_occurred.connect(self._on_llm_error)
+        
+        # Human-in-the-loop pause signal
+        self._llm_worker.topology_ready_for_review.connect(self._on_topology_review)
+        self._llm_worker.visual_viewer_signal.connect(self._on_visual_viewer_signal)  # reuse same handler for viewer interrupts
 
         # Start the worker thread's event loop
         self._worker_thread.start()
@@ -117,110 +162,12 @@ class ChatPanel(QWidget):
     # Layout context
     # -----------------------------------------
     def set_layout_context(self, nodes, edges=None, terminal_nets=None):
-        """Store the layout data so the LLM can reference it.
-
-        Performs inline Device/Block abstraction so the AI sees
-        hierarchical blocks instead of individual fingers.
-        This is the architectural fix: Python = Fingers, AI = Blocks.
-        """
-        # Keep raw context for internal command execution
+        """Store the layout data so the LLM can reference it."""
         self._layout_context = {"nodes": nodes}
         if edges:
             self._layout_context["edges"] = edges
         if terminal_nets:
             self._layout_context["terminal_nets"] = terminal_nets
-
-        # ── Inline abstraction: Finger → Device → Block ──
-        # Group by parent, compute device bboxes, detect matched groups
-        from collections import defaultdict
-        devices = {}
-        for node in (nodes or []):
-            elec = node.get("electrical", {})
-            parent = elec.get("parent")
-            if not parent:
-                # Standalone device (no fingers) — keep as-is
-                nid = node.get("id", "unknown")
-                geo = node.get("geometry", {})
-                devices[nid] = {
-                    "type": node.get("type", "?"),
-                    "nf": elec.get("nf", 1),
-                    "x": geo.get("x", 0),
-                    "y": geo.get("y", 0),
-                    "w": geo.get("width", 0),
-                    "h": geo.get("height", 0),
-                    "nets": (terminal_nets or {}).get(nid, {}),
-                }
-                continue
-
-            if parent not in devices:
-                geo = node.get("geometry", {})
-                devices[parent] = {
-                    "type": node.get("type", "?"),
-                    "nf": 0,
-                    "_min_x": float('inf'),
-                    "_min_y": float('inf'),
-                    "_max_xw": float('-inf'),
-                    "_max_h": float('-inf'),
-                    "nets": {},
-                    "_first_finger": node.get("id"),
-                }
-            d = devices[parent]
-            d["nf"] += 1
-            geo = node.get("geometry", {})
-            d["_min_x"] = min(d["_min_x"], geo.get("x", 0))
-            d["_min_y"] = min(d["_min_y"], geo.get("y", 0))
-            d["_max_xw"] = max(d["_max_xw"],
-                               geo.get("x", 0) + geo.get("width", 0))
-            d["_max_h"] = max(d["_max_h"], geo.get("height", 0))
-
-        # Finalize geometry and extract nets
-        for did, d in devices.items():
-            if "_min_x" in d:
-                d["x"] = round(d.pop("_min_x"), 4)
-                d["y"] = round(d.pop("_min_y"), 4)
-                d["w"] = round(d.pop("_max_xw") - d["x"], 4)
-                d["h"] = round(d.pop("_max_h"), 4)
-                ff = d.pop("_first_finger", None)
-                if terminal_nets and ff and ff in terminal_nets:
-                    d["nets"] = terminal_nets[ff]
-
-        # Detect matched blocks (shared G+S nets)
-        gs_groups = defaultdict(list)
-        for did, d in devices.items():
-            g_net = d.get("nets", {}).get("G")
-            s_net = d.get("nets", {}).get("S")
-            if g_net and s_net:
-                gs_groups[(g_net, s_net)].append(did)
-
-        blocks = []
-        assigned = set()
-        for (g_net, s_net), members in gs_groups.items():
-            if len(members) > 1:
-                bx = min(devices[m]["x"] for m in members)
-                by = min(devices[m]["y"] for m in members)
-                bxw = max(devices[m]["x"] + devices[m]["w"] for m in members)
-                byh = max(devices[m]["y"] + devices[m]["h"] for m in members)
-                blocks.append({
-                    "id": f"Block_{g_net}_{s_net}",
-                    "status": "LOCKED",
-                    "behavior": "rigid",
-                    "members": sorted(members),
-                    "x": round(bx, 4), "y": round(by, 4),
-                    "w": round(bxw - bx, 4), "h": round(byh - by, 4),
-                })
-                assigned.update(members)
-
-        # Build the abstracted context for the AI
-        abstracted = {
-            "devices": devices,
-            "blocks": blocks,
-            "free_devices": [d for d in devices if d not in assigned],
-            "total_original_fingers": len(nodes or []),
-        }
-        self._layout_context["_abstracted"] = abstracted
-
-        # Forward to multi-agent worker so orchestrator has fresh context
-        self._llm_worker.set_layout_context(self._layout_context)
 
     # -----------------------------------------
     # UI
@@ -245,42 +192,6 @@ class ChatPanel(QWidget):
         title.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
         title.setStyleSheet("color: #e0e8f0;")
         header_layout.addWidget(title)
-
-        # Model selector dropdown
-        self.model_combo = QComboBox()
-        self.model_combo.addItems(["Gemini", "OpenAI", "Ollama", "Groq", "DeepSeek"])
-        self.model_combo.setToolTip("Select AI Model for Chat")
-        self.model_combo.setStyleSheet(
-            """
-            QComboBox {
-                background-color: #2d3548;
-                color: #e0e8f0;
-                border: 1px solid #4a90d9;
-                border-radius: 4px;
-                padding: 2px 5px;
-                font-size: 11px;
-            }
-            QComboBox::drop-down {
-                border: none;
-            }
-            """
-        )
-        self.model_combo.setFixedWidth(80)
-        header_layout.addWidget(self.model_combo)
-
-        # Ollama sub-model selector (hidden by default unless Ollama is chosen)
-        self.ollama_model_combo = QComboBox()
-        self.ollama_model_combo.setEditable(True)
-        self.ollama_model_combo.addItems(["llama3.2", "qwen3.5:latest", "deepseek-coder:6.7b"])
-        self.ollama_model_combo.setToolTip("Select Local Ollama Model")
-        self.ollama_model_combo.setStyleSheet(self.model_combo.styleSheet())
-        self.ollama_model_combo.setFixedWidth(110)
-        self.ollama_model_combo.setVisible(False)
-        header_layout.addWidget(self.ollama_model_combo)
-
-        def _on_provider_changed(text):
-            self.ollama_model_combo.setVisible(text == "Ollama")
-        self.model_combo.currentTextChanged.connect(_on_provider_changed)
 
         header_layout.addStretch()
 
@@ -560,17 +471,45 @@ class ChatPanel(QWidget):
         else:
             self._user_cmds_executed = False
 
-        # --- Route to single-agent ----------------------
-        self._call_llm(text)
+        # --- Route to orchestrator or single-agent ----------------------
+        # If we have a pending topology, ANY message goes to the Orchestrator
+        # to resume the pipeline, regardless of keywords.
+        # If a layout is loaded, always use the Orchestrator — it contains the
+        # Classifier Agent which does fine-grained intent routing internally.
+        if self._layout_context:
+            if self._awaiting_strategy_resume:
+                self._is_orchestrated = True
+                self._start_thinking()
+                self.request_resume_strategy.emit(text)
+                self._awaiting_strategy_resume = False
+                return
+
+            if self._awaiting_visual_resume:
+                self._is_orchestrated = True
+                viewer_response = {
+                    "approved": self._ai_response_is_affirmative(text),
+                    "edits": [],
+                }
+                if not viewer_response["approved"]:
+                    viewer_response["edits"] = self._infer_commands_from_text(text)
+                self._start_thinking()
+                self.request_resume_viewer.emit(viewer_response)
+                self._awaiting_visual_resume = False
+                return
+
+            # Layout loaded → always orchestrate (classifier handles routing)
+            self._is_orchestrated = True
+            self._call_orchestrator(text)
+        else:
+            # No layout loaded → single-agent mode
+            self._is_orchestrated = False
+            self._call_llm(text)
 
 
     def _clear_chat(self):
         """Clear the chat display and history."""
         self.chat_display.clear()
         self._chat_history.clear()
-        # Reset multi-agent pipeline state so the Refiner doesn't
-        # think we're mid-conversation after a chat clear.
-        self._llm_worker.reset_pipeline()
         self._show_welcome()
 
     # keep backward-compat for external callers (main.py uses this)
@@ -583,22 +522,46 @@ class ChatPanel(QWidget):
     # -----------------------------------------
     def _start_thinking(self):
         self._thinking_dots = 0
-        self._append_bubble("ai", "Thinking")
+        self._thinking_stage = 0
+        if self._is_orchestrated:
+            label = _ORCHESTRATOR_STAGES[0][1]
+        else:
+            label = "Thinking"
+        self._append_bubble("ai", label)
         self._thinking_timer = QTimer(self)
         self._thinking_timer.timeout.connect(self._animate_thinking)
-        self._thinking_timer.start(400)
+        # Slower tick for orchestrator (stage labels change every ~4 s)
+        interval = 3800 if self._is_orchestrated else 400
+        self._thinking_timer.start(interval)
 
     def _animate_thinking(self):
-        # Original dot animation
-        self._thinking_dots = (self._thinking_dots + 1) % 4
-        dots = "." * self._thinking_dots
-        html = self.chat_display.toHtml()
-        idx = html.rfind("Thinking")
-        if idx != -1:
-            end = html.find("<", idx)
-            if end != -1:
-                html = html[:idx] + "Thinking" + dots + html[end:]
-                self.chat_display.setHtml(html)
+        if self._is_orchestrated:
+            # Cycle through pipeline stage labels
+            self._thinking_stage = (self._thinking_stage + 1) % len(_ORCHESTRATOR_STAGES)
+            label = _ORCHESTRATOR_STAGES[self._thinking_stage][1]
+            html = self.chat_display.toHtml()
+            # replace the last stage label with the next one
+            for _, stage_text in _ORCHESTRATOR_STAGES:
+                idx = html.rfind(stage_text.split("—")[0].strip())
+                if idx != -1:
+                    # find enclosing tag boundary
+                    end = html.find("<", idx + 1)
+                    if end == -1:
+                        end = idx + len(stage_text)
+                    html = html[:idx] + label + html[end:]
+                    break
+            self.chat_display.setHtml(html)
+        else:
+            # Original dot animation
+            self._thinking_dots = (self._thinking_dots + 1) % 4
+            dots = "." * self._thinking_dots
+            html = self.chat_display.toHtml()
+            idx = html.rfind("Thinking")
+            if idx != -1:
+                end = html.find("<", idx)
+                if end != -1:
+                    html = html[:idx] + "Thinking" + dots + html[end:]
+                    self.chat_display.setHtml(html)
         self.chat_display.verticalScrollBar().setValue(
             self.chat_display.verticalScrollBar().maximum()
         )
@@ -611,7 +574,31 @@ class ChatPanel(QWidget):
     # -----------------------------------------
     # LLM dispatch helpers
     # -----------------------------------------
+    def _call_orchestrator(self, user_message):
+        """Serialize layout context and dispatch to OrchestratorWorker."""
+        self._start_thinking()
+        ctx = self._layout_context or {}
+        try:
+            ctx_json = json.dumps(ctx, default=str)
+        except (TypeError, ValueError):
+            ctx_json = "{}"
+            
+        def _clean(content):
+            c = re.sub(r'\[CMD\].*?\[/CMD\]', '', content, flags=re.DOTALL)
+            if c.startswith("⚠️ Error:"):
+                return "(error – skipped)"
+            return c.strip()
 
+        recent = self._chat_history[-4:]
+        chat_messages = []
+        for msg in recent:
+            chat_messages.append({
+                "role": msg["role"],
+                "content": _clean(msg["content"]),
+            })
+
+        print(f"[CHAT] → Orchestrator pipeline for: {user_message[:60]!r}")
+        self.request_orchestrated.emit(user_message, ctx_json, chat_messages)
 
     def _call_llm(self, user_message):
         """Build prompts and dispatch the request to the single-agent worker thread."""
@@ -646,9 +633,7 @@ class ChatPanel(QWidget):
             })
 
         # Emit signal → crosses thread boundary → runs on worker thread
-        selected_model = self.model_combo.currentText()
-        ollama_model = self.ollama_model_combo.currentText()
-        self.request_inference.emit(full_prompt, chat_messages, selected_model, ollama_model)
+        self.request_inference.emit(full_prompt, chat_messages)
 
     # -----------------------------------------
     # Response handling (GUI thread)
@@ -802,6 +787,22 @@ class ChatPanel(QWidget):
     def _on_llm_response(self, text):
         self._stop_thinking()
         self._remove_last_message()
+        self._awaiting_strategy_resume = False
+        self._awaiting_visual_resume = False
+
+        # Normalize payloads defensively: worker/UI integrations may emit
+        # dict/list payloads in some paths instead of plain strings.
+        if isinstance(text, dict):
+            if isinstance(text.get("content"), str):
+                text = text.get("content", "")
+            else:
+                text = json.dumps(text, ensure_ascii=False, indent=2)
+        elif isinstance(text, list):
+            text = json.dumps(text, ensure_ascii=False, indent=2)
+        elif text is None:
+            text = ""
+        else:
+            text = str(text)
 
         print(f"[CHAT] Raw LLM response: {text[:300]}")
 
@@ -824,38 +825,65 @@ class ChatPanel(QWidget):
 
     def _parse_commands(self, text):
         """Extract [CMD]...[/CMD] blocks, return (display_text, list_of_cmds)."""
+        # Strip all commands from display text using the original pattern
         pattern = r'\[CMD\].*?\[/CMD\]'
         display_text = re.sub(pattern, '', text, flags=re.DOTALL | re.IGNORECASE)
         
-        commands = []
-        for match in re.finditer(pattern, text, flags=re.DOTALL | re.IGNORECASE):
-            # Clean up the matched block
-            block = match.group(0)
-            # Remove tags (case-insensitive)
-            block = re.sub(r'\[/?CMD\]', '', block, flags=re.IGNORECASE).strip()
-            if not block:
-                continue
-
-            try:
-                import json
-                parsed = json.loads(block)
-                if isinstance(parsed, dict):
-                    commands.append(parsed)
-                elif isinstance(parsed, list):
-                    commands.extend([c for c in parsed if isinstance(c, dict)])
-            except Exception as e:
-                print(f"[CHAT] Failed to parse command block: {block[:50]}... Error: {e}")
-
+        # Use orchestrator's hardened parser to harvest robust command dicts
+        commands = _extract_cmd_blocks(text)
         return display_text, commands
 
     def _on_llm_error(self, error_text):
         self._stop_thinking()
         self._remove_last_message()
         self._user_cmds_executed = False          # reset so next turn works
+        self._awaiting_strategy_resume = False
+        self._awaiting_visual_resume = False
         err_msg = f"⚠️ Error: {error_text}"
         self._chat_history.append({"role": "assistant", "content": err_msg})
         self._append_bubble("ai", err_msg)
+
+    @Slot(dict)
+    def _on_visual_viewer_signal(self, payload):
+        """Handle visual-viewer command payloads directly (no CMD text parsing)."""
+        self._stop_thinking()
+        self._remove_last_message()
+        self._awaiting_strategy_resume = False
+        self._awaiting_visual_resume = False
+
+        cmd_list = []
+        if isinstance(payload, dict):
+            if isinstance(payload.get("commands"), list):
+                cmd_list = [c for c in payload.get("commands", []) if isinstance(c, dict)]
+            elif isinstance(payload.get("placement"), list):
+                # Backward-compatible path used by existing worker payloads.
+                cmd_list = [c for c in payload.get("placement", []) if isinstance(c, dict)]
+            elif payload.get("action"):
+                cmd_list = [payload]
+
+        if cmd_list:
+            print(f"[CHAT] Visual viewer commands: {cmd_list}")
+            for cmd in cmd_list:
+                self.command_requested.emit(cmd)
+            info = f"Applied {len(cmd_list)} visual-review command(s)."
+        else:
+            info = "Visual review update received (no commands)."
+
+        self._user_cmds_executed = False
+        self._chat_history.append({"role": "assistant", "content": info})
+        self._append_bubble("ai", info)
         
+    def _on_topology_review(self, question):
+        """Handler for when Stage 1 completes and asks for confirmation."""
+        self._stop_thinking()
+        self._remove_last_message()
+        self._awaiting_strategy_resume = True
+        self._awaiting_visual_resume = False
+        
+        # Don't reset user cmds here since we are pausing
+        self._chat_history.append({"role": "assistant", "content": question})
+        self._append_bubble("ai", question)
+
     def _remove_last_message(self):
         """Remove the last appended message (the thinking bubble)."""
         html = self.chat_display.toHtml()

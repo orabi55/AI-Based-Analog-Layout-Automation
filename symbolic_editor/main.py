@@ -934,6 +934,9 @@ class MainWindow(QMainWindow):
         self._pending_cmds = []           # collects commands in the same Qt event-loop turn
         self._batch_flush_timer = None    # fires after all cmds arrive this turn
         self.chat_panel.command_requested.connect(self._enqueue_ai_command)
+        # Wire orchestrator stage events → canvas highlight
+        self.chat_panel._llm_worker.stage_completed.connect(self._on_pipeline_stage_completed)
+        self._stage_highlight_timer = None  # auto-clear timer
         self.editor.set_dummy_place_callback(self._add_dummy_device)
 
         # Connect panel toggle buttons (in each panel header)
@@ -3370,6 +3373,121 @@ class MainWindow(QMainWindow):
         # One refresh after all commands
         self._refresh_panels(compact=False)
         self._sync_node_positions()
+
+
+    # -------------------------------------------------
+    # Pipeline stage canvas highlights
+    # -------------------------------------------------
+    def _on_pipeline_stage_completed(self, stage_index, stage_name):
+        """Briefly highlight devices relevant to the completed pipeline stage.
+
+        Stage 0 – Topology Analyst:  amber
+        Stage 1 – Placement Specialist: blue
+        Stage 2 – DRC Critic:         red (overlapping devices only)
+        Stage 3 – Routing Pre-Viewer: purple
+
+        NOTE: we capture only device *IDs*, not Qt item pointers, so the
+        restore callback is safe even after swap commands rebuild the items.
+        """
+        from PySide6.QtCore import QTimer as _QTimer
+
+        device_items = (
+            getattr(self, 'editor', None)
+            and getattr(self.editor, 'device_items', {})
+        ) or {}
+        if not device_items:
+            return
+
+        # ---- Choose which device IDs to highlight ----
+        if stage_index == 2:
+            # DRC stage: highlight overlapping pairs only
+            try:
+                from ai_agent.ai_chat_bot.agents.drc_critic import run_drc_check
+                nodes = []
+                for dev_id, item in device_items.items():
+                    try:
+                        pos = item.scenePos()
+                        br  = item.boundingRect()
+                        nodes.append({
+                            "id": dev_id,
+                            "geometry": {
+                                "x": pos.x(), "y": pos.y(),
+                                "width": br.width(), "height": br.height(),
+                            },
+                        })
+                    except RuntimeError:
+                        pass
+                drc = run_drc_check(nodes)
+                if not drc["pass"] and drc.get("structured"):
+                    overlap_ids = set()
+                    for v in drc["structured"]:
+                        overlap_ids.add(v.dev_a)
+                        overlap_ids.add(v.dev_b)
+                    highlight_ids = overlap_ids
+                else:
+                    highlight_ids = set(device_items.keys())
+            except Exception:
+                highlight_ids = set(device_items.keys())
+        else:
+            highlight_ids = set(device_items.keys())
+
+        # ---- Dim selected items (capture IDs, not object refs) ----
+        dimmed_ids = set()
+        for dev_id in highlight_ids:
+            item = device_items.get(dev_id)
+            if item is None:
+                continue
+            try:
+                item.setOpacity(0.55)
+                dimmed_ids.add(dev_id)
+            except RuntimeError:
+                pass
+
+        print(f"[STAGE HL] Stage {stage_index} ({stage_name}): "
+              f"{len(dimmed_ids)} device(s) highlighted")
+
+        # ---- Auto-restore after 3 s --- safe: re-lookup items by ID ----
+        if self._stage_highlight_timer and self._stage_highlight_timer.isActive():
+            try:
+                self._stage_highlight_timer.stop()
+            except RuntimeError:
+                pass
+
+        def _restore():
+            """Restore opacity by re-looking up live items from editor."""
+            live_items = (
+                getattr(self, 'editor', None)
+                and getattr(self.editor, 'device_items', {})
+            ) or {}
+            for did in dimmed_ids:
+                itm = live_items.get(did)
+                if itm is None:
+                    continue
+                try:
+                    itm.setOpacity(1.0)
+                except RuntimeError:
+                    pass
+            self._stage_highlight_timer = None
+
+        self._stage_highlight_timer = _QTimer(self)
+        self._stage_highlight_timer.setSingleShot(True)
+        self._stage_highlight_timer.timeout.connect(_restore)
+        self._stage_highlight_timer.start(3000)
+
+    def _clear_stage_highlights(self):
+        """Restore all devices to full opacity immediately."""
+        device_items = getattr(self, 'editor', None) and self.editor.device_items or {}
+        for item in device_items.values():
+            try:
+                item.setOpacity(1.0)
+            except RuntimeError:
+                pass
+        if self._stage_highlight_timer:
+            try:
+                self._stage_highlight_timer.stop()
+            except RuntimeError:
+                pass
+            self._stage_highlight_timer = None
 
 
     def _resolve_device_id(self, raw_id):
