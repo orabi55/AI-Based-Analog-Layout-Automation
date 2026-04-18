@@ -8,19 +8,39 @@ Multi-Agent Architecture (LayoutCopilot):
     Uses MultiAgentOrchestrator to route user messages through
     specialised agents: Classifier -> Analyzer -> Refiner ->
     Adapter -> CodeGen.
+
+OrchestratorWorker (LangGraph pipeline):
+    Drives the 4-stage LangGraph pipeline:
+    Topology Analyst -> Placement Specialist -> DRC Critic -> Routing Pre-Viewer.
+    Uses human-in-the-loop interrupts for strategy selection and visual review.
 """
 
 import os
 import re
+import uuid
 from pathlib import Path
+from typing import cast
 from dotenv import load_dotenv
 from PySide6.QtCore import QObject, Signal, Slot
 
 from ai_agent.ai_chat_bot.agents.orchestrator import MultiAgentOrchestrator
 
-# Load .env from the project root so API keys are available
-_env_path = Path(__file__).resolve().parent.parent.parent / ".env"
-load_dotenv(_env_path)
+# Load .env – walk upward from this file to find the repo root .env
+_this_file = Path(__file__).resolve()
+_env_loaded = False
+for _parent in _this_file.parents:
+    if (_parent / "README.md").is_file() and (_parent / "ai_agent").is_dir():
+        _env_path = _parent / ".env"
+        if _env_path.is_file():
+            load_dotenv(_env_path)
+            _env_loaded = True
+        break
+if not _env_loaded:
+    for _parent in _this_file.parents:
+        _env_path = _parent / ".env"
+        if _env_path.is_file():
+            load_dotenv(_env_path)
+            break
 
 
 # -----------------------------------------------------------------
@@ -317,3 +337,252 @@ class LLMWorker(QObject):
     def reset_pipeline(self):
         """Reset the orchestrator state (e.g. when chat is cleared)."""
         self._orchestrator.reset()
+
+
+# -----------------------------------------------------------------
+# OrchestratorWorker — LangGraph multi-agent pipeline driver
+# -----------------------------------------------------------------
+class OrchestratorWorker(LLMWorker):
+    """Drives the 4-stage LangGraph pipeline (Topology → Placement → DRC → Routing).
+
+    Extends LLMWorker with additional signals and slots for:
+    - process_orchestrated_request: start the pipeline
+    - resume_with_strategy: resume after strategy-selection interrupt
+    - resume_from_viewer: resume after visual-review interrupt
+    """
+
+    stage_completed          = Signal(int, str)   # (stage_index, stage_name)
+    topology_ready_for_review = Signal(str)        # question text for chat panel
+    visual_viewer_signal     = Signal(dict)        # placement + routing payload
+
+    def __init__(self):
+        super().__init__()
+        try:
+            from langchain_core.runnables import RunnableConfig
+            self.thread_config = cast(RunnableConfig, {
+                "configurable": {
+                    "thread_id": str(uuid.uuid4())
+                }
+            })
+        except ImportError:
+            self.thread_config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+
+    @Slot(str, str, list)
+    def process_orchestrated_request(self, user_message, layout_context_json, chat_history=None):
+        import json as _json
+
+        if chat_history is None:
+            chat_history = []
+
+        try:
+            layout_context = _json.loads(layout_context_json)
+        except (_json.JSONDecodeError, ValueError):
+            layout_context = {}
+
+        try:
+            from ai_agent.ai_chat_bot.agents.classifier_agent import classify_intent
+            from ai_agent.ai_chat_bot.run_llm import run_llm as _run_llm
+
+            project_root = Path(__file__).resolve().parent.parent
+            sp_file = _resolve_sp_file(layout_context, project_root)
+            layout_context["sp_file_path"] = sp_file or ""
+
+            # ── Intent Classification ──────────────────────────────────
+            intent = classify_intent(user_message, _run_llm)
+
+            if intent == "chat":
+                print("[ORCH] CHAT intent -> conversational reply")
+                chat_system = (
+                    build_system_prompt(layout_context)
+                    + "\n\n"
+                    + "For this turn, the user requested general conversation. "
+                    + "Reply conversationally and do not emit [CMD] blocks unless "
+                    + "the user explicitly asks for an edit action."
+                )
+                chat_msgs = [{"role": "system", "content": chat_system}] + chat_history
+                if not chat_history or chat_history[-1].get("content") != user_message:
+                    chat_msgs.append({"role": "user", "content": user_message})
+                reply = _run_llm(chat_msgs, f"{chat_system}\n\nUser: {user_message}")
+                self.response_ready.emit(reply)
+
+            elif intent == "question":
+                print("[ORCH] QUESTION intent -> single-agent reply")
+                system_prompt = build_system_prompt(layout_context)
+                chat_msgs = [{"role": "system", "content": system_prompt}] + chat_history
+                if not chat_history or chat_history[-1].get("content") != user_message:
+                    chat_msgs.append({"role": "user", "content": user_message})
+                reply = _run_llm(chat_msgs, f"{system_prompt}\n\nUser: {user_message}")
+                self.response_ready.emit(reply)
+
+            elif intent == "concrete":
+                print("[ORCH] CONCRETE intent -> Directly editing layout")
+                system_prompt = (
+                    build_system_prompt(layout_context)
+                    + "\n\n"
+                    + "For this turn, return ONLY a JSON list of command dicts "
+                    + "(no markdown, no prose)."
+                )
+                reply = _run_llm(
+                    [{"role": "system", "content": system_prompt},
+                     {"role": "user",   "content": user_message}],
+                    system_prompt
+                )
+                try:
+                    clean_reply = reply.replace("```json", "").replace("```", "").strip()
+                    edits = _json.loads(clean_reply)
+                    if isinstance(edits, dict):
+                        edits = [edits]
+                    elif not isinstance(edits, list):
+                        edits = []
+                    edits = [c for c in edits if isinstance(c, dict)]
+                    self.visual_viewer_signal.emit(
+                        {"type": "visual_review", "placement": edits, "routing": {}}
+                    )
+                except Exception as e:
+                    self.error_occurred.emit(f"Failed to parse concrete command: {str(e)}")
+
+            else:
+                print("[ORCH] ABSTRACT intent -> Starting LangGraph Pipeline")
+                initial_state = {
+                    "user_message":    user_message,
+                    "chat_history":    chat_history,
+                    "nodes":           layout_context.get("nodes", []),
+                    "sp_file_path":    layout_context.get("sp_file_path", ""),
+                    "pending_cmds":    [],
+                    "constraints":     [],
+                    "constraint_text": "",
+                    "strategy_question": "",
+                    "edges":           [],
+                    "terminal_nets":   layout_context.get("terminal_nets", {}),
+                    "placement_nodes": layout_context.get("nodes", []),
+                    "drc_flags":       [],
+                    "drc_pass":        False,
+                    "approved":        False,
+                    "routing_result":  {},
+                    "selected_strategy": "auto",
+                    "gap_px":          layout_context.get("gap_px", 0.0),
+                    "drc_retry_count": 0,
+                    "routing_pass_count": 0,
+                }
+                if isinstance(layout_context.get("edges"), list):
+                    initial_state["edges"] = layout_context["edges"]
+
+                try:
+                    from langchain_core.runnables import RunnableConfig
+                    self.thread_config = cast(RunnableConfig, {
+                        "configurable": {"thread_id": str(uuid.uuid4())}
+                    })
+                except ImportError:
+                    self.thread_config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+
+                self._stream_graph(initial_state)
+
+        except Exception as exc:
+            import traceback
+            print(f"[ORCH] Pipeline error:\n{traceback.format_exc()}")
+            self.error_occurred.emit(f"Orchestrator error: {exc}")
+
+    def _stream_graph(self, input_data):
+        try:
+            from ai_agent.ai_chat_bot.graph import app as langgraph_app
+            from langgraph.types import Command
+
+            interrupted = False
+            for event in langgraph_app.stream(input_data, self.thread_config, stream_mode="updates"):
+                if "__interrupt__" in event:
+                    interrupt_data = event["__interrupt__"][0].value
+
+                    if interrupt_data["type"] == "strategy_selection":
+                        self.topology_ready_for_review.emit(interrupt_data["question"])
+                    elif interrupt_data["type"] == "visual_review":
+                        placement = interrupt_data.get("placement", [])
+                        if not isinstance(placement, list):
+                            placement = []
+                        routing = interrupt_data.get("routing", {})
+                        if not isinstance(routing, dict):
+                            routing = {}
+                        self.visual_viewer_signal.emit({
+                            "type": "visual_review",
+                            "placement": placement,
+                            "routing": routing,
+                        })
+
+                    interrupted = True
+                    return
+
+            if not interrupted:
+                self._finalize_pipeline()
+
+        except Exception as e:
+            self.error_occurred.emit(f"Graph Execution Error: {str(e)}")
+
+    def _finalize_pipeline(self):
+        try:
+            from ai_agent.ai_chat_bot.graph import app as langgraph_app
+        except ImportError:
+            self.error_occurred.emit("Could not import LangGraph app for finalization.")
+            return
+
+        final_state = langgraph_app.get_state(self.thread_config).values
+
+        placement_nodes = final_state.get("placement_nodes", [])
+        final_cmds = []
+        for n in placement_nodes:
+            if n.get("is_dummy"):
+                continue
+            try:
+                x = round(float(n["geometry"]["x"]), 3)
+                y = round(float(n["geometry"]["y"]), 3)
+            except (TypeError, KeyError, ValueError) as exc:
+                print(f"[FINALIZE] Skipping {n.get('id', '?')}: bad geometry ({exc})")
+                continue
+            final_cmds.append({"action": "move", "device": n["id"], "x": x, "y": y})
+
+        pending_cmds = final_state.get("pending_cmds", [])
+        if not final_cmds and pending_cmds:
+            print("[FINALIZE] placement_nodes empty — falling back to pending_cmds")
+            final_cmds = pending_cmds
+
+        drc_pass    = final_state.get("drc_pass", False)
+        drc_flags   = final_state.get("drc_flags", [])
+        drc_status  = "✅ Pass" if drc_pass else f"⚠ {len(drc_flags)} violation(s)"
+        routing_result  = final_state.get("routing_result", {})
+        routing_score   = routing_result.get("score", "N/A")
+        routing_cost    = routing_result.get("placement_cost", None)
+        constraint_count = len(final_state.get("constraints", []))
+
+        summary_header = (
+            f"**[Multi-Agent Pipeline Complete]**\n\n"
+            f"• Topology: {constraint_count} constraint lines\n"
+            f"• DRC: {drc_status}\n"
+            f"• Routing Score: {routing_score}"
+            + (f" (cost: {routing_cost:.2f})" if routing_cost is not None else "")
+            + f"\n• Commands: {len(final_cmds)} emitted\n\n"
+        )
+
+        if final_cmds:
+            self.visual_viewer_signal.emit({
+                "type": "final_layout",
+                "placement": final_cmds,
+                "routing": routing_result,
+            })
+
+        self.response_ready.emit(summary_header)
+
+    @Slot(str)
+    def resume_with_strategy(self, user_choice: str):
+        print(f"[ORCH] Resuming graph with strategy: {user_choice}")
+        try:
+            from langgraph.types import Command
+            self._stream_graph(Command(resume=user_choice))
+        except Exception as exc:
+            self.error_occurred.emit(f"Resume error: {exc}")
+
+    @Slot(dict)
+    def resume_from_viewer(self, viewer_response: dict):
+        print(f"[ORCH] Resuming from visual viewer. Approved: {viewer_response.get('approved')}")
+        try:
+            from langgraph.types import Command
+            self._stream_graph(Command(resume=viewer_response))
+        except Exception as exc:
+            self.error_occurred.emit(f"Resume error: {exc}")
