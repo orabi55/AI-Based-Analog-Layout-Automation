@@ -241,4 +241,3 @@ def _run_llm_once(chat_messages, full_prompt, selected_model, ollama_model="llam
             return f"DeepSeek Error: {str(e)}"
 
     return f"Error: Unsupported model '{selected_model}'"
-   )

@@ -81,18 +81,6 @@ def build_system_prompt(layout_context):
     from ai_agent.ai_chat_bot.agents.prompts import build_chat_prompt
     return build_chat_prompt(layout_context)
 
-
-# -----------------------------------------------------------------
-# Task-specific prompt builders
-# -----------------------------------------------------------------
-
-            return response.choices[0].message.content.strip()
-        except Exception as e:
-            return f"DeepSeek Error: {str(e)}"
-
-    return f"Error: Unknown model selected ('{selected_model}')."
-
-
 # -----------------------------------------------------------------
 # Worker QObject — Multi-Agent Pipeline
 # -----------------------------------------------------------------
