@@ -43,9 +43,27 @@ def generate_placement_grid(
         devices["DUMMY"] = devices.get("DUMMY", 0) + padding
         total_fingers += padding
 
-    # 3. Seed Generation (Top-Left 1/4 or Left 1/2)
-    # Fingers per device in the seed block
-    seed_counts = {d: count // symmetry_factor for d, count in devices.items()}
+    # 3. Seed Generation
+    if is_2d:
+        if rows != 2:
+            raise SymmetryError("COMMON_CENTROID_2D currently supports exactly 2 rows.")
+
+        odd_devices = [
+            dev_id for dev_id, count in devices.items()
+            if dev_id != "DUMMY" and count % 2 != 0
+        ]
+        if odd_devices:
+            raise SymmetryError(
+                "COMMON_CENTROID_2D requires even finger counts per device: "
+                + ", ".join(sorted(odd_devices))
+            )
+
+        # Build the full top row, then mirror it onto the bottom row.
+        # This preserves point symmetry even for small valid cases like AB/BA.
+        seed_counts = {d: count // 2 for d, count in devices.items()}
+    else:
+        # 1D common-centroid/interdigitated uses a half-row seed.
+        seed_counts = {d: count // symmetry_factor for d, count in devices.items()}
     seed_total = sum(seed_counts.values())
     
     # Fill seed list using Ratio-based Interleaving
@@ -75,14 +93,9 @@ def generate_placement_grid(
         grid[0][0:seed_total] = seed_list
         grid[0][seed_total:2*seed_total] = reversed(seed_list)
     else:
-        # 2D Cross-Quad
-        # Rows = 2. Seed fills half of Row 0.
+        # 2D point symmetry: build the full top row, then reverse it below.
         seed_len = len(seed_list)
-        # Top Left
         grid[0][0:seed_len] = seed_list
-        # Mirror X (Top Right)
-        grid[0][seed_len:2*seed_len] = reversed(seed_list)
-        # Mirror Y with Point Symmetry (Bottom Half = Reversed Top Half)
         grid[1][:] = list(reversed(grid[0]))
 
     # 5. Mathematical Audit

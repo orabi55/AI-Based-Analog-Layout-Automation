@@ -19,16 +19,22 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal, QPointF
 from PySide6.QtGui import QPainter, QPen, QPainterPath, QColor, QBrush, QAction
 
-from device_item import DeviceItem
-from passive_item import ResistorItem, CapacitorItem
-from block_item import BlockItem
-from hierarchy_group_item import HierarchyGroupItem
 try:
-    from abutment_engine import find_abutment_candidates, build_edge_highlight_map
+    from .device_item import DeviceItem
+    from .passive_item import ResistorItem, CapacitorItem
+    from .block_item import BlockItem
+    from .hierarchy_group_item import HierarchyGroupItem
+    from .abutment_engine import find_abutment_candidates, build_edge_highlight_map
 except ImportError:
-    find_abutment_candidates = None
-    build_edge_highlight_map = None
-
+    from device_item import DeviceItem
+    from passive_item import ResistorItem, CapacitorItem
+    from block_item import BlockItem
+    from hierarchy_group_item import HierarchyGroupItem
+    try:
+        from abutment_engine import find_abutment_candidates, build_edge_highlight_map
+    except ImportError:
+        find_abutment_candidates = None
+        build_edge_highlight_map = None
 
 class HierarchyAwareScene(QGraphicsScene):
     """Custom QGraphicsScene that blocks selection of devices in non-descended hierarchies."""
@@ -100,6 +106,7 @@ class SymbolicEditor(QGraphicsView):
         # Zoom parameters
         self.zoom_factor = 1.15
         self._zoom_level = 1.0
+        self.scale_factor = 80
 
         # Device items lookup by id
         self.device_items = {}
@@ -370,9 +377,12 @@ class SymbolicEditor(QGraphicsView):
 
                 # Restore orientation (flip)
                 orient = geom.get("orientation", "R0")
-                if "FH" in orient:
+                if orient in ("R180", "R0_FH_FV"):
                     item.set_flip_h(True)
-                if "FV" in orient:
+                    item.set_flip_v(True)
+                elif "FH" in orient or orient == "MX":
+                    item.set_flip_h(True)
+                elif "FV" in orient or orient == "MY":
                     item.set_flip_v(True)
 
             self.scene.addItem(item)

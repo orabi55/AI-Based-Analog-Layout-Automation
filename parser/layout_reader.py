@@ -98,6 +98,149 @@ def _ref_origin_rotation(ref):
     return x, y, rotation, mirrored, orientation
 
 
+def _identity_transform():
+    return (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+
+
+def _compose_transforms(parent, child):
+    pa, pb, pc, pd, ptx, pty = parent
+    ca, cb, cc, cd, ctx, cty = child
+    return (
+        pa * ca + pb * cc,
+        pa * cb + pb * cd,
+        pc * ca + pd * cc,
+        pc * cb + pd * cd,
+        pa * ctx + pb * cty + ptx,
+        pc * ctx + pd * cty + pty,
+    )
+
+
+def _apply_transform(transform, x, y):
+    a, b, c, d, tx, ty = transform
+    return (a * x + b * y + tx, c * x + d * y + ty)
+
+
+def invert_transform_point(parent_transform, x, y):
+    """Convert a root-space point back into the local coordinates of a child ref."""
+    a, b, c, d, tx, ty = parent_transform
+    det = a * d - b * c
+    if abs(det) < 1e-12:
+        raise ValueError("Parent transform is not invertible.")
+
+    dx = x - tx
+    dy = y - ty
+    return (
+        (d * dx - b * dy) / det,
+        (-c * dx + a * dy) / det,
+    )
+
+
+def _ref_transform(ref):
+    x, y = ref.origin
+    rotation = ref.rotation if ref.rotation else 0.0
+    mirrored = bool(ref.x_reflection)
+    cos_t = math.cos(rotation)
+    sin_t = math.sin(rotation)
+
+    if mirrored:
+        linear = (cos_t, sin_t, sin_t, -cos_t)
+    else:
+        linear = (cos_t, -sin_t, sin_t, cos_t)
+
+    return (*linear, x, y)
+
+
+def _walk_layout_references(
+    cell,
+    lib,
+    parent_transform=None,
+    prefix="",
+    include_references=False,
+):
+    """Recursively walk layout references while preserving parent transforms."""
+    if parent_transform is None:
+        parent_transform = _identity_transform()
+
+    devices = []
+    for ref in cell.references:
+        cell_name = ref.cell.name if hasattr(ref.cell, "name") else str(ref.cell)
+        ref_cell = ref.cell if hasattr(ref.cell, "references") else lib[ref.cell]
+        absolute_transform = _compose_transforms(parent_transform, _ref_transform(ref))
+        abs_x, abs_y = absolute_transform[4], absolute_transform[5]
+        _, _, _, mirrored, orientation = _ref_origin_rotation(ref)
+
+        bbox = ref_cell.bounding_box() if hasattr(ref_cell, "bounding_box") else None
+        if bbox is not None:
+            (xmin, ymin), (xmax, ymax) = bbox
+            width = xmax - xmin
+            height = ymax - ymin
+        else:
+            width = 0
+            height = 0
+
+        if _is_transistor_cell(cell_name):
+            params = _parse_pcell_params(ref_cell, ref)
+            entry = {
+                "cell": cell_name,
+                "x": abs_x,
+                "y": abs_y,
+                "width": width,
+                "height": height,
+                "orientation": orientation if not mirrored else "MX",
+                "hier_prefix": prefix,
+                "params": params,
+                "abut_left": params.get("leftAbut") == "1",
+                "abut_right": params.get("rightAbut") == "1",
+            }
+        elif _is_resistor_cell(cell_name) or _is_capacitor_cell(cell_name):
+            passive_type = "res" if _is_resistor_cell(cell_name) else "cap"
+            params = _parse_pcell_params(ref_cell, ref)
+            entry = {
+                "cell": cell_name,
+                "x": abs_x,
+                "y": abs_y,
+                "width": width,
+                "height": height,
+                "orientation": orientation if not mirrored else "MX",
+                "hier_prefix": prefix,
+                "passive_type": passive_type,
+                "params": params,
+            }
+        elif _is_via_or_utility(cell_name):
+            continue
+        else:
+            sub_prefix = f"{prefix}{cell_name}_" if prefix else f"{cell_name}_"
+            devices.extend(
+                _walk_layout_references(
+                    ref_cell,
+                    lib,
+                    parent_transform=absolute_transform,
+                    prefix=sub_prefix,
+                    include_references=include_references,
+                )
+            )
+            continue
+
+        if include_references:
+            entry["reference"] = ref
+            entry["parent_transform"] = parent_transform
+        devices.append(entry)
+
+    return devices
+
+
+def extract_layout_instances_from_library(lib, include_references=False):
+    """Extract device instances from an already-loaded OAS/GDS library."""
+    top_cells = lib.top_level()
+    if not top_cells:
+        raise ValueError("Layout file has no top-level cells.")
+    return _walk_layout_references(
+        top_cells[0],
+        lib,
+        include_references=include_references,
+    )
+
+
 def _extract_recursive(cell, lib, offset_x=0.0, offset_y=0.0,
                        parent_rotation=0.0, parent_mirror=False,
                        prefix=""):
@@ -223,6 +366,8 @@ def extract_layout_instances(layout_file):
         lib = gdstk.read_oas(layout_file)
     else:
         raise ValueError("Unsupported layout format")
+
+    return extract_layout_instances_from_library(lib)
 
     top_cell = lib.top_level()[0]
 

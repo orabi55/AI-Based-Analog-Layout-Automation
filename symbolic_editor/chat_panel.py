@@ -30,7 +30,10 @@ from PySide6.QtGui import QFont
 
 from ai_agent.ai_chat_bot.llm_worker import OrchestratorWorker, build_system_prompt
 from ai_agent.ai_chat_bot.cmd_utils import _extract_cmd_blocks
-from icons import icon_panel_toggle
+try:
+    from .icons import icon_panel_toggle
+except ImportError:
+    from icons import icon_panel_toggle
 
 # ---------------------------------------------------------------------------
 # Keywords that trigger the multi-agent Orchestrator pipeline
@@ -107,7 +110,7 @@ class ChatPanel(QWidget):
     # Single-agent path (normal chat)
     request_inference = Signal(str, list, str, str)
     # Multi-agent path (orchestrator pipeline)
-    request_orchestrated = Signal(str, str, list)  # (user_message, layout_context_json, chat_history)
+    request_orchestrated = Signal(str, str, list, str, str)
     # Resume paths for LangGraph interrupts
     request_resume_strategy = Signal(str)
     request_resume_viewer = Signal(dict)
@@ -602,7 +605,13 @@ class ChatPanel(QWidget):
             })
 
         print(f"[CHAT] → Orchestrator pipeline for: {user_message[:60]!r}")
-        self.request_orchestrated.emit(user_message, ctx_json, chat_messages)
+        self.request_orchestrated.emit(
+            user_message,
+            ctx_json,
+            chat_messages,
+            self.selected_model,
+            self.ollama_model,
+        )
 
     def _call_llm(self, user_message):
         """Build prompts and dispatch the request to the single-agent worker thread."""

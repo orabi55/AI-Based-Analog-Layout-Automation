@@ -1,5 +1,6 @@
+# -*- coding: utf-8 -*-
 """
-Device Tree Panel — left sidebar showing device hierarchy and
+Device Tree Panel -- left sidebar showing device hierarchy and
 terminal connectivity.
 """
 
@@ -14,11 +15,15 @@ from PySide6.QtWidgets import (
     QPushButton,
     QTreeWidget,
     QTreeWidgetItem,
+    QLineEdit,
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QFont
 
-from icons import icon_panel_toggle
+try:
+    from .icons import icon_panel_toggle
+except ImportError:
+    from icons import icon_panel_toggle
 
 
 class DeviceTreePanel(QWidget):
@@ -81,6 +86,31 @@ class DeviceTreePanel(QWidget):
         header_layout.addWidget(toggle_btn)
 
         layout.addWidget(header)
+
+        # Search / filter bar
+        self._search = QLineEdit()
+        self._search.setPlaceholderText("\U0001f50d  Filter devices\u2026")
+        self._search.setClearButtonEnabled(True)
+        self._search.setFixedHeight(30)
+        self._search.setStyleSheet(
+            """
+            QLineEdit {
+                background-color: #161c28;
+                border: 1px solid #2d3548;
+                border-radius: 6px;
+                padding: 2px 10px;
+                color: #c0cad8;
+                font-family: 'Segoe UI';
+                font-size: 11px;
+                margin: 6px 8px 4px 8px;
+            }
+            QLineEdit:focus {
+                border-color: #4a90d9;
+            }
+            """
+        )
+        self._search.textChanged.connect(self._on_filter_changed)
+        layout.addWidget(self._search)
 
         # Tree widget
         self.tree = QTreeWidget()
@@ -541,3 +571,33 @@ class DeviceTreePanel(QWidget):
                 self.device_selected.emit(parent_dev)
                 self.connection_selected.emit(parent_dev, net_name, "")
 
+    # ── Search / Filter ──────────────────────────────────────────────
+    def _on_filter_changed(self, text):
+        """Show only tree items whose text matches the filter (case-insensitive)."""
+        query = text.strip().lower()
+        root = self.tree.invisibleRootItem()
+        self._apply_filter(root, query)
+
+    def _apply_filter(self, item, query):
+        """Recursively show/hide items. Returns True if this item or any child is visible."""
+        if not query:
+            # Show everything when the search box is empty
+            for i in range(item.childCount()):
+                child = item.child(i)
+                child.setHidden(False)
+                self._apply_filter(child, query)
+            return True
+
+        any_visible = False
+        for i in range(item.childCount()):
+            child = item.child(i)
+            child_text = (child.text(0) or "").lower()
+            child_match = query in child_text
+            descendant_match = self._apply_filter(child, query)
+            visible = child_match or descendant_match
+            child.setHidden(not visible)
+            if visible:
+                any_visible = True
+                # Auto-expand parent groups that contain a match
+                child.setExpanded(True)
+        return any_visible

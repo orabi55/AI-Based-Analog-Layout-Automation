@@ -11,12 +11,12 @@ import sys
 import os
 import json
 
-# Add the symbolic_editor directory to the path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'symbolic_editor'))
+# Add the repository root to the path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QPointF
-from editor_view import SymbolicEditor
+from symbolic_editor.editor_view import SymbolicEditor
 
 
 def main():
@@ -25,7 +25,7 @@ def main():
     # Load test JSON
     json_path = os.path.join(
         os.path.dirname(__file__),
-        'examples', 'current_mirror', 'NEW.json'
+        '..', 'examples', 'current_mirror', 'NEW.json'
     )
     with open(json_path) as f:
         data = json.load(f)
