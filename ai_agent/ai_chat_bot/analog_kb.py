@@ -1,5 +1,5 @@
 """
-ai_agent/analog_kb.py
+ai_agent/ai_chat_bot/analog_kb.py
 ======================
 Analog layout design knowledge base.
 Injected into the Topology Analyst and Placement Specialist prompts

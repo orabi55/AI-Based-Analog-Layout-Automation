@@ -129,6 +129,9 @@ def node_topology_analyst(state: LayoutState):
         f"Extracted Constraints:\n{constraint_text}\n\n"
     )
 
+    selected_model = state.get("selected_model", "Gemini")
+    ollama_model = state.get("ollama_model", "qwen2.5")
+
     analyst_msgs = _build_llm_messages(
         topology_analyst.TOPOLOGY_ANALYST_PROMPT,
         chat_history,
@@ -136,7 +139,12 @@ def node_topology_analyst(state: LayoutState):
     )
 
     try:
-        analyst_response = run_llm(analyst_msgs, analyst_user)
+        analyst_response = run_llm(
+            analyst_msgs, 
+            analyst_user, 
+            selected_model=selected_model, 
+            ollama_model=ollama_model
+        )
         question = analyst_response.strip()
         if question.startswith("{") and question.endswith("}"):
             question = None
@@ -165,7 +173,7 @@ def node_topology_analyst(state: LayoutState):
     updated_chat_history = _update_and_save_chat_history(
         chat_history=chat_history,
         user_content=user_message,
-        node_role="Analyzer Asssistant",
+        node_role="Analyzer Assistant",
         node_content=question,
     )
 
@@ -268,6 +276,9 @@ def node_placement_specialist(state: LayoutState):
         f"{context_text}"
     )
 
+    selected_model = state.get("selected_model", "Gemini")
+    ollama_model = state.get("ollama_model", "qwen2.5")
+
     placer_msgs = _build_llm_messages(
         PLACEMENT_SPECIALIST_PROMPT,
         chat_history,
@@ -276,7 +287,12 @@ def node_placement_specialist(state: LayoutState):
 
     placement_response = ""
     try:
-        placement_response = run_llm(placer_msgs, placer_user)
+        placement_response = run_llm(
+            placer_msgs, 
+            placer_user, 
+            selected_model=selected_model, 
+            ollama_model=ollama_model
+        )
         stage2_cmds = _extract_cmd_blocks(placement_response)
     except Exception as exc:
         print(f"[PLACEMENT] LLM failed: {exc}")
@@ -394,6 +410,9 @@ def node_drc_critic(state: LayoutState):
         f"=== CURRENT DEVICE POSITIONS ===\n{current_placement_context}"
     )
 
+    selected_model = state.get("selected_model", "Gemini")
+    ollama_model = state.get("ollama_model", "qwen2.5")
+
     critic_msgs = _build_llm_messages(
         DRC_CRITIC_PROMPT,
         chat_history,
@@ -403,7 +422,12 @@ def node_drc_critic(state: LayoutState):
     # ── LLM correction pass ──────────────────────────────────────────────────
     critic_response = ""
     try:
-        critic_response = run_llm(critic_msgs, critic_user)
+        critic_response = run_llm(
+            critic_msgs, 
+            critic_user, 
+            selected_model=selected_model, 
+            ollama_model=ollama_model
+        )
         critic_cmds = _extract_cmd_blocks(critic_response)
     except Exception as exc:
         print(f"[DRC] LLM Error: {exc}")
@@ -565,6 +589,9 @@ def node_routing_previewer(state: LayoutState):
         f"{routing_text}\n\n"
         f"Current positions: {current_positions}"
     )
+    selected_model = state.get("selected_model", "Gemini")
+    ollama_model = state.get("ollama_model", "qwen2.5")
+
     router_msgs = _build_llm_messages(
         ROUTING_PREVIEWER_PROMPT,
         chat_history,
@@ -575,7 +602,12 @@ def node_routing_previewer(state: LayoutState):
     applied_cmds = []
     router_response = ""
     try:
-        router_response = run_llm(router_msgs, router_user)
+        router_response = run_llm(
+            router_msgs, 
+            router_user, 
+            selected_model=selected_model, 
+            ollama_model=ollama_model
+        )
         router_cmds     = _extract_cmd_blocks(router_response)
     except Exception as exc:
         print(f"[ROUTING] LLM error: {exc}")

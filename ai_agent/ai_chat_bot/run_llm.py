@@ -63,155 +63,182 @@ def _build_transcript_prompt(chat_messages, full_prompt):
 #-----------------------------------------------------------------
 # Main LLM interface function
 #`-----------------------------------------------------------------`
+def run_llm(chat_messages, full_prompt, selected_model="Gemini", ollama_model="llama3.2"):
+    """Execute the chosen LLM request and return the reply text.
 
-def run_llm(chat_messages, full_prompt):
-    """Execute the cascading LLM request and return the reply text.
+    Includes automatic retry with exponential backoff for transient
+    API errors (429 RESOURCE_EXHAUSTED, 503 UNAVAILABLE) so that a
+    single hiccup does not crash the multi-agent pipeline.
 
     Args:
         chat_messages: list of {"role": ..., "content": ...} dicts
         full_prompt:   complete prompt string for single-turn APIs
+        selected_model: 'Gemini' | 'OpenAI' | 'Ollama' | 'Groq' | 'DeepSeek'
+        ollama_model:   name of the local Ollama model to use
 
     Returns:
         str: the LLM reply text
-
-    Raises:
-        RuntimeError: if all backends fail
     """
-    errors = []
-    print(
-        f"[LLM] run_llm: {len(chat_messages)} msgs, "
-        f"prompt={len(full_prompt)} chars"
-    )
+    MAX_RETRIES = 3
+    BACKOFF_BASE = 2  # seconds
 
-    # ---- 1. Gemini ----
-    gemini_key = os.environ.get("GEMINI_API_KEY", "")
-    if gemini_key:
-        gemini_models = [
-            "models/gemma-4-31b-it",
-        ]
-        _gemini_key_invalid = False
-        for model_name in gemini_models:
-            if _gemini_key_invalid:
-                break
-            for attempt in range(3):
+    print(f"[LLM] run_llm: model={selected_model}, msgs={len(chat_messages)}, prompt={len(full_prompt)}")
+
+    last_result = "Error: All retries failed."
+    for attempt in range(1, MAX_RETRIES + 1):
+        result = _run_llm_once(chat_messages, full_prompt, selected_model, ollama_model)
+
+        # Check for transient errors worth retrying
+        # Fix Bug #3: Explicit parentheses for operator precedence
+        is_transient = (
+            result.startswith("Gemini Error: Rate Limited")
+            or ("429" in result and "RESOURCE_EXHAUSTED" in result)
+            or ("503" in result and "UNAVAILABLE" in result)
+            or ("503" in result and "high demand" in result.lower())
+        )
+        if is_transient and attempt < MAX_RETRIES:
+            wait = BACKOFF_BASE ** attempt
+            print(f"[LLM] Transient error on attempt {attempt}/{MAX_RETRIES}, "
+                  f"retrying in {wait}s...")
+            time.sleep(wait)
+            continue
+
+        return result
+
+    return last_result
+
+
+def _run_llm_once(chat_messages, full_prompt, selected_model, ollama_model="llama3.2"):
+    """Single-shot LLM call (no retries)."""
+
+    if selected_model == "Gemini":
+        gemini_key = os.environ.get("GEMINI_API_KEY", "")
+        if not gemini_key:
+            return "Error: GEMINI_API_KEY not set. Please update the API key in the Model Selection tool."
+
+        try:
+            from google import genai
+            from google.genai import types as genai_types
+
+            client = genai.Client(api_key=gemini_key)
+            
+            # Detect if we should use the JSON transcript format (for LangGraph nodes)
+            # or the standard chat format (for UI chat).
+            is_pipeline = any("topology" in str(m.get("content", "")).lower() for m in chat_messages)
+            
+            if is_pipeline:
+                sys_text, user_text = _build_transcript_prompt(chat_messages, full_prompt)
+            else:
+                sys_text = ""
+                conv_parts = []
+                for cm in chat_messages:
+                    if cm["role"] == "system":
+                        sys_text = cm["content"]
+                    else:
+                        conv_parts.append(cm["content"])
+                user_text = "\n".join(conv_parts) if conv_parts else full_prompt
+
+            config_kwargs = {
+                "max_output_tokens": 4096,
+                "temperature": 0.4,
+                "system_instruction": sys_text or None
+            }
+
+            response = client.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=user_text,
+                config=genai_types.GenerateContentConfig(**config_kwargs),
+            )
+
+            if response and response.text:
+                return response.text.strip()
+            return "Error: Gemini returned an empty response."
+        except Exception as e:
+            err_str = str(e)
+            if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
+                return "Gemini Error: Rate Limited (429). Please wait a minute before trying again."
+            if "503" in err_str or "UNAVAILABLE" in err_str:
+                return f"503 UNAVAILABLE: {err_str}"
+            return f"Gemini Error: {err_str}"
+
+    elif selected_model == "OpenAI":
+        openai_key = os.environ.get("OPENAI_API_KEY", "")
+        if not openai_key:
+            return "Error: OPENAI_API_KEY not set."
+
+        try:
+            from openai import OpenAI
+            client = OpenAI(api_key=openai_key)
+
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=chat_messages,
+                temperature=0.4,
+                max_tokens=4096
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            return f"OpenAI Error: {str(e)}"
+
+    elif selected_model == "Ollama":
+        try:
+            import requests
+            response = requests.post(
+                "http://localhost:11434/api/chat",
+                json={
+                    "model": ollama_model,
+                    "messages": chat_messages,
+                    "stream": False
+                },
+                timeout=300
+            )
+            if response.status_code != 200:
+                err_msg = response.text
                 try:
-                    from google import genai
-                    from google.genai import types as genai_types
+                    err_json = response.json()
+                    err_msg = err_json.get("error", err_msg)
+                except Exception:
+                    pass
+                return f"Ollama API Error ({response.status_code}): {err_msg}"
+            return response.json().get("message", {}).get("content", "").strip()
+        except Exception as e:
+            return f"Ollama Error: Could not connect to local server on port 11434. ({str(e)})"
 
-                    client = genai.Client(api_key=gemini_key)
-                    sys_text, user_text = _build_transcript_prompt(
-                        chat_messages,
-                        full_prompt,
-                    )
+    elif selected_model == "Groq":
+        groq_key = os.environ.get("GROQ_API_KEY", "")
+        if not groq_key:
+            return "Error: GROQ_API_KEY not set."
 
-                    config_kwargs = {
-                        "max_output_tokens": 4096,
-                        "temperature":       0.4,
-                    }
+        try:
+            from groq import Groq as GroqClient
+            client = GroqClient(api_key=groq_key)
+            response = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=chat_messages,
+                temperature=0.4,
+                max_tokens=4096
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            return f"Groq Error: {str(e)}"
 
-                    if "gemma" in model_name.lower():
-                        if sys_text:
-                            user_text = f"{sys_text}\n\n{user_text}"
-                    else:
-                        config_kwargs["system_instruction"] = sys_text or None
+    elif selected_model == "DeepSeek":
+        deepseek_key = os.environ.get("DEEPSEEK_API_KEY", "")
+        if not deepseek_key:
+            return "Error: DEEPSEEK_API_KEY not set."
 
-                    response = client.models.generate_content(
-                        model    = model_name,
-                        contents = user_text,
-                        config   = genai_types.GenerateContentConfig(
-                            **config_kwargs
-                        ),
-                    )
+        try:
+            from openai import OpenAI
+            client = OpenAI(api_key=deepseek_key, base_url="https://api.deepseek.com")
+            response = client.chat.completions.create(
+                model="deepseek-chat",
+                messages=chat_messages,
+                temperature=0.4,
+                max_tokens=4096
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            return f"DeepSeek Error: {str(e)}"
 
-                    print("################ LLM Prompt ################")
-                    print(user_text)
-                    print("##########################################")
-                    print("################ LLM Response ################")
-                    print(response.text if response else "[No response]")
-                    print("##########################################")
-
-                    reply_text = None
-
-                    if response:
-                        reply_text = getattr(response, "text", None)
-
-                        # Fallback if empty
-                        if not reply_text:
-                            candidates = getattr(response, "candidates", None)
-
-                            if candidates and len(candidates) > 0:
-                                content = getattr(candidates[0], "content", None)
-
-                                if content:
-                                    parts = getattr(content, "parts", None)
-
-                                    if parts:
-                                        texts = []
-                                        for p in parts:
-                                            text = getattr(p, "text", None)
-                                            if isinstance(text, str):
-                                                texts.append(text)
-
-                                        if texts:
-                                            reply_text = "".join(texts)
-                          
-
-                    if reply_text and reply_text.strip():
-                        print(f"[LLM] Gemini/{model_name}")
-                        return reply_text.strip()
-                    else:
-                        errors.append(
-                            f"Gemini/{model_name}: empty response"
-                        )
-                        break
-
-                except Exception as e:
-                    import traceback
-                    e_str   = str(e)
-                    err_str = (
-                        f"[{type(e).__name__}] {e}\n"
-                        f"{traceback.format_exc()}"
-                    )
-                    if any(
-                        k in e_str
-                        for k in (
-                            "API_KEY_INVALID",
-                            "API key not valid",
-                            "401",
-                            "403",
-                            "PERMISSION_DENIED",
-                            "invalid api key",
-                            "could not validate",
-                        )
-                    ):
-                        errors.append(f"Gemini: API key invalid – {e}")
-                        _gemini_key_invalid = True
-                        break
-                    if "429" in e_str or "RESOURCE_EXHAUSTED" in e_str:
-                        retry_s = _parse_retry_delay(e)
-                        wait    = min(retry_s + 2.0, 120.0)
-                        if attempt < 2:
-                            print(
-                                f"[LLM] Gemini/{model_name} rate-limited "
-                                f"(retry in {retry_s:.1f}s). "
-                                f"Waiting {wait:.1f}s..."
-                            )
-                            time.sleep(wait)
-                            continue
-                    errors.append(f"Gemini/{model_name}: {err_str}")
-                    break
-    else:
-        errors.append("Gemini: GEMINI_API_KEY not set")
-
-    # ---- All models failed ----
-    summary = "\n".join(f"  * {e}" for e in errors)
-    print(
-        f"[LLM] All models failed. "
-        f"Falling back to prescriptive logic.\n{summary}"
-    )
-    return (
-        "I'm having trouble connecting to my AI backend right now. "
-        "Please check your API key in the `.env` file and try again. "
-        "In the meantime, I can still execute direct commands like "
-        "**swap**, **move**, and **add dummy** if you type them!"
-    )
+    return f"Error: Unsupported model '{selected_model}'"
+   )

@@ -1,5 +1,5 @@
 """
-ai_agent/topology_analyst.py
+ai_agent/ai_chat_bot/agents/topology_analyst.py
 =============================
 Topology Analyst Agent
 ======================
@@ -48,7 +48,7 @@ IDENTIFY THE CIRCUIT:
 3) State your conclusion about which topologies are present (e.g., current mirror, differential pair, cascode, logic gate, etc.)
 4) For each identified topology, explain your reasoning based on the connectivity and device types.
 5) Then identify the overall circuit function (e.g., amplifier, comparator, logic function) based on the topologies you found.
-"""
+""" + "\n\n" + ANALOG_LAYOUT_RULES
 
 
 
