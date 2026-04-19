@@ -3,8 +3,8 @@ import os
 import traceback
 from PySide6.QtWidgets import QApplication
 
-sys.path.insert(0, os.path.abspath('symbolic_editor'))
-from main import MainWindow
+sys.path.insert(0, os.path.abspath('.'))
+from symbolic_editor.main import MainWindow
 
 def main():
     app = QApplication(sys.argv)
@@ -28,12 +28,17 @@ def main():
         
         # Test dialog
         from unittest.mock import patch
-        with patch('main._MatchDialog.exec', return_value=1): # Accept
-            with patch('main._MatchDialog.get_technique', return_value='interdigitated'):
+        with patch('symbolic_editor.main._MatchDialog.exec', return_value=1): # Accept
+            with patch('symbolic_editor.main._MatchDialog.get_technique', return_value='interdigitated'):
                 win._on_match_devices()
                 print("TEST COMPLETE: No Exception")
+                return 0
     except Exception as e:
         traceback.print_exc()
+        return 1
+    finally:
+        win.close()
+        app.quit()
 
 if __name__ == '__main__':
-    main()
+    raise SystemExit(main())

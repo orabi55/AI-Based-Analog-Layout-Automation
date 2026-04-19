@@ -193,8 +193,15 @@ class OrchestratorWorker(LLMWorker):
         except ImportError:
             self.thread_config = {"configurable": {"thread_id": str(uuid.uuid4())}}
 
-    @Slot(str, str, list)
-    def process_orchestrated_request(self, user_message, layout_context_json, chat_history=None):
+    @Slot(str, str, list, str, str)
+    def process_orchestrated_request(
+        self,
+        user_message,
+        layout_context_json,
+        chat_history=None,
+        selected_model="Gemini",
+        ollama_model="llama3.2",
+    ):
         import json as _json
 
         if chat_history is None:
@@ -212,9 +219,15 @@ class OrchestratorWorker(LLMWorker):
             project_root = Path(__file__).resolve().parent.parent
             sp_file = _resolve_sp_file(layout_context, project_root)
             layout_context["sp_file_path"] = sp_file or ""
+            classify_run_llm = lambda msgs, prompt, sel: _run_llm(
+                msgs, prompt, sel, ollama_model
+            )
+            run_selected_llm = lambda msgs, prompt: _run_llm(
+                msgs, prompt, selected_model, ollama_model
+            )
 
             # ── Intent Classification ──────────────────────────────────
-            intent = classify_intent(user_message, _run_llm, selected_model)
+            intent = classify_intent(user_message, classify_run_llm, selected_model)
 
             if intent == "chat":
                 print("[ORCH] CHAT intent -> conversational reply")
@@ -228,7 +241,7 @@ class OrchestratorWorker(LLMWorker):
                 chat_msgs = [{"role": "system", "content": chat_system}] + chat_history
                 if not chat_history or chat_history[-1].get("content") != user_message:
                     chat_msgs.append({"role": "user", "content": user_message})
-                reply = _run_llm(chat_msgs, f"{chat_system}\n\nUser: {user_message}")
+                reply = run_selected_llm(chat_msgs, f"{chat_system}\n\nUser: {user_message}")
                 self.response_ready.emit(reply)
 
             elif intent == "question":
@@ -237,7 +250,7 @@ class OrchestratorWorker(LLMWorker):
                 chat_msgs = [{"role": "system", "content": system_prompt}] + chat_history
                 if not chat_history or chat_history[-1].get("content") != user_message:
                     chat_msgs.append({"role": "user", "content": user_message})
-                reply = _run_llm(chat_msgs, f"{system_prompt}\n\nUser: {user_message}")
+                reply = run_selected_llm(chat_msgs, f"{system_prompt}\n\nUser: {user_message}")
                 self.response_ready.emit(reply)
 
             elif intent == "concrete":
@@ -248,7 +261,7 @@ class OrchestratorWorker(LLMWorker):
                     + "For this turn, return ONLY a JSON list of command dicts "
                     + "(no markdown, no prose)."
                 )
-                reply = _run_llm(
+                reply = run_selected_llm(
                     [{"role": "system", "content": system_prompt},
                      {"role": "user",   "content": user_message}],
                     system_prompt

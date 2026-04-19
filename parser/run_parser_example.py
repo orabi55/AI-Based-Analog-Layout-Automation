@@ -2,7 +2,8 @@ import os
 import sys
 
 # Ensure imports work from the root directory
-sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
+_repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, _repo_root)
 
 from parser.netlist_reader import read_netlist
 from parser.layout_reader import extract_layout_instances
@@ -11,12 +12,11 @@ from parser.circuit_graph import build_merged_graph
 
 def run_parser_pipeline():
     print("Starting Parser Walkthrough...")
-    base_dir = os.path.abspath(os.path.dirname(__file__))
-    spice_path = os.path.join(base_dir, "examples", "xor", "Xor_Automation.sp")
-    layout_path = os.path.join(base_dir, "examples", "xor", "Xor_Automation.oas")
+    spice_path = os.path.join(_repo_root, "examples", "xor", "Xor_Automation.sp")
+    layout_path = os.path.join(_repo_root, "examples", "xor", "Xor_Automation.oas")
 
     if not os.path.exists(spice_path) or not os.path.exists(layout_path):
-        print(f"Error: Could not find example files in {base_dir}/examples/xor/")
+        print(f"Error: Could not find example files in {_repo_root}/examples/xor/")
         return
 
     print("\n" + "="*50)

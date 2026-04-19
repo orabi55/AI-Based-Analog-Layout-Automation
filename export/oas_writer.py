@@ -37,7 +37,10 @@ if _project_root not in sys.path:
 
 import gdstk
 
-from parser.layout_reader import extract_layout_instances
+from parser.layout_reader import (
+    extract_layout_instances_from_library,
+    invert_transform_point,
+)
 from parser.netlist_reader import read_netlist
 from parser.device_matcher import match_devices
 
@@ -314,30 +317,54 @@ def update_oas_placement(oas_path, sp_path, nodes, output_path,
         catalog.setdefault((base_type, ph), {})[( al, ar)] = cell
 
     # ── Device mapping ────────────────────────────────────────────────────
-    layout_devices = extract_layout_instances(oas_path)
+    layout_devices = extract_layout_instances_from_library(lib, include_references=True)
     netlist        = read_netlist(sp_path)
     mapping        = match_devices(netlist, layout_devices)
     node_by_id     = {n["id"]: n for n in nodes if not n.get("is_dummy")}
 
     # ── Apply updates ─────────────────────────────────────────────────────
     # Spatial matching to map netlist devices to references
-    original_layout_data = {i: d for i, d in enumerate(layout_devices)}
-    
+    layout_to_nodes = defaultdict(list)
     for dev_id, layout_idx in mapping.items():
         node = node_by_id.get(dev_id)
-        if node is None:
-            continue
-            
-        if layout_idx >= len(refs):
-            continue
-            
-        ref = refs[layout_idx]
+        if node is not None:
+            layout_to_nodes[layout_idx].append(node)
 
-        geom   = node.get("geometry", {})
+    def _node_sort_key(node):
+        electrical = node.get("electrical", {})
+        return (
+            electrical.get("array_index") or 0,
+            electrical.get("multiplier_index") or 0,
+            electrical.get("finger_index") or 0,
+            node.get("id", ""),
+        )
+
+    for layout_idx, group_nodes in layout_to_nodes.items():
+        if layout_idx >= len(layout_devices):
+            continue
+
+        layout_entry = layout_devices[layout_idx]
+        ref = layout_entry.get("reference")
+        if ref is None:
+            continue
+
+        group_nodes = sorted(group_nodes, key=_node_sort_key)
+        node = group_nodes[0]
+        geom = dict(node.get("geometry", {}))
+        if len(group_nodes) > 1:
+            geom["x"] = min(n.get("geometry", {}).get("x", geom.get("x", 0)) for n in group_nodes)
+        orient = geom.get("orientation", "R0")
+
+        local_x, local_y = invert_transform_point(
+            layout_entry.get("parent_transform", (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)),
+            geom.get("x", 0),
+            geom.get("y", 0),
+        )
+
         orient = geom.get("orientation", "R0")
         
         # Position & orientation
-        ref.origin = (geom.get("x", 0), geom.get("y", 0))
+        ref.origin = (local_x, local_y)
         rot_rad, x_mirror = _orient_to_gdstk(orient)
         ref.rotation     = rot_rad
         ref.x_reflection = x_mirror
