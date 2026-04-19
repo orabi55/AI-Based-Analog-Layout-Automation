@@ -31,7 +31,8 @@ builder.add_edge("node_topology_analyst", "node_strategy_selector")
 builder.add_edge("node_strategy_selector", "node_placement_specialist")
 
 # --- Placement Pipeline ---
-builder.add_edge("node_placement_specialist", "node_routing_previewer")
+builder.add_edge("node_placement_specialist", "node_finger_expansion")
+builder.add_edge("node_finger_expansion", "node_routing_previewer")
 builder.add_edge("node_routing_previewer", "node_drc_critic")
 
 # 3. Conditional / Cyclic Flows

@@ -1,5 +1,5 @@
 """
-ai_agent/finger_grouping.py
+ai_agent/ai_chat_bot/finger_grouping.py
 ===========================
 Utilities for detecting and managing multi-finger transistor structures.
 

@@ -105,7 +105,7 @@ class ChatPanel(QWidget):
     toggle_requested = Signal()        # emitted when the user clicks the panel-toggle button
 
     # Single-agent path (normal chat)
-    request_inference = Signal(str, list)
+    request_inference = Signal(str, list, str, str)
     # Multi-agent path (orchestrator pipeline)
     request_orchestrated = Signal(str, str, list)  # (user_message, layout_context_json, chat_history)
     # Resume paths for LangGraph interrupts
@@ -123,6 +123,10 @@ class ChatPanel(QWidget):
         self._is_orchestrated = False     # True when orchestrator path is active
         self._awaiting_strategy_resume = False
         self._awaiting_visual_resume = False
+
+        # Model preferences (synced from MainWindow)
+        self.selected_model = "Gemini"
+        self.ollama_model = "llama3.2"
 
         # --- Worker-Object Pattern: QThread + OrchestratorWorker ---
         self._worker_thread = QThread()
@@ -633,7 +637,9 @@ class ChatPanel(QWidget):
             })
 
         # Emit signal → crosses thread boundary → runs on worker thread
-        self.request_inference.emit(full_prompt, chat_messages)
+        self.request_inference.emit(
+            full_prompt, chat_messages, self.selected_model, self.ollama_model
+        )
 
     # -----------------------------------------
     # Response handling (GUI thread)
@@ -849,7 +855,8 @@ class ChatPanel(QWidget):
         self._stop_thinking()
         self._remove_last_message()
         self._awaiting_strategy_resume = False
-        self._awaiting_visual_resume = False
+        # Bug Fix #5: Only set to True if this is an interrupt review request
+        self._awaiting_visual_resume = (payload.get("type") == "visual_review")
 
         cmd_list = []
         if isinstance(payload, dict):

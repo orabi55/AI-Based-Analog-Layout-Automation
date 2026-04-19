@@ -1,5 +1,5 @@
 """
-ai_agent/placement_specialist.py
+ai_agent/ai_chat_bot/agents/placement_specialist.py
 ==================================
 Generates [CMD] blocks for device positioning while enforcing strict
 inventory conservation, row-based analog constraints, and routing quality.

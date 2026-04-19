@@ -24,6 +24,7 @@ from dotenv import load_dotenv
 from PySide6.QtCore import QObject, Signal, Slot
 
 from ai_agent.ai_chat_bot.agents.orchestrator import MultiAgentOrchestrator
+from ai_agent.ai_chat_bot.run_llm import run_llm
 
 # Load .env – walk upward from this file to find the repo root .env
 _this_file = Path(__file__).resolve()
@@ -82,171 +83,8 @@ def build_system_prompt(layout_context):
 
 
 # -----------------------------------------------------------------
-# Module-level helper — pure Python, no Qt
+# Task-specific prompt builders
 # -----------------------------------------------------------------
-def run_llm(chat_messages, full_prompt, selected_model, ollama_model="llama3.2"):
-    """Execute the chosen LLM request and return the reply text.
-
-    Includes automatic retry with exponential backoff for transient
-    API errors (429 RESOURCE_EXHAUSTED, 503 UNAVAILABLE) so that a
-    single hiccup does not crash the multi-agent pipeline.
-    """
-    import time as _time
-
-    MAX_RETRIES = 3
-    BACKOFF_BASE = 2  # seconds
-
-    print(f"[LLM] run_llm: model={selected_model}, msgs={len(chat_messages)}, prompt={len(full_prompt)}")
-
-    for attempt in range(1, MAX_RETRIES + 1):
-        result = _run_llm_once(chat_messages, full_prompt, selected_model, ollama_model)
-
-        # Check for transient errors worth retrying
-        is_transient = (
-            result.startswith("Gemini Error: Rate Limited")
-            or "429" in result and "RESOURCE_EXHAUSTED" in result
-            or "503" in result and "UNAVAILABLE" in result
-            or "503" in result and "high demand" in result.lower()
-        )
-        if is_transient and attempt < MAX_RETRIES:
-            wait = BACKOFF_BASE ** attempt
-            print(f"[LLM] Transient error on attempt {attempt}/{MAX_RETRIES}, "
-                  f"retrying in {wait}s...")
-            _time.sleep(wait)
-            continue
-
-        return result
-
-    return result  # return last result even if still an error
-
-
-def _run_llm_once(chat_messages, full_prompt, selected_model, ollama_model="llama3.2"):
-    """Single-shot LLM call (no retries)."""
-
-    if selected_model == "Gemini":
-        gemini_key = os.environ.get("GEMINI_API_KEY", "")
-        if not gemini_key:
-            return "Error: GEMINI_API_KEY not set. Please update the API key in the Model Selection tool."
-
-        try:
-            from google import genai
-            from google.genai import types as genai_types
-
-            client = genai.Client(api_key=gemini_key)
-            sys_text = ""
-            conv_parts = []
-            for cm in chat_messages:
-                if cm["role"] == "system":
-                    sys_text = cm["content"]
-                else:
-                    conv_parts.append(cm["content"])
-            user_text = "\n".join(conv_parts) if conv_parts else full_prompt
-
-            config_kwargs = {
-                "max_output_tokens": 4096,
-                "temperature": 0.4,
-                "system_instruction": sys_text or None
-            }
-
-            response = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=user_text,
-                config=genai_types.GenerateContentConfig(**config_kwargs),
-            )
-
-            if response and response.text:
-                return response.text.strip()
-            return "Error: Gemini returned an empty response."
-        except Exception as e:
-            err_str = str(e)
-            if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
-                return "Gemini Error: Rate Limited (429). Please wait a minute before trying again."
-            if "503" in err_str or "UNAVAILABLE" in err_str:
-                return f"503 UNAVAILABLE: {err_str}"
-            return f"Gemini Error: {err_str}"
-
-    elif selected_model == "OpenAI":
-        openai_key = os.environ.get("OPENAI_API_KEY", "")
-        if not openai_key:
-            return "Error: OPENAI_API_KEY not set. Please update the API key in the Model Selection tool."
-
-        try:
-            from openai import OpenAI
-            client = OpenAI(api_key=openai_key)
-
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=chat_messages,
-                temperature=0.4,
-                max_tokens=4096
-            )
-
-            return response.choices[0].message.content.strip()
-        except Exception as e:
-            return f"OpenAI Error: {str(e)}"
-
-    elif selected_model == "Ollama":
-        try:
-            import requests
-            response = requests.post(
-                "http://localhost:11434/api/chat",
-                json={
-                    "model": ollama_model,
-                    "messages": chat_messages,
-                    "stream": False
-                },
-                timeout=300
-            )
-            if response.status_code != 200:
-                err_msg = response.text
-                try:
-                    err_json = response.json()
-                    err_msg = err_json.get("error", err_msg)
-                except Exception:
-                    pass
-                return f"Ollama API Error ({response.status_code}): {err_msg}"
-            return response.json().get("message", {}).get("content", "").strip()
-        except Exception as e:
-            return f"Ollama Error: Could not connect or generate response. ({str(e)})\nEnsure 'ollama serve' is running locally on port 11434."
-
-    elif selected_model == "Groq":
-        groq_key = os.environ.get("GROQ_API_KEY", "")
-        if not groq_key:
-            return "Error: GROQ_API_KEY not set. Please update the API key in the Model Selection tool."
-
-        try:
-            from groq import Groq as GroqClient
-            client = GroqClient(api_key=groq_key)
-
-            response = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=chat_messages,
-                temperature=0.4,
-                max_tokens=4096
-            )
-
-            return response.choices[0].message.content.strip()
-        except Exception as e:
-            return f"Groq Error: {str(e)}"
-
-    elif selected_model == "DeepSeek":
-        deepseek_key = os.environ.get("DEEPSEEK_API_KEY", "")
-        if not deepseek_key:
-            return "Error: DEEPSEEK_API_KEY not set. Please update the API key in the Model Selection tool."
-
-        try:
-            from openai import OpenAI
-            client = OpenAI(
-                api_key=deepseek_key,
-                base_url="https://api.deepseek.com"
-            )
-
-            response = client.chat.completions.create(
-                model="deepseek-chat",
-                messages=chat_messages,
-                temperature=0.4,
-                max_tokens=4096
-            )
 
             return response.choices[0].message.content.strip()
         except Exception as e:
@@ -380,7 +218,7 @@ class OrchestratorWorker(LLMWorker):
             layout_context = {}
 
         try:
-            from ai_agent.ai_chat_bot.agents.classifier_agent import classify_intent
+            from ai_agent.ai_chat_bot.agents.classifier import classify_intent
             from ai_agent.ai_chat_bot.run_llm import run_llm as _run_llm
 
             project_root = Path(__file__).resolve().parent.parent
@@ -388,7 +226,7 @@ class OrchestratorWorker(LLMWorker):
             layout_context["sp_file_path"] = sp_file or ""
 
             # ── Intent Classification ──────────────────────────────────
-            intent = classify_intent(user_message, _run_llm)
+            intent = classify_intent(user_message, _run_llm, selected_model)
 
             if intent == "chat":
                 print("[ORCH] CHAT intent -> conversational reply")
@@ -455,6 +293,7 @@ class OrchestratorWorker(LLMWorker):
                     "edges":           [],
                     "terminal_nets":   layout_context.get("terminal_nets", {}),
                     "placement_nodes": layout_context.get("nodes", []),
+                    "deterministic_snapshot": [],
                     "drc_flags":       [],
                     "drc_pass":        False,
                     "approved":        False,

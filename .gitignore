@@ -1,49 +1,72 @@
-# Python cache / bytecode
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
+.pytest_cache/
+.mypy_cache/
+.tox/
+.coverage
+htmlcov/
 
-# Virtual environments
+# Environments
 .venv/
 venv/
 env/
 ENV/
-
-# Build / packaging
-build/
-dist/
+bin/
+lib/
+develop-eggs/
+eggs/
+parts/
+sdist/
+var/
+wheels/
 *.egg-info/
-.pytest_cache/
-.mypy_cache/
+.installed.cfg
+*.egg
 
-# IDE / editor files
-.sixth/
-.qwen/
+# IDEs / Editors
 .vscode/
 .idea/
 *.swp
 *.swo
+.project
+.pydevproject
+.settings/
+.qwen/
+.sixth/
 
-# OS artifacts
+# OS
 .DS_Store
 Thumbs.db
+Desktop.ini
 
 # Logs
 logs/
 *.log
 
-# Secrets / local config
+# Local Config / Secrets
 .env
 .env.*
 !.env.example
 
+# App Specific Intermediate Files
+*_graph.json
+*_placed.json
+debug_raw_output.json
+*.oas
+*.gds
+*.sp
+
+# RAG / Vector DBs
+*/rag_examples_db/
+*/rag_db/
+chroma_db/
+faiss_index/
+
 # Archives
 *.rar
 *.zip
-
-# Generated placement files (keep source .sp and .oas, ignore intermediates)
-*_graph.json
-*_placed.json
-.venv/
-.venv/
-venv/
+*.7z
+*.tar.gz
