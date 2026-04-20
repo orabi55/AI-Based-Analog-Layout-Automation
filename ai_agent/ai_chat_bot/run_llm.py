@@ -240,4 +240,140 @@ def _run_llm_once(chat_messages, full_prompt, selected_model, ollama_model="llam
         except Exception as e:
             return f"DeepSeek Error: {str(e)}"
 
+    elif selected_model == "Alibaba":
+        alibaba_key = os.environ.get("ALIBABA_API_KEY", "")
+        if not alibaba_key:
+            return "Error: ALIBABA_API_KEY not set. Please enter it in the Model Selection dialog."
+        try:
+            from openai import OpenAI
+            client = OpenAI(
+                api_key=alibaba_key,
+                base_url="https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+            )
+            # Build messages for Qwen (same OpenAI format)
+            qwen_messages = []
+            for cm in chat_messages:
+                role = cm.get("role", "user")
+                content = cm.get("content", "")
+                if role not in ("system", "user", "assistant"):
+                    role = "user"
+                if content:
+                    qwen_messages.append({"role": role, "content": content})
+            if not qwen_messages:
+                qwen_messages = [{"role": "user", "content": full_prompt or "Hello"}]
+            response = client.chat.completions.create(
+                model="qwen-plus",
+                messages=qwen_messages,
+                temperature=0.4,
+                max_tokens=4096,
+            )
+            return (response.choices[0].message.content or "").strip()
+        except Exception as e:
+            return f"Alibaba Qwen Error: {str(e)}"
+
+    elif selected_model == "VertexGemini":
+        project_id = os.environ.get("VERTEX_PROJECT_ID", "")
+        location = os.environ.get("VERTEX_LOCATION", "us-central1")
+        if not project_id:
+            return "Error: VERTEX_PROJECT_ID not set. Please configure it in the Model Selection dialog."
+
+        try:
+            from google import genai
+            from google.genai import types as genai_types
+
+            client = genai.Client(
+                vertexai=True, project=project_id, location=location
+            )
+
+            # Detect if we should use the JSON transcript format
+            is_pipeline = any(
+                "topology" in str(m.get("content", "")).lower()
+                for m in chat_messages
+            )
+
+            if is_pipeline:
+                sys_text, user_text = _build_transcript_prompt(
+                    chat_messages, full_prompt
+                )
+            else:
+                sys_text = ""
+                conv_parts = []
+                for cm in chat_messages:
+                    if cm["role"] == "system":
+                        sys_text = cm["content"]
+                    else:
+                        conv_parts.append(cm["content"])
+                user_text = "\n".join(conv_parts) if conv_parts else full_prompt
+
+            config_kwargs = {
+                "max_output_tokens": 4096,
+                "temperature": 0.4,
+                "system_instruction": sys_text or None,
+            }
+
+            response = client.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=user_text,
+                config=genai_types.GenerateContentConfig(**config_kwargs),
+            )
+
+            if response and response.text:
+                return response.text.strip()
+            return "Error: Vertex AI Gemini returned an empty response."
+        except Exception as e:
+            err_str = str(e)
+            if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
+                return "Vertex AI Gemini Error: Rate Limited (429). Please wait before trying again."
+            if "503" in err_str or "UNAVAILABLE" in err_str:
+                return f"503 UNAVAILABLE: {err_str}"
+            return f"Vertex AI Gemini Error: {err_str}"
+
+    elif selected_model == "VertexClaude":
+        project_id = os.environ.get("VERTEX_PROJECT_ID", "")
+        location = os.environ.get("VERTEX_LOCATION", "us-east5")
+        if not project_id:
+            return "Error: VERTEX_PROJECT_ID not set. Please configure it in the Model Selection dialog."
+
+        try:
+            from anthropic import AnthropicVertex
+
+            client = AnthropicVertex(
+                region=location, project_id=project_id
+            )
+
+            # Build messages for Claude format
+            sys_text = ""
+            claude_messages = []
+            for cm in chat_messages:
+                if cm["role"] == "system":
+                    sys_text = cm["content"]
+                else:
+                    claude_messages.append(
+                        {"role": cm["role"], "content": cm["content"]}
+                    )
+
+            if not claude_messages:
+                claude_messages = [
+                    {"role": "user", "content": full_prompt or "Hello"}
+                ]
+
+            kwargs = {
+                "model": "claude-sonnet-4-20250514",
+                "max_tokens": 4096,
+                "messages": claude_messages,
+            }
+            if sys_text:
+                kwargs["system"] = sys_text
+
+            message = client.messages.create(**kwargs)
+
+            if message and message.content:
+                return message.content[0].text.strip()
+            return "Error: Vertex AI Claude returned an empty response."
+        except Exception as e:
+            err_str = str(e)
+            if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
+                return "Vertex AI Claude Error: Rate Limited (429). Please wait before trying again."
+            return f"Vertex AI Claude Error: {err_str}"
+
     return f"Error: Unsupported model '{selected_model}'"

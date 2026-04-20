@@ -969,6 +969,8 @@ class LayoutEditorTab(QWidget):
         if submodel:
             self.chat_panel.ollama_model = submodel
         abutment_enabled = dialog.is_abutment_enabled()
+        run_sa = dialog.is_sa_enabled()
+        run_multi_agent = dialog.get_multi_agent_enabled()
         dialog.apply_api_keys()
         self._sync_node_positions()
         data = copy.deepcopy(self._build_output_data())
@@ -980,7 +982,8 @@ class LayoutEditorTab(QWidget):
             data["abutment_candidates"] = []
         data["no_abutment"] = not abutment_enabled
         abut_label = "with abutment" if abutment_enabled else "no abutment"
-        self.overlay.show_message(f"Running AI initial placement ({model_choice}, {abut_label})...")
+        sa_label = ", +SA" if run_sa else ""
+        self.overlay.show_message(f"Running AI initial placement ({model_choice}, {abut_label}{sa_label})...")
         self._saved_locked_positions = {}
         for group in self._matched_groups:
             for gid in group["ids"]:
@@ -988,7 +991,7 @@ class LayoutEditorTab(QWidget):
                 if node:
                     geo = node.get("geometry", {})
                     self._saved_locked_positions[gid] = {"x": geo.get("x", 0), "y": geo.get("y", 0)}
-        self._ai_worker = GenericWorker(self._run_ai_initial_placement, data, model_choice, submodel)
+        self._ai_worker = GenericWorker(self._run_ai_initial_placement, data, model_choice, submodel, run_sa, run_multi_agent)
         self._ai_worker.finished.connect(self._on_ai_placement_completed)
         self._ai_worker.error.connect(self._on_ai_placement_error)
         self._ai_worker.start()
@@ -1260,14 +1263,22 @@ class LayoutEditorTab(QWidget):
         return compressed
 
     @staticmethod
-    def _run_ai_initial_placement(data, model_choice="Gemini", submodel=None):
+    def _run_ai_initial_placement(data, model_choice="Gemini", submodel=None, run_sa=False, run_multi_agent=False):
         import tempfile
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tmp_in:
             json.dump(data, tmp_in, indent=2)
             tmp_in_path = tmp_in.name
         tmp_out_path = tmp_in_path.replace(".json", "_placed.json")
         try:
-            if model_choice == "OpenAI":
+            if run_multi_agent:
+                from ai_agent.ai_initial_placement.multi_agent_placer import multi_agent_generate_placement
+                multi_agent_generate_placement(
+                    tmp_in_path, tmp_out_path,
+                    selected_model=model_choice,
+                    ollama_model=submodel,
+                    run_sa=run_sa,
+                )
+            elif model_choice == "OpenAI":
                 try:
                     from ai_agent.ai_initial_placement.openai_placer import llm_generate_placement
                     llm_generate_placement(tmp_in_path, tmp_out_path)
@@ -1323,6 +1334,20 @@ class LayoutEditorTab(QWidget):
                     if "401" in str(e) or "invalid_api_key" in str(e):
                         raise RuntimeError("Invalid DeepSeek API Key.")
                     raise
+            elif model_choice == "Alibaba":
+                try:
+                    from ai_agent.ai_initial_placement.alibaba_placer import alibaba_generate_placement
+                    alibaba_generate_placement(tmp_in_path, tmp_out_path)
+                except Exception as e:
+                    if "401" in str(e) or "Unauthorized" in str(e) or "InvalidApiKey" in str(e):
+                        raise RuntimeError("Invalid Alibaba DashScope API Key.")
+                    raise
+            elif model_choice == "VertexGemini":
+                from ai_agent.ai_initial_placement.vertex_gemini_placer import vertex_gemini_generate_placement
+                vertex_gemini_generate_placement(tmp_in_path, tmp_out_path)
+            elif model_choice == "VertexClaude":
+                from ai_agent.ai_initial_placement.claude_vertex_placer import claude_generate_placement
+                claude_generate_placement(tmp_in_path, tmp_out_path)
             else:
                 try:
                     from ai_agent.ai_initial_placement.gemini_placer import gemini_generate_placement
@@ -1331,6 +1356,27 @@ class LayoutEditorTab(QWidget):
                     if "API key not valid" in str(e) or "API_KEY_INVALID" in str(e):
                         raise RuntimeError("Invalid Gemini API Key.")
                     raise
+
+            # ── Simulated Annealing post-optimization ──────────────
+            if run_sa:
+                try:
+                    with open(tmp_out_path) as f:
+                        sa_data = json.load(f)
+                    from ai_agent.ai_initial_placement.placer_utils import _ensure_placement_dict
+                    sa_data = _ensure_placement_dict(sa_data)
+                    sa_nodes = sa_data.get("nodes", [])
+                    if sa_nodes and len(sa_nodes) >= 2:
+                        from ai_agent.ai_initial_placement.sa_optimizer import optimize_placement
+                        sa_edges = data.get("edges", [])
+                        sa_candidates = data.get("abutment_candidates", [])
+                        sa_data["nodes"] = optimize_placement(
+                            sa_nodes, sa_edges, abutment_candidates=sa_candidates
+                        )
+                        with open(tmp_out_path, "w") as f:
+                            json.dump(sa_data, f, indent=4)
+                except Exception as sa_err:
+                    print(f"[SA] Post-optimization failed (non-fatal): {sa_err}")
+
             with open(tmp_out_path) as f:
                 raw_placed = json.load(f)
             from ai_agent.ai_initial_placement.placer_utils import _ensure_placement_dict

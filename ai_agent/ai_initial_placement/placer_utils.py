@@ -9,7 +9,18 @@ import copy
 def _repair_truncated_json(text: str) -> str:
     """
     Fix truncated JSON by closing any unclosed brackets and braces.
-    Handles the common case where Gemini hits token limit mid-output.
+    Handles the common case where an LLM hits its token limit mid-output.
+
+    Parameters
+    ----------
+    text : str
+        The raw, potentially truncated JSON string.
+
+    Returns
+    -------
+    str
+        A string with all detected open brackets (`[`) and braces (`{`)
+        properly closed at the end to make it structurally valid JSON.
     """
     text = text.rstrip()
     if text.endswith(","):
@@ -48,8 +59,28 @@ def _repair_truncated_json(text: str) -> str:
 
 def sanitize_json(text: str) -> dict:
     """
-    Extract and sanitize LLM output into strict JSON.
-    Handles: markdown fences, trailing commas, comments, and truncated output.
+    Extract and sanitize LLM output into a strict JSON dictionary.
+
+    Handles edge cases common to LLM generation such as:
+    - Markdown code fences (e.g., ```json ... ```)
+    - Trailing commas before array/object closures
+    - Inline JavaScript-style comments (// ...)
+    - Truncated output (by invoking _repair_truncated_json)
+
+    Parameters
+    ----------
+    text : str
+        The raw text response direct from the LLM.
+
+    Returns
+    -------
+    dict
+        A fully parsed JSON dictionary representing the layout geometry.
+
+    Raises
+    ------
+    ValueError
+        If the text cannot be repaired or parsed into valid JSON.
     """
     if not text or len(text.strip()) == 0:
         raise ValueError("Empty response from LLM")
@@ -99,7 +130,29 @@ def sanitize_json(text: str) -> dict:
     raise ValueError(f"Could not parse LLM output as JSON. First 500 chars: {s[:500]}")
 
 def _ensure_placement_dict(parsed) -> dict:
-    """Normalise the result of sanitize_json() to always be a dict with a 'nodes' key."""
+    """
+    Normalize the result of sanitize_json() to always be a dictionary
+    containing a "nodes" key.
+
+    Different LLMs might return a bare list `[{}, {}]` or nest the nodes under
+    keys like "placement", "result", or "layout", instead of the expected
+    `{"nodes": [{}, {}]}` structure. This function enforces consistency.
+
+    Parameters
+    ----------
+    parsed : dict | list
+        The raw Python object obtained after successfully parsing the LLM JSON.
+
+    Returns
+    -------
+    dict
+        A dictionary strictly containing a "nodes" key mapping to a list.
+
+    Raises
+    ------
+    ValueError
+        If the parsed object structure is entirely unrecognized.
+    """
     if isinstance(parsed, list):
         return {"nodes": parsed}
     if isinstance(parsed, dict):
@@ -114,7 +167,27 @@ def _ensure_placement_dict(parsed) -> dict:
 # Pre-analysis helpers (pure Python - no LLM)
 # ---------------------------------------------------------------------------
 def _build_net_adjacency(nodes: list, edges: list) -> str:
-    """Return a human-readable adjacency table for injection into the prompt."""
+    """
+    Construct a human-readable text block summarizing which devices share
+    which signal nets.
+
+    This block is injected directly into the LLM prompt to heavily bias the
+    model into placing devices that share nets closer together. It explicitly
+    flags nets that cross between PMOS and NMOS rows.
+
+    Parameters
+    ----------
+    nodes : list
+        List of device node dictionaries.
+    edges : list
+        List of edge dictionaries detailing connectivity (source, target, net).
+
+    Returns
+    -------
+    str
+        A multi-line formatted string enumerating all signal nets and their
+        connected devices. Returns a placeholder string if no nets are found.
+    """
     _POWER = frozenset({"VDD", "VSS", "GND", "VCC", "AVDD", "AVSS"})
     net_devs: dict = defaultdict(set)
     for e in edges:
@@ -137,14 +210,25 @@ def _build_net_adjacency(nodes: list, edges: list) -> str:
     return "\n".join(lines)
 
 def _build_device_inventory(nodes: list, row_summary: str = "") -> str:
-    """Return a structured device inventory string for the prompt.
+    """
+    Construct a structured text block enumerating all devices to be placed.
+
+    Separates devices by type (PMOS vs NMOS) and lists out their critical
+    electrical parameters (number of fingers, multiplier, length) so the
+    model understands the physical bounds and sizing constraints.
 
     Parameters
     ----------
-    nodes       : list of node dicts
-    row_summary : optional pre-computed row assignment summary from
-                  ``pre_assign_rows()``.  When provided the inventory will
-                  reference multi-row placement instead of a single row per type.
+    nodes : list
+        List of node dictionaries containing device metadata.
+    row_summary : str, optional
+        An optional pre-computed string detailing explicitly assigned rows
+        (used when generating multi-row/complex layouts). Defaults to "".
+
+    Returns
+    -------
+    str
+        A multi-line formatted string detailing the device inventory.
     """
     pmos = [n for n in nodes if n.get("type") == "pmos"]
     nmos = [n for n in nodes if n.get("type") == "nmos"]
@@ -169,7 +253,24 @@ def _build_device_inventory(nodes: list, row_summary: str = "") -> str:
     return "\n".join(lines)
 
 def _build_block_info(nodes: list, graph_data: dict) -> str:
-    """Return a human-readable block grouping summary for the prompt."""
+    """
+    Construct a text block defining hierarchical device groupings (blocks).
+
+    Any devices declared as part of the same block/sub-circuit must be kept
+    strictly contiguous within the layout row. This alerts the LLM to those bounds.
+
+    Parameters
+    ----------
+    nodes : list
+        List of node dictionaries.
+    graph_data : dict
+        The full graph JSON data which may contain top-level 'blocks' definitions.
+
+    Returns
+    -------
+    str
+        A multi-line formatted string describing which devices belong to which blocks.
+    """
     blocks = graph_data.get("blocks", {})
     if not blocks:
         for n in nodes:
@@ -194,7 +295,28 @@ def _build_block_info(nodes: list, graph_data: dict) -> str:
 # Post-placement validation
 # ---------------------------------------------------------------------------
 def _validate_placement(original_nodes: list, result) -> list:
-    """Run quick sanity checks on the returned placement. Returns list of errors."""
+    """
+    Run quick structural sanity checks on the returned AI placement.
+
+    Validates that:
+    1. No devices were dropped (missing).
+    2. No hallucinated (extra) devices were added.
+    3. No two devices occupy the exact same physical slot in a row (collision).
+    4. PMOS and NMOS devices have not erroneously swapped rows/types.
+
+    Parameters
+    ----------
+    original_nodes : list
+        The source-of-truth list of nodes sent to the model.
+    result : list | dict
+        The parsed geometry output from the model. Can be the raw list of nodes
+        or a dict containing a 'nodes' key.
+
+    Returns
+    -------
+    list
+        A list of string error messages. If empty, the placement is valid.
+    """
     errors = []
     orig_ids  = {n["id"] for n in original_nodes}
     orig_type = {n["id"]: n.get("type") for n in original_nodes}
@@ -269,7 +391,25 @@ def _validate_placement(original_nodes: list, result) -> list:
 # Coordinate normalisation
 # ---------------------------------------------------------------------------
 def _normalise_coords(nodes: list) -> tuple:
-    """Shift all node Y-coordinates so that min(y) == 0 across all devices."""
+    """
+    Shift all node Y-coordinates uniformly so that the minimum Y value is 0.0.
+
+    This ensures that components always sit on or above the positive Y-axis,
+    normalizing topologies plotted in negative coordinate space (e.g. from
+    certain extraction tools) before passing them to the AI.
+
+    Parameters
+    ----------
+    nodes : list
+        List of node dictionaries with absolute 'geometry' coordinates.
+
+    Returns
+    -------
+    tuple
+        A 2-tuple `(normalised_nodes, y_offset)` where:
+        - `normalised_nodes` is a deep copy of the original nodes with shifted Y values.
+        - `y_offset` is the float amount that was ADDED to the original coordinates.
+    """
     if not nodes:
         return nodes, 0.0
 
@@ -292,7 +432,25 @@ def _normalise_coords(nodes: list) -> tuple:
     return normalised, y_offset
 
 def _restore_coords(placed_nodes: list, y_offset: float) -> list:
-    """Un-shift Y coordinates back to the original frame."""
+    """
+    Un-shift Y coordinates back to their original extraction frame.
+
+    This reverses the arithmetic applied by `_normalise_coords` so that the
+    AI's layout strictly aligns with the source schematic's bounding box logic.
+
+    Parameters
+    ----------
+    placed_nodes : list
+        List of node dictionaries with AI-assigned coordinates.
+    y_offset : float
+        The float amount originally added by `_normalise_coords`.
+
+    Returns
+    -------
+    list
+        A deep copy of the `placed_nodes` with Y coordinates shifted downwards
+        by `y_offset`.
+    """
     if abs(y_offset) < 1e-9:
         return placed_nodes
     restored = copy.deepcopy(placed_nodes)
@@ -318,7 +476,18 @@ def compress_graph_for_prompt(graph_data: dict) -> dict:
     - Compresses terminal_nets (one per parent, not per finger)
     - Uses net-centric connectivity instead of verbose edge lists
     
-    Expected reduction: 95-97% smaller (e.g., 7300 lines -> 150-200 lines)
+    Expected reduction: 95-97% smaller (e.g., 7300 lines -> 150-200 lines).
+
+    Parameters
+    ----------
+    graph_data : dict
+        The full verbose JSON dictionary exported directly from the GUI.
+
+    Returns
+    -------
+    dict
+        A highly compressed dictionary containing exactly what the LLM needs:
+        devices, signal nets, matching constraints, and blocks.
     """
     if not graph_data:
         return {}
@@ -400,7 +569,22 @@ def compress_graph_for_prompt(graph_data: dict) -> dict:
 
 
 def _format_abutment_candidates(candidates: list) -> str:
-    """Format abutment candidate list into a human-readable prompt section."""
+    """
+    Format the abutment candidate list into a human-readable prompt section.
+
+    Abutment candidates represent devices that should share a common
+    Source/Drain diffusion area to minimize overall footprint.
+
+    Parameters
+    ----------
+    candidates : list
+        List of candidate dictionaries indicating which devices should abut.
+
+    Returns
+    -------
+    str
+        A multi-line formatted string enumerating all valid abutment chains.
+    """
     if not candidates:
         return ""
     lines = []
@@ -416,11 +600,24 @@ def _format_abutment_candidates(candidates: list) -> str:
 # Post-placement Healing — chain-based topological clustering
 # ---------------------------------------------------------------------------
 def _build_abutment_chains(nodes: list, candidates: list) -> list[list[str]]:
-    """Extract connected components of abutment pairs as ordered chains.
+    """
+    Extract connected components of abutment pairs as ordered sequences (chains).
 
-    Returns a list of chains, where each chain is an ordered list of
-    device-IDs that must be placed consecutively (abutted). Uses a
-    clean Union-Find with correct path compression.
+    Using Union-Find with path compression, this reconstructs full multi-device
+    abutment chains (e.g., A-B, B-C -> [A, B, C]) so the placement engine
+    knows which macroscopic groups must be kept unconditionally contiguous.
+
+    Parameters
+    ----------
+    nodes : list
+        List of all node dictionaries in the graph.
+    candidates : list
+        List of dictionaries declaring `dev_a` and `dev_b` abutment constraints.
+
+    Returns
+    -------
+    list[list[str]]
+        A list of chains. Each chain is an ordered list of device ID strings.
     """
     node_ids = [n["id"] for n in nodes if "id" in n]
     id_set = set(node_ids)
@@ -501,24 +698,37 @@ def _build_abutment_chains(nodes: list, candidates: list) -> list[list[str]]:
 
 def _heal_abutment_positions(nodes: list, candidates: list,
                               no_abutment: bool = False) -> list:
-    """Robust post-placement healing with chain-based topological clustering.
+    """
+    Robust post-placement geometry reconstruction with chain-based topological clustering.
+
+    This function overrides the model's raw AI coordinate output by forcing
+    strict determinism on abutted chains and passive rows.
 
     Algorithm (per row):
-    0. FIRST: Force all passive devices (res/cap) to a dedicated row at y=1.630,
+    0. FIRST: Force all passive devices (res/cap) to a dedicated row at Y=1.630,
        packed left-to-right by their actual widths. This prevents overlap with transistors.
     1. Build abutment chains (connected components of abutted device pairs).
     2. For each row, group devices by their chain membership.
     3. Force-pack each chain into consecutive slots separated by
        ABUT_SPACING (0.070 µm), anchored at the chain leader's X.
     4. Separate different chains / standalone devices by device width.
-    5. The result is guaranteed to pass _validate_placement even when the
+    5. The result is guaranteed to pass _validate_placement even if the
        LLM outputs completely wrong X values inside a chain.
 
     Parameters
     ----------
-    no_abutment : bool
-        If True, skip ALL abutment chain logic. Pack every device at standard
-        spacing (device width) and clear all abutment flags.
+    nodes : list
+        List of node dictionaries containing the raw AI-predicted geometries.
+    candidates : list
+        List of abutment candidate dictionaries dictating absolute connectivity limits.
+    no_abutment : bool, optional
+        If True, skips ALL abutment chain logic. Packs every transistor at a standard
+        device-width spacing and aggressively clears all abutment flags. Defaults to False.
+
+    Returns
+    -------
+    list
+        Mutated node dictionary list with perfectly snapped geometrical coordinates.
     """
     ABUT_SPACING = 0.070   # µm between abutted device origins
     PITCH        = 0.294   # µm between non-abutted device origins
@@ -676,11 +886,26 @@ def _heal_abutment_positions(nodes: list, candidates: list,
 
 
 def _force_abutment_spacing(nodes: list, candidates: list = None) -> list:
-    """FAILSAFE: Force correct abutment spacing for any devices with abutment flags.
-    
-    This is a last-resort fix if _heal_abutment_positions didn't work correctly.
-    It scans all rows and ensures that adjacent devices with abutment flags
-    have the correct 0.070µm spacing.
+    """
+    FAILSAFE: Force logically-correct abutment spacing across adjacent geometries.
+
+    A final protection layer running after `_heal_abutment_positions` or SA.
+    It scans the row array, looks for devices natively declaring structural
+    abutment (`abut_right` interacting with `abut_left`), and rigorously forces 
+    their physical delta-X to be exactly 0.070 µm.
+
+    Parameters
+    ----------
+    nodes : list
+        List of geometrically assigned node dictionaries.
+    candidates : list, optional
+        Fallback reference candidate list (unused natively inside the loop
+        but kept for API compatibility).
+
+    Returns
+    -------
+    list
+        The safety-corrected mutated node dictionaries.
     """
     from collections import defaultdict
     
@@ -716,7 +941,7 @@ def _force_abutment_spacing(nodes: list, candidates: list = None) -> list:
                 if abs(x2 - expected_x2) > 0.001:
                     print(f"[FORCE_FIX] Moving {n2['id']} from x={x2:.4f} to x={expected_x2:.4f} "
                           f"(was {abs(x2 - x1):.4f}, should be {ABUT_SPACING:.3f})")
-                    n2["geometry"]["x"] = expected_x2
+                    n2.setdefault("geometry", {})["x"] = expected_x2
                     fixed_count += 1
     
     if fixed_count > 0:
@@ -728,17 +953,39 @@ def _force_abutment_spacing(nodes: list, candidates: list = None) -> list:
 # ---------------------------------------------------------------------------
 # Core Structured Prompt
 # ---------------------------------------------------------------------------
-def generate_vlsi_prompt(prompt_graph, inventory_str, adjacency_str, block_str,
+def generate_vlsi_prompt(prompt_graph: dict, inventory_str: str, adjacency_str: str, block_str: str,
                          abutment_str: str = "",
                          row_summary: str = "",
                          matching_section: str = "") -> str:
-    """Returns the perfectly structured core VLSI formatting string for LLMs.
+    """
+    Construct the legacy VLSI floating-point geometry prompt template.
+
+    Orchestrates disparate string sub-sections (inventory, adjacency, matches)
+    into a monolithic text prompt demanding spatial constraints (`x` and `y` float
+    responses). Generally utilized by legacy local models that lack structured
+    JSON-object schema constraint capabilities.
 
     Parameters
     ----------
-    row_summary      : human-readable row assignment from ``pre_assign_rows()``
-    matching_section : matching/symmetry constraints from
-                       ``build_matching_section()``
+    prompt_graph : dict
+        A heavily compressed representation of the graph topology.
+    inventory_str : str
+        Human-readable summary of `pmos` and `nmos` arrays (`_build_device_inventory`).
+    adjacency_str : str
+        Nets and connection groupings (`_build_net_adjacency`).
+    block_str : str
+        Physical hierarchy block separation (`_build_block_info`).
+    abutment_str : str, optional
+        Mandatory topological abutments (`_format_abutment_candidates`).
+    row_summary : str, optional
+        Pre-computed row geometry blocks.
+    matching_section : str, optional
+        Symmetry matching configurations.
+
+    Returns
+    -------
+    str
+        The fully assembled natural-language placement prompt text.
     """
 
     abut_section = ""
@@ -882,3 +1129,184 @@ COMPRESSED DEVICE GRAPH (parent-level summary):
 {json.dumps(compress_graph_for_prompt(prompt_graph), indent=2)}
 """
 
+
+# ---------------------------------------------------------------------------
+# Slot-Based Prompt (for structured-output models like Gemini / Claude)
+# ---------------------------------------------------------------------------
+def generate_vlsi_slot_prompt(original_nodes: list,
+                              edges: list,
+                              graph_data: dict,
+                              abutment_str: str = "") -> str:
+    """
+    Construct the modern Slot-Based JSON sequence prompt string.
+
+    Rather than allowing floating-point calculation hallucinations, this prompt
+    strictly demands only deterministic sequence assignments (left-to-right
+    transistor order). Coordinates are mathmatically inferred client-side later
+    by `_convert_slots_to_geometry`.
+
+    Parameters
+    ----------
+    original_nodes : list
+        Source-of-truth JSON architecture for devices.
+    edges : list
+        Raw edge adjacency array to reconstruct the topologies inline.
+    graph_data : dict
+        Fully exported graph containing hierarchical definitions.
+    abutment_str : str, optional
+        Mandatory topological abutments (`_format_abutment_candidates`).
+
+    Returns
+    -------
+    str
+        The fully assembled natural-language placement prompt, expecting
+        a JSON object strictly containing `{ "nmos_order": [], "pmos_order": [] }`.
+    """
+    # Separate devices by type
+    pmos_ids = sorted(n["id"] for n in original_nodes if n.get("type") == "pmos")
+    nmos_ids = sorted(n["id"] for n in original_nodes if n.get("type") == "nmos")
+
+    # Build net-adjacency for context
+    adjacency_str = _build_net_adjacency(original_nodes, edges)
+    block_str = _build_block_info(original_nodes, graph_data)
+
+    # Abutment chain info
+    abut_chains_section = ""
+    if abutment_str and abutment_str.strip():
+        abut_chains_section = f"""
+ABUTMENT CHAINS (devices that MUST appear consecutively in the ordering):
+{abutment_str}
+"""
+
+    return f"""You are a VLSI analog placement engineer.
+
+YOUR TASK: Determine the optimal LEFT-TO-RIGHT ordering of transistors in each row.
+You do NOT calculate coordinates — just decide the best sequence.
+
+DEVICES TO PLACE:
+  NMOS row: {', '.join(nmos_ids)}
+  PMOS row: {', '.join(pmos_ids)}
+
+SIGNAL NET CONNECTIVITY (devices sharing a net should be near each other):
+{adjacency_str}
+
+BLOCK GROUPING (same-block devices must be contiguous):
+{block_str}
+{abut_chains_section}
+RULES:
+1. Place devices that share signal nets ADJACENT to each other to minimise wire length.
+2. Keep same-block devices CONTIGUOUS — never interleave blocks.
+3. Multi-finger devices (e.g. MM0_m1, MM0_m2, ...) must appear consecutively in order.
+4. Abutment chain devices MUST appear consecutively in the exact chain order.
+5. Optimise for minimum total wire length (HPWL).
+
+OUTPUT FORMAT (strict JSON):
+Return ONLY a JSON object with exactly two keys:
+- "nmos_order": array of ALL {len(nmos_ids)} NMOS device IDs in left-to-right order
+- "pmos_order": array of ALL {len(pmos_ids)} PMOS device IDs in left-to-right order
+
+EXAMPLE:
+{{
+  "nmos_order": ["MM0_m1", "MM0_m2", "MM1_m1"],
+  "pmos_order": ["MM3_m1", "MM4_m1"]
+}}
+
+CRITICAL: Include EVERY device ID exactly once. Missing or duplicate IDs = failure.
+Return ONLY raw JSON. No markdown, no explanation.
+"""
+
+
+def _convert_slots_to_geometry(slot_data: dict,
+                               original_nodes: list,
+                               abutment_candidates: list | None = None) -> list:
+    """Convert AI slot-based output to exact geometry coordinates.
+
+    Parameters
+    ----------
+    slot_data           : dict with ``nmos_order`` and ``pmos_order`` keys,
+                          each a list of device IDs in left-to-right order.
+    original_nodes      : list of original node dicts with full metadata.
+    abutment_candidates : list of ``{dev_a, dev_b, ...}`` dicts.
+
+    Returns
+    -------
+    list — fully placed node dicts with correct geometry.
+    """
+    ABUT_SPACING = 0.070
+    STANDARD_PITCH = 0.294
+    ROW_Y = {"nmos": 0.000, "pmos": 0.668}
+
+    # Build lookup from original nodes
+    node_map: dict[str, dict] = {
+        n["id"]: n for n in original_nodes
+        if isinstance(n, dict) and "id" in n
+    }
+
+    # Build abutment pair lookup: (dev_a, dev_b) means A abuts right → B
+    abut_pairs: set[tuple[str, str]] = set()
+    if abutment_candidates:
+        for c in abutment_candidates:
+            abut_pairs.add((c["dev_a"], c["dev_b"]))
+    # Also check embedded flags from original nodes
+    for n in original_nodes:
+        abut = n.get("abutment", {})
+        nid = n.get("id", "")
+        if abut.get("abut_right"):
+            # Find the device that has abut_left and is next in some chain
+            for m in original_nodes:
+                if (m.get("abutment", {}).get("abut_left")
+                        and m.get("id", "") != nid):
+                    abut_pairs.add((nid, m["id"]))
+
+    placed_nodes: list[dict] = []
+
+    for row_key, dev_type in [("nmos_order", "nmos"), ("pmos_order", "pmos")]:
+        device_ids = slot_data.get(row_key, [])
+        if not device_ids:
+            continue
+
+        row_y = ROW_Y.get(dev_type, 0.0)
+        cursor = 0.0
+
+        for i, dev_id in enumerate(device_ids):
+            if dev_id not in node_map:
+                print(f"[slot→geo] WARNING: '{dev_id}' not found in node_map, skipping")
+                continue
+
+            orig = copy.deepcopy(node_map[dev_id])
+            geo = orig.setdefault("geometry", {})
+            geo["x"] = round(cursor, 6)
+            geo["y"] = row_y
+            geo.setdefault("orientation", "R0")
+
+            # Determine spacing to next device
+            if i < len(device_ids) - 1:
+                next_id = device_ids[i + 1]
+                is_abutted = (dev_id, next_id) in abut_pairs
+
+                if is_abutted:
+                    orig.setdefault("abutment", {})["abut_right"] = True
+                    cursor = round(cursor + ABUT_SPACING, 6)
+                else:
+                    dev_w = geo.get("width", STANDARD_PITCH)
+                    orig.setdefault("abutment", {})["abut_right"] = False
+                    cursor = round(cursor + dev_w, 6)
+
+            # Set abut_left flag based on previous device
+            if i > 0:
+                prev_id = device_ids[i - 1]
+                if (prev_id, dev_id) in abut_pairs:
+                    orig.setdefault("abutment", {})["abut_left"] = True
+                else:
+                    orig.setdefault("abutment", {})["abut_left"] = False
+            else:
+                orig.setdefault("abutment", {})["abut_left"] = False
+
+            placed_nodes.append(orig)
+
+    # Handle passive devices (res, cap) — just keep original positions
+    for n in original_nodes:
+        if n.get("type") in ("res", "cap"):
+            placed_nodes.append(copy.deepcopy(n))
+
+    return placed_nodes
