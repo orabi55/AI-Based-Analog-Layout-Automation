@@ -1,0 +1,224 @@
+{
+    "version": "2.0",
+    "device_types": {
+        "pmos": {
+            "y_row": 0.668,
+            "default_width": 0.294,
+            "default_height": 0.818
+        },
+        "nmos": {
+            "y_row": 0.0,
+            "default_width": 0.294,
+            "default_height": 0.668
+        },
+        "res": {
+            "y_row": 1.63,
+            "default_width": 0.294,
+            "default_height": 0.1
+        },
+        "cap": {
+            "y_row": 1.63,
+            "default_width": 0.294,
+            "default_height": 0.668
+        }
+    },
+    "devices": {
+        "MM28": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "Bb",
+                "G": "B",
+                "S": "VSS"
+            }
+        },
+        "MM5": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "PDN",
+                "G": "Bb",
+                "S": "VSS"
+            }
+        },
+        "MM4": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "PDN",
+                "G": "A",
+                "S": "VSS"
+            }
+        },
+        "MM3": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "OUT",
+                "G": "B",
+                "S": "PDN"
+            }
+        },
+        "MM2": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "OUT",
+                "G": "Ab",
+                "S": "PDN"
+            }
+        },
+        "MM25": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "Ab",
+                "G": "A",
+                "S": "VSS"
+            }
+        },
+        "MM29": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "Bb",
+                "G": "B",
+                "S": "VDD"
+            }
+        },
+        "MM9": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "PUN",
+                "G": "Ab",
+                "S": "VDD"
+            }
+        },
+        "MM8": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "PUN",
+                "G": "Bb",
+                "S": "VDD"
+            }
+        },
+        "MM7": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "OUT",
+                "G": "B",
+                "S": "PUN"
+            }
+        },
+        "MM6": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "OUT",
+                "G": "A",
+                "S": "PUN"
+            }
+        },
+        "MM24": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "Ab",
+                "G": "A",
+                "S": "VDD"
+            }
+        }
+    },
+    "connectivity": {
+        "nets": {
+            "Bb": [
+                "MM28",
+                "MM29",
+                "MM5",
+                "MM8"
+            ],
+            "B": [
+                "MM28",
+                "MM29",
+                "MM3",
+                "MM7"
+            ],
+            "PDN": [
+                "MM2",
+                "MM3",
+                "MM4",
+                "MM5"
+            ],
+            "A": [
+                "MM24",
+                "MM25",
+                "MM4",
+                "MM6"
+            ],
+            "OUT": [
+                "MM2",
+                "MM3",
+                "MM6",
+                "MM7"
+            ],
+            "Ab": [
+                "MM2",
+                "MM24",
+                "MM25",
+                "MM9"
+            ],
+            "PUN": [
+                "MM6",
+                "MM7",
+                "MM8",
+                "MM9"
+            ]
+        }
+    },
+    "drc_rules": {
+        "fin_pitch": 0.014,
+        "row_pitch": 0.668,
+        "device_pitch": 0.294,
+        "abut_pitch": 0.07
+    },
+    "blocks": {}
+}

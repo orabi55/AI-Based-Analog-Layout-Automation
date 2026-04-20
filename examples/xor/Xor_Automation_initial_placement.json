@@ -7,7 +7,12 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
             },
             "geometry": {
                 "x": 0.0,
@@ -24,10 +29,15 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
             },
             "geometry": {
-                "x": 0.504,
+                "x": 0.294,
                 "y": -3.057,
                 "width": 0.294,
                 "height": 0.6680000000000001,
@@ -41,10 +51,15 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
             },
             "geometry": {
-                "x": 0.434,
+                "x": 1.176,
                 "y": -3.057,
                 "width": 0.294,
                 "height": 0.6680000000000001,
@@ -58,10 +73,15 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
             },
             "geometry": {
-                "x": 0.364,
+                "x": 0.882,
                 "y": -3.057,
                 "width": 0.294,
                 "height": 0.6680000000000001,
@@ -75,10 +95,15 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
             },
             "geometry": {
-                "x": 0.294,
+                "x": 0.588,
                 "y": -3.057,
                 "width": 0.294,
                 "height": 0.6680000000000001,
@@ -92,10 +117,15 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
             },
             "geometry": {
-                "x": 0.798,
+                "x": 1.47,
                 "y": -3.057,
                 "width": 0.294,
                 "height": 0.6680000000000001,
@@ -109,7 +139,12 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
             },
             "geometry": {
                 "x": 0.0,
@@ -126,10 +161,15 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
             },
             "geometry": {
-                "x": 0.504,
+                "x": 1.176,
                 "y": -2.389,
                 "width": 0.294,
                 "height": 0.6680000000000001,
@@ -143,10 +183,15 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
             },
             "geometry": {
-                "x": 0.434,
+                "x": 0.294,
                 "y": -2.389,
                 "width": 0.294,
                 "height": 0.6680000000000001,
@@ -160,10 +205,15 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
             },
             "geometry": {
-                "x": 0.364,
+                "x": 0.882,
                 "y": -2.389,
                 "width": 0.294,
                 "height": 0.6680000000000001,
@@ -177,10 +227,15 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
             },
             "geometry": {
-                "x": 0.294,
+                "x": 0.588,
                 "y": -2.389,
                 "width": 0.294,
                 "height": 0.6680000000000001,
@@ -194,10 +249,15 @@
                 "l": 1.4e-08,
                 "nf": 1,
                 "nfin": 4.0,
-                "w": 0
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
             },
             "geometry": {
-                "x": 0.798,
+                "x": 1.47,
                 "y": -2.389,
                 "width": 0.294,
                 "height": 0.6680000000000001,

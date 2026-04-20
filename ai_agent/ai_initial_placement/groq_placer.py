@@ -17,7 +17,22 @@ from ai_agent.ai_initial_placement.placer_utils import (
 
 MAX_RETRIES = 2
 
-def groq_generate_placement(input_json: str, output_json: str):
+def groq_generate_placement(input_json: str, output_json: str) -> None:
+    """
+    Generate an initial transistor placement using the Groq API.
+
+    Parameters
+    ----------
+    input_json : str
+        Path to the JSON file containing the extracted circuit topology.
+    output_json : str
+        Path where the final placed layout JSON should be saved.
+
+    Returns
+    -------
+    None
+        The placement is written directly to output_json.
+    """
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
         raise ValueError("GROQ_API_KEY not set")

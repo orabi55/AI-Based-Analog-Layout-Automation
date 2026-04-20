@@ -419,10 +419,21 @@ def _restore_coords(placed_nodes: list, y_offset: float) -> list:
 MAX_RETRIES = 2
 
 
-def gemini_generate_placement(input_json: str, output_json: str):
+def gemini_generate_placement(input_json: str, output_json: str) -> None:
     """
-    Generates initial transistor placement using Gemini API.
-    Retries on JSON parse failure up to MAX_RETRIES times.
+    Generate an initial transistor placement using the Gemini API.
+
+    Parameters
+    ----------
+    input_json : str
+        Path to the JSON file containing the extracted circuit topology.
+    output_json : str
+        Path where the final placed layout JSON should be saved.
+
+    Returns
+    -------
+    None
+        The placement is written directly to output_json.
     """
 
     api_key = os.getenv("GEMINI_API_KEY")

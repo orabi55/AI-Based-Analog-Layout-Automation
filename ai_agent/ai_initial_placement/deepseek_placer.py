@@ -18,7 +18,22 @@ from ai_agent.ai_initial_placement.placer_utils import (
 
 MAX_RETRIES = 2
 
-def deepseek_generate_placement(input_json: str, output_json: str):
+def deepseek_generate_placement(input_json: str, output_json: str) -> None:
+    """
+    Generate an initial transistor placement using the DeepSeek API.
+
+    Parameters
+    ----------
+    input_json : str
+        Path to the JSON file containing the extracted circuit topology.
+    output_json : str
+        Path where the final placed layout JSON should be saved.
+
+    Returns
+    -------
+    None
+        The placement is written directly to output_json.
+    """
     api_key = os.getenv("DEEPSEEK_API_KEY")
     if not api_key:
         raise ValueError("DEEPSEEK_API_KEY not set")
