@@ -145,7 +145,7 @@ def _run_llm_once(chat_messages, full_prompt, selected_model, ollama_model="llam
             }
 
             response = client.models.generate_content(
-                model="gemini-2.0-flash",
+                model="gemini-2.5-flash",
                 contents=user_text,
                 config=genai_types.GenerateContentConfig(**config_kwargs),
             )
