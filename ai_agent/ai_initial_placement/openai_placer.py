@@ -1,3 +1,10 @@
+"""
+openai_placer.py
+================
+Generates an initial analog transistor placement using the OpenAI API.
+Uses the gpt-4o-mini model.
+"""
+
 import os
 import json
 from openai import OpenAI
@@ -10,7 +17,23 @@ from ai_agent.ai_initial_placement.placer_utils import (
 )
 
 
-def llm_generate_placement(input_json, output_json):
+def llm_generate_placement(input_json: str, output_json: str) -> None:
+    """
+    Generate an initial transistor placement using OpenAI's GPT models.
+
+    Parameters
+    ----------
+    input_json : str
+        Path to the JSON file containing the extracted circuit topology
+        (nodes, edges, matched blocks, terminal nets).
+    output_json : str
+        Path where the final placed layout JSON should be saved.
+
+    Returns
+    -------
+    None
+        The function writes the output directly to the specified file path.
+    """
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         raise ValueError("OPENAI_API_KEY not set")

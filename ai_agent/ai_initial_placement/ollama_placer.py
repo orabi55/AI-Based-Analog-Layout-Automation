@@ -1,3 +1,10 @@
+"""
+ollama_placer.py
+================
+Generates an initial analog transistor placement using local Ollama models.
+Allows for completely offline placement using open-weights models (e.g. Llama 3).
+"""
+
 import json
 import requests
 
@@ -9,7 +16,24 @@ from ai_agent.ai_initial_placement.placer_utils import (
 )
 
 
-def ollama_generate_placement(input_json, output_json, model="llama3.2"):
+def ollama_generate_placement(input_json: str, output_json: str, model: str = "llama3.2") -> None:
+    """
+    Generate an initial transistor placement using a local Ollama server.
+
+    Parameters
+    ----------
+    input_json : str
+        Path to the JSON file containing the extracted circuit topology.
+    output_json : str
+        Path where the final placed layout JSON should be saved.
+    model : str
+        The local model alias to run via Ollama (e.g., 'llama3.2').
+
+    Returns
+    -------
+    None
+        The placement is written directly to output_json.
+    """
     try:
         with open(input_json, "r") as f:
             graph_data = json.load(f)
