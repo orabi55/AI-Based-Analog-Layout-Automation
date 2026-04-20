@@ -113,20 +113,28 @@ def _transistor_key(node_id: str) -> str:
 # Public API — Step 1: GROUP
 # ---------------------------------------------------------------------------
 
-def group_fingers(nodes: list, edges: list) -> Tuple[list, dict]:
+def group_fingers(nodes: list, edges: list) -> Tuple[list, list, dict]:
     """
-    Collapse finger-level nodes into transistor-level group nodes.
+    Collapse multiple finger-level node dictionaries into single transistor-level groups.
+
+    This function prevents context truncation by the LLM. If an NMOS has 8 fingers 
+    and multiplier=4, it collapses 32 raw nodes into a single logical "group node".
 
     Parameters
     ----------
-    nodes : list of node dicts (from graph JSON)
-    edges : list of edge dicts (from graph JSON)
+    nodes : list
+        The raw graph extracted nodes array from the UI schematic.
+    edges : list
+        The raw connection edge array.
 
     Returns
     -------
-    group_nodes : list of ~N compact group dicts (one per logical transistor)
-    finger_map  : dict mapping group_id → [original node dicts], preserving
-                  insertion order (bus index ascending, finger index ascending)
+    Tuple[list, list, dict]
+        A 3-tuple containing:
+        - `group_nodes` (list): Compact lists of merged entities for the LLM.
+        - `group_edges` (list): Pruned and remapped edges for the merged entities.
+        - `finger_map` (dict): A mapping of `{ group_id -> [original_node1, original_node2, ...] }` 
+          used to restore the architecture in `expand_groups`.
     """
     # --- 1. Bucket every finger node under its logical transistor key --------
     buckets: Dict[str, List[dict]] = defaultdict(list)
@@ -247,20 +255,27 @@ def _electrical_signature(group_node: dict) -> tuple:
 
 def detect_matching_groups(group_nodes: list, group_edges: list) -> dict:
     """
-    Detect structurally matched transistor groups, differential pairs,
-    and cross-coupled pairs from the compact transistor-level graph.
+    Detect structurally matched transistor groups using electrical signatures.
 
-    Structural matching: two transistor groups are a *matched pair* if they
-    share the same device type, number of fingers (nf), multiplier (m),
-    gate length (L), and fin count (nfin).  This is critical for analog
-    layout where matched transistors must be placed symmetrically.
+    Identifies matched pairs (L, W, nf, nfin are identical), differential pairs,
+    and cross-coupled topologies purely from topological netlist signatures.
 
-    Returns a dict with:
-      "matched_pairs" : list of (grpA, grpB) — structurally identical params
-      "matched_clusters": list of [grpA, grpB, ...] — groups of 3+ identical
-      "diff_pairs"    : list of (grpA, grpB) — reserved for net-based detection
-      "cross_coupled" : list of (grpA, grpB) — reserved for net-based detection
-      "tail_sources"  : list of grp_ids
+    Parameters
+    ----------
+    group_nodes : list
+        List of compacted group-level nodes.
+    group_edges : list
+        List of compacted group-level edges.
+
+    Returns
+    -------
+    dict
+        A mapping defining symmetrical groups, including:
+        - `matched_pairs`: list of tuples `(grpA, grpB)`
+        - `matched_clusters`: list of lists `[grpA, grpB, grpC]`
+        - `diff_pairs`: list of tuples `(grpA, grpB)`
+        - `cross_coupled`: list of tuples `(grpA, grpB)`
+        - `tail_sources`: list of string `grp_id`s
     """
     # --- Structural matching: group by electrical signature ---------------
     sig_buckets: Dict[tuple, List[str]] = defaultdict(list)
@@ -360,21 +375,25 @@ def build_matching_section(
         group_terminal_nets: dict,
 ) -> str:
     """
-    Build a human-readable matching/symmetry section for the LLM prompt.
+    Construct a human-readable text block summarizing transistor symmetry constraints.
+
+    Generates the "Matched Transistors / Symmetry Constraints" text section
+    injected into the prompt. It enforces strict placement symmetry rules for
+    cross-coupled systems and warns about predefined matched blocks.
 
     Parameters
     ----------
-    group_nodes       : list of compact group node dicts
-    group_edges       : list of compact group edge dicts (unused, kept for API
-                        compatibility — may be used for future net analysis)
-    group_terminal_nets : dict mapping group_id → {D, G, S} terminal nets
-                          (pre-resolved by the caller using first-finger lookup)
+    group_nodes : list
+        List of compact group node dicts.
+    group_edges : list
+        List of compacted edge dicts (unused but provided for API expansion).
+    group_terminal_nets : dict
+        Mapping of `group_id -> {D, G, S}` net topology.
 
-    Detects:
-      • Structurally matched transistors (same type, nf, m, L, nfin)
-      • Differential pairs (VINP/VINN gate nets)
-      • Cross-coupled latch pairs (D of A == G of B and vice-versa)
-      • Known topologies (Strong-ARM latch, current mirror, etc.)
+    Returns
+    -------
+    str
+        A multi-line formatted string describing all symmetrical rules.
     """
     grp_terminals: Dict[str, dict] = group_terminal_nets
 
@@ -548,12 +567,22 @@ def build_matching_section(
 
 def build_finger_group_section(finger_map: dict, group_nodes: list) -> str:
     """
-    Build a human-readable finger-group section for the LLM prompt.
-    Explains the transistor groupings so the LLM knows what each group node
-    represents and what constraints govern its placement.
+    Construct the human-readable transistor inventory defining all placement groups.
 
-    Fixed matched blocks (from ``merge_matched_groups``) are clearly labeled
-    so the LLM knows they are pre-interdigitated and cannot be separated.
+    Warns the model about groups that are permanently pre-interdigitated 
+    (Fixed Matched Blocks) and details footprint sizes.
+
+    Parameters
+    ----------
+    finger_map : dict
+        Mapping of `group_id -> list of constituent fingers`.
+    group_nodes : list
+        List of compacted group-level nodes.
+
+    Returns
+    -------
+    str
+        A multi-line formatted string defining transistor finger group footprints.
     """
     lines: List[str] = [
         "TRANSISTOR FINGER GROUPS:",
@@ -620,19 +649,27 @@ def _generate_abba_pattern(
         fingers_b: List[dict],
 ) -> List[dict]:
     """
-    Generate an ABBA interdigitation pattern from two finger lists.
+    Generate an ABBA interdigitation pattern from two identical-device finger lists.
 
     For equal lengths (na == nb):
-        A₁ B₁ B₂ A₂ | A₃ B₃ B₄ A₄ | ...  (true ABBA motifs of 4)
+        A1 B1 B2 A2 | A3 B3 B4 A4 | ...  (true ABBA motifs of 4)
 
-    For na > nb (A has more fingers):
-        Distributes B fingers evenly among A fingers. Each B is inserted
-        at the position nearest to ``(b_idx + 0.5) * na / nb`` so that B
-        fingers are spread uniformly through the A sequence.
+    For unequal lengths:
+        Distributes B fingers evenly among A fingers for maximum thermal symmetry.
 
-    Each returned dict is a *shallow copy* of the original finger node
-    with an added ``"_match_owner"`` key indicating which group it
-    originally belonged to (``"A"`` or ``"B"``).
+    Parameters
+    ----------
+    fingers_a : List[dict]
+        List of raw finger nodes for Device A.
+    fingers_b : List[dict]
+        List of raw finger nodes for Device B.
+
+    Returns
+    -------
+    List[dict]
+        An ordered, interleaved list of shallow-copied finger dictionaries.
+        Each dictionary gets a injected `_match_owner` key ("A" or "B")
+        for debug tracing later.
     """
     # Make shallow copies so we don't mutate originals
     a_list = [dict(n, _match_owner="A") for n in fingers_a]
@@ -754,25 +791,37 @@ def merge_matched_groups(
         terminal_nets: dict,
 ) -> Tuple[list, list, dict, dict]:
     """
-    Merge matched transistor pairs into fixed interdigitated blocks
-    BEFORE the LLM sees the groups.
+    Merge symmetrical transistor pairs into fixed interdigitated monolithic blocks.
 
-    This function:
-      1. Identifies diff pairs and current mirrors
-      2. Interdigitates their fingers using the ABBA pattern
-      3. Creates a single "merged block" group node with the combined footprint
-      4. Returns updated group_nodes, group_edges, finger_map, and a
-         ``merged_blocks`` dict mapping block_id → {members, pattern}
+    Executes BEFORE the LLM sees the topology. If it detects a differential
+    pair or current mirror, it permanently interdigitates their fingers (ABBA)
+    into one super-group block node. The LLM only assigns an X origin to the block
+    and cannot accidentally dismember the matched pair.
 
-    The LLM sees the merged block as a single device with one X origin.
-    It cannot separate or reorder the internal fingers.
+    Parameters
+    ----------
+    group_nodes : list
+        The current list of compacted transistor groups.
+    group_edges : list
+        The current graph edges.
+    finger_map : dict
+        Mapping of `group_id -> [fingers]`.
+    matching_info : dict
+        Dictionary of detected structural matches (from `detect_matching_groups`).
+    group_terminal_nets : dict
+        Dictionary of resolved Gate/Source/Drain terminal nets for groups.
+    terminal_nets : dict
+        Raw finger-level terminal nest (unused natively here but needed if deeper
+        finger-level routing checks get added).
 
     Returns
     -------
-    merged_group_nodes  : updated group node list (merged pairs replaced by single blocks)
-    merged_group_edges  : updated edge list
-    merged_finger_map   : updated finger_map (merged block → interleaved fingers)
-    merged_blocks       : dict of block_id → {"members": [grpA, grpB], "technique": "ABBA"}
+    Tuple[list, list, dict, dict]
+        A 4-tuple containing:
+        - `merged_group_nodes` (list): Group list with pairs swallowed into blocks.
+        - `merged_group_edges` (list): Edges updated to point to block IDs.
+        - `merged_finger_map` (dict): `group_id -> interleaved [A, B, B, A] fingers`.
+        - `merged_blocks` (dict): Audit trail mapping `block_id -> {"members": [grpA, grpB], "technique": "ABBA"}`.
     """
     _POWER = frozenset({"VDD", "VSS", "GND", "VCC", "AVDD", "AVSS", ""})
 
@@ -1114,28 +1163,31 @@ def pre_assign_rows(
         group_terminal_nets: dict | None = None,
 ) -> Tuple[list, str]:
     """
-    Deterministically assign transistor groups to rows BEFORE calling the LLM.
+    Deterministically allocate transistor groups into physical Y-rows via bin packing.
 
-    Uses a greedy bin-packing approach (largest-first):
-      - Separate groups by type (NMOS / PMOS / passive)
-      - Assign groups to rows until the accumulated footprint exceeds
-        `max_row_width`; then start a new row
-      - NMOS rows get the lowest Y values (starting at 0)
-      - PMOS rows get Y values immediately above all NMOS rows
-      - Passive rows are placed above all transistor rows
+    Runs BEFORE calling the LLM. It calculates row break points to ensure layout
+    aspect ratios stay relatively rectangular rather than infinitely wide. 
+    It forces strict isolation of NMOS, PMOS, and Passives.
 
-    Symmetry-aware ordering
-    -----------------------
-    When ``matching_info`` is provided (from ``detect_matching_groups`` +
-    ``build_matching_section``), each row's groups are reordered so that:
-      - Cross-coupled latch pairs sit at the center
-      - Diff pair halves flank the latch
-      - CLK switches are split symmetrically to the outer edges
+    Parameters
+    ----------
+    group_nodes : list
+        List of compacted group-level nodes.
+    max_row_width : float, optional
+        Heuristic absolute maximum width for any single geometrical row before wrapping.
+    matching_info : dict, optional
+        Detected symmetric relationships. Used to arrange devices laterally to satisfy
+        structural constraints. Defaults to None.
+    group_terminal_nets : dict, optional
+        Precalculated grouped D/G/S nets. Used to deduce topologies like latches 
+        during structural placement. Defaults to None.
 
     Returns
     -------
-    updated_nodes  : deep-copy of group_nodes with geometry.y updated
-    row_summary_str: human-readable string for the LLM prompt
+    Tuple[list, str]
+        A 2-tuple containing:
+        - `updated_nodes` (list): Modified group nodes with fixed `y` geometries.
+        - `row_summary_str` (str): Text table injected into the LLM prompt.
     """
     import copy as _copy
 
@@ -1285,9 +1337,17 @@ def pre_assign_rows(
 
 def _snap_to_row_grid(y: float) -> float:
     """
-    Snap a Y coordinate to the nearest multiple of ROW_PITCH (0.668 µm).
-    Ensures all rows land exactly on the row grid regardless of LLM rounding.
-    Negative values are clamped to 0.
+    Quantize an arbitrary float Y coordinate to the standard `ROW_PITCH` grid spacing.
+
+    Parameters
+    ----------
+    y : float
+        Raw float coordinate (e.g., from an LLM hallucination or drift).
+
+    Returns
+    -------
+    float
+        The nearest valid row increment float (e.g., 0.0, 0.668, 1.336).
     """
     if y < 0:
         y = 0.0
@@ -1302,50 +1362,29 @@ def expand_groups(
         no_abutment: bool = False,
 ) -> list:
     """
-    Expand group-level LLM placement back to individual finger nodes.
+    Explode optimized LLM groupings back into physical multi-finger atomic elements.
 
-    Hierarchy handling
-    ------------------
-    The finger_map members may come from several naming conventions:
-      - Legacy array-bus:    "MM9<3>_f4"  (array copy 3, finger 4)
-      - Simple finger:       "MM5_f2"     (single parent, finger 2)
-      - Two-level hierarchy: "MM6_2_f3"   (multiplier child 2, finger 3)
-      - Multiplier-only:     "MM6_2"      (multiplier child 2)
-
-    Members within each group are sorted by _parse_id() which yields
-    (parent, bus/multiplier_idx, finger_idx).  This guarantees that:
-      - Sibling devices at the same hierarchy level are placed consecutively
-      - All siblings are **abutted** (adjacent with FINGER_PITCH spacing)
-      - The parent device's bounding box spans from the first child's edge
-        to the last child's edge during placement
-
-    Multi-row support
-    -----------------
-    The LLM may assign any valid row Y (a non-negative multiple of ROW_PITCH).
-    This function:
-      1. Snaps the LLM's Y to the nearest row-grid position (fixes float drift).
-      2. Enforces PMOS/NMOS type correctness.
-      3. Places each finger with correct pitch and abutment flags.
-
-    Matched block support
-    ---------------------
-    Groups marked with ``_matched_block=True`` (created by
-    ``merge_matched_groups``) use their own ``_block_pitch`` for internal
-    finger spacing.  The interleaved finger order was established pre-LLM
-    and is preserved exactly.
+    Restores `1 LLM output -> 40 actual fingers` while rigorously applying
+    precision layout math (abutment spacing, matched patterns).
 
     Parameters
     ----------
-    group_placement : list of group node dicts with updated geometry from LLM
-    finger_map      : finger_map from ``group_fingers`` or ``merge_matched_groups``
-    matching_info   : matching info dict (currently informational)
-    no_abutment     : if True, use STD_PITCH (0.294 um) between fingers and
-                      clear all abutment flags.  The user chose not to abut
-                      any devices.
+    group_placement : list
+        The fully processed AI placement response array (nodes).
+    finger_map : dict
+        Mapping recorded during `group_fingers` dictating which atomic nodes
+        belong to which AI group.
+    matching_info : dict, optional
+        Precomputed symmetry definitions used to determine finger-level orderings.
+        Defaults to None.
+    no_abutment : bool, optional
+        Force diffusion breaks everywhere by reverting standard FINGER_PITCH to
+        STD_PITCH arrays. Defaults to False.
 
     Returns
     -------
-    expanded_nodes : list of individual finger node dicts
+    list
+        Fully unrolled and geometrically sound list of elemental transistor dicts.
     """
     expanded: List[dict] = []
 
@@ -1518,22 +1557,24 @@ def expand_groups(
 
 def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[dict]:
     """
-    Guarantee no two devices in the same row overlap while preserving
-    abutment chains for hierarchy siblings.
+    Guarantee no two devices in the same row overlap while preserving hierarchy abutment.
 
-    Key insight: devices belonging to the same logical transistor (same parent)
-    form an abutment chain that must NOT be broken.  We identify chains by
-    extracting the parent name from each device ID, then place each chain
-    as an atomic unit.
+    Performs a deterministic bucket sort on the final expanded transistor rows
+    and aggressively forces the delta-x of different component clusters to be
+    at least standard width apart.
 
-    Devices are also separated by type (PMOS vs NMOS) so they are never
-    placed in the same chain bucket.
+    Parameters
+    ----------
+    nodes : List[dict]
+        List of expanded atomic hardware element dictionaries with float coordinates.
+    no_abutment : bool, optional
+        Flag dictating whether intra-device overlaps can use tight diffusion sharing
+        pitches. Defaults to False.
 
-    Algorithm:
-      1. Group devices by (type, parent name) — ensures PMOS/NMOS never mix
-      2. Within each chain, place devices consecutively at FINGER_PITCH
-      3. Place chains left-to-right ordered by each chain's leftmost original X
-      4. Separate different chains by device width (STD_PITCH if width unknown)
+    Returns
+    -------
+    List[dict]
+        Mutated non-overlapping device geometry array.
     """
     if not nodes:
         return nodes
