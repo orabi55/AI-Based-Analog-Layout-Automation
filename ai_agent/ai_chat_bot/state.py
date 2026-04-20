@@ -8,14 +8,13 @@ class LayoutState(TypedDict):
     sp_file_path: str
     
     # Topology
-    constraints: List[str]
     constraint_text: str  
     edges: List[Dict]
     terminal_nets: Dict[str, Dict[str, Any]]
     
     # Strategy
-    strategy_question: str
-    selected_strategy: str 
+    Analysis_result: str
+    strategy_result: str 
     
     # Placement
     placement_nodes: List[Dict] 

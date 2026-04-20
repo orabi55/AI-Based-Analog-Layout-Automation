@@ -9,6 +9,9 @@ fast-path so trivial greetings never hit the LLM at all.
 """
 
 import re
+from langchain_google_genai import ChatGoogleGenerativeAI
+
+llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
 
 # ── Regex fast-path patterns (zero LLM cost) ─────────────────────
 _CHAT_RE = re.compile(
@@ -90,10 +93,11 @@ def classify_intent(user_message: str, run_llm_fn, selected_model: str) -> str:
     ]
     full_prompt = CLASSIFIER_PROMPT + "\n\n" + user_message
     try:
-        result = run_llm_fn(msgs, full_prompt, selected_model)
+        #result = run_llm_fn(msgs, full_prompt, selected_model)
+        result = llm.invoke(msgs)
         if not result:
             return "abstract"
-        label = result.strip().upper().split()[0].rstrip(".,;:")
+        label = result.content.strip().upper().split()[0].rstrip(".,;:")
         if label in ("CONCRETE", "ABSTRACT", "QUESTION", "CHAT"):
             print(f"[CLASSIFIER] LLM -> {label}: '{stripped[:60]}'")
             return label.lower()
