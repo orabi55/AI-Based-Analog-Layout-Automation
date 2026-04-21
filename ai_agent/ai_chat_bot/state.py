@@ -6,6 +6,7 @@ class LayoutState(TypedDict):
     chat_history: List[Dict[str, str]]
     nodes: List[Dict[str, Any]]
     sp_file_path: str
+    selected_model: str
     
     # Topology
     constraint_text: str  

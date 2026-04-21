@@ -67,7 +67,7 @@ class MultiAgentOrchestrator:
 
         # ── Fresh turn: classify intent ───────────────────────────
         from ai_agent.ai_chat_bot.agents.classifier import classify_intent
-        intent = classify_intent(user_message, run_llm_fn, selected_model)
+        intent = classify_intent(user_message, selected_model)
         print(f"[ORCHESTRATOR] Intent: {intent}")
 
         if intent == "chat":
