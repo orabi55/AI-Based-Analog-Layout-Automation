@@ -79,6 +79,27 @@ ROW_PITCH    = 0.668   # µm  — row-to-row pitch
 ABUT_SPACING = 0.070   # µm  — abutted finger pitch
 STD_PITCH    = 0.294   # µm  — non-abutted standard pitch
 MAX_RETRIES  = 3
+MAX_ROW_DEVS = 16      # max devices per row (auto-split if exceeded)
+
+
+def _device_width(node: dict) -> float:
+    """
+    Compute the physical width of a device from its geometry or electrical params.
+
+    Priority:
+      1. geometry.width  (if present and > 0)
+      2. Computed from electrical: nf * STD_PITCH (finger-aware)
+      3. Fallback: STD_PITCH
+
+    The value is used for device-to-device spacing when not abutted.
+    """
+    geo = node.get("geometry", {})
+    w = geo.get("width", 0)
+    if w and float(w) > 0:
+        return float(w)
+    elec = node.get("electrical", {})
+    nf = max(1, int(elec.get("nf", 1)))
+    return round(nf * STD_PITCH, 6)
 
 _POWER_NETS = frozenset({"VDD", "VSS", "GND", "VCC", "AVDD", "AVSS"})
 
@@ -88,7 +109,7 @@ _POWER_NETS = frozenset({"VDD", "VSS", "GND", "VCC", "AVDD", "AVSS"})
 ###############################################################################
 
 def _call_llm(prompt: str, selected_model: str,
-               ollama_model: Optional[str] = None,
+               task_weight: str = "light",
                stage: str = "") -> str:
     """
     Call the appropriate LLM and return the raw response text.
@@ -101,10 +122,9 @@ def _call_llm(prompt: str, selected_model: str,
     prompt : str
         Full assembled prompt string.
     selected_model : str
-        Provider key: "Gemini" | "Groq" | "OpenAI" | "DeepSeek" |
-        "Alibaba" | "Ollama" | "VertexGemini" | "VertexClaude".
-    ollama_model : str | None
-        Sub-model name for Ollama. Defaults to "llama3.2".
+        Provider key: "Gemini" | "Alibaba" | "VertexGemini" | "VertexClaude".
+    task_weight : str
+        "light" or "heavy" logic mapping.
     stage : str
         Human-readable label used in log messages.
 
@@ -122,42 +142,14 @@ def _call_llm(prompt: str, selected_model: str,
             if not api_key:
                 raise ValueError("GEMINI_API_KEY not set")
             client = genai.Client(api_key=api_key)
+            model_name = "gemini-1.5-pro" if task_weight == "heavy" else "gemini-2.5-flash"
+            print(f"[MultiAgent] Gemini request: weight='{task_weight}', model='{model_name}'")
             resp = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model=model_name,
                 contents=prompt,
                 config=gtypes.GenerateContentConfig(max_output_tokens=65536),
             )
             return (resp.text or "").strip()
-
-        elif selected_model == "Groq":
-            from groq import Groq
-            resp = Groq(api_key=os.getenv("GROQ_API_KEY", "")).chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=8192, temperature=0.2,
-            )
-            return (resp.choices[0].message.content or "").strip()
-
-        elif selected_model == "OpenAI":
-            import openai
-            openai.api_key = os.getenv("OPENAI_API_KEY", "")
-            resp = openai.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=8192, temperature=0.2,
-            )
-            return (resp.choices[0].message.content or "").strip()
-
-        elif selected_model == "DeepSeek":
-            import openai as _oa
-            client = _oa.OpenAI(api_key=os.getenv("DEEPSEEK_API_KEY", ""),
-                                base_url="https://api.deepseek.com/v1")
-            resp = client.chat.completions.create(
-                model="deepseek-chat",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=8192, temperature=0.2,
-            )
-            return (resp.choices[0].message.content or "").strip()
 
         elif selected_model == "Alibaba":
             from openai import OpenAI as AliOpenAI
@@ -165,23 +157,14 @@ def _call_llm(prompt: str, selected_model: str,
                 api_key=os.getenv("ALIBABA_API_KEY", ""),
                 base_url="https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
             )
+            model_name = "qwen-max" if task_weight == "heavy" else "qwen-plus"
+            print(f"[MultiAgent] Alibaba Qwen request: weight='{task_weight}', model='{model_name}'")
             resp = client.chat.completions.create(
-                model="qwen-plus",
+                model=model_name,
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=8192, temperature=0.2,
             )
             return (resp.choices[0].message.content or "").strip()
-
-        elif selected_model == "Ollama":
-            import requests
-            resp = requests.post(
-                "http://localhost:11434/api/generate",
-                json={"model": ollama_model or "llama3.2",
-                      "prompt": prompt, "stream": False},
-                timeout=120,
-            )
-            resp.raise_for_status()
-            return resp.json().get("response", "").strip()
 
         elif selected_model == "VertexGemini":
             from google import genai
@@ -193,8 +176,11 @@ def _call_llm(prompt: str, selected_model: str,
                 vertexai=True, project=project,
                 location=os.getenv("VERTEX_LOCATION", "us-central1"),
             )
+            model_name = "gemini-2.5-flash"
+            print(f"[MultiAgent] VertexGemini request: weight='{task_weight}', model='{model_name}'"
+                  f" (note: same model for all weights — only model available in project)")
             resp = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model=model_name,
                 contents=prompt,
                 config=gtypes.GenerateContentConfig(max_output_tokens=65536),
             )
@@ -206,15 +192,29 @@ def _call_llm(prompt: str, selected_model: str,
                 project_id=os.getenv("VERTEX_PROJECT_ID", ""),
                 region=os.getenv("VERTEX_LOCATION", "us-east5"),
             )
+            model_name = "claude-3-5-sonnet-v2@20241022" if task_weight == "heavy" else "claude-3-5-sonnet@20240620"
+            print(f"[MultiAgent] VertexClaude request: weight='{task_weight}', model='{model_name}'")
             resp = client.messages.create(
-                model="claude-sonnet-4-5",
+                model=model_name,
                 max_tokens=8192,
                 messages=[{"role": "user", "content": prompt}],
             )
             return (resp.content[0].text or "").strip()
 
         else:
-            return _call_llm(prompt, "Gemini", ollama_model, stage)
+            print(f"{tag} WARNING: Unknown provider '{selected_model}', falling back to Gemini.")
+            from google import genai
+            from google.genai import types as gtypes
+            api_key = os.getenv("GEMINI_API_KEY", "")
+            if not api_key:
+                raise ValueError("GEMINI_API_KEY not set (fallback from unknown provider)")
+            client = genai.Client(api_key=api_key)
+            resp = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt,
+                config=gtypes.GenerateContentConfig(max_output_tokens=65536),
+            )
+            return (resp.text or "").strip()
 
     except Exception as exc:
         print(f"{tag} LLM error (non-fatal): {exc}")
@@ -226,7 +226,7 @@ def _call_llm(prompt: str, selected_model: str,
 ###############################################################################
 
 def _stage_topology(nodes: list, terminal_nets: dict, edges: list,
-                    selected_model: str, ollama_model: Optional[str]) -> str:
+                    selected_model: str, task_weight: str = "light") -> str:
     """
     Stage 1 — Analyze the circuit topology.
 
@@ -243,8 +243,10 @@ def _stage_topology(nodes: list, terminal_nets: dict, edges: list,
         {device_id: {"D": net, "G": net, "S": net}}.
     edges : list
         Edge / net connection list.
-    selected_model, ollama_model : str
-        LLM provider key and Ollama sub-model.
+    selected_model : str
+        LLM provider key.
+    task_weight : str
+        Weight.
 
     Returns
     -------
@@ -336,7 +338,7 @@ Identify:
 
 Format: 6-10 bullet points. Be specific. Use device IDs.
 """
-    llm_analysis = _call_llm(analyst_prompt, selected_model, ollama_model,
+    llm_analysis = _call_llm(analyst_prompt, selected_model, task_weight,
                               stage="TopologyAnalyst")
     if llm_analysis and len(llm_analysis.strip()) > 30:
         constraint_text = (
@@ -580,13 +582,13 @@ def _place_row(devices: list, row_y: float, node_map: dict,
                       and (dev_id, devices[idx + 1]) in abut_pairs)
         node["abutment"] = {"abut_left": abut_left, "abut_right": abut_right}
 
-        # Advance cursor
+        # Advance cursor by the ACTUAL device width (not STD_PITCH)
         if idx < len(devices) - 1:
             next_id = devices[idx + 1]
             if (dev_id, next_id) in abut_pairs:
                 cursor = round(cursor + ABUT_SPACING, 6)
             else:
-                cursor = round(cursor + geo.get("width", STD_PITCH), 6)
+                cursor = round(cursor + _device_width(node), 6)
 
         placed.append(node)
     return placed
@@ -626,6 +628,28 @@ def _convert_multirow_to_geometry(multirow_data: dict, original_nodes: list,
     nmos_rows = multirow_data.get("nmos_rows", [])
     pmos_rows = multirow_data.get("pmos_rows", [])
 
+    # ── Auto-split oversized rows ─────────────────────────────────
+    # If the LLM puts >MAX_ROW_DEVS devices in a single row, split it
+    # into multiple sub-rows for a more square aspect ratio.
+    def _split_rows(rows: list) -> list:
+        split = []
+        for row in rows:
+            devs = row.get("devices", [])
+            label = row.get("label", "row")
+            if len(devs) <= MAX_ROW_DEVS:
+                split.append(row)
+            else:
+                chunk_idx = 0
+                while devs:
+                    chunk = devs[:MAX_ROW_DEVS]
+                    devs = devs[MAX_ROW_DEVS:]
+                    split.append({"label": f"{label}_sub{chunk_idx}", "devices": chunk})
+                    chunk_idx += 1
+        return split
+
+    nmos_rows = _split_rows(nmos_rows)
+    pmos_rows = _split_rows(pmos_rows)
+
     # ── Total fallback — alphabetical single-row each ───────────────
     if not nmos_rows and not pmos_rows:
         nmos_ids = sorted(n["id"] for n in original_nodes if n.get("type") == "nmos")
@@ -639,10 +663,12 @@ def _convert_multirow_to_geometry(multirow_data: dict, original_nodes: list,
     abut_pairs = _build_abut_pairs(original_nodes, abutment_candidates)
 
     # ── Compute row Y coordinates ───────────────────────────────────
+    # PMOS rows start one extra ROW_PITCH above the top NMOS row
+    # to guarantee a clear vertical gap and prevent visual overlap.
     n_nmos = len(nmos_rows)
     n_pmos = len(pmos_rows)
     nmos_ys = [round(i * ROW_PITCH, 6) for i in range(n_nmos)]
-    pmos_base = n_nmos * ROW_PITCH
+    pmos_base = (n_nmos + 1) * ROW_PITCH   # +1 for PMOS/NMOS gap
     pmos_ys   = [round(pmos_base + j * ROW_PITCH, 6) for j in range(n_pmos)]
 
     placed_ids: set  = set()
@@ -702,6 +728,29 @@ def _convert_multirow_to_geometry(multirow_data: dict, original_nodes: list,
         placed_ids.add(nid)
         print(f"[MultiAgent]   Orphan '{nid}' ({dev_type}) → ({x:.3f}, {y:.3f})")
 
+    # ── Center all rows for symmetric layout ──────────────────────
+    # Find the max row width, then shift each row so it's centered.
+    row_nodes_by_y: dict = defaultdict(list)
+    for p in placed_nodes:
+        ry = round(float(p.get("geometry", {}).get("y", 0.0)), 6)
+        row_nodes_by_y[ry].append(p)
+
+    global_max_x = 0.0
+    for ry, rnodes in row_nodes_by_y.items():
+        if rnodes:
+            row_max = max(float(n["geometry"]["x"]) for n in rnodes)
+            global_max_x = max(global_max_x, row_max)
+
+    if global_max_x > 0:
+        for ry, rnodes in row_nodes_by_y.items():
+            if not rnodes:
+                continue
+            row_max = max(float(n["geometry"]["x"]) for n in rnodes)
+            shift = round((global_max_x - row_max) / 2.0, 6)
+            if shift > 0:
+                for n in rnodes:
+                    n["geometry"]["x"] = round(float(n["geometry"]["x"]) + shift, 6)
+
     return placed_nodes
 
 
@@ -716,19 +765,10 @@ def _validate_multirow(nodes: list, placed: list) -> list:
     Checks that:
     - Every input device ID appears in the output.
     - No device has a mixed type (PMOS placed at NMOS y, etc.).
-    - No two devices in the SAME ROW (same y) have the same x-slot.
+    - No two devices in the SAME ROW overlap (x-distance < min spacing).
 
-    Parameters
-    ----------
-    nodes : list
-        Original input device nodes.
-    placed : list
-        Placed node dicts from ``_convert_multirow_to_geometry``.
-
-    Returns
-    -------
-    list[str]
-        List of error message strings (empty = passed).
+    Uses a direct minimum-distance check instead of slot rounding to
+    avoid false positives when device widths differ from STD_PITCH.
     """
     errors: list = []
     orig_ids   = {n["id"] for n in nodes}
@@ -740,23 +780,27 @@ def _validate_multirow(nodes: list, placed: list) -> list:
     if missing:
         errors.append(f"MISSING devices: {sorted(missing)}")
 
-    # 2. Same-row x-slot collision
-    row_slots: dict = defaultdict(list)
+    # 2. Same-row overlap (distance-based, not slot-based)
+    MIN_SPACING = ABUT_SPACING * 0.9  # ~0.063 µm — anything closer is a collision
+    row_devs: dict = defaultdict(list)
     for p in placed:
         if not isinstance(p, dict):
             continue
-        geo  = p.get("geometry", {})
-        x    = geo.get("x", 0.0)
-        y    = round(float(geo.get("y", 0.0)), 3)
-        slot = round(float(x) / STD_PITCH)
-        row_slots[(y, slot)].append(p.get("id", "?"))
+        geo = p.get("geometry", {})
+        x   = float(geo.get("x", 0.0))
+        y   = round(float(geo.get("y", 0.0)), 3)
+        row_devs[y].append((x, p.get("id", "?")))
 
-    for (y, slot), ids in row_slots.items():
-        if len(ids) > 1:
-            errors.append(
-                f"X-COLLISION in row y={y:.3f} at slot {slot} "
-                f"(x≈{slot*STD_PITCH:.3f}µm): {ids}"
-            )
+    for y, devs in row_devs.items():
+        devs_sorted = sorted(devs, key=lambda d: d[0])
+        for i in range(len(devs_sorted) - 1):
+            x_a, id_a = devs_sorted[i]
+            x_b, id_b = devs_sorted[i + 1]
+            if abs(x_b - x_a) < MIN_SPACING:
+                errors.append(
+                    f"X-COLLISION in row y={y:.3f}: '{id_a}' and '{id_b}' "
+                    f"only {abs(x_b - x_a):.4f}µm apart (min={MIN_SPACING:.4f}µm)"
+                )
 
     # 3. Type must not change
     for p in placed:
@@ -775,7 +819,7 @@ def _stage_placement(nodes: list, edges: list, graph_data: dict,
                      abutment_candidates: list,
                      constraint_text: str,
                      selected_model: str,
-                     ollama_model: Optional[str]) -> list:
+                     task_weight: str = "heavy") -> list:
     """
     Stage 3 — Multi-row Placement Specialist.
 
@@ -794,15 +838,15 @@ def _stage_placement(nodes: list, edges: list, graph_data: dict,
         Abutment pair candidates.
     constraint_text : str
         Topology summary from Stage 1.
-    selected_model, ollama_model : str
-        LLM provider key and Ollama sub-model.
+    selected_model : str
+    task_weight : str
 
     Returns
     -------
     list
         Placed node dicts with geometry.
     """
-    print("[MultiAgent] Stage 3/4: Placement Specialist (multi-row)…")
+    print("[MultiAgent] Stage 2/4: Placement Specialist (multi-row)…")
 
     abutment_str = _format_abutment_candidates(abutment_candidates)
     prompt       = _build_multirow_prompt(nodes, edges, graph_data,
@@ -814,7 +858,7 @@ def _stage_placement(nodes: list, edges: list, graph_data: dict,
     last_error = None
     for attempt in range(1, MAX_RETRIES + 1):
         print(f"[MultiAgent]   Placement attempt {attempt}/{MAX_RETRIES}…")
-        raw = _call_llm(prompt, selected_model, ollama_model,
+        raw = _call_llm(prompt, selected_model, task_weight,
                         stage=f"Placement#{attempt}")
         if not raw:
             last_error = "Empty LLM response"
@@ -919,7 +963,14 @@ def _stage_placement(nodes: list, edges: list, graph_data: dict,
 
 def _deterministic_fallback(nodes: list, abutment_candidates: list) -> list:
     """
-    Group devices by shared gate net, then pack each group into a row.
+    Connectivity-aware multi-row deterministic fallback.
+
+    Instead of dumping all NMOS/PMOS into a single row each (which
+    produces an extremely elongated, unusable layout), this groups
+    devices by shared gate nets (mirrors, diff pairs) and splits
+    large groups into multiple rows for a roughly square aspect ratio.
+
+    Matched pairs are interdigitated (A-B-B-A) for symmetry.
 
     Parameters
     ----------
@@ -933,10 +984,107 @@ def _deterministic_fallback(nodes: list, abutment_candidates: list) -> list:
     list
         Placed node dicts.
     """
-    nmos = sorted([n["id"] for n in nodes if n.get("type") == "nmos"])
-    pmos = sorted([n["id"] for n in nodes if n.get("type") == "pmos"])
-    return _convert_slots_to_geometry(
-        {"nmos_order": nmos, "pmos_order": pmos},
+    MAX_ROW_WIDTH = 14  # Max devices per row for ~square aspect ratio
+
+    # ── Separate by type ────────────────────────────────────────────
+    nmos_nodes = [n for n in nodes if n.get("type") == "nmos"]
+    pmos_nodes = [n for n in nodes if n.get("type") == "pmos"]
+
+    def _build_rows(typed_nodes: list) -> list:
+        """Group devices into rows by connectivity, then split large rows."""
+        if not typed_nodes:
+            return []
+
+        # Group by parent device (strip _fN, _mN suffixes)
+        parent_groups: dict = defaultdict(list)
+        for n in typed_nodes:
+            dev_id = n["id"]
+            parent = re.sub(r'_[mf]\d+$', '', dev_id)
+            parent_groups[parent].append(dev_id)
+
+        # Sort parents and interdigitate matched pairs (same-size groups)
+        parents = sorted(parent_groups.keys())
+        used = set()
+        rows = []
+        current_row = []
+
+        for parent in parents:
+            if parent in used:
+                continue
+            group = parent_groups[parent]
+
+            # Find a matching partner (same finger count, unused)
+            partner = None
+            for other in parents:
+                if other != parent and other not in used:
+                    if len(parent_groups[other]) == len(group):
+                        partner = other
+                        break
+
+            if partner:
+                # Interdigitate: A_f1, B_f1, A_f2, B_f2, ... (common centroid)
+                a_devs = sorted(parent_groups[parent])
+                b_devs = sorted(parent_groups[partner])
+                interdig = []
+                for a, b in zip(a_devs, b_devs):
+                    interdig.extend([a, b])
+                # Any remaining from uneven sizes
+                interdig.extend(a_devs[len(b_devs):])
+                interdig.extend(b_devs[len(a_devs):])
+
+                if len(current_row) + len(interdig) > MAX_ROW_WIDTH:
+                    if current_row:
+                        rows.append(current_row)
+                    current_row = interdig
+                else:
+                    current_row.extend(interdig)
+                used.add(parent)
+                used.add(partner)
+            else:
+                # No partner — add group sequentially
+                if len(current_row) + len(group) > MAX_ROW_WIDTH:
+                    if current_row:
+                        rows.append(current_row)
+                    current_row = sorted(group)
+                else:
+                    current_row.extend(sorted(group))
+                used.add(parent)
+
+        if current_row:
+            rows.append(current_row)
+
+        # Split any remaining oversized rows
+        final_rows = []
+        for row in rows:
+            while len(row) > MAX_ROW_WIDTH:
+                final_rows.append(row[:MAX_ROW_WIDTH])
+                row = row[MAX_ROW_WIDTH:]
+            if row:
+                final_rows.append(row)
+
+        return final_rows
+
+    nmos_row_lists = _build_rows(nmos_nodes)
+    pmos_row_lists = _build_rows(pmos_nodes)
+
+    nmos_rows = [{"label": f"nmos_group_{i}", "devices": devs}
+                 for i, devs in enumerate(nmos_row_lists)]
+    pmos_rows = [{"label": f"pmos_group_{i}", "devices": devs}
+                 for i, devs in enumerate(pmos_row_lists)]
+
+    # If no rows built, fall back to single rows
+    if not nmos_rows and not pmos_rows:
+        nmos_ids = sorted(n["id"] for n in nmos_nodes)
+        pmos_ids = sorted(n["id"] for n in pmos_nodes)
+        nmos_rows = [{"label": "nmos", "devices": nmos_ids}]
+        pmos_rows = [{"label": "pmos", "devices": pmos_ids}]
+
+    n_total_rows = len(nmos_rows) + len(pmos_rows)
+    print(f"[MultiAgent]   Deterministic fallback: {len(nmos_rows)} NMOS row(s) + "
+          f"{len(pmos_rows)} PMOS row(s) = {n_total_rows} total")
+
+    return _convert_multirow_to_geometry(
+        {"nmos_rows": nmos_rows, "pmos_rows": pmos_rows},
         nodes, abutment_candidates,
     )
 
@@ -968,7 +1116,7 @@ def _stage_drc_and_heal(placed_nodes: list, abutment_candidates: list,
     list
         Geometrically corrected node dicts.
     """
-    print("[MultiAgent] Stage 4/4: DRC & Healing…")
+    print("[MultiAgent] Stage 3/4: DRC & Healing…")
 
     # ── Group nodes by row (y-value) ───────────────────────────────
     row_buckets: dict = defaultdict(list)
@@ -994,7 +1142,7 @@ def _stage_drc_and_heal(placed_nodes: list, abutment_candidates: list,
                 if not no_abutment and (nid, next_id) in abut_pairs:
                     cursor = round(cursor + ABUT_SPACING, 6)
                 else:
-                    cursor = round(cursor + geo.get("width", STD_PITCH), 6)
+                    cursor = round(cursor + _device_width(node), 6)
 
     # ── Force exact 0.070µm between known abutted pairs ───────────
     if not no_abutment:
@@ -1047,7 +1195,7 @@ def multi_agent_generate_placement(
     input_json_path: str,
     output_json_path: str,
     selected_model: str = "Gemini",
-    ollama_model: Optional[str] = None,
+    task_weight: str = "heavy",
     run_sa: bool = False,
 ) -> None:
     """
@@ -1071,12 +1219,10 @@ def multi_agent_generate_placement(
     output_json_path : str
         Path where the placed JSON will be written.
     selected_model : str
-        LLM provider: "Gemini" | "Groq" | "OpenAI" | "DeepSeek" |
-        "Alibaba" | "Ollama" | "VertexGemini" | "VertexClaude".
+        LLM provider: "Gemini" | "Alibaba" | "VertexGemini" | "VertexClaude".
         Defaults to "Gemini".
-    ollama_model : str | None
-        Ollama sub-model name (e.g. "llama3.2"). Default: "llama3.2".
-    run_sa : bool
+    task_weight : str
+        "light" or "heavy" logic mapping. Defaults to "heavy".
         Run Simulated Annealing post-pass. Default: False.
 
     Raises
@@ -1114,22 +1260,23 @@ def multi_agent_generate_placement(
     prompt_graph        = dict(graph_data)
     prompt_graph["nodes"] = norm_nodes
 
-    # ── Stage 1: Topology Analyst ───────────────────────────────────
+    # ── Stage 1/4: Topology Analyst ─────────────────────────────────
     constraint_text = _stage_topology(
-        norm_nodes, terminal_nets, edges, selected_model, ollama_model
+        norm_nodes, terminal_nets, edges, selected_model, "light"
     )
 
-    # ── Stage 2 & 3: Multi-Row Placement Specialist ─────────────────
+    # ── Stage 2/4: Multi-Row Placement Specialist ──────────────────
     placed_nodes = _stage_placement(
         norm_nodes, edges, prompt_graph,
         abutment_candidates, constraint_text,
-        selected_model, ollama_model,
+        selected_model, "heavy",
     )
 
-    # ── Stage 4: DRC & Abutment Healing ────────────────────────────
+    # ── Stage 3/4: DRC & Abutment Healing ──────────────────────────
     placed_nodes = _stage_drc_and_heal(placed_nodes, abutment_candidates, no_abutment)
 
-    # ── SA Post-Optimisation (optional) ────────────────────────────
+    # ── Stage 4/4: SA Post-Optimisation (optional) ─────────────────
+
     if run_sa:
         placed_nodes = _run_sa(placed_nodes, edges, abutment_candidates)
 
