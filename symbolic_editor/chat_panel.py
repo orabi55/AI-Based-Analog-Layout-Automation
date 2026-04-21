@@ -108,9 +108,9 @@ class ChatPanel(QWidget):
     toggle_requested = Signal()        # emitted when the user clicks the panel-toggle button
 
     # Single-agent path (normal chat)
-    request_inference = Signal(str, list, str, str)
+    request_inference = Signal(str, list, str)
     # Multi-agent path (orchestrator pipeline)
-    request_orchestrated = Signal(str, str, list, str, str)
+    request_orchestrated = Signal(str, str, list, str)
     # Resume paths for LangGraph interrupts
     request_resume_strategy = Signal(str)
     request_resume_viewer = Signal(dict)
@@ -129,7 +129,7 @@ class ChatPanel(QWidget):
 
         # Model preferences (synced from MainWindow)
         self.selected_model = "Gemini"
-        self.ollama_model = "llama3.2"
+        
 
         # --- Worker-Object Pattern: QThread + OrchestratorWorker ---
         self._worker_thread = QThread()
@@ -610,7 +610,6 @@ class ChatPanel(QWidget):
             ctx_json,
             chat_messages,
             self.selected_model,
-            self.ollama_model,
         )
 
     def _call_llm(self, user_message):
@@ -647,7 +646,7 @@ class ChatPanel(QWidget):
 
         # Emit signal → crosses thread boundary → runs on worker thread
         self.request_inference.emit(
-            full_prompt, chat_messages, self.selected_model, self.ollama_model
+            full_prompt, chat_messages, self.selected_model
         )
 
     # -----------------------------------------

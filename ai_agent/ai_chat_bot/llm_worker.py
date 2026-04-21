@@ -100,15 +100,14 @@ class LLMWorker(QObject):
         super().__init__()
         self._orchestrator = MultiAgentOrchestrator()
 
-    @Slot(str, list, str, str)
-    def process_request(self, full_prompt, chat_messages, selected_model, ollama_model):
+    @Slot(str, list, str)
+    def process_request(self, full_prompt, chat_messages, selected_model):
         """Execute the multi-agent pipeline.
 
         Args:
             full_prompt:    complete prompt string (contains system + user).
             chat_messages:  list of {"role", "content"} dicts.
             selected_model: 'Gemini' | 'OpenAI' | 'Ollama'
-            ollama_model:   local ollama sub-model (e.g. 'llama3.2', 'qwen2.5')
         """
         try:
             # Extract the user message (last user entry in chat_messages)
@@ -133,7 +132,7 @@ class LLMWorker(QObject):
                 user_message=user_message,
                 layout_context=layout_context,
                 chat_history=chat_messages,
-                run_llm_fn=lambda sys, msg, sel: run_llm(sys, msg, sel, ollama_model),
+                run_llm_fn=lambda sys, msg, sel: run_llm(sys, msg, sel, task_weight="light"),
                 selected_model=selected_model,
             )
 
@@ -193,16 +192,25 @@ class OrchestratorWorker(LLMWorker):
         except ImportError:
             self.thread_config = {"configurable": {"thread_id": str(uuid.uuid4())}}
 
-    @Slot(str, str, list, str, str)
+    @Slot(str, str, list, str)
     def process_orchestrated_request(
         self,
         user_message,
         layout_context_json,
         chat_history=None,
         selected_model="Gemini",
-        ollama_model="llama3.2",
+        task_weight="light",
     ):
         import json as _json
+        import time as _time
+        _t0 = _time.time()
+
+        print("\n" + "\u2588"*60, flush=True)
+        print("  CHATBOT ORCHESTRATOR REQUEST", flush=True)
+        print("\u2588"*60, flush=True)
+        print(f"[ORCH] Model: {selected_model} | Weight: {task_weight}", flush=True)
+        print(f"[ORCH] Message: {user_message[:80]!r}", flush=True)
+        print(f"[ORCH] History: {len(chat_history or [])} messages", flush=True)
 
         if chat_history is None:
             chat_history = []
@@ -219,15 +227,16 @@ class OrchestratorWorker(LLMWorker):
             project_root = Path(__file__).resolve().parent.parent
             sp_file = _resolve_sp_file(layout_context, project_root)
             layout_context["sp_file_path"] = sp_file or ""
-            classify_run_llm = lambda msgs, prompt, sel: _run_llm(
-                msgs, prompt, sel, ollama_model
-            )
+            print(f"[ORCH] SP file: {sp_file or 'N/A'}", flush=True)
+            classify_run_llm = None  # classifier uses llm_factory directly now
             run_selected_llm = lambda msgs, prompt: _run_llm(
-                msgs, prompt, selected_model, ollama_model
+                msgs, prompt, selected_model, task_weight
             )
 
             # ── Intent Classification ──────────────────────────────────
-            intent = classify_intent(user_message, classify_run_llm, selected_model)
+            print(f"[ORCH] Classifying intent...", flush=True)
+            intent = classify_intent(user_message, selected_model)
+            print(f"[ORCH] → Intent: {intent.upper()}", flush=True)
 
             if intent == "chat":
                 print("[ORCH] CHAT intent -> conversational reply")
@@ -281,7 +290,8 @@ class OrchestratorWorker(LLMWorker):
                     self.error_occurred.emit(f"Failed to parse concrete command: {str(e)}")
 
             else:
-                print("[ORCH] ABSTRACT intent -> Starting LangGraph Pipeline")
+                print("[ORCH] ABSTRACT intent → Starting LangGraph Pipeline", flush=True)
+                print("[ORCH] Building initial state...", flush=True)
                 initial_state = {
                     "user_message":    user_message,
                     "chat_history":    chat_history,
@@ -302,6 +312,7 @@ class OrchestratorWorker(LLMWorker):
                     "gap_px":          layout_context.get("gap_px", 0.0),
                     "drc_retry_count": 0,
                     "routing_pass_count": 0,
+                    "selected_model": selected_model,
                 }
                 if isinstance(layout_context.get("edges"), list):
                     initial_state["edges"] = layout_context["edges"]
@@ -314,11 +325,13 @@ class OrchestratorWorker(LLMWorker):
                 except ImportError:
                     self.thread_config = {"configurable": {"thread_id": str(uuid.uuid4())}}
 
+                print(f"[ORCH] Initial state ready | {len(initial_state.get('nodes', []))} devices | {len(initial_state.get('edges', []))} edges", flush=True)
+
                 self._stream_graph(initial_state)
 
         except Exception as exc:
             import traceback
-            print(f"[ORCH] Pipeline error:\n{traceback.format_exc()}")
+            print(f"[ORCH] Pipeline error:\n{traceback.format_exc()}", flush=True)
             self.error_occurred.emit(f"Orchestrator error: {exc}")
 
     def _stream_graph(self, input_data):
@@ -326,14 +339,22 @@ class OrchestratorWorker(LLMWorker):
             from ai_agent.ai_chat_bot.graph import app as langgraph_app
             from langgraph.types import Command
 
+            print(f"\n[GRAPH] ▶ Streaming LangGraph...", flush=True)
             interrupted = False
+            event_count = 0
             for event in langgraph_app.stream(input_data, self.thread_config, stream_mode="updates"):
+                event_count += 1
+                event_keys = list(event.keys())
+                print(f"[GRAPH]   Event #{event_count}: {event_keys}", flush=True)
+
                 if "__interrupt__" in event:
                     interrupt_data = event["__interrupt__"][0].value
+                    itype = interrupt_data.get('type', '?')
+                    print(f"[GRAPH]   ⏸ INTERRUPT: type={itype}", flush=True)
 
-                    if interrupt_data["type"] == "strategy_selection":
+                    if itype == "strategy_selection":
                         self.topology_ready_for_review.emit(interrupt_data["question"])
-                    elif interrupt_data["type"] == "visual_review":
+                    elif itype == "visual_review":
                         placement = interrupt_data.get("placement", [])
                         if not isinstance(placement, list):
                             placement = []
@@ -349,13 +370,18 @@ class OrchestratorWorker(LLMWorker):
                     interrupted = True
                     return
 
+            print(f"[GRAPH] ✓ Stream complete ({event_count} events)", flush=True)
             if not interrupted:
                 self._finalize_pipeline()
 
         except Exception as e:
+            print(f"[GRAPH] ✗ Error: {e}", flush=True)
             self.error_occurred.emit(f"Graph Execution Error: {str(e)}")
 
     def _finalize_pipeline(self):
+        print("\n" + "═"*60, flush=True)
+        print("  PIPELINE FINALIZATION", flush=True)
+        print("═"*60, flush=True)
         try:
             from ai_agent.ai_chat_bot.graph import app as langgraph_app
         except ImportError:
@@ -373,13 +399,13 @@ class OrchestratorWorker(LLMWorker):
                 x = round(float(n["geometry"]["x"]), 3)
                 y = round(float(n["geometry"]["y"]), 3)
             except (TypeError, KeyError, ValueError) as exc:
-                print(f"[FINALIZE] Skipping {n.get('id', '?')}: bad geometry ({exc})")
+                print(f"[FINALIZE] Skipping {n.get('id', '?')}: bad geometry ({exc})", flush=True)
                 continue
             final_cmds.append({"action": "move", "device": n["id"], "x": x, "y": y})
 
         pending_cmds = final_state.get("pending_cmds", [])
         if not final_cmds and pending_cmds:
-            print("[FINALIZE] placement_nodes empty — falling back to pending_cmds")
+            print("[FINALIZE] placement_nodes empty — falling back to pending_cmds", flush=True)
             final_cmds = pending_cmds
 
         drc_pass    = final_state.get("drc_pass", False)
@@ -389,6 +415,12 @@ class OrchestratorWorker(LLMWorker):
         routing_score   = routing_result.get("score", "N/A")
         routing_cost    = routing_result.get("placement_cost", None)
         constraint_count = len(final_state.get("constraints", []))
+
+        print(f"[FINALIZE] Devices placed: {len(final_cmds)}", flush=True)
+        print(f"[FINALIZE] DRC: {drc_status}", flush=True)
+        print(f"[FINALIZE] Routing Score: {routing_score}", flush=True)
+        if routing_cost is not None:
+            print(f"[FINALIZE] Routing Cost: {routing_cost:.2f}", flush=True)
 
         summary_header = (
             f"**[Multi-Agent Pipeline Complete]**\n\n"
@@ -407,6 +439,7 @@ class OrchestratorWorker(LLMWorker):
             })
 
         self.response_ready.emit(summary_header)
+        print("[FINALIZE] ✓ Pipeline complete — signals emitted.", flush=True)
 
     @Slot(str)
     def resume_with_strategy(self, user_choice: str):
