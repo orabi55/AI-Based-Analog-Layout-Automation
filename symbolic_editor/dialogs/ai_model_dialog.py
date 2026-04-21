@@ -103,10 +103,6 @@ class AIModelSelectionDialog(QDialog):
         model_layout.setContentsMargins(0, 0, 0, 0)
         self.model_combo = QComboBox()
         self.model_combo.addItem("Gemini Pro (Cloud)", "Gemini")
-        self.model_combo.addItem("Groq (Llama 3.3 70B)", "Groq")
-        self.model_combo.addItem("DeepSeek (Cloud)", "DeepSeek")
-        self.model_combo.addItem("OpenAI GPT-4 (Cloud)", "OpenAI")
-        self.model_combo.addItem("Ollama (Local)", "Ollama")
         self.model_combo.addItem("Alibaba Qwen (DashScope)", "Alibaba")
         self.model_combo.addItem("Vertex AI — Gemini (Cloud ADC)", "VertexGemini")
         self.model_combo.addItem("Vertex AI — Claude (Cloud ADC)", "VertexClaude")
@@ -125,28 +121,6 @@ class AIModelSelectionDialog(QDialog):
         self.gemini_api_key = QLineEdit(os.environ.get("GEMINI_API_KEY", "******"))
         self.gemini_page = self._create_page("API Key:", self.gemini_api_key, "Fast & efficient. Free tier: 15 req/min.")
         self.settings_stack.addWidget(self.gemini_page)
-
-        # 2. Groq
-        self.groq_api_key = QLineEdit(os.environ.get("GROQ_API_KEY", "******"))
-        self.groq_page = self._create_page("API Key:", self.groq_api_key, "Ultra fast inference. Free tier: 30 req/min. \u26a1")
-        self.settings_stack.addWidget(self.groq_page)
-
-        # 3. DeepSeek
-        self.deepseek_api_key = QLineEdit(os.environ.get("DEEPSEEK_API_KEY", "******"))
-        self.deepseek_page = self._create_page("API Key:", self.deepseek_api_key, "Strong code reasoning. Free tier available.")
-        self.settings_stack.addWidget(self.deepseek_page)
-
-        # 4. OpenAI
-        self.openai_api_key = QLineEdit(os.environ.get("OPENAI_API_KEY", "******"))
-        self.openai_page = self._create_page("API Key:", self.openai_api_key, "High precision spatial understanding.")
-        self.settings_stack.addWidget(self.openai_page)
-
-        # 5. Ollama
-        self.ollama_model_combo = QComboBox()
-        self.ollama_model_combo.setEditable(True)
-        self.ollama_model_combo.addItems(["qwen3.5", "llama3.2", "deepseek-coder:6.7b", "phi4-mini:3.8b", "gemma3:4b"])
-        self.ollama_page = self._create_page("Local Model:", self.ollama_model_combo, "Requires Ollama installed & running locally.")
-        self.settings_stack.addWidget(self.ollama_page)
 
         # 6. Alibaba DashScope (Qwen)
         self.alibaba_api_key = QLineEdit(os.environ.get("ALIBABA_API_KEY", "******"))
@@ -291,9 +265,6 @@ class AIModelSelectionDialog(QDialog):
         # The user data contains our internal ID ("Gemini", "Groq", etc)
         return self.model_combo.itemData(self.model_combo.currentIndex())
 
-    def get_ollama_submodel(self):
-        return self.ollama_model_combo.currentText()
-
     def get_alibaba_model(self):
         return self.alibaba_model_combo.currentText()
 
@@ -311,18 +282,6 @@ class AIModelSelectionDialog(QDialog):
         gemini_key = self.gemini_api_key.text().strip().strip('\'"')
         if gemini_key and gemini_key != "******":
             os.environ["GEMINI_API_KEY"] = gemini_key
-
-        openai_key = self.openai_api_key.text().strip().strip('\'"')
-        if openai_key and openai_key != "******":
-            os.environ["OPENAI_API_KEY"] = openai_key
-
-        groq_key = self.groq_api_key.text().strip().strip('\'"')
-        if groq_key and groq_key != "******":
-            os.environ["GROQ_API_KEY"] = groq_key
-
-        deepseek_key = self.deepseek_api_key.text().strip().strip('\'"')
-        if deepseek_key and deepseek_key != "******":
-            os.environ["DEEPSEEK_API_KEY"] = deepseek_key
 
         alibaba_key = self.alibaba_api_key.text().strip().strip('\'"')
         if alibaba_key and alibaba_key != "******":
