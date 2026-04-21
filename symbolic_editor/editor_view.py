@@ -662,8 +662,6 @@ class SymbolicEditor(QGraphicsView):
         self._last_raw_nodes = nodes
 
         # ── Pass 2: Matched Group Rigid-Body Locking ──────────────────────
-        # If terminal_nets are already available, detect current mirrors.
-        # Also supports manual MATCHED_GROUPS fallback.
         self._wire_matched_group_locking(parent_groups, nodes)
 
     def _wire_matched_group_locking(self, parent_groups, raw_nodes):
@@ -672,18 +670,38 @@ class SymbolicEditor(QGraphicsView):
         After this, dragging ANY finger from ANY device in a matched group
         moves the ENTIRE group as one rigid body.
 
-        Detection methods (in priority order):
-          1. terminal_nets — auto-detect current mirrors (shared G+S)
-          2. Manual fallback — MATCHED_GROUPS dict (user-defined)
+        Detection: terminal_nets — auto-detect current mirrors (shared G+S)
+        with same-type filter and power-net exclusion.
         """
         from collections import defaultdict
 
-        # ─── Method 1: Auto-detect from terminal_nets ────────────────
+        # ─── Reset sibling groups to per-parent defaults ─────────────
+        # This prevents unbounded growth when called multiple times
+        # (e.g. once from _build_hierarchy_groups, again from set_terminal_nets).
+        for parent_name, members in parent_groups.items():
+            items_list = [m[1] for m in members]
+            for item in items_list:
+                if hasattr(item, '_sibling_group'):
+                    item._sibling_group = list(items_list)
+                    item._match_locked = False
+
+        # ─── Power nets that should NOT trigger matching ─────────────
+        _POWER_NETS = {"VDD", "VSS", "GND", "VCC", "AVDD", "AVSS",
+                       "DVDD", "DVSS", "VDDQ", "VSSQ"}
+
+        # ─── Determine device type per parent ────────────────────────
+        parent_type = {}     # parent_name -> "nmos" | "pmos"
+        for parent_name, members in parent_groups.items():
+            for node, item in members:
+                dev_type = str(node.get("type", "?")).lower()
+                parent_type[parent_name] = dev_type
+                break
+
+        # ─── Auto-detect from terminal_nets ──────────────────────────
         matched_sets = []  # list of sets of parent names
 
         if hasattr(self, '_terminal_nets') and self._terminal_nets:
             # Build parent→nets map: for each parent, get G and S nets
-            # from its first finger's terminal_nets entry
             parent_gs = {}  # parent_name -> (G_net, S_net)
             for parent_name, members in parent_groups.items():
                 for node, item in members:
@@ -699,22 +717,25 @@ class SymbolicEditor(QGraphicsView):
                 gs_groups[(g, s)].append(parent_name)
 
             for (g_net, s_net), members in gs_groups.items():
-                if len(members) > 1:
-                    matched_sets.append(set(members))
-                    print(f"[MATCHED GROUP] Auto-detected: {members} "
-                          f"(shared G={g_net}, S={s_net})")
+                if len(members) <= 1:
+                    continue
 
-        # ─── Method 2: Manual fallback for circuits without nets ─────
-        # Users can define this dict to hardcode matched groups
-        MANUAL_MATCHED_GROUPS = {
-            "Group_NMOS_Mirror": ["MM0", "MM1", "MM2"],
-            "Group_PMOS_Mirror": ["MM3", "MM4", "MM5"],
-        }
-        for group_name, members in MANUAL_MATCHED_GROUPS.items():
-            # Only add if all members exist in the current layout
-            if all(m in parent_groups for m in members):
-                matched_sets.append(set(members))
-                print(f"[MATCHED GROUP] Manual: {group_name} = {members}")
+                # ── Filter 1: Skip if G or S is a power net ──────────
+                if g_net.upper() in _POWER_NETS or s_net.upper() in _POWER_NETS:
+                    print(f"[MATCHED GROUP] Skipped: {members} — "
+                          f"G={g_net} or S={s_net} is a power net")
+                    continue
+
+                # ── Filter 2: Only match same device type ────────────
+                type_groups = defaultdict(list)
+                for m in members:
+                    type_groups[parent_type.get(m, "?")].append(m)
+
+                for dev_type, typed_members in type_groups.items():
+                    if len(typed_members) > 1:
+                        matched_sets.append(set(typed_members))
+                        print(f"[MATCHED GROUP] Auto-detected ({dev_type}): "
+                              f"{typed_members} (shared G={g_net}, S={s_net})")
 
         # ─── Merge sibling groups ────────────────────────────────────
         for matched_parents in matched_sets:
