@@ -964,14 +964,22 @@ class LayoutEditorTab(QWidget):
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         model_choice = dialog.get_selected_model()
-        submodel = dialog.get_ollama_submodel() if model_choice == "Ollama" else None
         self.chat_panel.selected_model = model_choice
-        if submodel:
-            self.chat_panel.ollama_model = submodel
         abutment_enabled = dialog.is_abutment_enabled()
         run_sa = dialog.is_sa_enabled()
         run_multi_agent = dialog.get_multi_agent_enabled()
         dialog.apply_api_keys()
+
+        # ── Debug output ──
+        print("\n" + "\u2588"*60, flush=True)
+        print("  AI INITIAL PLACEMENT", flush=True)
+        print("\u2588"*60, flush=True)
+        print(f"[AI-PLACE] Model       : {model_choice}", flush=True)
+        print(f"[AI-PLACE] Multi-Agent  : {run_multi_agent}", flush=True)
+        print(f"[AI-PLACE] Abutment    : {abutment_enabled}", flush=True)
+        print(f"[AI-PLACE] SA Post-Opt : {run_sa}", flush=True)
+        print(f"[AI-PLACE] Devices     : {len(self.nodes)}", flush=True)
+
         self._sync_node_positions()
         data = copy.deepcopy(self._build_output_data())
         if "terminal_nets" not in data:
@@ -991,7 +999,8 @@ class LayoutEditorTab(QWidget):
                 if node:
                     geo = node.get("geometry", {})
                     self._saved_locked_positions[gid] = {"x": geo.get("x", 0), "y": geo.get("y", 0)}
-        self._ai_worker = GenericWorker(self._run_ai_initial_placement, data, model_choice, submodel, run_sa, run_multi_agent)
+        print(f"[AI-PLACE] \u25B6 Launching worker thread...", flush=True)
+        self._ai_worker = GenericWorker(self._run_ai_initial_placement, data, model_choice, run_sa, run_multi_agent)
         self._ai_worker.finished.connect(self._on_ai_placement_completed)
         self._ai_worker.error.connect(self._on_ai_placement_error)
         self._ai_worker.start()
@@ -1263,7 +1272,7 @@ class LayoutEditorTab(QWidget):
         return compressed
 
     @staticmethod
-    def _run_ai_initial_placement(data, model_choice="Gemini", submodel=None, run_sa=False, run_multi_agent=False):
+    def _run_ai_initial_placement(data, model_choice="Gemini", run_sa=False, run_multi_agent=False):
         import tempfile
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tmp_in:
             json.dump(data, tmp_in, indent=2)
@@ -1275,65 +1284,8 @@ class LayoutEditorTab(QWidget):
                 multi_agent_generate_placement(
                     tmp_in_path, tmp_out_path,
                     selected_model=model_choice,
-                    ollama_model=submodel,
                     run_sa=run_sa,
                 )
-            elif model_choice == "OpenAI":
-                try:
-                    from ai_agent.ai_initial_placement.openai_placer import llm_generate_placement
-                    llm_generate_placement(tmp_in_path, tmp_out_path)
-                except Exception as e:
-                    if "401" in str(e) or "Incorrect API key" in str(e):
-                        raise RuntimeError("Invalid OpenAI API Key.")
-                    raise
-            elif model_choice == "Ollama":
-                import shutil, subprocess, urllib.request, time
-                if not shutil.which("ollama"):
-                    raise RuntimeError("Ollama executable not found.")
-                ollama_running = False
-                try:
-                    urllib.request.urlopen("http://localhost:11434", timeout=1)
-                    ollama_running = True
-                except Exception:
-                    pass
-                if not ollama_running:
-                    try:
-                        kwargs = {}
-                        if os.name == "nt":
-                            kwargs["creationflags"] = 0x08000000
-                        subprocess.Popen(["ollama", "serve"], **kwargs)
-                        for _ in range(8):
-                            time.sleep(1)
-                            try:
-                                urllib.request.urlopen("http://localhost:11434", timeout=1)
-                                ollama_running = True
-                                break
-                            except Exception:
-                                pass
-                        if not ollama_running:
-                            raise RuntimeError("Ollama didn't respond within 8 seconds.")
-                    except Exception as e:
-                        if isinstance(e, RuntimeError):
-                            raise
-                        raise RuntimeError(f"Failed to start Ollama: {e}")
-                from ai_agent.ai_initial_placement.ollama_placer import ollama_generate_placement
-                ollama_generate_placement(tmp_in_path, tmp_out_path, model=submodel or "llama3.2")
-            elif model_choice == "Groq":
-                try:
-                    from ai_agent.ai_initial_placement.groq_placer import groq_generate_placement
-                    groq_generate_placement(tmp_in_path, tmp_out_path)
-                except Exception as e:
-                    if "401" in str(e) or "invalid_api_key" in str(e):
-                        raise RuntimeError("Invalid Groq API Key.")
-                    raise
-            elif model_choice == "DeepSeek":
-                try:
-                    from ai_agent.ai_initial_placement.deepseek_placer import deepseek_generate_placement
-                    deepseek_generate_placement(tmp_in_path, tmp_out_path)
-                except Exception as e:
-                    if "401" in str(e) or "invalid_api_key" in str(e):
-                        raise RuntimeError("Invalid DeepSeek API Key.")
-                    raise
             elif model_choice == "Alibaba":
                 try:
                     from ai_agent.ai_initial_placement.alibaba_placer import alibaba_generate_placement
