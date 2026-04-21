@@ -81,6 +81,30 @@ STD_PITCH    = 0.294   # µm  — non-abutted standard pitch
 MAX_RETRIES  = 3
 MAX_ROW_DEVS = 16      # max devices per row (auto-split if exceeded)
 
+# -----------------------------------------------------------------------
+# Per-stage model mapping — each pipeline stage gets its optimal model.
+# Format:  { provider: { stage_key: (model_name, location_override|None) } }
+# location_override=None means use the env VERTEX_LOCATION / default.
+# -----------------------------------------------------------------------
+_VERTEX_MODELS = {
+    "TopologyAnalyst":  ("gemini-2.5-flash", None),       # fast analysis
+    "Placement":        ("gemini-2.5-pro",   "global"),   # best reasoning
+    "DRC":              ("gemini-2.5-flash", None),       # fast fixes
+    "default":          ("gemini-2.5-flash", None),
+}
+_GEMINI_MODELS = {
+    "TopologyAnalyst":  "gemini-2.5-flash",
+    "Placement":        "gemini-2.5-pro",
+    "DRC":              "gemini-2.5-flash",
+    "default":          "gemini-2.5-flash",
+}
+_ALIBABA_MODELS = {
+    "TopologyAnalyst":  "qwen-plus",
+    "Placement":        "qwen-max",
+    "DRC":              "qwen-plus",
+    "default":          "qwen-plus",
+}
+
 
 def _device_width(node: dict) -> float:
     """
@@ -114,25 +138,26 @@ def _call_llm(prompt: str, selected_model: str,
     """
     Call the appropriate LLM and return the raw response text.
 
+    Each pipeline stage gets its own optimal model:
+      - TopologyAnalyst  → fast/cheap (flash / qwen-plus)
+      - Placement         → best reasoning (pro / qwen-max)
+      - DRC               → fast/cheap (flash / qwen-plus)
+
+    For VertexGemini, the location is automatically adjusted per model
+    (gemini-2.5-pro requires location="global").
+
     Falls back to "" on any error so the caller can use a deterministic
     fallback rather than crashing the whole pipeline.
-
-    Parameters
-    ----------
-    prompt : str
-        Full assembled prompt string.
-    selected_model : str
-        Provider key: "Gemini" | "Alibaba" | "VertexGemini" | "VertexClaude".
-    task_weight : str
-        "light" or "heavy" logic mapping.
-    stage : str
-        Human-readable label used in log messages.
-
-    Returns
-    -------
-    str
-        LLM response or "" on error.
     """
+    # Determine the stage key for model lookup
+    stage_key = "default"
+    if "Topology" in stage or "Analyst" in stage:
+        stage_key = "TopologyAnalyst"
+    elif "Placement" in stage:
+        stage_key = "Placement"
+    elif "DRC" in stage:
+        stage_key = "DRC"
+
     tag = f"[MultiAgent][{stage}]" if stage else "[MultiAgent]"
     try:
         if selected_model == "Gemini":
@@ -142,8 +167,8 @@ def _call_llm(prompt: str, selected_model: str,
             if not api_key:
                 raise ValueError("GEMINI_API_KEY not set")
             client = genai.Client(api_key=api_key)
-            model_name = "gemini-1.5-pro" if task_weight == "heavy" else "gemini-2.5-flash"
-            print(f"[MultiAgent] Gemini request: weight='{task_weight}', model='{model_name}'")
+            model_name = _GEMINI_MODELS.get(stage_key, _GEMINI_MODELS["default"])
+            print(f"[MultiAgent] Gemini → {stage_key}: model='{model_name}'")
             resp = client.models.generate_content(
                 model=model_name,
                 contents=prompt,
@@ -157,8 +182,8 @@ def _call_llm(prompt: str, selected_model: str,
                 api_key=os.getenv("ALIBABA_API_KEY", ""),
                 base_url="https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
             )
-            model_name = "qwen-max" if task_weight == "heavy" else "qwen-plus"
-            print(f"[MultiAgent] Alibaba Qwen request: weight='{task_weight}', model='{model_name}'")
+            model_name = _ALIBABA_MODELS.get(stage_key, _ALIBABA_MODELS["default"])
+            print(f"[MultiAgent] Alibaba → {stage_key}: model='{model_name}'")
             resp = client.chat.completions.create(
                 model=model_name,
                 messages=[{"role": "user", "content": prompt}],
@@ -172,13 +197,14 @@ def _call_llm(prompt: str, selected_model: str,
             project = os.getenv("VERTEX_PROJECT_ID", "")
             if not project:
                 raise ValueError("VERTEX_PROJECT_ID not set")
-            client = genai.Client(
-                vertexai=True, project=project,
-                location=os.getenv("VERTEX_LOCATION", "us-central1"),
+            model_name, loc_override = _VERTEX_MODELS.get(
+                stage_key, _VERTEX_MODELS["default"]
             )
-            model_name = "gemini-2.5-flash"
-            print(f"[MultiAgent] VertexGemini request: weight='{task_weight}', model='{model_name}'"
-                  f" (note: same model for all weights — only model available in project)")
+            location = loc_override or os.getenv("VERTEX_LOCATION", "us-central1")
+            print(f"[MultiAgent] VertexGemini → {stage_key}: model='{model_name}', location='{location}'")
+            client = genai.Client(
+                vertexai=True, project=project, location=location,
+            )
             resp = client.models.generate_content(
                 model=model_name,
                 contents=prompt,
@@ -192,8 +218,8 @@ def _call_llm(prompt: str, selected_model: str,
                 project_id=os.getenv("VERTEX_PROJECT_ID", ""),
                 region=os.getenv("VERTEX_LOCATION", "us-east5"),
             )
-            model_name = "claude-3-5-sonnet-v2@20241022" if task_weight == "heavy" else "claude-3-5-sonnet@20240620"
-            print(f"[MultiAgent] VertexClaude request: weight='{task_weight}', model='{model_name}'")
+            model_name = "claude-3-5-sonnet-v2@20241022" if stage_key == "Placement" else "claude-3-5-sonnet@20240620"
+            print(f"[MultiAgent] VertexClaude → {stage_key}: model='{model_name}'")
             resp = client.messages.create(
                 model=model_name,
                 max_tokens=8192,
@@ -369,21 +395,7 @@ def _build_multirow_prompt(nodes: list, edges: list, graph_data: dict,
     and order it Left-to-Right. Coordinates are computed later by
     ``_convert_multirow_to_geometry`` — zero floating-point hallucination.
 
-    Parameters
-    ----------
-    nodes : list
-        Normalised device nodes.
-    edges, graph_data : list, dict
-        Edge list and complete graph data.
-    abutment_str : str
-        Formatted abutment candidate string.
-    constraint_text : str
-        Topology summary from Stage 1.
-
-    Returns
-    -------
-    str
-        Full placement prompt string.
+    Includes computed target row counts for a square aspect ratio.
     """
     pmos_ids = sorted(n["id"] for n in nodes if n.get("type") == "pmos")
     nmos_ids = sorted(n["id"] for n in nodes if n.get("type") == "nmos")
@@ -403,6 +415,35 @@ def _build_multirow_prompt(nodes: list, edges: list, graph_data: dict,
     abut_section = ""
     if abutment_str and abutment_str.strip():
         abut_section = f"\nABUTMENT REQUIREMENTS (these pairs MUST be adjacent):\n{abutment_str}\n"
+
+    # ── Compute target row counts for square aspect ratio ─────────────
+    # Width per device ≈ 0.294µm, row pitch = 0.668µm.
+    # For a square: n_devices_per_row * 0.294 ≈ n_total_rows * 0.668
+    # So: devices_per_row ≈ sqrt(N * 0.668 / 0.294) ≈ sqrt(N * 2.27)
+    import math
+    n_total   = len(nmos_ids) + len(pmos_ids)
+    avg_width = sum(_device_width(n) for n in nodes) / max(1, len(nodes))
+    devs_per_row = max(4, int(math.sqrt(n_total * ROW_PITCH / avg_width)))
+    devs_per_row = min(devs_per_row, MAX_ROW_DEVS)
+
+    target_nmos_rows = max(1, math.ceil(len(nmos_ids) / devs_per_row))
+    target_pmos_rows = max(1, math.ceil(len(pmos_ids) / devs_per_row))
+    target_nmos_per  = math.ceil(len(nmos_ids) / target_nmos_rows) if target_nmos_rows else 0
+    target_pmos_per  = math.ceil(len(pmos_ids) / target_pmos_rows) if target_pmos_rows else 0
+
+    square_guidance = (
+        f"SQUARE ASPECT RATIO TARGET (IMPORTANT):\n"
+        f"  Total devices = {n_total} ({len(nmos_ids)} NMOS + {len(pmos_ids)} PMOS)\n"
+        f"  Average device width ≈ {avg_width:.3f}µm, row pitch = {ROW_PITCH}µm\n"
+        f"  For a near-square layout, aim for:\n"
+        f"    • ~{target_nmos_rows} NMOS row(s) with ~{target_nmos_per} devices each\n"
+        f"    • ~{target_pmos_rows} PMOS row(s) with ~{target_pmos_per} devices each\n"
+        f"  Maximum {MAX_ROW_DEVS} devices per row (rows exceeding this will be auto-split).\n"
+        f"  DO NOT put {len(pmos_ids)} devices in a single row — split by function.\n"
+    )
+
+    print(f"[MultiAgent]   Square-ratio target: {target_nmos_rows} NMOS rows × "
+          f"{target_nmos_per} dev + {target_pmos_rows} PMOS rows × {target_pmos_per} dev")
 
     return f"""\
 You are an expert VLSI analog IC layout engineer.
@@ -462,8 +503,10 @@ RULE 5 — ROUTING AWARENESS:
   • Bias/tail devices may be independently ordered at the edges.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-HOW MANY ROWS TO USE (topology-based guidance):
+{square_guidance}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+HOW MANY ROWS TO USE (topology-based guidance):
 
 Simple diff-amp / 5T OTA (most common):
   nmos_rows: [ {{tail_current}}, {{input_pair}} ]
@@ -505,6 +548,7 @@ CRITICAL CHECKS before outputting:
   [ ] Every PMOS device ID appears exactly once in pmos_rows.
   [ ] No PMOS ID is in nmos_rows. No NMOS ID is in pmos_rows.
   [ ] Multi-finger devices are consecutive (_f1, _f2, _f3 in order).
+  [ ] No row has more than {MAX_ROW_DEVS} devices.
   [ ] The JSON is valid (no trailing commas, no comments).
 """
 
@@ -1260,7 +1304,21 @@ def multi_agent_generate_placement(
     prompt_graph        = dict(graph_data)
     prompt_graph["nodes"] = norm_nodes
 
-    # ── Stage 1/4: Topology Analyst ─────────────────────────────────
+    # ── Stage 1/4: Topology Analyst (flash — fast analysis) ─────────
+    print(f"[MultiAgent] Model assignment per stage:")
+    if selected_model == "VertexGemini":
+        for k, (m, loc) in _VERTEX_MODELS.items():
+            if k == "default": continue
+            print(f"[MultiAgent]   {k:20s} → {m} (location={loc or 'default'})")
+    elif selected_model == "Gemini":
+        for k, m in _GEMINI_MODELS.items():
+            if k == "default": continue
+            print(f"[MultiAgent]   {k:20s} → {m}")
+    elif selected_model == "Alibaba":
+        for k, m in _ALIBABA_MODELS.items():
+            if k == "default": continue
+            print(f"[MultiAgent]   {k:20s} → {m}")
+
     constraint_text = _stage_topology(
         norm_nodes, terminal_nets, edges, selected_model, "light"
     )

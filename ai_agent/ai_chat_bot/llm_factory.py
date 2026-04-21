@@ -44,7 +44,7 @@ def get_langchain_llm(selected_model: str, task_weight: str = "light"):
 
     if selected_model == "Gemini":
         from langchain_google_genai import ChatGoogleGenerativeAI
-        model_name = "gemini-1.5-pro" if task_weight == "heavy" else "gemini-2.5-flash"
+        model_name = "gemini-2.5-pro" if task_weight == "heavy" else "gemini-2.5-flash"
         print(f"[LLM_FACTORY] │  Model    : {model_name}", flush=True)
         print(f"[LLM_FACTORY] │  API Key  : {'***' + os.environ.get('GEMINI_API_KEY', '???')[-4:]}", flush=True)
         llm = ChatGoogleGenerativeAI(
@@ -69,9 +69,13 @@ def get_langchain_llm(selected_model: str, task_weight: str = "light"):
 
     elif selected_model == "VertexGemini":
         from langchain_google_vertexai import ChatVertexAI
-        model_name = "gemini-2.5-flash"
+        model_name = "gemini-2.5-pro" if task_weight == "heavy" else "gemini-2.5-flash"
         project_id = os.getenv("VERTEX_PROJECT_ID", "")
-        location = os.getenv("VERTEX_LOCATION", "us-central1")
+        # gemini-2.5-pro requires location="global"
+        if "pro" in model_name:
+            location = "global"
+        else:
+            location = os.getenv("VERTEX_LOCATION", "us-central1")
         print(f"[LLM_FACTORY] │  Model    : {model_name}", flush=True)
         print(f"[LLM_FACTORY] │  Project  : {project_id or '⚠ MISSING'}", flush=True)
         print(f"[LLM_FACTORY] │  Location : {location}", flush=True)
