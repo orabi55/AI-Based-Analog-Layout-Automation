@@ -75,7 +75,7 @@ from ai_agent.ai_initial_placement.placer_utils import (
 # -------------------------------------------------------------------
 # Physical layout constants
 # -------------------------------------------------------------------
-ROW_PITCH    = 0.668   # µm  — row-to-row pitch
+ROW_PITCH    = 0.668   # µm — default row-to-row pitch (overridden dynamically)
 ABUT_SPACING = 0.070   # µm  — abutted finger pitch
 STD_PITCH    = 0.294   # µm  — non-abutted standard pitch
 MAX_RETRIES  = 3
@@ -707,13 +707,25 @@ def _convert_multirow_to_geometry(multirow_data: dict, original_nodes: list,
     abut_pairs = _build_abut_pairs(original_nodes, abutment_candidates)
 
     # ── Compute row Y coordinates ───────────────────────────────────
-    # PMOS rows start one extra ROW_PITCH above the top NMOS row
-    # to guarantee a clear vertical gap and prevent visual overlap.
+    # Dynamically compute row pitch from actual device height.
+    # The hardcoded ROW_PITCH=0.668 is too small for devices with
+    # height=0.818 — causes vertical overlap in every row.
+    max_height = max(
+        (float(n.get("geometry", {}).get("height", 0.5)) for n in original_nodes),
+        default=0.5
+    )
+    row_pitch = round(max(ROW_PITCH, max_height * 1.25), 3)  # 25% gap for routing
+    pmos_nmos_gap = round(max_height * 1.5, 3)  # 50% extra gap between types
+
+    print(f"[MultiAgent]   Row pitch: {row_pitch:.3f}µm "
+          f"(device height={max_height:.3f}µm, gap={row_pitch - max_height:.3f}µm)")
+    print(f"[MultiAgent]   PMOS/NMOS gap: {pmos_nmos_gap:.3f}µm")
+
     n_nmos = len(nmos_rows)
     n_pmos = len(pmos_rows)
-    nmos_ys = [round(i * ROW_PITCH, 6) for i in range(n_nmos)]
-    pmos_base = (n_nmos + 1) * ROW_PITCH   # +1 for PMOS/NMOS gap
-    pmos_ys   = [round(pmos_base + j * ROW_PITCH, 6) for j in range(n_pmos)]
+    nmos_ys = [round(i * row_pitch, 6) for i in range(n_nmos)]
+    pmos_base = round(n_nmos * row_pitch + pmos_nmos_gap, 6)  # extra gap between types
+    pmos_ys   = [round(pmos_base + j * row_pitch, 6) for j in range(n_pmos)]
 
     placed_ids: set  = set()
     placed_nodes: list = []
@@ -749,18 +761,19 @@ def _convert_multirow_to_geometry(multirow_data: dict, original_nodes: list,
         if dev_type == "nmos":
             y = nmos_ys[-1] if nmos_ys else 0.0
         elif dev_type == "pmos":
-            y = pmos_ys[-1] if pmos_ys else ROW_PITCH
+            y = pmos_ys[-1] if pmos_ys else pmos_base
         else:
             # passive (res/cap) — dedicated row above everything
-            y = round((n_nmos + n_pmos) * ROW_PITCH + ROW_PITCH, 6)
+            y = round(pmos_base + n_pmos * row_pitch + row_pitch, 6)
 
         # Find leftmost free x in that row
         used_x = {round(p["geometry"]["x"], 6)
                   for p in placed_nodes
                   if round(p.get("geometry", {}).get("y", -999), 6) == y}
+        w = _device_width(n)
         x = 0.0
         while round(x, 6) in used_x:
-            x = round(x + STD_PITCH, 6)
+            x = round(x + w, 6)
 
         orphan = copy.deepcopy(n)
         geo    = orphan.setdefault("geometry", {})
@@ -773,27 +786,37 @@ def _convert_multirow_to_geometry(multirow_data: dict, original_nodes: list,
         print(f"[MultiAgent]   Orphan '{nid}' ({dev_type}) → ({x:.3f}, {y:.3f})")
 
     # ── Center all rows for symmetric layout ──────────────────────
-    # Find the max row width, then shift each row so it's centered.
+    # Compute each row's bounding width (last device x + its width),
+    # then shift each row so its center aligns with the widest row.
     row_nodes_by_y: dict = defaultdict(list)
     for p in placed_nodes:
         ry = round(float(p.get("geometry", {}).get("y", 0.0)), 6)
         row_nodes_by_y[ry].append(p)
 
-    global_max_x = 0.0
+    global_max_width = 0.0
+    row_widths = {}
     for ry, rnodes in row_nodes_by_y.items():
         if rnodes:
-            row_max = max(float(n["geometry"]["x"]) for n in rnodes)
-            global_max_x = max(global_max_x, row_max)
+            rightmost = max(rnodes, key=lambda n: float(n["geometry"]["x"]))
+            row_w = float(rightmost["geometry"]["x"]) + _device_width(rightmost)
+            row_widths[ry] = row_w
+            global_max_width = max(global_max_width, row_w)
 
-    if global_max_x > 0:
+    if global_max_width > 0:
         for ry, rnodes in row_nodes_by_y.items():
             if not rnodes:
                 continue
-            row_max = max(float(n["geometry"]["x"]) for n in rnodes)
-            shift = round((global_max_x - row_max) / 2.0, 6)
+            row_w = row_widths.get(ry, 0)
+            shift = round((global_max_width - row_w) / 2.0, 6)
             if shift > 0:
                 for n in rnodes:
                     n["geometry"]["x"] = round(float(n["geometry"]["x"]) + shift, 6)
+
+    # ── Log layout metrics ──────────────────────────────────────────
+    total_height = (pmos_ys[-1] if pmos_ys else 0) + max_height - (nmos_ys[0] if nmos_ys else 0)
+    aspect = global_max_width / total_height if total_height > 0 else 0
+    print(f"[MultiAgent]   Layout: {global_max_width:.3f}µm × {total_height:.3f}µm "
+          f"(aspect={aspect:.2f}, target≈1.0)")
 
     return placed_nodes
 
