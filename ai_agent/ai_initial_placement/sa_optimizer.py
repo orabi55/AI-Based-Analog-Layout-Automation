@@ -81,7 +81,8 @@ _STD_PITCH = 0.294
 
 def _repack_row(row_nodes: list[dict],
                 abut_right_ids: set[str],
-                abut_left_ids: set[str]) -> None:
+                abut_left_ids: set[str],
+                start_x: float = 0.0) -> None:
     """
     Re-assign exact X coordinates for devices in a single row based on their list order.
 
@@ -98,7 +99,9 @@ def _repack_row(row_nodes: list[dict],
         Set of device IDs that require right-side abutment.
     abut_left_ids : set[str]
         Set of device IDs that require left-side abutment.
-
+    start_x : float
+        The base X coordinate for the entire row.
+        
     Returns
     -------
     None
@@ -106,7 +109,7 @@ def _repack_row(row_nodes: list[dict],
     """
     if not row_nodes:
         return
-    cursor = row_nodes[0].get("geometry", {}).get("x", 0.0)
+    cursor = start_x
     for i, dev in enumerate(row_nodes):
         geo = dev.setdefault("geometry", {})
         geo["x"] = round(cursor, 6)
@@ -187,7 +190,11 @@ def optimize_placement(nodes: list,
 
     # ── Identify swappable indices per row ──────────────────────────────
     swappable: dict[float, list[int]] = {}
+    row_starts: dict[float, float] = {}
     for y_key, row_nodes in row_buckets.items():
+        if row_nodes:
+            # Capture the starting X of the row (before any swaps)
+            row_starts[y_key] = round(float(row_nodes[0].get("geometry", {}).get("x", 0.0)), 6)
         idxs = [
             i for i, n in enumerate(row_nodes)
             if n.get("id", "") not in chain_member_ids
@@ -215,6 +222,7 @@ def optimize_placement(nodes: list,
         y_key = random.choice(active_rows)
         row = row_buckets[y_key]
         idxs = swappable[y_key]
+        start_x = row_starts[y_key]
 
         # Pick two random swappable positions
         i_idx, j_idx = random.sample(idxs, 2)
@@ -223,7 +231,7 @@ def optimize_placement(nodes: list,
         row[i_idx], row[j_idx] = row[j_idx], row[i_idx]
 
         # Re-pack the row to get valid X coordinates
-        _repack_row(row, abut_right_ids, abut_left_ids)
+        _repack_row(row, abut_right_ids, abut_left_ids, start_x)
 
         new_hpwl = _compute_hpwl(working, edges)
         delta = new_hpwl - current_hpwl
@@ -234,7 +242,7 @@ def optimize_placement(nodes: list,
         else:
             # Revert
             row[i_idx], row[j_idx] = row[j_idx], row[i_idx]
-            _repack_row(row, abut_right_ids, abut_left_ids)
+            _repack_row(row, abut_right_ids, abut_left_ids, start_x)
 
         temperature *= cooling_rate
 

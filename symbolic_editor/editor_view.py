@@ -720,10 +720,10 @@ class SymbolicEditor(QGraphicsView):
                 if len(members) <= 1:
                     continue
 
-                # ── Filter 1: Skip if G or S is a power net ──────────
-                if g_net.upper() in _POWER_NETS or s_net.upper() in _POWER_NETS:
+                # ── Filter 1: Skip if G is a power net ──────────
+                if g_net.upper() in _POWER_NETS:
                     print(f"[MATCHED GROUP] Skipped: {members} — "
-                          f"G={g_net} or S={s_net} is a power net")
+                          f"G={g_net} is a power net (dummy or static)")
                     continue
 
                 # ── Filter 2: Only match same device type ────────────
