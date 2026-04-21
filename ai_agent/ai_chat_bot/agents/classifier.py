@@ -9,9 +9,7 @@ fast-path so trivial greetings never hit the LLM at all.
 """
 
 import re
-from langchain_google_genai import ChatGoogleGenerativeAI
-
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+from ai_agent.ai_chat_bot.llm_factory import get_langchain_llm
 
 # ── Regex fast-path patterns (zero LLM cost) ─────────────────────
 _CHAT_RE = re.compile(
@@ -59,7 +57,7 @@ Do not explain. Do not add punctuation.
 """
 
 
-def classify_intent(user_message: str, run_llm_fn, selected_model: str) -> str:
+def classify_intent(user_message: str, selected_model: str) -> str:
     """Classify user intent as 'concrete', 'abstract', 'question', or 'chat'.
 
     Uses a regex fast-path for trivial cases (greetings, obvious
@@ -68,7 +66,6 @@ def classify_intent(user_message: str, run_llm_fn, selected_model: str) -> str:
 
     Args:
         user_message:   the raw user text from the chat panel.
-        run_llm_fn:     callable(chat_messages, full_prompt, model) -> str
         selected_model: which LLM backend to use.
 
     Returns:
@@ -93,7 +90,8 @@ def classify_intent(user_message: str, run_llm_fn, selected_model: str) -> str:
     ]
     full_prompt = CLASSIFIER_PROMPT + "\n\n" + user_message
     try:
-        #result = run_llm_fn(msgs, full_prompt, selected_model)
+        llm = get_langchain_llm(selected_model, task_weight="light")
+        print(f"[CLASSIFIER] Requesting Intent Classification from {selected_model}...")
         result = llm.invoke(msgs)
         if not result:
             return "abstract"

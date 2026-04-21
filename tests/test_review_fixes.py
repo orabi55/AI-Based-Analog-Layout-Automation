@@ -16,13 +16,13 @@ def test_orchestrated_request_propagates_selected_model(monkeypatch):
 
     seen = {}
 
-    def fake_classify_intent(user_message, run_llm_fn, selected_model):
+    def fake_classify_intent(user_message, selected_model):
         seen["classifier_model"] = selected_model
         return "question"
 
-    def fake_run_llm(chat_messages, full_prompt, selected_model="Gemini", ollama_model="llama3.2"):
+    def fake_run_llm(chat_messages, full_prompt, selected_model="Gemini", task_weight="light"):
         seen["reply_model"] = selected_model
-        seen["ollama_model"] = ollama_model
+        seen["task_weight"] = task_weight
         return "ok"
 
     monkeypatch.setattr(
@@ -34,13 +34,13 @@ def test_orchestrated_request_propagates_selected_model(monkeypatch):
     worker = OrchestratorWorker()
     replies = []
     worker.response_ready.connect(replies.append)
-    worker.process_orchestrated_request("what is this?", "{}", [], "OpenAI", "qwen2.5")
+    worker.process_orchestrated_request("what is this?", "{}", [], "Alibaba", "light")
 
     assert replies == ["ok"]
     assert seen == {
-        "classifier_model": "OpenAI",
-        "reply_model": "OpenAI",
-        "ollama_model": "qwen2.5",
+        "classifier_model": "Alibaba",
+        "reply_model": "Alibaba",
+        "task_weight": "light",
     }
 
 
