@@ -1580,6 +1580,20 @@ class SymbolicEditor(QGraphicsView):
                 return
             except Exception:
                 pass
+        elif event.key() == Qt.Key.Key_F:
+            # Ignore if Ctrl or Alt are pressed
+            if event.modifiers() & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.AltModifier):
+                super().keyPressEvent(event)
+                return
+                
+            if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+                # 'Shift+F' - all to symbolic view
+                self.set_all_to_symbol_view()
+            else:
+                # 'F' key - all to transistor view
+                self.set_all_to_transistor_view()
+            event.accept()
+            return
         super().keyPressEvent(event)
 
     # -------------------------------------------------
@@ -1692,6 +1706,37 @@ class SymbolicEditor(QGraphicsView):
         # Force a refresh of connections
         self.resetCachedContent()
 
+    def set_all_to_transistor_view(self):
+        """Toggle all devices to transistor view."""
+        self.set_view_level("transistor")
+        
+        def descend_recursive(groups):
+            for g in groups:
+                if not getattr(g, '_is_descended', True):
+                    g.descend()
+                if hasattr(g, '_child_groups') and g._child_groups:
+                    descend_recursive(g._child_groups)
+                    
+        try:
+            descend_recursive(getattr(self, '_hierarchy_groups', []))
+        except Exception:
+            pass
+
+    def set_all_to_symbol_view(self):
+        """Toggle all devices to symbol view."""
+        self.set_view_level("symbol")
+        
+        def ascend_recursive(groups):
+            for g in groups:
+                if getattr(g, '_is_descended', False):
+                    g.ascend()
+                if hasattr(g, '_child_groups') and g._child_groups:
+                    ascend_recursive(g._child_groups)
+                    
+        try:
+            ascend_recursive(getattr(self, '_hierarchy_groups', []))
+        except Exception:
+            pass
 
     def _clear_block_overlays(self):
         """Remove all block overlay items from the scene."""
