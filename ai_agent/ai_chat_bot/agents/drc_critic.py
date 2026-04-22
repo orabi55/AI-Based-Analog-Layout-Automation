@@ -342,6 +342,16 @@ def run_drc_check(
     overlaps = _sweep_line_overlaps(boxes, terminal_nets, gap_px)
 
     for a, b, req_gap in overlaps:
+        # ── Skip cross-type (NMOS vs PMOS) bounding-box overlaps ──────────
+        # These are caused by row-order violations (NMOS above PMOS or vice
+        # versa) and will be resolved when ROW_ERROR corrections move the
+        # row to the correct Y.  Treating them as horizontal overlaps would
+        # push devices sideways, destroying matching and symmetry.
+        a_type = a.get("type", "")
+        b_type = b.get("type", "")
+        if {a_type, b_type} == {"nmos", "pmos"}:
+            continue
+
         # Determine which device is the anchor (left-most stays put)
         if a["x1"] <= b["x1"]:
             fix_dev = b["id"]
@@ -360,11 +370,11 @@ def run_drc_check(
             grp_note = f"  [GROUP MOVE — apply same Δx to: {', '.join(peers)}]"
 
         text = (
-            f"OVERLAP: {a['id']} ∩ {b['id']}  "
-            f"({a['id']}=[x:{a['x1']:.3f}→{a['x2']:.3f}, y:{a['y1']:.3f}]  "
-            f"{b['id']}=[x:{b['x1']:.3f}→{b['x2']:.3f}, y:{b['y1']:.3f}])  "
+            f"OVERLAP: {a['id']} vs {b['id']}  "
+            f"({a['id']}=[x:{a['x1']:.3f}>{a['x2']:.3f}, y:{a['y1']:.3f}]  "
+            f"{b['id']}=[x:{b['x1']:.3f}>{b['x2']:.3f}, y:{b['y1']:.3f}])  "
             f"effective_gap={req_gap:.4f}  "
-            f"→ MOVE {fix_dev} to x={fix_x:.3f}, y={fix_y:.3f}{grp_note}"
+            f"MOVE {fix_dev} to x={fix_x:.3f}, y={fix_y:.3f}{grp_note}"
         )
         _add(text, DRCViolation(
             kind="OVERLAP",
@@ -406,11 +416,15 @@ def run_drc_check(
             if dev_type == "pmos":
                 # Stage A: must be above all NMOS rows
                 if nmos_top_y is not None and y <= nmos_top_y:
-                    correct_y = max(pmos_ys) if pmos_ys else round(nmos_top_y + 0.668, 4)
+                    # Use any PMOS row that is already above NMOS.
+                    # If none exist (fully inverted) PMOS stays in place —
+                    # only NMOS rows will be re-stacked below it.
+                    valid_pmos_ys = [py for py in pmos_ys if py > nmos_top_y]
+                    correct_y = max(valid_pmos_ys) if valid_pmos_ys else y
                     _row_viol(
                         f"FATAL ROW ERROR: {dev_id} is PMOS at y={y:.4f} "
                         f"(must be above NMOS band y>{nmos_top_y:.4f}). "
-                        f"→ MOVE {dev_id} to y={correct_y:.4f}",
+                        f"Move {dev_id} to y={correct_y:.4f}",
                         correct_y,
                     )
                 # Stage B: on correct side but not in known PMOS rows
@@ -427,11 +441,46 @@ def run_drc_check(
             elif dev_type == "nmos":
                 # Stage A: must be below all PMOS rows
                 if pmos_bottom_y is not None and y >= pmos_bottom_y:
-                    correct_y = min(nmos_ys) if nmos_ys else round(pmos_bottom_y - 0.668, 4)
+                    # Use any NMOS row already below PMOS.
+                    valid_nmos_ys = [ny for ny in nmos_ys if ny < pmos_bottom_y]
+                    if valid_nmos_ys:
+                        correct_y = min(valid_nmos_ys)
+                    else:
+                        # ── Fully inverted: all NMOS rows are above PMOS rows ──
+                        # Compute per-row device heights dynamically from geometry.
+                        # Stack NMOS rows directly below the lowest PMOS row,
+                        # one on top of the other, with zero gap between them.
+                        # No hardcoded spacing — uses actual device heights.
+                        _row_max_h: Dict[float, float] = {}
+                        for _n2 in valid:
+                            _ry2 = round(float(_n2["geometry"]["y"]), 4)
+                            _h2  = float(_n2["geometry"].get("height", 0))
+                            _row_max_h[_ry2] = max(_row_max_h.get(_ry2, 0.0), _h2)
+
+                        # Sort NMOS rows descending (highest Y first, i.e. the
+                        # inverted-top row becomes the corrected top NMOS row).
+                        nmos_sorted_desc = sorted(nmos_ys, reverse=True)
+
+                        # Stack: start just below pmos_bottom_y, subtract each
+                        # row's actual height (no gap).
+                        _nmos_target_map: Dict[float, float] = {}
+                        cursor = pmos_bottom_y
+                        for _nrow_y in nmos_sorted_desc:
+                            _h_nrow = _row_max_h.get(_nrow_y, 0.0)
+                            if _h_nrow <= 0:
+                                _h_nrow = float(geo.get("height", 0.568))
+                            target = round(cursor - _h_nrow, 4)
+                            _nmos_target_map[_nrow_y] = target
+                            cursor = target
+
+                        correct_y = _nmos_target_map.get(
+                            y,
+                            round(pmos_bottom_y - float(geo.get("height", 0.568)), 4)
+                        )
                     _row_viol(
                         f"FATAL ROW ERROR: {dev_id} is NMOS at y={y:.4f} "
                         f"(must be below PMOS band y<{pmos_bottom_y:.4f}). "
-                        f"→ MOVE {dev_id} to y={correct_y:.4f}",
+                        f"Move {dev_id} to y={correct_y:.4f}",
                         correct_y,
                     )
                 # Stage B: on correct side but not in known NMOS rows
@@ -554,6 +603,37 @@ def compute_prescriptive_fixes(
     geometric_tags = geometric_tags or {}
     terminal_nets  = terminal_nets  or {}
 
+    # ── Row-boundary references (for PMOS/NMOS violation filtering) ──────────
+    # Strategy: build boundaries from AUTHORITATIVE positions:
+    #   - For devices with a ROW_ERROR → use the correction target (y_b)
+    #   - For correctly placed devices (no ROW_ERROR) → use current position
+    # This prevents wrong current positions from polluting the boundary set.
+    _nmos_top_y: Optional[float] = None     # highest valid NMOS row Y
+    _pmos_bot_y: Optional[float] = None     # lowest  valid PMOS row Y
+
+    if nodes:
+        # Build a map: device_id -> target_y if it has a ROW_ERROR
+        _row_err_targets: Dict[str, float] = {}
+        for _v in drc_result.get("structured", []):
+            if _v.kind == "ROW_ERROR" and _v.dev_a and _v.y_b is not None:
+                _row_err_targets[_v.dev_a] = _v.y_b
+
+        # Now walk all nodes and pick the right y for boundary computation
+        for _n in nodes:
+            _did = str(_n.get("id", ""))
+            _t   = str(_n.get("type", "")).strip().lower()
+            # Use the correction target if this device has a ROW_ERROR,
+            # otherwise trust the current (presumably correct) position.
+            if _did in _row_err_targets:
+                _y = round(_row_err_targets[_did], 4)
+            else:
+                _y = round(float(_n.get("geometry", {}).get("y", 0)), 4)
+
+            if _t == "nmos":
+                _nmos_top_y = max(_nmos_top_y, _y) if _nmos_top_y is not None else _y
+            elif _t == "pmos":
+                _pmos_bot_y = min(_pmos_bot_y, _y) if _pmos_bot_y is not None else _y
+
     # ── Build lookup maps ─────────────────────────────────────────────────────
     # proposed_x / proposed_y track where we think each device currently sits
     # after previously applied fixes in this same pass.
@@ -622,36 +702,67 @@ def compute_prescriptive_fixes(
         w: float,
         anchor_x2: Optional[float] = None,
         req_gap: float = 0.0,
+        dev_type: str = "",
     ) -> Tuple[float, float]:
         """Pick the lowest-cost legal position from four candidate directions.
 
         Candidates evaluated (cardinal vectors):
           RIGHT: raw_x (primary direction)
           LEFT:  anchor_x2 - w - req_gap  (compact leftward if space exists)
-          DOWN:  same x, shift down by row_pitch (only if NMOS)
-          UP:    same x, shift up by row_pitch (only if PMOS)
+          DOWN:  same x, shift down by row_pitch
+          UP:    same x, shift up by row_pitch
+
+        Vertical candidates are FILTERED by device type to prevent
+        PMOS from drifting below NMOS rows (and vice-versa).
+        A PMOS candidate must satisfy: candidate_y >= _pmos_bot_y
+        An NMOS candidate must satisfy: candidate_y <= _nmos_top_y
         """
         ox = orig_x.get(dev_id, raw_x)
         oy = orig_y.get(dev_id, raw_y)
         nc = net_counts.get(dev_id, 1)
         row_pitch = 0.668
+        _type = dev_type.strip().lower()
 
-        candidates: List[Tuple[float, float]] = [
-            (_find_free_x(raw_y, raw_x, w), raw_y),          # RIGHT
-        ]
+        def _row_valid_for_type(y: float) -> bool:
+            """Return True if y is a legal row for this device's type."""
+            if _type == "pmos":
+                # PMOS must stay at or above its minimum row Y
+                if _pmos_bot_y is not None and y < _pmos_bot_y:
+                    return False
+                # PMOS must NOT be in any NMOS row band
+                if _nmos_top_y is not None and y <= _nmos_top_y:
+                    return False
+            elif _type == "nmos":
+                # NMOS must stay at or below its maximum row Y
+                if _nmos_top_y is not None and y > _nmos_top_y:
+                    return False
+                # NMOS must NOT be in any PMOS row band
+                if _pmos_bot_y is not None and y >= _pmos_bot_y:
+                    return False
+            return True
+
+        candidates: List[Tuple[float, float]] = []
+
+        # RIGHT candidate (primary horizontal fix)
+        if _row_valid_for_type(raw_y):
+            candidates.append((_find_free_x(raw_y, raw_x, w), raw_y))
 
         # LEFT candidate (only sensible if anchor_x2 is known)
-        if anchor_x2 is not None:
+        if anchor_x2 is not None and _row_valid_for_type(raw_y):
             left_x = round(anchor_x2 - w - req_gap, 4)
             if left_x >= 0 and _is_free(raw_y, left_x, w):
                 candidates.append((left_x, raw_y))
 
-        # Vertical candidates — only when there are multiple rows
+        # Vertical candidates — gated by type-aware row validation
         for delta_y in (+row_pitch, -row_pitch):
             ny = round(raw_y + delta_y, 4)
-            fx = _find_free_x(ny, ox, w)
-            # Accept vertical move only if the row is "valid" for this type
-            candidates.append((fx, ny))
+            if _row_valid_for_type(ny):
+                fx = _find_free_x(ny, ox, w)
+                candidates.append((fx, ny))
+
+        # Fallback: if no type-valid candidate found, allow horizontal at raw_y
+        if not candidates:
+            candidates.append((_find_free_x(raw_y, raw_x, w), raw_y))
 
         # Score all candidates; keep the cheapest valid one
         best_x, best_y = candidates[0]
@@ -683,52 +794,75 @@ def compute_prescriptive_fixes(
                 continue
             cur_x = proposed_x.get(gid, orig_x.get(gid, 0.0))
             cur_y = proposed_y.get(gid, orig_y.get(gid, 0.0))
-            new_x = round(cur_x + dx, 4)
             new_y = round(cur_y + dy, 4)
             w_g   = proposed_w.get(gid, 0.294)
-            free_x = _find_free_x(new_y, new_x, w_g)
-            _register_slot(new_y, free_x)
-            proposed_x[gid] = free_x
+
+            if abs(dx) < 1e-6:
+                # Y-only row fix: keep sibling's exact X — do NOT search for
+                # a free slot (that would break matching and symmetry).
+                new_x = cur_x
+            else:
+                # Horizontal fix: find the nearest free slot at the target X.
+                new_x = _find_free_x(new_y, round(cur_x + dx, 4), w_g)
+
+            _register_slot(new_y, new_x)
+            proposed_x[gid] = new_x
             proposed_y[gid] = new_y
             if gid not in cmd_map:
-                c = {"action": "move", "device": gid, "x": free_x, "y": new_y}
+                c = {"action": "move", "device": gid, "x": new_x, "y": new_y}
                 cmds.append(c)
                 cmd_map[gid] = c
             else:
-                cmd_map[gid]["x"] = free_x
+                cmd_map[gid]["x"] = new_x
                 cmd_map[gid]["y"] = new_y
 
     # ── Main fix loop ─────────────────────────────────────────────────────────
     cmds:    List[Dict]        = []
     cmd_map: Dict[str, Dict]   = {}
 
+    # Build a type lookup from nodes for use in _best_candidate
+    _node_type_map: Dict[str, str] = {}
+    if nodes:
+        for _n in nodes:
+            _node_type_map[str(_n.get("id", ""))] = str(_n.get("type", "")).strip().lower()
+
     for v in drc_result.get("structured", []):
 
         if v.kind == "ROW_ERROR":
+            # ── ROW_ERROR: change Y ONLY — never change X ─────────────────
+            # Changing X would destroy horizontal placement, break matched
+            # groups, common-centroid patterns, and interdigitation order.
+            # The correct action is to shift the ENTIRE ROW vertically:
+            # every device keeps its exact X and moves to correct_y.
             correct_y = v.y_b
             dev_id    = v.dev_a
             cur_x     = proposed_x.get(dev_id, v.x1_a)
             cur_y     = proposed_y.get(dev_id, v.y_a)
-            w         = proposed_w.get(dev_id, v.w_a)
 
-            free_x, free_y = _best_candidate(dev_id, cur_x, correct_y, w)
-            _register_slot(free_y, free_x)
+            # Skip if this device is already at the correct Y (no-op fix)
+            if abs(cur_y - correct_y) < 1e-6:
+                continue
 
-            # Compute delta for group move
-            dx = free_x - cur_x
-            dy = free_y - cur_y
-            proposed_x[dev_id] = free_x
-            proposed_y[dev_id] = free_y
+            dx = 0.0                              # X never changes for row fixes
+            dy = round(correct_y - cur_y, 4)
+
+            new_x = cur_x                         # X frozen
+            new_y = correct_y
+
+            _register_slot(new_y, new_x)
+            proposed_x[dev_id] = new_x
+            proposed_y[dev_id] = new_y
 
             if dev_id not in cmd_map:
-                c = {"action": "move", "device": dev_id, "x": free_x, "y": free_y}
+                c = {"action": "move", "device": dev_id, "x": new_x, "y": new_y}
                 cmds.append(c)
                 cmd_map[dev_id] = c
             else:
-                cmd_map[dev_id]["x"] = free_x
-                cmd_map[dev_id]["y"] = free_y
+                cmd_map[dev_id]["x"] = new_x
+                cmd_map[dev_id]["y"] = new_y
 
-            # Propagate to symmetric group
+            # Propagate Y-shift to every device in the same matched group.
+            # dx=0 ensures siblings only shift vertically, preserving symmetry.
             if v.group_ids and len(v.group_ids) > 1:
                 _apply_group_move(dev_id, dx, dy, v.group_ids, cmds, cmd_map)
 
@@ -756,9 +890,11 @@ def compute_prescriptive_fixes(
                 w_t        = w_a
                 anchor_x2  = cur_xb + w_b
 
+            dev_type_t = _node_type_map.get(target_dev, "")
             free_x, free_y = _best_candidate(
                 target_dev, raw_x, old_y, w_t,
                 anchor_x2=anchor_x2, req_gap=req,
+                dev_type=dev_type_t,
             )
             _register_slot(free_y, free_x)
 
@@ -790,9 +926,11 @@ def compute_prescriptive_fixes(
             req    = _effective_gap(v.dev_a, v.dev_b, terminal_nets, gap_px)
 
             raw_x = round(cur_xa + w_a + req, 4)
+            dev_type_b = _node_type_map.get(v.dev_b, "")
             free_x, free_y = _best_candidate(
                 v.dev_b, raw_x, old_yb, w_b,
                 anchor_x2=cur_xa + w_a, req_gap=req,
+                dev_type=dev_type_b,
             )
             _register_slot(free_y, free_x)
 
