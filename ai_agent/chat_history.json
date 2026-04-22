@@ -1,22 +1,6 @@
 [
   {
     "role": "user",
-    "content": "analyze"
-  },
-  {
-    "role": "Placement Specialist Assistant",
-    "content": "[PLACEMENT] LLM failed to generate a response."
-  },
-  {
-    "role": "Routing Previewer Assistant",
-    "content": "Gemini Error: Rate Limited (429). Please wait a minute before trying again."
-  },
-  {
-    "role": "DRC Critic Assistant",
-    "content": "[DRC] LLM Error: Unexpected message type: 'Placement Specialist Assistant'. Use one of 'human', 'user', 'ai', 'assistant', 'function', 'tool', 'system', or 'developer'.\nFor troubleshooting, visit: https://docs.langchain.com/oss/python/langchain/errors/MESSAGE_COERCION_FAILURE"
-  },
-  {
-    "role": "DRC Critic Assistant",
-    "content": "[DRC] LLM Error: Unexpected message type: 'Placement Specialist Assistant'. Use one of 'human', 'user', 'ai', 'assistant', 'function', 'tool', 'system', or 'developer'.\nFor troubleshooting, visit: https://docs.langchain.com/oss/python/langchain/errors/MESSAGE_COERCION_FAILURE"
+    "content": "Optimize initial placement."
   }
 ]
