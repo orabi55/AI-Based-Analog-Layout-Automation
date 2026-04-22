@@ -598,7 +598,7 @@ For each MB device group in the sequence:
 
 ❗ If ANY validation check fails → ✗ INVALID (no [CMD] blocks)
 
-""" + ANALOG_LAYOUT_RULES
+"""
 
 
 # ---------------------------------------------------------------------------

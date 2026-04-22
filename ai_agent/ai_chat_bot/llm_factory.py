@@ -16,6 +16,16 @@ import time
 _DEFAULT_TIMEOUT = 120
 
 
+def _resolve_timeout(task_weight: str) -> int:
+    env_key = "LLM_TIMEOUT_HEAVY" if task_weight == "heavy" else "LLM_TIMEOUT_LIGHT"
+    raw = os.getenv(env_key, str(_DEFAULT_TIMEOUT))
+    try:
+        timeout = int(raw)
+        return timeout if timeout > 0 else _DEFAULT_TIMEOUT
+    except (TypeError, ValueError):
+        return _DEFAULT_TIMEOUT
+
+
 def get_langchain_llm(selected_model: str, task_weight: str = "light"):
     """
     Dynamically instantiate the appropriate LangChain chat model based on the
@@ -39,6 +49,8 @@ def get_langchain_llm(selected_model: str, task_weight: str = "light"):
     print(f"\n[LLM_FACTORY] ┌─ Initializing LLM", flush=True)
     print(f"[LLM_FACTORY] │  Provider : {selected_model}", flush=True)
     print(f"[LLM_FACTORY] │  Weight   : {task_weight}", flush=True)
+    request_timeout = _resolve_timeout(task_weight)
+    print(f"[LLM_FACTORY] │  Timeout  : {request_timeout}s", flush=True)
 
     t_start = time.time()
 
@@ -51,7 +63,7 @@ def get_langchain_llm(selected_model: str, task_weight: str = "light"):
         llm = ChatGoogleGenerativeAI(
             model=model_name,
             temperature=0.4,
-            timeout=_DEFAULT_TIMEOUT,
+            timeout=request_timeout,
         )
 
     elif selected_model == "Alibaba":
@@ -65,7 +77,7 @@ def get_langchain_llm(selected_model: str, task_weight: str = "light"):
             base_url="https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
             model=model_name,
             temperature=0.4,
-            timeout=_DEFAULT_TIMEOUT,
+            timeout=request_timeout,
         )
 
     elif selected_model == "VertexGemini":
@@ -85,7 +97,7 @@ def get_langchain_llm(selected_model: str, task_weight: str = "light"):
             location=location,
             model_name=model_name,
             temperature=0.4,
-            timeout=_DEFAULT_TIMEOUT,
+            timeout=request_timeout,
         )
 
     elif selected_model == "VertexClaude":
@@ -101,7 +113,7 @@ def get_langchain_llm(selected_model: str, task_weight: str = "light"):
             location=location,
             model_name=model_name,
             temperature=0.4,
-            timeout=_DEFAULT_TIMEOUT,
+            timeout=request_timeout,
         )
 
     else:
@@ -110,7 +122,7 @@ def get_langchain_llm(selected_model: str, task_weight: str = "light"):
         llm = ChatGoogleGenerativeAI(
             model="gemini-2.5-flash",
             temperature=0.4,
-            timeout=_DEFAULT_TIMEOUT,
+            timeout=request_timeout,
         )
 
     elapsed = time.time() - t_start
