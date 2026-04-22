@@ -3,6 +3,7 @@ LangGraph nodes
 """
 import copy
 import json
+import re
 import time
 from pathlib import Path
 from ai_agent.ai_chat_bot.run_llm import run_llm
@@ -27,6 +28,113 @@ from ai_agent.ai_chat_bot.llm_factory import get_langchain_llm
 CHAT_HISTORY_JSON_PATH = Path(__file__).resolve().parents[1] / "chat_history.json"
 MAX_CHAT_HISTORY = 50  # Trim chat history to prevent unbounded growth
 
+_VALID_CHAT_ROLES = {
+    "human", "user", "ai", "assistant", "function", "tool", "system", "developer"
+}
+
+
+def _canonicalize_role(role):
+    role_text = str(role or "").strip()
+    if not role_text:
+        return ""
+
+    lowered = role_text.lower()
+
+    # Directly valid roles
+    if lowered in _VALID_CHAT_ROLES:
+        return lowered
+
+    # Common aliases and custom labels used in this project
+    if "assistant" in lowered or lowered.startswith("ai"):
+        return "assistant"
+    if lowered in {"human", "client"}:
+        return "user"
+
+    # Safe fallback for unknown roles
+    return "assistant"
+
+
+def _split_content_and_thinking(content):
+    """Split model content into visible text and hidden thinking text."""
+    visible_chunks = []
+    thinking_chunks = []
+
+    def _walk(obj):
+        if obj is None:
+            return
+        if isinstance(obj, str):
+            visible_chunks.append(obj)
+            return
+        if isinstance(obj, list):
+            for part in obj:
+                _walk(part)
+            return
+        if isinstance(obj, dict):
+            part_type = str(obj.get("type", "")).strip().lower()
+            if part_type == "thinking":
+                thinking_text = obj.get("thinking")
+                if thinking_text is None:
+                    thinking_text = obj.get("text")
+                if thinking_text is None:
+                    thinking_text = json.dumps(obj, ensure_ascii=False)
+                thinking_chunks.append(str(thinking_text))
+                return
+
+            if isinstance(obj.get("text"), str):
+                visible_chunks.append(obj["text"])
+                return
+
+            # Unknown dict shape: preserve as visible text.
+            visible_chunks.append(json.dumps(obj, ensure_ascii=False))
+            return
+
+        visible_chunks.append(str(obj))
+
+    _walk(content)
+    visible_text = "\n".join(s for s in visible_chunks if str(s).strip()).strip()
+    thinking_text = "\n\n".join(s for s in thinking_chunks if str(s).strip()).strip()
+    return visible_text, thinking_text
+
+
+def _strip_thinking_text(text: str) -> str:
+    """Remove thinking blocks from plain text before sending prompts."""
+    if not text:
+        return ""
+
+    cleaned = str(text)
+
+    # Remove XML-style thinking blocks.
+    cleaned = re.sub(r"<thinking>[\s\S]*?</thinking>", "", cleaned, flags=re.IGNORECASE)
+
+    # If content is JSON, split visible/thinking semantically.
+    stripped = cleaned.strip()
+    if stripped.startswith("{") or stripped.startswith("["):
+        try:
+            parsed = json.loads(stripped)
+            visible, _ = _split_content_and_thinking(parsed)
+            cleaned = visible
+        except Exception:
+            pass
+
+    # Remove inline serialized thinking objects.
+    cleaned = re.sub(
+        r'\{\s*"type"\s*:\s*"thinking"[\s\S]*?\}\s*',
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+
+    # Compact excessive blank lines after stripping.
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
+
+
+def _print_thinking_block(stage_tag: str, thinking_text: str):
+    if not thinking_text:
+        return
+    print(f"[{stage_tag}] Thinking Block:", flush=True)
+    print(thinking_text, flush=True)
+
 
 def _normalize_chat_history(chat_history):
     normalized = []
@@ -36,8 +144,8 @@ def _normalize_chat_history(chat_history):
     for msg in chat_history:
         if not isinstance(msg, dict):
             continue
-        role = str(msg.get("role", "")).strip()
-        content = str(msg.get("content", "")).strip()
+        role = _canonicalize_role(msg.get("role", ""))
+        content = _strip_thinking_text(str(msg.get("content", "")).strip())
         if not role or not content:
             continue
         normalized.append({"role": role, "content": content})
@@ -49,8 +157,8 @@ def _append_chat_message(chat_history, role, content, dedupe_last=False):
     if not content:
         return chat_history
 
-    role_text = str(role).strip()
-    content_text = str(content).strip()
+    role_text = _canonicalize_role(role)
+    content_text = _strip_thinking_text(str(content).strip())
     if not role_text or not content_text:
         return chat_history
 
@@ -92,38 +200,35 @@ def _update_and_save_chat_history(chat_history, user_content, node_role=None, no
 
 
 def _build_llm_messages(system_prompt, chat_history, user_prompt, max_history=8):
-    messages = [{"role": "system", "content": str(system_prompt)}]
+    messages = [{"role": "system", "content": _strip_thinking_text(str(system_prompt))}]
     for msg in _normalize_chat_history(chat_history)[-max_history:]:
-        messages.append({"role": msg["role"], "content": msg["content"]})
-    messages.append({"role": "user", "content": str(user_prompt).strip()})
+        messages.append({"role": msg["role"], "content": _strip_thinking_text(msg["content"])})
+    messages.append({"role": "user", "content": _strip_thinking_text(str(user_prompt).strip())})
     return messages
 
 
 def _content_to_text(content):
     """Convert provider-specific structured LLM content into plain text."""
-    if isinstance(content, str):
-        return content
+    visible_text, _ = _split_content_and_thinking(content)
+    return _strip_thinking_text(visible_text)
 
-    if isinstance(content, dict):
-        if isinstance(content.get("text"), str):
-            return content["text"]
-        return json.dumps(content, ensure_ascii=False)
 
-    if isinstance(content, list):
-        chunks = []
-        for part in content:
-            if isinstance(part, str):
-                chunks.append(part)
-            elif isinstance(part, dict):
-                if isinstance(part.get("text"), str):
-                    chunks.append(part["text"])
-                else:
-                    chunks.append(json.dumps(part, ensure_ascii=False))
-            elif part is not None:
-                chunks.append(str(part))
-        return "\n".join(chunks).strip()
-
-    return "" if content is None else str(content)
+def _invoke_with_retry(messages, selected_model: str, task_weight: str, stage_tag: str):
+    max_retries = 1 if task_weight == "light" else 2
+    for attempt in range(max_retries + 1):
+        try:
+            llm = get_langchain_llm(selected_model, task_weight=task_weight)
+            return llm.invoke(messages)
+        except Exception as exc:
+            msg = str(exc).lower()
+            is_timeout = "timed out" in msg or "timeout" in msg or "read operation timed out" in msg
+            if is_timeout and attempt < max_retries:
+                print(
+                    f"[{stage_tag}] ⚠ Timeout from provider; retrying ({attempt + 1}/{max_retries})...",
+                    flush=True,
+                )
+                continue
+            raise
 
 def node_topology_analyst(state: LayoutState):
     """
@@ -165,11 +270,15 @@ def node_topology_analyst(state: LayoutState):
     print(f"[TOPO] Calling LLM ({selected_model}, weight=light)...", flush=True)
 
     try:
-        llm = get_langchain_llm(selected_model, task_weight="light")
-        analyst_response = llm.invoke(analyst_msgs)
-        analysis_txt = _content_to_text(analyst_response.content)
+        print("[TOPO] Prompt for Topology Analyst:")
+        for msg in analyst_msgs:
+            print(f"  {msg['role'].upper()}: {msg['content']}")
+        analyst_response = _invoke_with_retry(analyst_msgs, selected_model, "light", "TOPO")
+        analysis_txt, analysis_thinking = _split_content_and_thinking(analyst_response.content)
+        analysis_txt = _strip_thinking_text(analysis_txt)
         preview = analysis_txt[:200].replace('\n', ' ')
         print(f"[TOPO] ✓ LLM response ({len(analysis_txt)} chars): \"{preview}...\"", flush=True)
+        _print_thinking_block("TOPO", analysis_thinking)
     except Exception as exc:
         print(f"[TOPO] ✗ LLM failed: {exc}", flush=True)
         analysis_txt = None
@@ -218,11 +327,15 @@ def node_strategy_selector(state: LayoutState):
     print(f"[STRATEGY] Calling LLM ({selected_model}, weight=light)...", flush=True)
 
     try:
-        llm = get_langchain_llm(selected_model, task_weight="light")
-        strategy_response = llm.invoke(strategy_prompt)
-        strategy_text = _content_to_text(strategy_response.content)
+        print("[STRATEGY] Prompt for Strategy Selector:") 
+        for msg in strategy_prompt:
+            print(f"  {msg['role'].upper()}: {msg['content']}")
+        strategy_response = _invoke_with_retry(strategy_prompt, selected_model, "light", "STRATEGY")
+        strategy_text, strategy_thinking = _split_content_and_thinking(strategy_response.content)
+        strategy_text = _strip_thinking_text(strategy_text)
         preview = strategy_text[:200].replace('\n', ' ')
         print(f"[STRATEGY] ✓ Strategies ({len(strategy_text)} chars): \"{preview}...\"", flush=True)
+        _print_thinking_block("STRATEGY", strategy_thinking)
     except Exception as exc:
         print(f"[STRATEGY] ✗ LLM failed: {exc}", flush=True)
         strategy_text = ""
@@ -309,11 +422,15 @@ def node_placement_specialist(state: LayoutState):
 
     placement_text = ""
     try:
-        llm = get_langchain_llm(selected_model, task_weight="heavy")
-        placement_raw = llm.invoke(placer_msgs)
-        placement_text = _content_to_text(placement_raw.content)
+        print("[PLACEMENT] Prompt for Placement Specialist:")
+        for msg in placer_msgs:
+            print(f"  {msg['role'].upper()}: {msg['content']}")
+        placement_raw = _invoke_with_retry(placer_msgs, selected_model, "heavy", "PLACEMENT")
+        placement_text, placement_thinking = _split_content_and_thinking(placement_raw.content)
+        placement_text = _strip_thinking_text(placement_text)
         stage2_cmds = _extract_cmd_blocks(placement_text)
         print(f"[PLACEMENT] ✓ LLM produced {len(stage2_cmds)} CMD block(s) ({len(placement_text)} chars)", flush=True)
+        _print_thinking_block("PLACEMENT", placement_thinking)
     except Exception as exc:
         print(f"[PLACEMENT] ✗ LLM failed: {exc}", flush=True)
         placement_text = "[PLACEMENT] LLM failed to generate a response."
@@ -451,11 +568,12 @@ def node_drc_critic(state: LayoutState):
     print(f"[DRC] Calling LLM ({selected_model}, weight=heavy)...", flush=True)
     critic_response = ""
     try:
-        llm = get_langchain_llm(selected_model, task_weight="heavy")
-        critic_raw_response = llm.invoke(critic_msgs)
-        critic_response = _content_to_text(critic_raw_response.content)
+        critic_raw_response = _invoke_with_retry(critic_msgs, selected_model, "heavy", "DRC")
+        critic_response, drc_thinking = _split_content_and_thinking(critic_raw_response.content)
+        critic_response = _strip_thinking_text(critic_response)
         critic_cmds = _extract_cmd_blocks(critic_response)
         print(f"[DRC] ✓ LLM proposed {len(critic_cmds)} fix(es)", flush=True)
+        _print_thinking_block("DRC", drc_thinking)
     except Exception as exc:
         print(f"[DRC] ✗ LLM Error: {exc}", flush=True)
         critic_response = f"[DRC] LLM Error: {exc}"
@@ -624,11 +742,12 @@ def node_routing_previewer(state: LayoutState):
     applied_cmds = []
     router_response = ""
     try:
-        llm = get_langchain_llm(selected_model, task_weight="heavy")
-        router_raw_response = llm.invoke(router_msgs)
-        router_response = _content_to_text(router_raw_response.content)
+        router_raw_response = _invoke_with_retry(router_msgs, selected_model, "heavy", "ROUTING")
+        router_response, routing_thinking = _split_content_and_thinking(router_raw_response.content)
+        router_response = _strip_thinking_text(router_response)
         router_cmds     = _extract_cmd_blocks(router_response)
         print(f"[ROUTING] ✓ LLM proposed {len(router_cmds)} swap(s)", flush=True)
+        _print_thinking_block("ROUTING", routing_thinking)
     except Exception as exc:
         print(f"[ROUTING] ✗ LLM error: {exc}", flush=True)
         router_response = f"[ROUTING] LLM Error: {exc}"
