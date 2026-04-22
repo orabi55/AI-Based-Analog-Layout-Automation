@@ -4,27 +4,14 @@ ai_agent/ai_chat_bot/agents/placement_specialist.py
 Generates [CMD] blocks for device positioning while enforcing strict
 inventory conservation, row-based analog constraints, and routing quality.
 """
-
 import math
 import re
 from collections import defaultdict
 from typing import Dict, List, Optional, Tuple
 
-from ai_agent.ai_chat_bot.analog_kb import ANALOG_LAYOUT_RULES
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-PITCH_UM            = 0.294   # x-pitch between fingers in micrometres
-ROW_HEIGHT_UM       = 0.668   # y-spacing between adjacent rows
-MAX_FINGERS_PER_ROW = 16      # tune per PDK / area budget
-NMOS_ROW_0_Y        = 0.0     # first  NMOS row  y-coordinate
-PMOS_ROW_0_Y        = -ROW_HEIGHT_UM   # first  PMOS row  y-coordinate
-
-
-# ---------------------------------------------------------------------------
 # System Prompt
-# ---------------------------------------------------------------------------
+
 PLACEMENT_SPECIALIST_PROMPT = """\
 You are the PLACEMENT SPECIALIST in a multi-agent analog IC layout system.
 Your task is to reposition existing devices on a symbolic grid to improve
