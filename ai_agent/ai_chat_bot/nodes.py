@@ -509,13 +509,17 @@ def node_placement_specialist(state: LayoutState):
     placement_system_prompt = str(
         placement_agent.get("system_prompt", PLACEMENT_SPECIALIST_PROMPT)
     )
+
+    # Collect tools from all middlewares via the `tools` property
     placement_tools = []
     for middleware in placement_agent.get("middlewares", []):
         if isinstance(middleware, SkillMiddleware):
-            placement_system_prompt = middleware.build_react_system_prompt(
+            # Augment system prompt with skill catalog + load_skill instructions
+            placement_system_prompt = middleware.augment_system_prompt(
                 placement_system_prompt
             )
-            placement_tools.extend(middleware.get_react_tools())
+            # Register load_skill tool so the agent can call it automatically
+            placement_tools.extend(middleware.tools)
             if middleware.skill_index:
                 print(
                     f"[PLACEMENT] Skill catalog ids: {', '.join(sorted(middleware.skill_index.keys()))}",
@@ -524,7 +528,7 @@ def node_placement_specialist(state: LayoutState):
 
     if placement_tools:
         tool_names = [getattr(t, "name", "tool") for t in placement_tools]
-        print(f"[PLACEMENT] ReAct tools: {', '.join(tool_names)}", flush=True)
+        print(f"[PLACEMENT] ReAct tools (auto-callable): {', '.join(tool_names)}", flush=True)
 
     placer_msgs = _build_llm_messages(
         placement_system_prompt,
