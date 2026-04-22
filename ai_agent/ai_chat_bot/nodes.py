@@ -98,6 +98,33 @@ def _build_llm_messages(system_prompt, chat_history, user_prompt, max_history=8)
     messages.append({"role": "user", "content": str(user_prompt).strip()})
     return messages
 
+
+def _content_to_text(content):
+    """Convert provider-specific structured LLM content into plain text."""
+    if isinstance(content, str):
+        return content
+
+    if isinstance(content, dict):
+        if isinstance(content.get("text"), str):
+            return content["text"]
+        return json.dumps(content, ensure_ascii=False)
+
+    if isinstance(content, list):
+        chunks = []
+        for part in content:
+            if isinstance(part, str):
+                chunks.append(part)
+            elif isinstance(part, dict):
+                if isinstance(part.get("text"), str):
+                    chunks.append(part["text"])
+                else:
+                    chunks.append(json.dumps(part, ensure_ascii=False))
+            elif part is not None:
+                chunks.append(str(part))
+        return "\n".join(chunks).strip()
+
+    return "" if content is None else str(content)
+
 def node_topology_analyst(state: LayoutState):
     """
     Stage 1: Topology Analyst
@@ -140,7 +167,7 @@ def node_topology_analyst(state: LayoutState):
     try:
         llm = get_langchain_llm(selected_model, task_weight="light")
         analyst_response = llm.invoke(analyst_msgs)
-        analysis_txt = analyst_response.content
+        analysis_txt = _content_to_text(analyst_response.content)
         preview = analysis_txt[:200].replace('\n', ' ')
         print(f"[TOPO] ✓ LLM response ({len(analysis_txt)} chars): \"{preview}...\"", flush=True)
     except Exception as exc:
@@ -193,7 +220,7 @@ def node_strategy_selector(state: LayoutState):
     try:
         llm = get_langchain_llm(selected_model, task_weight="light")
         strategy_response = llm.invoke(strategy_prompt)
-        strategy_text = strategy_response.content
+        strategy_text = _content_to_text(strategy_response.content)
         preview = strategy_text[:200].replace('\n', ' ')
         print(f"[STRATEGY] ✓ Strategies ({len(strategy_text)} chars): \"{preview}...\"", flush=True)
     except Exception as exc:
@@ -284,7 +311,7 @@ def node_placement_specialist(state: LayoutState):
     try:
         llm = get_langchain_llm(selected_model, task_weight="heavy")
         placement_raw = llm.invoke(placer_msgs)
-        placement_text = placement_raw.content
+        placement_text = _content_to_text(placement_raw.content)
         stage2_cmds = _extract_cmd_blocks(placement_text)
         print(f"[PLACEMENT] ✓ LLM produced {len(stage2_cmds)} CMD block(s) ({len(placement_text)} chars)", flush=True)
     except Exception as exc:
@@ -426,7 +453,7 @@ def node_drc_critic(state: LayoutState):
     try:
         llm = get_langchain_llm(selected_model, task_weight="heavy")
         critic_raw_response = llm.invoke(critic_msgs)
-        critic_response = critic_raw_response.content
+        critic_response = _content_to_text(critic_raw_response.content)
         critic_cmds = _extract_cmd_blocks(critic_response)
         print(f"[DRC] ✓ LLM proposed {len(critic_cmds)} fix(es)", flush=True)
     except Exception as exc:
@@ -599,7 +626,7 @@ def node_routing_previewer(state: LayoutState):
     try:
         llm = get_langchain_llm(selected_model, task_weight="heavy")
         router_raw_response = llm.invoke(router_msgs)
-        router_response = router_raw_response.content
+        router_response = _content_to_text(router_raw_response.content)
         router_cmds     = _extract_cmd_blocks(router_response)
         print(f"[ROUTING] ✓ LLM proposed {len(router_cmds)} swap(s)", flush=True)
     except Exception as exc:

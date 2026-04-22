@@ -31,8 +31,7 @@ builder.add_edge("node_strategy_selector", "node_placement_specialist")
 builder.add_edge("node_placement_specialist", "node_finger_expansion")
 builder.add_edge("node_finger_expansion", "node_drc_critic")
 
-builder.add_edge("node_drc_critic", "node_human_viewer")
-builder.add_edge("node_human_viewer", END)
+builder.add_edge("node_drc_critic", END)
 
 # 5. Compile Graph
 app = builder.compile(checkpointer=memory)

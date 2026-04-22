@@ -1279,60 +1279,102 @@ class LayoutEditorTab(QWidget):
             tmp_in_path = tmp_in.name
         tmp_out_path = tmp_in_path.replace(".json", "_placed.json")
         try:
-            if run_multi_agent:
-                from ai_agent.ai_initial_placement.multi_agent_placer import multi_agent_generate_placement
-                multi_agent_generate_placement(
-                    tmp_in_path, tmp_out_path,
-                    selected_model=model_choice,
-                    run_sa=run_sa,
-                )
-            elif model_choice == "Alibaba":
-                try:
-                    from ai_agent.ai_initial_placement.alibaba_placer import alibaba_generate_placement
-                    alibaba_generate_placement(tmp_in_path, tmp_out_path)
-                except Exception as e:
-                    if "401" in str(e) or "Unauthorized" in str(e) or "InvalidApiKey" in str(e):
-                        raise RuntimeError("Invalid Alibaba DashScope API Key.")
-                    raise
-            elif model_choice == "VertexGemini":
-                from ai_agent.ai_initial_placement.vertex_gemini_placer import vertex_gemini_generate_placement
-                vertex_gemini_generate_placement(tmp_in_path, tmp_out_path)
-            elif model_choice == "VertexClaude":
-                from ai_agent.ai_initial_placement.claude_vertex_placer import claude_generate_placement
-                claude_generate_placement(tmp_in_path, tmp_out_path)
+            from ai_agent.ai_initial_placement.placer_graph_worker import PlacerGraphWorker
+
+            final_payload = {}
+            graph_error = {"message": ""}
+
+            def _on_visual(payload):
+                if isinstance(payload, dict) and payload.get("type") == "final_layout":
+                    final_payload.clear()
+                    final_payload.update(payload)
+
+            def _on_error(err_msg):
+                graph_error["message"] = str(err_msg or "Graph execution failed.")
+
+            graph_worker = PlacerGraphWorker()
+            graph_worker.visual_viewer_signal.connect(_on_visual)
+            graph_worker.error_occurred.connect(_on_error)
+
+            graph_worker.process_initial_placement_request(
+                json.dumps(data),
+                "Optimize initial placement.",
+                [],
+                model_choice,
+            )
+
+            if graph_error["message"]:
+                raise RuntimeError(graph_error["message"])
+
+            placed_nodes_payload = final_payload.get("placement_nodes", []) if isinstance(final_payload, dict) else []
+
+            placed_nodes = []
+            if isinstance(placed_nodes_payload, list) and placed_nodes_payload:
+                # Preferred path: use placement_nodes directly from graph final state.
+                for src_node in data.get("nodes", []):
+                    if not isinstance(src_node, dict):
+                        continue
+                    placed_nodes.append(copy.deepcopy(src_node))
+
+                placed_map = {
+                    n.get("id"): n
+                    for n in placed_nodes_payload
+                    if isinstance(n, dict) and n.get("id")
+                }
+                for node in placed_nodes:
+                    node_id = node.get("id")
+                    placed_node = placed_map.get(node_id)
+                    if not placed_node:
+                        continue
+                    geometry = placed_node.get("geometry")
+                    if geometry is None:
+                        geometry = {
+                            k: placed_node[k]
+                            for k in ("x", "y", "width", "height", "orientation")
+                            if k in placed_node
+                        }
+                    if isinstance(geometry, dict) and isinstance(node.get("geometry"), dict):
+                        node["geometry"].update(geometry)
             else:
-                try:
-                    from ai_agent.ai_initial_placement.gemini_placer import gemini_generate_placement
-                    gemini_generate_placement(tmp_in_path, tmp_out_path)
-                except Exception as e:
-                    if "API key not valid" in str(e) or "API_KEY_INVALID" in str(e):
-                        raise RuntimeError("Invalid Gemini API Key.")
-                    raise
+                # Backward-compatible fallback: rebuild placement from move commands.
+                placement_cmds = final_payload.get("placement", []) if isinstance(final_payload, dict) else []
+                if not isinstance(placement_cmds, list):
+                    placement_cmds = []
 
-            # ── Simulated Annealing post-optimization ──────────────
-            if run_sa:
-                try:
-                    with open(tmp_out_path) as f:
-                        sa_data = json.load(f)
-                    from ai_agent.ai_initial_placement.placer_utils import _ensure_placement_dict
-                    sa_data = _ensure_placement_dict(sa_data)
-                    sa_nodes = sa_data.get("nodes", [])
-                    if sa_nodes and len(sa_nodes) >= 2:
-                        from ai_agent.ai_initial_placement.sa_optimizer import optimize_placement
-                        sa_edges = data.get("edges", [])
-                        sa_candidates = data.get("abutment_candidates", [])
-                        sa_data["nodes"] = optimize_placement(
-                            sa_nodes, sa_edges, abutment_candidates=sa_candidates
-                        )
-                        with open(tmp_out_path, "w") as f:
-                            json.dump(sa_data, f, indent=4)
-                except Exception as sa_err:
-                    print(f"[SA] Post-optimization failed (non-fatal): {sa_err}")
+                move_map = {}
+                for cmd in placement_cmds:
+                    if not isinstance(cmd, dict):
+                        continue
+                    if str(cmd.get("action", "")).lower() != "move":
+                        continue
+                    dev_id = cmd.get("device")
+                    if not dev_id:
+                        continue
+                    try:
+                        move_map[dev_id] = {
+                            "x": float(cmd["x"]),
+                            "y": float(cmd["y"]),
+                        }
+                    except (KeyError, TypeError, ValueError):
+                        continue
 
-            with open(tmp_out_path) as f:
-                raw_placed = json.load(f)
-            from ai_agent.ai_initial_placement.placer_utils import _ensure_placement_dict
-            placed = _ensure_placement_dict(raw_placed)
+                for src_node in data.get("nodes", []):
+                    if not isinstance(src_node, dict):
+                        continue
+                    node = copy.deepcopy(src_node)
+                    node_id = node.get("id")
+                    if node_id in move_map:
+                        geom = node.get("geometry", {})
+                        if isinstance(geom, dict):
+                            geom["x"] = move_map[node_id]["x"]
+                            geom["y"] = move_map[node_id]["y"]
+                            node["geometry"] = geom
+                    placed_nodes.append(node)
+
+            placed = {"nodes": placed_nodes}
+            with open(tmp_out_path, "w") as f:
+                json.dump(placed, f, indent=4)
+
             placed_nodes_list = placed.get("nodes", [])
             if isinstance(placed_nodes_list, list):
                 placed_map = {n["id"]: n for n in placed_nodes_list if isinstance(n, dict) and "id" in n}

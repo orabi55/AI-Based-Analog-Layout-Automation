@@ -44,7 +44,8 @@ def get_langchain_llm(selected_model: str, task_weight: str = "light"):
 
     if selected_model == "Gemini":
         from langchain_google_genai import ChatGoogleGenerativeAI
-        model_name = "gemini-2.5-pro" if task_weight == "heavy" else "gemini-2.5-flash"
+        #model_name = "gemini-2.5-pro" if task_weight == "heavy" else "gemini-2.5-flash"
+        model_name = "gemma-4-31b-it"  
         print(f"[LLM_FACTORY] │  Model    : {model_name}", flush=True)
         print(f"[LLM_FACTORY] │  API Key  : {'***' + os.environ.get('GEMINI_API_KEY', '???')[-4:]}", flush=True)
         llm = ChatGoogleGenerativeAI(

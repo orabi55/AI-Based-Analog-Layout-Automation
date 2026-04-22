@@ -1,8 +1,7 @@
 """
 PlacerGraph Worker (QThread + QObject friendly).
 
-Streams ai_initial_placement.placer_graph similarly to OrchestratorWorker in
-ai_chat_bot.llm_worker, including support for LangGraph interrupts and resume.
+Streams ai_initial_placement.placer_graph and emits stage/final updates.
 """
 
 import json
@@ -21,8 +20,7 @@ class PlacerGraphWorker(QObject):
     # Stage/stream updates
     stage_completed = Signal(int, str)   # (stage_index, stage_name)
 
-    # Interrupt channels (same semantics as llm_worker)
-    topology_ready_for_review = Signal(str)
+    # Final placement payload channel
     visual_viewer_signal = Signal(dict)
 
     def __init__(self):
@@ -37,12 +35,13 @@ class PlacerGraphWorker(QObject):
         except ImportError:
             self.thread_config = {"configurable": {"thread_id": str(uuid.uuid4())}}
 
-    @Slot(str, str, list)
+    @Slot(str, str, list, str)
     def process_initial_placement_request(
         self,
         layout_context_json: str,
         user_message: str = "Optimize initial placement.",
         chat_history=None,
+        selected_model: str = "Gemini",
     ):
         """Start a new graph run from a serialized layout context JSON."""
         if chat_history is None:
@@ -60,6 +59,7 @@ class PlacerGraphWorker(QObject):
             "chat_history": chat_history,
             "nodes": layout_context.get("nodes", []),
             "sp_file_path": layout_context.get("sp_file_path", ""),
+            "selected_model": selected_model,
             "pending_cmds": [],
             "constraint_text": "",
             "Analysis_result": "",
@@ -88,53 +88,26 @@ class PlacerGraphWorker(QObject):
         self._stream_graph(initial_state)
 
     def _stream_graph(self, input_data):
-        """Stream LangGraph updates, stop on interrupt, finalize on completion."""
+        """Stream LangGraph updates and finalize on completion."""
         try:
             from ai_agent.ai_initial_placement.placer_graph import app as placer_app
 
-            interrupted = False
             stage_index = 0
 
             for event in placer_app.stream(input_data, self.thread_config, stream_mode="updates"):
-                if "__interrupt__" in event:
-                    interrupt_data = event["__interrupt__"][0].value
-
-                    if isinstance(interrupt_data, dict) and interrupt_data.get("type") == "strategy_selection":
-                        self.topology_ready_for_review.emit(str(interrupt_data.get("question", "")))
-                    elif isinstance(interrupt_data, dict) and interrupt_data.get("type") == "visual_review":
-                        placement = interrupt_data.get("placement", [])
-                        routing = interrupt_data.get("routing", {})
-                        if not isinstance(placement, list):
-                            placement = []
-                        if not isinstance(routing, dict):
-                            routing = {}
-                        self.visual_viewer_signal.emit({
-                            "type": "visual_review",
-                            "placement": placement,
-                            "routing": routing,
-                        })
-                    else:
-                        # Unknown interrupt type: still forward to viewer channel.
-                        payload = interrupt_data if isinstance(interrupt_data, dict) else {"value": str(interrupt_data)}
-                        self.visual_viewer_signal.emit(payload)
-
-                    interrupted = True
-                    return
-
                 for stage_name in event.keys():
                     if stage_name == "__interrupt__":
                         continue
                     stage_index += 1
                     self.stage_completed.emit(stage_index, stage_name)
 
-            if not interrupted:
-                self._finalize_pipeline()
+            self._finalize_pipeline()
 
         except Exception as exc:
             self.error_occurred.emit(f"Graph Execution Error: {exc}")
 
     def _finalize_pipeline(self):
-        """Build a summary and emit final placement commands for the viewer."""
+        """Build a summary and emit final placement payload."""
         try:
             from ai_agent.ai_initial_placement.placer_graph import app as placer_app
         except ImportError:
@@ -171,30 +144,13 @@ class PlacerGraphWorker(QObject):
         summary = (
             "[Initial Placement Graph Complete]\n"
             f"- DRC: {drc_status}\n"
-            f"- Commands: {len(final_cmds)} emitted"
+            f"- Nodes: {len(placement_nodes)} placed"
         )
 
         self.visual_viewer_signal.emit({
             "type": "final_layout",
+            "placement_nodes": placement_nodes,
             "placement": final_cmds,
             "routing": final_state.get("routing_result", {}),
         })
         self.response_ready.emit(summary)
-
-    @Slot(str)
-    def resume_with_strategy(self, user_choice: str):
-        """Resume graph execution with a strategy choice after interrupt."""
-        try:
-            from langgraph.types import Command
-            self._stream_graph(Command(resume=user_choice))
-        except Exception as exc:
-            self.error_occurred.emit(f"Resume error: {exc}")
-
-    @Slot(dict)
-    def resume_from_viewer(self, viewer_response: dict):
-        """Resume graph execution with visual-review response."""
-        try:
-            from langgraph.types import Command
-            self._stream_graph(Command(resume=viewer_response))
-        except Exception as exc:
-            self.error_occurred.emit(f"Resume error: {exc}")
