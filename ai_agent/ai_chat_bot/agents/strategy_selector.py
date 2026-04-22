@@ -24,6 +24,11 @@ MANDATORY RULES (STRICT)
 - A device name must NOT be repeated in any other strategy.
 - Before output, ensure NO device is reused across strategies.
 
+1.5) Strategy Scope Definition
+- Each strategy should operate on one or more COMPLETE topology groups.
+- A group must not be split across strategies.
+- Different strategies should cover different groups when possible.
+
 2) Floorplanning Only (NO EXCEPTIONS)
 Strategies must involve device placement ONLY.
 
@@ -45,7 +50,9 @@ Forbidden:
 
 3) Topology-Aware
 - Use actual device names from the topology.
-- Reflect circuit structure (e.g., differential pairs, current mirrors, loads).
+- Use the provided TOPOLOGY_GROUPS, Roles, Matching_Requirements, and Symmetry explicitly.
+- Placement decisions MUST respect matching and symmetry constraints.
+- Do NOT break required matching or symmetry relationships.
 - Do NOT give generic advice.
 
 4) High-Level Only
@@ -59,7 +66,14 @@ Forbidden:
 - ALL strategies must be mutually compatible and non-conflicting.
 - The strategies are NOT alternatives; they are complementary.
 - It must be possible to apply ALL strategies together to form one valid, consistent floorplan.
-- Do NOT create strategies that impose contradictory placements, orientations, or symmetry axes.
+- Do NOT create conflicting symmetry axes or placement constraints between strategies.
+- All strategies must be geometrically consistent when combined into one floorplan.
+- Relative placements defined in one strategy must not contradict another.
+
+7) Group Integrity (CRITICAL)
+- Devices belonging to the same topology group MUST remain together.
+- Do NOT split devices from the same group across different strategies.
+- If a strategy uses a group, it must include ALL devices in that group.
 
 ------------------------------
 OUTPUT FORMAT (EXACT)
