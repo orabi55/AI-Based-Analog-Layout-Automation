@@ -1,0 +1,4328 @@
+{
+    "nodes": [
+        {
+            "id": "XI1_MM7",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 5.0,
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 0.15000000000000002,
+                "y": -0.395,
+                "width": 0.294,
+                "height": 0.718,
+                "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI1",
+                "subckt": "Inverter"
+            }
+        },
+        {
+            "id": "XI1_MM8",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 5.0,
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 0.877,
+                "y": -1.123,
+                "width": 0.294,
+                "height": 0.718,
+                "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI1",
+                "subckt": "Inverter"
+            }
+        },
+        {
+            "id": "XI0_MM7",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 5.0,
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 0.15000000000000002,
+                "y": -4.032,
+                "width": 0.294,
+                "height": 0.718,
+                "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI0",
+                "subckt": "Inverter"
+            }
+        },
+        {
+            "id": "XI0_MM8",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 5.0,
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 0.877,
+                "y": -4.76,
+                "width": 0.294,
+                "height": 0.718,
+                "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI0",
+                "subckt": "Inverter"
+            }
+        },
+        {
+            "id": "XI3_MM28_f1",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI3_MM28",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 3.055,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI3_MM28_f2",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI3_MM28",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 3.6430000000000002,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI3_MM5_f1",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI3_MM5",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 4.231,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI3_MM5_f2",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI3_MM5",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 4.819,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI3_MM4_f1",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI3_MM4",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 5.407,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI3_MM4_f2",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI3_MM4",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 5.995,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI3_MM3_f1",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI3_MM3",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 6.583,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI3_MM3_f2",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI3_MM3",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 7.171,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI3_MM2_f1",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI3_MM2",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 7.759,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI3_MM2_f2",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI3_MM2",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 8.347,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI3_MM25_f1",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI3_MM25",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 8.934999999999999,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI3_MM25_f2",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI3_MM25",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 9.522999999999998,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI3_MM29_f1",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI3_MM29",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 10.110999999999997,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI3_MM29_f2",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI3_MM29",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 10.698999999999996,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI3_MM9_f1",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI3_MM9",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 11.286999999999995,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI3_MM9_f2",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI3_MM9",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 11.874999999999995,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI3_MM8_f1",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI3_MM8",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 12.462999999999994,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI3_MM8_f2",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI3_MM8",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 13.050999999999993,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI3_MM7_f1",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI3_MM7",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 13.638999999999992,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI3_MM7_f2",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI3_MM7",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 14.226999999999991,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI3_MM6_f1",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI3_MM6",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 14.81499999999999,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI3_MM6_f2",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI3_MM6",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 15.40299999999999,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI3_MM24_f1",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI3_MM24",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 15.990999999999989,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI3_MM24_f2",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI3_MM24",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 16.57899999999999,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI2_MM28_f1",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI2_MM28",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 1.521,
+                "y": -4.468,
+                "width": 0.368,
+                "height": 0.6680000000000001,
+                "orientation": "MX"
+            },
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI2_MM28_f2",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI2_MM28",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 1.521,
+                "y": -3.012,
+                "width": 0.368,
+                "height": 0.6680000000000001,
+                "orientation": "MX"
+            },
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI2_MM5_f1",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI2_MM5",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 2.3930000000000002,
+                "y": -4.468,
+                "width": 0.368,
+                "height": 0.6680000000000001,
+                "orientation": "R180"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI2_MM5_f2",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI2_MM5",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 2.3930000000000002,
+                "y": -3.012,
+                "width": 0.368,
+                "height": 0.6680000000000001,
+                "orientation": "R180"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI2_MM4_f1",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI2_MM4",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 1.9649999999999999,
+                "y": -4.468,
+                "width": 0.368,
+                "height": 0.6680000000000001,
+                "orientation": "MX"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": false
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI2_MM4_f2",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI2_MM4",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 1.9649999999999999,
+                "y": -3.012,
+                "width": 0.368,
+                "height": 0.6680000000000001,
+                "orientation": "MX"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": false
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI2_MM3_f1",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI2_MM3",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 1.8170000000000002,
+                "y": -4.468,
+                "width": 0.368,
+                "height": 0.6680000000000001,
+                "orientation": "MX"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI2_MM3_f2",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI2_MM3",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 1.8170000000000002,
+                "y": -3.012,
+                "width": 0.368,
+                "height": 0.6680000000000001,
+                "orientation": "MX"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI2_MM2_f1",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI2_MM2",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 1.669,
+                "y": -4.468,
+                "width": 0.368,
+                "height": 0.6680000000000001,
+                "orientation": "MX"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI2_MM2_f2",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI2_MM2",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 1.669,
+                "y": -3.012,
+                "width": 0.368,
+                "height": 0.6680000000000001,
+                "orientation": "MX"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI2_MM25_f1",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI2_MM25",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 1.2690000000000001,
+                "y": -4.468,
+                "width": 0.368,
+                "height": 0.6680000000000001,
+                "orientation": "R180"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI2_MM25_f2",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI2_MM25",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 1.2690000000000001,
+                "y": -3.012,
+                "width": 0.368,
+                "height": 0.6680000000000001,
+                "orientation": "R180"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI2_MM29_f1",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI2_MM29",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 1.521,
+                "y": -3.5700000000000003,
+                "width": 0.368,
+                "height": 0.6680000000000001,
+                "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI2_MM29_f2",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI2_MM29",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 1.521,
+                "y": -2.114,
+                "width": 0.368,
+                "height": 0.6680000000000001,
+                "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI2_MM9_f1",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI2_MM9",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 2.3049999999999997,
+                "y": -3.5700000000000003,
+                "width": 0.368,
+                "height": 0.6680000000000001,
+                "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI2_MM9_f2",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI2_MM9",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 2.3049999999999997,
+                "y": -2.114,
+                "width": 0.368,
+                "height": 0.6680000000000001,
+                "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI2_MM8_f1",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI2_MM8",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 1.965,
+                "y": -3.5700000000000003,
+                "width": 0.368,
+                "height": 0.6680000000000001,
+                "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": false
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI2_MM8_f2",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI2_MM8",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 1.965,
+                "y": -2.114,
+                "width": 0.368,
+                "height": 0.6680000000000001,
+                "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": false
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI2_MM7_f1",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI2_MM7",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 1.8170000000000002,
+                "y": -3.5700000000000003,
+                "width": 0.368,
+                "height": 0.6680000000000001,
+                "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI2_MM7_f2",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI2_MM7",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 1.8170000000000002,
+                "y": -2.114,
+                "width": 0.368,
+                "height": 0.6680000000000001,
+                "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI2_MM6_f1",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI2_MM6",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 1.669,
+                "y": -3.5700000000000003,
+                "width": 0.368,
+                "height": 0.6680000000000001,
+                "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI2_MM6_f2",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI2_MM6",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 1.669,
+                "y": -2.114,
+                "width": 0.368,
+                "height": 0.6680000000000001,
+                "orientation": "R0"
+            },
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI2_MM24_f1",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI2_MM24",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 1,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 1.181,
+                "y": -3.5700000000000003,
+                "width": 0.368,
+                "height": 0.6680000000000001,
+                "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        {
+            "id": "XI2_MM24_f2",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": "XI2_MM24",
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": 2,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 1.181,
+                "y": -2.114,
+                "width": 0.368,
+                "height": 0.6680000000000001,
+                "orientation": "R0"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        }
+    ],
+    "edges": [
+        {
+            "source": "XI1_MM7",
+            "target": "XI1_MM8",
+            "net": "VIN2"
+        },
+        {
+            "source": "XI1_MM7",
+            "target": "XI3_MM28_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI1_MM7",
+            "target": "XI3_MM28_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI1_MM7",
+            "target": "XI3_MM3_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI1_MM7",
+            "target": "XI3_MM3_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI1_MM7",
+            "target": "XI3_MM29_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI1_MM7",
+            "target": "XI3_MM29_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI1_MM7",
+            "target": "XI3_MM7_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI1_MM7",
+            "target": "XI3_MM7_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI1_MM7",
+            "target": "XI2_MM28_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI1_MM7",
+            "target": "XI2_MM28_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI1_MM7",
+            "target": "XI2_MM3_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI1_MM7",
+            "target": "XI2_MM3_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI1_MM7",
+            "target": "XI2_MM29_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI1_MM7",
+            "target": "XI2_MM29_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI1_MM7",
+            "target": "XI2_MM7_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI1_MM7",
+            "target": "XI2_MM7_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI1_MM8",
+            "target": "XI3_MM28_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI1_MM8",
+            "target": "XI3_MM28_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI1_MM8",
+            "target": "XI3_MM3_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI1_MM8",
+            "target": "XI3_MM3_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI1_MM8",
+            "target": "XI3_MM29_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI1_MM8",
+            "target": "XI3_MM29_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI1_MM8",
+            "target": "XI3_MM7_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI1_MM8",
+            "target": "XI3_MM7_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI1_MM8",
+            "target": "XI2_MM28_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI1_MM8",
+            "target": "XI2_MM28_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI1_MM8",
+            "target": "XI2_MM3_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI1_MM8",
+            "target": "XI2_MM3_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI1_MM8",
+            "target": "XI2_MM29_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI1_MM8",
+            "target": "XI2_MM29_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI1_MM8",
+            "target": "XI2_MM7_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI1_MM8",
+            "target": "XI2_MM7_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI0_MM7",
+            "target": "XI0_MM8",
+            "net": "VIN1"
+        },
+        {
+            "source": "XI0_MM7",
+            "target": "XI3_MM4_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI0_MM7",
+            "target": "XI3_MM4_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI0_MM7",
+            "target": "XI3_MM25_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI0_MM7",
+            "target": "XI3_MM25_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI0_MM7",
+            "target": "XI3_MM6_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI0_MM7",
+            "target": "XI3_MM6_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI0_MM7",
+            "target": "XI3_MM24_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI0_MM7",
+            "target": "XI3_MM24_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI0_MM7",
+            "target": "XI2_MM4_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI0_MM7",
+            "target": "XI2_MM4_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI0_MM7",
+            "target": "XI2_MM25_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI0_MM7",
+            "target": "XI2_MM25_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI0_MM7",
+            "target": "XI2_MM6_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI0_MM7",
+            "target": "XI2_MM6_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI0_MM7",
+            "target": "XI2_MM24_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI0_MM7",
+            "target": "XI2_MM24_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI0_MM8",
+            "target": "XI3_MM4_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI0_MM8",
+            "target": "XI3_MM4_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI0_MM8",
+            "target": "XI3_MM25_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI0_MM8",
+            "target": "XI3_MM25_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI0_MM8",
+            "target": "XI3_MM6_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI0_MM8",
+            "target": "XI3_MM6_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI0_MM8",
+            "target": "XI3_MM24_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI0_MM8",
+            "target": "XI3_MM24_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI0_MM8",
+            "target": "XI2_MM4_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI0_MM8",
+            "target": "XI2_MM4_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI0_MM8",
+            "target": "XI2_MM25_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI0_MM8",
+            "target": "XI2_MM25_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI0_MM8",
+            "target": "XI2_MM6_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI0_MM8",
+            "target": "XI2_MM6_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI0_MM8",
+            "target": "XI2_MM24_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI0_MM8",
+            "target": "XI2_MM24_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM28_f1",
+            "target": "XI3_MM28_f2",
+            "net": "XI3_Bb"
+        },
+        {
+            "source": "XI3_MM28_f1",
+            "target": "XI3_MM3_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM28_f1",
+            "target": "XI3_MM3_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM28_f1",
+            "target": "XI3_MM29_f1",
+            "net": "XI3_Bb"
+        },
+        {
+            "source": "XI3_MM28_f1",
+            "target": "XI3_MM29_f2",
+            "net": "XI3_Bb"
+        },
+        {
+            "source": "XI3_MM28_f1",
+            "target": "XI3_MM7_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM28_f1",
+            "target": "XI3_MM7_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM28_f1",
+            "target": "XI2_MM28_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM28_f1",
+            "target": "XI2_MM28_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM28_f1",
+            "target": "XI2_MM3_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM28_f1",
+            "target": "XI2_MM3_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM28_f1",
+            "target": "XI2_MM29_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM28_f1",
+            "target": "XI2_MM29_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM28_f1",
+            "target": "XI2_MM7_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM28_f1",
+            "target": "XI2_MM7_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM28_f1",
+            "target": "XI3_MM5_f1",
+            "net": "XI3_Bb"
+        },
+        {
+            "source": "XI3_MM28_f1",
+            "target": "XI3_MM5_f2",
+            "net": "XI3_Bb"
+        },
+        {
+            "source": "XI3_MM28_f1",
+            "target": "XI3_MM8_f1",
+            "net": "XI3_Bb"
+        },
+        {
+            "source": "XI3_MM28_f1",
+            "target": "XI3_MM8_f2",
+            "net": "XI3_Bb"
+        },
+        {
+            "source": "XI3_MM28_f2",
+            "target": "XI3_MM3_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM28_f2",
+            "target": "XI3_MM3_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM28_f2",
+            "target": "XI3_MM29_f1",
+            "net": "XI3_Bb"
+        },
+        {
+            "source": "XI3_MM28_f2",
+            "target": "XI3_MM29_f2",
+            "net": "XI3_Bb"
+        },
+        {
+            "source": "XI3_MM28_f2",
+            "target": "XI3_MM7_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM28_f2",
+            "target": "XI3_MM7_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM28_f2",
+            "target": "XI2_MM28_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM28_f2",
+            "target": "XI2_MM28_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM28_f2",
+            "target": "XI2_MM3_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM28_f2",
+            "target": "XI2_MM3_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM28_f2",
+            "target": "XI2_MM29_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM28_f2",
+            "target": "XI2_MM29_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM28_f2",
+            "target": "XI2_MM7_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM28_f2",
+            "target": "XI2_MM7_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM28_f2",
+            "target": "XI3_MM5_f1",
+            "net": "XI3_Bb"
+        },
+        {
+            "source": "XI3_MM28_f2",
+            "target": "XI3_MM5_f2",
+            "net": "XI3_Bb"
+        },
+        {
+            "source": "XI3_MM28_f2",
+            "target": "XI3_MM8_f1",
+            "net": "XI3_Bb"
+        },
+        {
+            "source": "XI3_MM28_f2",
+            "target": "XI3_MM8_f2",
+            "net": "XI3_Bb"
+        },
+        {
+            "source": "XI3_MM5_f1",
+            "target": "XI3_MM5_f2",
+            "net": "XI3_PDN"
+        },
+        {
+            "source": "XI3_MM5_f1",
+            "target": "XI3_MM29_f1",
+            "net": "XI3_Bb"
+        },
+        {
+            "source": "XI3_MM5_f1",
+            "target": "XI3_MM29_f2",
+            "net": "XI3_Bb"
+        },
+        {
+            "source": "XI3_MM5_f1",
+            "target": "XI3_MM8_f1",
+            "net": "XI3_Bb"
+        },
+        {
+            "source": "XI3_MM5_f1",
+            "target": "XI3_MM8_f2",
+            "net": "XI3_Bb"
+        },
+        {
+            "source": "XI3_MM5_f1",
+            "target": "XI3_MM4_f1",
+            "net": "XI3_PDN"
+        },
+        {
+            "source": "XI3_MM5_f1",
+            "target": "XI3_MM4_f2",
+            "net": "XI3_PDN"
+        },
+        {
+            "source": "XI3_MM5_f1",
+            "target": "XI3_MM3_f1",
+            "net": "XI3_PDN"
+        },
+        {
+            "source": "XI3_MM5_f1",
+            "target": "XI3_MM3_f2",
+            "net": "XI3_PDN"
+        },
+        {
+            "source": "XI3_MM5_f1",
+            "target": "XI3_MM2_f1",
+            "net": "XI3_PDN"
+        },
+        {
+            "source": "XI3_MM5_f1",
+            "target": "XI3_MM2_f2",
+            "net": "XI3_PDN"
+        },
+        {
+            "source": "XI3_MM5_f2",
+            "target": "XI3_MM29_f1",
+            "net": "XI3_Bb"
+        },
+        {
+            "source": "XI3_MM5_f2",
+            "target": "XI3_MM29_f2",
+            "net": "XI3_Bb"
+        },
+        {
+            "source": "XI3_MM5_f2",
+            "target": "XI3_MM8_f1",
+            "net": "XI3_Bb"
+        },
+        {
+            "source": "XI3_MM5_f2",
+            "target": "XI3_MM8_f2",
+            "net": "XI3_Bb"
+        },
+        {
+            "source": "XI3_MM5_f2",
+            "target": "XI3_MM4_f1",
+            "net": "XI3_PDN"
+        },
+        {
+            "source": "XI3_MM5_f2",
+            "target": "XI3_MM4_f2",
+            "net": "XI3_PDN"
+        },
+        {
+            "source": "XI3_MM5_f2",
+            "target": "XI3_MM3_f1",
+            "net": "XI3_PDN"
+        },
+        {
+            "source": "XI3_MM5_f2",
+            "target": "XI3_MM3_f2",
+            "net": "XI3_PDN"
+        },
+        {
+            "source": "XI3_MM5_f2",
+            "target": "XI3_MM2_f1",
+            "net": "XI3_PDN"
+        },
+        {
+            "source": "XI3_MM5_f2",
+            "target": "XI3_MM2_f2",
+            "net": "XI3_PDN"
+        },
+        {
+            "source": "XI3_MM4_f1",
+            "target": "XI3_MM4_f2",
+            "net": "XI3_PDN"
+        },
+        {
+            "source": "XI3_MM4_f1",
+            "target": "XI3_MM25_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM4_f1",
+            "target": "XI3_MM25_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM4_f1",
+            "target": "XI3_MM6_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM4_f1",
+            "target": "XI3_MM6_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM4_f1",
+            "target": "XI3_MM24_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM4_f1",
+            "target": "XI3_MM24_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM4_f1",
+            "target": "XI2_MM4_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM4_f1",
+            "target": "XI2_MM4_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM4_f1",
+            "target": "XI2_MM25_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM4_f1",
+            "target": "XI2_MM25_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM4_f1",
+            "target": "XI2_MM6_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM4_f1",
+            "target": "XI2_MM6_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM4_f1",
+            "target": "XI2_MM24_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM4_f1",
+            "target": "XI2_MM24_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM4_f1",
+            "target": "XI3_MM3_f1",
+            "net": "XI3_PDN"
+        },
+        {
+            "source": "XI3_MM4_f1",
+            "target": "XI3_MM3_f2",
+            "net": "XI3_PDN"
+        },
+        {
+            "source": "XI3_MM4_f1",
+            "target": "XI3_MM2_f1",
+            "net": "XI3_PDN"
+        },
+        {
+            "source": "XI3_MM4_f1",
+            "target": "XI3_MM2_f2",
+            "net": "XI3_PDN"
+        },
+        {
+            "source": "XI3_MM4_f2",
+            "target": "XI3_MM25_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM4_f2",
+            "target": "XI3_MM25_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM4_f2",
+            "target": "XI3_MM6_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM4_f2",
+            "target": "XI3_MM6_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM4_f2",
+            "target": "XI3_MM24_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM4_f2",
+            "target": "XI3_MM24_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM4_f2",
+            "target": "XI2_MM4_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM4_f2",
+            "target": "XI2_MM4_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM4_f2",
+            "target": "XI2_MM25_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM4_f2",
+            "target": "XI2_MM25_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM4_f2",
+            "target": "XI2_MM6_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM4_f2",
+            "target": "XI2_MM6_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM4_f2",
+            "target": "XI2_MM24_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM4_f2",
+            "target": "XI2_MM24_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM4_f2",
+            "target": "XI3_MM3_f1",
+            "net": "XI3_PDN"
+        },
+        {
+            "source": "XI3_MM4_f2",
+            "target": "XI3_MM3_f2",
+            "net": "XI3_PDN"
+        },
+        {
+            "source": "XI3_MM4_f2",
+            "target": "XI3_MM2_f1",
+            "net": "XI3_PDN"
+        },
+        {
+            "source": "XI3_MM4_f2",
+            "target": "XI3_MM2_f2",
+            "net": "XI3_PDN"
+        },
+        {
+            "source": "XI3_MM3_f1",
+            "target": "XI3_MM3_f2",
+            "net": "VOUT2"
+        },
+        {
+            "source": "XI3_MM3_f1",
+            "target": "XI3_MM29_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM3_f1",
+            "target": "XI3_MM29_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM3_f1",
+            "target": "XI3_MM7_f1",
+            "net": "VOUT2"
+        },
+        {
+            "source": "XI3_MM3_f1",
+            "target": "XI3_MM7_f2",
+            "net": "VOUT2"
+        },
+        {
+            "source": "XI3_MM3_f1",
+            "target": "XI2_MM28_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM3_f1",
+            "target": "XI2_MM28_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM3_f1",
+            "target": "XI2_MM3_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM3_f1",
+            "target": "XI2_MM3_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM3_f1",
+            "target": "XI2_MM29_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM3_f1",
+            "target": "XI2_MM29_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM3_f1",
+            "target": "XI2_MM7_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM3_f1",
+            "target": "XI2_MM7_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM3_f1",
+            "target": "XI3_MM2_f1",
+            "net": "VOUT2"
+        },
+        {
+            "source": "XI3_MM3_f1",
+            "target": "XI3_MM2_f2",
+            "net": "VOUT2"
+        },
+        {
+            "source": "XI3_MM3_f1",
+            "target": "XI3_MM6_f1",
+            "net": "VOUT2"
+        },
+        {
+            "source": "XI3_MM3_f1",
+            "target": "XI3_MM6_f2",
+            "net": "VOUT2"
+        },
+        {
+            "source": "XI3_MM3_f2",
+            "target": "XI3_MM29_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM3_f2",
+            "target": "XI3_MM29_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM3_f2",
+            "target": "XI3_MM7_f1",
+            "net": "VOUT2"
+        },
+        {
+            "source": "XI3_MM3_f2",
+            "target": "XI3_MM7_f2",
+            "net": "VOUT2"
+        },
+        {
+            "source": "XI3_MM3_f2",
+            "target": "XI2_MM28_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM3_f2",
+            "target": "XI2_MM28_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM3_f2",
+            "target": "XI2_MM3_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM3_f2",
+            "target": "XI2_MM3_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM3_f2",
+            "target": "XI2_MM29_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM3_f2",
+            "target": "XI2_MM29_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM3_f2",
+            "target": "XI2_MM7_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM3_f2",
+            "target": "XI2_MM7_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM3_f2",
+            "target": "XI3_MM2_f1",
+            "net": "VOUT2"
+        },
+        {
+            "source": "XI3_MM3_f2",
+            "target": "XI3_MM2_f2",
+            "net": "VOUT2"
+        },
+        {
+            "source": "XI3_MM3_f2",
+            "target": "XI3_MM6_f1",
+            "net": "VOUT2"
+        },
+        {
+            "source": "XI3_MM3_f2",
+            "target": "XI3_MM6_f2",
+            "net": "VOUT2"
+        },
+        {
+            "source": "XI3_MM2_f1",
+            "target": "XI3_MM2_f2",
+            "net": "XI3_Ab"
+        },
+        {
+            "source": "XI3_MM2_f1",
+            "target": "XI3_MM7_f1",
+            "net": "VOUT2"
+        },
+        {
+            "source": "XI3_MM2_f1",
+            "target": "XI3_MM7_f2",
+            "net": "VOUT2"
+        },
+        {
+            "source": "XI3_MM2_f1",
+            "target": "XI3_MM6_f1",
+            "net": "VOUT2"
+        },
+        {
+            "source": "XI3_MM2_f1",
+            "target": "XI3_MM6_f2",
+            "net": "VOUT2"
+        },
+        {
+            "source": "XI3_MM2_f1",
+            "target": "XI3_MM25_f1",
+            "net": "XI3_Ab"
+        },
+        {
+            "source": "XI3_MM2_f1",
+            "target": "XI3_MM25_f2",
+            "net": "XI3_Ab"
+        },
+        {
+            "source": "XI3_MM2_f1",
+            "target": "XI3_MM9_f1",
+            "net": "XI3_Ab"
+        },
+        {
+            "source": "XI3_MM2_f1",
+            "target": "XI3_MM9_f2",
+            "net": "XI3_Ab"
+        },
+        {
+            "source": "XI3_MM2_f1",
+            "target": "XI3_MM24_f1",
+            "net": "XI3_Ab"
+        },
+        {
+            "source": "XI3_MM2_f1",
+            "target": "XI3_MM24_f2",
+            "net": "XI3_Ab"
+        },
+        {
+            "source": "XI3_MM2_f2",
+            "target": "XI3_MM7_f1",
+            "net": "VOUT2"
+        },
+        {
+            "source": "XI3_MM2_f2",
+            "target": "XI3_MM7_f2",
+            "net": "VOUT2"
+        },
+        {
+            "source": "XI3_MM2_f2",
+            "target": "XI3_MM6_f1",
+            "net": "VOUT2"
+        },
+        {
+            "source": "XI3_MM2_f2",
+            "target": "XI3_MM6_f2",
+            "net": "VOUT2"
+        },
+        {
+            "source": "XI3_MM2_f2",
+            "target": "XI3_MM25_f1",
+            "net": "XI3_Ab"
+        },
+        {
+            "source": "XI3_MM2_f2",
+            "target": "XI3_MM25_f2",
+            "net": "XI3_Ab"
+        },
+        {
+            "source": "XI3_MM2_f2",
+            "target": "XI3_MM9_f1",
+            "net": "XI3_Ab"
+        },
+        {
+            "source": "XI3_MM2_f2",
+            "target": "XI3_MM9_f2",
+            "net": "XI3_Ab"
+        },
+        {
+            "source": "XI3_MM2_f2",
+            "target": "XI3_MM24_f1",
+            "net": "XI3_Ab"
+        },
+        {
+            "source": "XI3_MM2_f2",
+            "target": "XI3_MM24_f2",
+            "net": "XI3_Ab"
+        },
+        {
+            "source": "XI3_MM25_f1",
+            "target": "XI3_MM25_f2",
+            "net": "XI3_Ab"
+        },
+        {
+            "source": "XI3_MM25_f1",
+            "target": "XI3_MM6_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM25_f1",
+            "target": "XI3_MM6_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM25_f1",
+            "target": "XI3_MM24_f1",
+            "net": "XI3_Ab"
+        },
+        {
+            "source": "XI3_MM25_f1",
+            "target": "XI3_MM24_f2",
+            "net": "XI3_Ab"
+        },
+        {
+            "source": "XI3_MM25_f1",
+            "target": "XI2_MM4_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM25_f1",
+            "target": "XI2_MM4_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM25_f1",
+            "target": "XI2_MM25_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM25_f1",
+            "target": "XI2_MM25_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM25_f1",
+            "target": "XI2_MM6_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM25_f1",
+            "target": "XI2_MM6_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM25_f1",
+            "target": "XI2_MM24_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM25_f1",
+            "target": "XI2_MM24_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM25_f1",
+            "target": "XI3_MM9_f1",
+            "net": "XI3_Ab"
+        },
+        {
+            "source": "XI3_MM25_f1",
+            "target": "XI3_MM9_f2",
+            "net": "XI3_Ab"
+        },
+        {
+            "source": "XI3_MM25_f2",
+            "target": "XI3_MM6_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM25_f2",
+            "target": "XI3_MM6_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM25_f2",
+            "target": "XI3_MM24_f1",
+            "net": "XI3_Ab"
+        },
+        {
+            "source": "XI3_MM25_f2",
+            "target": "XI3_MM24_f2",
+            "net": "XI3_Ab"
+        },
+        {
+            "source": "XI3_MM25_f2",
+            "target": "XI2_MM4_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM25_f2",
+            "target": "XI2_MM4_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM25_f2",
+            "target": "XI2_MM25_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM25_f2",
+            "target": "XI2_MM25_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM25_f2",
+            "target": "XI2_MM6_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM25_f2",
+            "target": "XI2_MM6_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM25_f2",
+            "target": "XI2_MM24_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM25_f2",
+            "target": "XI2_MM24_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM25_f2",
+            "target": "XI3_MM9_f1",
+            "net": "XI3_Ab"
+        },
+        {
+            "source": "XI3_MM25_f2",
+            "target": "XI3_MM9_f2",
+            "net": "XI3_Ab"
+        },
+        {
+            "source": "XI3_MM29_f1",
+            "target": "XI3_MM29_f2",
+            "net": "XI3_Bb"
+        },
+        {
+            "source": "XI3_MM29_f1",
+            "target": "XI3_MM7_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM29_f1",
+            "target": "XI3_MM7_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM29_f1",
+            "target": "XI2_MM28_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM29_f1",
+            "target": "XI2_MM28_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM29_f1",
+            "target": "XI2_MM3_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM29_f1",
+            "target": "XI2_MM3_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM29_f1",
+            "target": "XI2_MM29_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM29_f1",
+            "target": "XI2_MM29_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM29_f1",
+            "target": "XI2_MM7_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM29_f1",
+            "target": "XI2_MM7_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM29_f1",
+            "target": "XI3_MM8_f1",
+            "net": "XI3_Bb"
+        },
+        {
+            "source": "XI3_MM29_f1",
+            "target": "XI3_MM8_f2",
+            "net": "XI3_Bb"
+        },
+        {
+            "source": "XI3_MM29_f2",
+            "target": "XI3_MM7_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM29_f2",
+            "target": "XI3_MM7_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM29_f2",
+            "target": "XI2_MM28_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM29_f2",
+            "target": "XI2_MM28_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM29_f2",
+            "target": "XI2_MM3_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM29_f2",
+            "target": "XI2_MM3_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM29_f2",
+            "target": "XI2_MM29_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM29_f2",
+            "target": "XI2_MM29_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM29_f2",
+            "target": "XI2_MM7_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM29_f2",
+            "target": "XI2_MM7_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM29_f2",
+            "target": "XI3_MM8_f1",
+            "net": "XI3_Bb"
+        },
+        {
+            "source": "XI3_MM29_f2",
+            "target": "XI3_MM8_f2",
+            "net": "XI3_Bb"
+        },
+        {
+            "source": "XI3_MM9_f1",
+            "target": "XI3_MM9_f2",
+            "net": "XI3_PUN"
+        },
+        {
+            "source": "XI3_MM9_f1",
+            "target": "XI3_MM24_f1",
+            "net": "XI3_Ab"
+        },
+        {
+            "source": "XI3_MM9_f1",
+            "target": "XI3_MM24_f2",
+            "net": "XI3_Ab"
+        },
+        {
+            "source": "XI3_MM9_f1",
+            "target": "XI3_MM8_f1",
+            "net": "XI3_PUN"
+        },
+        {
+            "source": "XI3_MM9_f1",
+            "target": "XI3_MM8_f2",
+            "net": "XI3_PUN"
+        },
+        {
+            "source": "XI3_MM9_f1",
+            "target": "XI3_MM7_f1",
+            "net": "XI3_PUN"
+        },
+        {
+            "source": "XI3_MM9_f1",
+            "target": "XI3_MM7_f2",
+            "net": "XI3_PUN"
+        },
+        {
+            "source": "XI3_MM9_f1",
+            "target": "XI3_MM6_f1",
+            "net": "XI3_PUN"
+        },
+        {
+            "source": "XI3_MM9_f1",
+            "target": "XI3_MM6_f2",
+            "net": "XI3_PUN"
+        },
+        {
+            "source": "XI3_MM9_f2",
+            "target": "XI3_MM24_f1",
+            "net": "XI3_Ab"
+        },
+        {
+            "source": "XI3_MM9_f2",
+            "target": "XI3_MM24_f2",
+            "net": "XI3_Ab"
+        },
+        {
+            "source": "XI3_MM9_f2",
+            "target": "XI3_MM8_f1",
+            "net": "XI3_PUN"
+        },
+        {
+            "source": "XI3_MM9_f2",
+            "target": "XI3_MM8_f2",
+            "net": "XI3_PUN"
+        },
+        {
+            "source": "XI3_MM9_f2",
+            "target": "XI3_MM7_f1",
+            "net": "XI3_PUN"
+        },
+        {
+            "source": "XI3_MM9_f2",
+            "target": "XI3_MM7_f2",
+            "net": "XI3_PUN"
+        },
+        {
+            "source": "XI3_MM9_f2",
+            "target": "XI3_MM6_f1",
+            "net": "XI3_PUN"
+        },
+        {
+            "source": "XI3_MM9_f2",
+            "target": "XI3_MM6_f2",
+            "net": "XI3_PUN"
+        },
+        {
+            "source": "XI3_MM8_f1",
+            "target": "XI3_MM8_f2",
+            "net": "XI3_PUN"
+        },
+        {
+            "source": "XI3_MM8_f1",
+            "target": "XI3_MM7_f1",
+            "net": "XI3_PUN"
+        },
+        {
+            "source": "XI3_MM8_f1",
+            "target": "XI3_MM7_f2",
+            "net": "XI3_PUN"
+        },
+        {
+            "source": "XI3_MM8_f1",
+            "target": "XI3_MM6_f1",
+            "net": "XI3_PUN"
+        },
+        {
+            "source": "XI3_MM8_f1",
+            "target": "XI3_MM6_f2",
+            "net": "XI3_PUN"
+        },
+        {
+            "source": "XI3_MM8_f2",
+            "target": "XI3_MM7_f1",
+            "net": "XI3_PUN"
+        },
+        {
+            "source": "XI3_MM8_f2",
+            "target": "XI3_MM7_f2",
+            "net": "XI3_PUN"
+        },
+        {
+            "source": "XI3_MM8_f2",
+            "target": "XI3_MM6_f1",
+            "net": "XI3_PUN"
+        },
+        {
+            "source": "XI3_MM8_f2",
+            "target": "XI3_MM6_f2",
+            "net": "XI3_PUN"
+        },
+        {
+            "source": "XI3_MM7_f1",
+            "target": "XI3_MM7_f2",
+            "net": "XI3_PUN"
+        },
+        {
+            "source": "XI3_MM7_f1",
+            "target": "XI2_MM28_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM7_f1",
+            "target": "XI2_MM28_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM7_f1",
+            "target": "XI2_MM3_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM7_f1",
+            "target": "XI2_MM3_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM7_f1",
+            "target": "XI2_MM29_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM7_f1",
+            "target": "XI2_MM29_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM7_f1",
+            "target": "XI2_MM7_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM7_f1",
+            "target": "XI2_MM7_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM7_f1",
+            "target": "XI3_MM6_f1",
+            "net": "XI3_PUN"
+        },
+        {
+            "source": "XI3_MM7_f1",
+            "target": "XI3_MM6_f2",
+            "net": "XI3_PUN"
+        },
+        {
+            "source": "XI3_MM7_f2",
+            "target": "XI2_MM28_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM7_f2",
+            "target": "XI2_MM28_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM7_f2",
+            "target": "XI2_MM3_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM7_f2",
+            "target": "XI2_MM3_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM7_f2",
+            "target": "XI2_MM29_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM7_f2",
+            "target": "XI2_MM29_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM7_f2",
+            "target": "XI2_MM7_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM7_f2",
+            "target": "XI2_MM7_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI3_MM7_f2",
+            "target": "XI3_MM6_f1",
+            "net": "XI3_PUN"
+        },
+        {
+            "source": "XI3_MM7_f2",
+            "target": "XI3_MM6_f2",
+            "net": "XI3_PUN"
+        },
+        {
+            "source": "XI3_MM6_f1",
+            "target": "XI3_MM6_f2",
+            "net": "XI3_PUN"
+        },
+        {
+            "source": "XI3_MM6_f1",
+            "target": "XI3_MM24_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM6_f1",
+            "target": "XI3_MM24_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM6_f1",
+            "target": "XI2_MM4_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM6_f1",
+            "target": "XI2_MM4_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM6_f1",
+            "target": "XI2_MM25_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM6_f1",
+            "target": "XI2_MM25_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM6_f1",
+            "target": "XI2_MM6_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM6_f1",
+            "target": "XI2_MM6_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM6_f1",
+            "target": "XI2_MM24_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM6_f1",
+            "target": "XI2_MM24_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM6_f2",
+            "target": "XI3_MM24_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM6_f2",
+            "target": "XI3_MM24_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM6_f2",
+            "target": "XI2_MM4_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM6_f2",
+            "target": "XI2_MM4_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM6_f2",
+            "target": "XI2_MM25_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM6_f2",
+            "target": "XI2_MM25_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM6_f2",
+            "target": "XI2_MM6_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM6_f2",
+            "target": "XI2_MM6_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM6_f2",
+            "target": "XI2_MM24_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM6_f2",
+            "target": "XI2_MM24_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM24_f1",
+            "target": "XI3_MM24_f2",
+            "net": "XI3_Ab"
+        },
+        {
+            "source": "XI3_MM24_f1",
+            "target": "XI2_MM4_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM24_f1",
+            "target": "XI2_MM4_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM24_f1",
+            "target": "XI2_MM25_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM24_f1",
+            "target": "XI2_MM25_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM24_f1",
+            "target": "XI2_MM6_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM24_f1",
+            "target": "XI2_MM6_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM24_f1",
+            "target": "XI2_MM24_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM24_f1",
+            "target": "XI2_MM24_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM24_f2",
+            "target": "XI2_MM4_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM24_f2",
+            "target": "XI2_MM4_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM24_f2",
+            "target": "XI2_MM25_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM24_f2",
+            "target": "XI2_MM25_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM24_f2",
+            "target": "XI2_MM6_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM24_f2",
+            "target": "XI2_MM6_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM24_f2",
+            "target": "XI2_MM24_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI3_MM24_f2",
+            "target": "XI2_MM24_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI2_MM28_f1",
+            "target": "XI2_MM28_f2",
+            "net": "XI2_Bb"
+        },
+        {
+            "source": "XI2_MM28_f1",
+            "target": "XI2_MM3_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI2_MM28_f1",
+            "target": "XI2_MM3_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI2_MM28_f1",
+            "target": "XI2_MM29_f1",
+            "net": "XI2_Bb"
+        },
+        {
+            "source": "XI2_MM28_f1",
+            "target": "XI2_MM29_f2",
+            "net": "XI2_Bb"
+        },
+        {
+            "source": "XI2_MM28_f1",
+            "target": "XI2_MM7_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI2_MM28_f1",
+            "target": "XI2_MM7_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI2_MM28_f1",
+            "target": "XI2_MM5_f1",
+            "net": "XI2_Bb"
+        },
+        {
+            "source": "XI2_MM28_f1",
+            "target": "XI2_MM5_f2",
+            "net": "XI2_Bb"
+        },
+        {
+            "source": "XI2_MM28_f1",
+            "target": "XI2_MM8_f1",
+            "net": "XI2_Bb"
+        },
+        {
+            "source": "XI2_MM28_f1",
+            "target": "XI2_MM8_f2",
+            "net": "XI2_Bb"
+        },
+        {
+            "source": "XI2_MM28_f2",
+            "target": "XI2_MM3_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI2_MM28_f2",
+            "target": "XI2_MM3_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI2_MM28_f2",
+            "target": "XI2_MM29_f1",
+            "net": "XI2_Bb"
+        },
+        {
+            "source": "XI2_MM28_f2",
+            "target": "XI2_MM29_f2",
+            "net": "XI2_Bb"
+        },
+        {
+            "source": "XI2_MM28_f2",
+            "target": "XI2_MM7_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI2_MM28_f2",
+            "target": "XI2_MM7_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI2_MM28_f2",
+            "target": "XI2_MM5_f1",
+            "net": "XI2_Bb"
+        },
+        {
+            "source": "XI2_MM28_f2",
+            "target": "XI2_MM5_f2",
+            "net": "XI2_Bb"
+        },
+        {
+            "source": "XI2_MM28_f2",
+            "target": "XI2_MM8_f1",
+            "net": "XI2_Bb"
+        },
+        {
+            "source": "XI2_MM28_f2",
+            "target": "XI2_MM8_f2",
+            "net": "XI2_Bb"
+        },
+        {
+            "source": "XI2_MM5_f1",
+            "target": "XI2_MM5_f2",
+            "net": "XI2_PDN"
+        },
+        {
+            "source": "XI2_MM5_f1",
+            "target": "XI2_MM29_f1",
+            "net": "XI2_Bb"
+        },
+        {
+            "source": "XI2_MM5_f1",
+            "target": "XI2_MM29_f2",
+            "net": "XI2_Bb"
+        },
+        {
+            "source": "XI2_MM5_f1",
+            "target": "XI2_MM8_f1",
+            "net": "XI2_Bb"
+        },
+        {
+            "source": "XI2_MM5_f1",
+            "target": "XI2_MM8_f2",
+            "net": "XI2_Bb"
+        },
+        {
+            "source": "XI2_MM5_f1",
+            "target": "XI2_MM4_f1",
+            "net": "XI2_PDN"
+        },
+        {
+            "source": "XI2_MM5_f1",
+            "target": "XI2_MM4_f2",
+            "net": "XI2_PDN"
+        },
+        {
+            "source": "XI2_MM5_f1",
+            "target": "XI2_MM3_f1",
+            "net": "XI2_PDN"
+        },
+        {
+            "source": "XI2_MM5_f1",
+            "target": "XI2_MM3_f2",
+            "net": "XI2_PDN"
+        },
+        {
+            "source": "XI2_MM5_f1",
+            "target": "XI2_MM2_f1",
+            "net": "XI2_PDN"
+        },
+        {
+            "source": "XI2_MM5_f1",
+            "target": "XI2_MM2_f2",
+            "net": "XI2_PDN"
+        },
+        {
+            "source": "XI2_MM5_f2",
+            "target": "XI2_MM29_f1",
+            "net": "XI2_Bb"
+        },
+        {
+            "source": "XI2_MM5_f2",
+            "target": "XI2_MM29_f2",
+            "net": "XI2_Bb"
+        },
+        {
+            "source": "XI2_MM5_f2",
+            "target": "XI2_MM8_f1",
+            "net": "XI2_Bb"
+        },
+        {
+            "source": "XI2_MM5_f2",
+            "target": "XI2_MM8_f2",
+            "net": "XI2_Bb"
+        },
+        {
+            "source": "XI2_MM5_f2",
+            "target": "XI2_MM4_f1",
+            "net": "XI2_PDN"
+        },
+        {
+            "source": "XI2_MM5_f2",
+            "target": "XI2_MM4_f2",
+            "net": "XI2_PDN"
+        },
+        {
+            "source": "XI2_MM5_f2",
+            "target": "XI2_MM3_f1",
+            "net": "XI2_PDN"
+        },
+        {
+            "source": "XI2_MM5_f2",
+            "target": "XI2_MM3_f2",
+            "net": "XI2_PDN"
+        },
+        {
+            "source": "XI2_MM5_f2",
+            "target": "XI2_MM2_f1",
+            "net": "XI2_PDN"
+        },
+        {
+            "source": "XI2_MM5_f2",
+            "target": "XI2_MM2_f2",
+            "net": "XI2_PDN"
+        },
+        {
+            "source": "XI2_MM4_f1",
+            "target": "XI2_MM4_f2",
+            "net": "XI2_PDN"
+        },
+        {
+            "source": "XI2_MM4_f1",
+            "target": "XI2_MM25_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI2_MM4_f1",
+            "target": "XI2_MM25_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI2_MM4_f1",
+            "target": "XI2_MM6_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI2_MM4_f1",
+            "target": "XI2_MM6_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI2_MM4_f1",
+            "target": "XI2_MM24_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI2_MM4_f1",
+            "target": "XI2_MM24_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI2_MM4_f1",
+            "target": "XI2_MM3_f1",
+            "net": "XI2_PDN"
+        },
+        {
+            "source": "XI2_MM4_f1",
+            "target": "XI2_MM3_f2",
+            "net": "XI2_PDN"
+        },
+        {
+            "source": "XI2_MM4_f1",
+            "target": "XI2_MM2_f1",
+            "net": "XI2_PDN"
+        },
+        {
+            "source": "XI2_MM4_f1",
+            "target": "XI2_MM2_f2",
+            "net": "XI2_PDN"
+        },
+        {
+            "source": "XI2_MM4_f2",
+            "target": "XI2_MM25_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI2_MM4_f2",
+            "target": "XI2_MM25_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI2_MM4_f2",
+            "target": "XI2_MM6_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI2_MM4_f2",
+            "target": "XI2_MM6_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI2_MM4_f2",
+            "target": "XI2_MM24_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI2_MM4_f2",
+            "target": "XI2_MM24_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI2_MM4_f2",
+            "target": "XI2_MM3_f1",
+            "net": "XI2_PDN"
+        },
+        {
+            "source": "XI2_MM4_f2",
+            "target": "XI2_MM3_f2",
+            "net": "XI2_PDN"
+        },
+        {
+            "source": "XI2_MM4_f2",
+            "target": "XI2_MM2_f1",
+            "net": "XI2_PDN"
+        },
+        {
+            "source": "XI2_MM4_f2",
+            "target": "XI2_MM2_f2",
+            "net": "XI2_PDN"
+        },
+        {
+            "source": "XI2_MM3_f1",
+            "target": "XI2_MM3_f2",
+            "net": "VOUT1"
+        },
+        {
+            "source": "XI2_MM3_f1",
+            "target": "XI2_MM29_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI2_MM3_f1",
+            "target": "XI2_MM29_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI2_MM3_f1",
+            "target": "XI2_MM7_f1",
+            "net": "VOUT1"
+        },
+        {
+            "source": "XI2_MM3_f1",
+            "target": "XI2_MM7_f2",
+            "net": "VOUT1"
+        },
+        {
+            "source": "XI2_MM3_f1",
+            "target": "XI2_MM2_f1",
+            "net": "VOUT1"
+        },
+        {
+            "source": "XI2_MM3_f1",
+            "target": "XI2_MM2_f2",
+            "net": "VOUT1"
+        },
+        {
+            "source": "XI2_MM3_f1",
+            "target": "XI2_MM6_f1",
+            "net": "VOUT1"
+        },
+        {
+            "source": "XI2_MM3_f1",
+            "target": "XI2_MM6_f2",
+            "net": "VOUT1"
+        },
+        {
+            "source": "XI2_MM3_f2",
+            "target": "XI2_MM29_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI2_MM3_f2",
+            "target": "XI2_MM29_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI2_MM3_f2",
+            "target": "XI2_MM7_f1",
+            "net": "VOUT1"
+        },
+        {
+            "source": "XI2_MM3_f2",
+            "target": "XI2_MM7_f2",
+            "net": "VOUT1"
+        },
+        {
+            "source": "XI2_MM3_f2",
+            "target": "XI2_MM2_f1",
+            "net": "VOUT1"
+        },
+        {
+            "source": "XI2_MM3_f2",
+            "target": "XI2_MM2_f2",
+            "net": "VOUT1"
+        },
+        {
+            "source": "XI2_MM3_f2",
+            "target": "XI2_MM6_f1",
+            "net": "VOUT1"
+        },
+        {
+            "source": "XI2_MM3_f2",
+            "target": "XI2_MM6_f2",
+            "net": "VOUT1"
+        },
+        {
+            "source": "XI2_MM2_f1",
+            "target": "XI2_MM2_f2",
+            "net": "XI2_Ab"
+        },
+        {
+            "source": "XI2_MM2_f1",
+            "target": "XI2_MM7_f1",
+            "net": "VOUT1"
+        },
+        {
+            "source": "XI2_MM2_f1",
+            "target": "XI2_MM7_f2",
+            "net": "VOUT1"
+        },
+        {
+            "source": "XI2_MM2_f1",
+            "target": "XI2_MM6_f1",
+            "net": "VOUT1"
+        },
+        {
+            "source": "XI2_MM2_f1",
+            "target": "XI2_MM6_f2",
+            "net": "VOUT1"
+        },
+        {
+            "source": "XI2_MM2_f1",
+            "target": "XI2_MM25_f1",
+            "net": "XI2_Ab"
+        },
+        {
+            "source": "XI2_MM2_f1",
+            "target": "XI2_MM25_f2",
+            "net": "XI2_Ab"
+        },
+        {
+            "source": "XI2_MM2_f1",
+            "target": "XI2_MM9_f1",
+            "net": "XI2_Ab"
+        },
+        {
+            "source": "XI2_MM2_f1",
+            "target": "XI2_MM9_f2",
+            "net": "XI2_Ab"
+        },
+        {
+            "source": "XI2_MM2_f1",
+            "target": "XI2_MM24_f1",
+            "net": "XI2_Ab"
+        },
+        {
+            "source": "XI2_MM2_f1",
+            "target": "XI2_MM24_f2",
+            "net": "XI2_Ab"
+        },
+        {
+            "source": "XI2_MM2_f2",
+            "target": "XI2_MM7_f1",
+            "net": "VOUT1"
+        },
+        {
+            "source": "XI2_MM2_f2",
+            "target": "XI2_MM7_f2",
+            "net": "VOUT1"
+        },
+        {
+            "source": "XI2_MM2_f2",
+            "target": "XI2_MM6_f1",
+            "net": "VOUT1"
+        },
+        {
+            "source": "XI2_MM2_f2",
+            "target": "XI2_MM6_f2",
+            "net": "VOUT1"
+        },
+        {
+            "source": "XI2_MM2_f2",
+            "target": "XI2_MM25_f1",
+            "net": "XI2_Ab"
+        },
+        {
+            "source": "XI2_MM2_f2",
+            "target": "XI2_MM25_f2",
+            "net": "XI2_Ab"
+        },
+        {
+            "source": "XI2_MM2_f2",
+            "target": "XI2_MM9_f1",
+            "net": "XI2_Ab"
+        },
+        {
+            "source": "XI2_MM2_f2",
+            "target": "XI2_MM9_f2",
+            "net": "XI2_Ab"
+        },
+        {
+            "source": "XI2_MM2_f2",
+            "target": "XI2_MM24_f1",
+            "net": "XI2_Ab"
+        },
+        {
+            "source": "XI2_MM2_f2",
+            "target": "XI2_MM24_f2",
+            "net": "XI2_Ab"
+        },
+        {
+            "source": "XI2_MM25_f1",
+            "target": "XI2_MM25_f2",
+            "net": "XI2_Ab"
+        },
+        {
+            "source": "XI2_MM25_f1",
+            "target": "XI2_MM6_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI2_MM25_f1",
+            "target": "XI2_MM6_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI2_MM25_f1",
+            "target": "XI2_MM24_f1",
+            "net": "XI2_Ab"
+        },
+        {
+            "source": "XI2_MM25_f1",
+            "target": "XI2_MM24_f2",
+            "net": "XI2_Ab"
+        },
+        {
+            "source": "XI2_MM25_f1",
+            "target": "XI2_MM9_f1",
+            "net": "XI2_Ab"
+        },
+        {
+            "source": "XI2_MM25_f1",
+            "target": "XI2_MM9_f2",
+            "net": "XI2_Ab"
+        },
+        {
+            "source": "XI2_MM25_f2",
+            "target": "XI2_MM6_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI2_MM25_f2",
+            "target": "XI2_MM6_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI2_MM25_f2",
+            "target": "XI2_MM24_f1",
+            "net": "XI2_Ab"
+        },
+        {
+            "source": "XI2_MM25_f2",
+            "target": "XI2_MM24_f2",
+            "net": "XI2_Ab"
+        },
+        {
+            "source": "XI2_MM25_f2",
+            "target": "XI2_MM9_f1",
+            "net": "XI2_Ab"
+        },
+        {
+            "source": "XI2_MM25_f2",
+            "target": "XI2_MM9_f2",
+            "net": "XI2_Ab"
+        },
+        {
+            "source": "XI2_MM29_f1",
+            "target": "XI2_MM29_f2",
+            "net": "XI2_Bb"
+        },
+        {
+            "source": "XI2_MM29_f1",
+            "target": "XI2_MM7_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI2_MM29_f1",
+            "target": "XI2_MM7_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI2_MM29_f1",
+            "target": "XI2_MM8_f1",
+            "net": "XI2_Bb"
+        },
+        {
+            "source": "XI2_MM29_f1",
+            "target": "XI2_MM8_f2",
+            "net": "XI2_Bb"
+        },
+        {
+            "source": "XI2_MM29_f2",
+            "target": "XI2_MM7_f1",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI2_MM29_f2",
+            "target": "XI2_MM7_f2",
+            "net": "VIN2b"
+        },
+        {
+            "source": "XI2_MM29_f2",
+            "target": "XI2_MM8_f1",
+            "net": "XI2_Bb"
+        },
+        {
+            "source": "XI2_MM29_f2",
+            "target": "XI2_MM8_f2",
+            "net": "XI2_Bb"
+        },
+        {
+            "source": "XI2_MM9_f1",
+            "target": "XI2_MM9_f2",
+            "net": "XI2_PUN"
+        },
+        {
+            "source": "XI2_MM9_f1",
+            "target": "XI2_MM24_f1",
+            "net": "XI2_Ab"
+        },
+        {
+            "source": "XI2_MM9_f1",
+            "target": "XI2_MM24_f2",
+            "net": "XI2_Ab"
+        },
+        {
+            "source": "XI2_MM9_f1",
+            "target": "XI2_MM8_f1",
+            "net": "XI2_PUN"
+        },
+        {
+            "source": "XI2_MM9_f1",
+            "target": "XI2_MM8_f2",
+            "net": "XI2_PUN"
+        },
+        {
+            "source": "XI2_MM9_f1",
+            "target": "XI2_MM7_f1",
+            "net": "XI2_PUN"
+        },
+        {
+            "source": "XI2_MM9_f1",
+            "target": "XI2_MM7_f2",
+            "net": "XI2_PUN"
+        },
+        {
+            "source": "XI2_MM9_f1",
+            "target": "XI2_MM6_f1",
+            "net": "XI2_PUN"
+        },
+        {
+            "source": "XI2_MM9_f1",
+            "target": "XI2_MM6_f2",
+            "net": "XI2_PUN"
+        },
+        {
+            "source": "XI2_MM9_f2",
+            "target": "XI2_MM24_f1",
+            "net": "XI2_Ab"
+        },
+        {
+            "source": "XI2_MM9_f2",
+            "target": "XI2_MM24_f2",
+            "net": "XI2_Ab"
+        },
+        {
+            "source": "XI2_MM9_f2",
+            "target": "XI2_MM8_f1",
+            "net": "XI2_PUN"
+        },
+        {
+            "source": "XI2_MM9_f2",
+            "target": "XI2_MM8_f2",
+            "net": "XI2_PUN"
+        },
+        {
+            "source": "XI2_MM9_f2",
+            "target": "XI2_MM7_f1",
+            "net": "XI2_PUN"
+        },
+        {
+            "source": "XI2_MM9_f2",
+            "target": "XI2_MM7_f2",
+            "net": "XI2_PUN"
+        },
+        {
+            "source": "XI2_MM9_f2",
+            "target": "XI2_MM6_f1",
+            "net": "XI2_PUN"
+        },
+        {
+            "source": "XI2_MM9_f2",
+            "target": "XI2_MM6_f2",
+            "net": "XI2_PUN"
+        },
+        {
+            "source": "XI2_MM8_f1",
+            "target": "XI2_MM8_f2",
+            "net": "XI2_PUN"
+        },
+        {
+            "source": "XI2_MM8_f1",
+            "target": "XI2_MM7_f1",
+            "net": "XI2_PUN"
+        },
+        {
+            "source": "XI2_MM8_f1",
+            "target": "XI2_MM7_f2",
+            "net": "XI2_PUN"
+        },
+        {
+            "source": "XI2_MM8_f1",
+            "target": "XI2_MM6_f1",
+            "net": "XI2_PUN"
+        },
+        {
+            "source": "XI2_MM8_f1",
+            "target": "XI2_MM6_f2",
+            "net": "XI2_PUN"
+        },
+        {
+            "source": "XI2_MM8_f2",
+            "target": "XI2_MM7_f1",
+            "net": "XI2_PUN"
+        },
+        {
+            "source": "XI2_MM8_f2",
+            "target": "XI2_MM7_f2",
+            "net": "XI2_PUN"
+        },
+        {
+            "source": "XI2_MM8_f2",
+            "target": "XI2_MM6_f1",
+            "net": "XI2_PUN"
+        },
+        {
+            "source": "XI2_MM8_f2",
+            "target": "XI2_MM6_f2",
+            "net": "XI2_PUN"
+        },
+        {
+            "source": "XI2_MM7_f1",
+            "target": "XI2_MM7_f2",
+            "net": "XI2_PUN"
+        },
+        {
+            "source": "XI2_MM7_f1",
+            "target": "XI2_MM6_f1",
+            "net": "XI2_PUN"
+        },
+        {
+            "source": "XI2_MM7_f1",
+            "target": "XI2_MM6_f2",
+            "net": "XI2_PUN"
+        },
+        {
+            "source": "XI2_MM7_f2",
+            "target": "XI2_MM6_f1",
+            "net": "XI2_PUN"
+        },
+        {
+            "source": "XI2_MM7_f2",
+            "target": "XI2_MM6_f2",
+            "net": "XI2_PUN"
+        },
+        {
+            "source": "XI2_MM6_f1",
+            "target": "XI2_MM6_f2",
+            "net": "XI2_PUN"
+        },
+        {
+            "source": "XI2_MM6_f1",
+            "target": "XI2_MM24_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI2_MM6_f1",
+            "target": "XI2_MM24_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI2_MM6_f2",
+            "target": "XI2_MM24_f1",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI2_MM6_f2",
+            "target": "XI2_MM24_f2",
+            "net": "VIN1b"
+        },
+        {
+            "source": "XI2_MM24_f1",
+            "target": "XI2_MM24_f2",
+            "net": "XI2_Ab"
+        }
+    ],
+    "terminal_nets": {
+        "XI1_MM7": {
+            "D": "VIN2b",
+            "G": "VIN2",
+            "S": "VDD"
+        },
+        "XI1_MM8": {
+            "D": "VIN2b",
+            "G": "VIN2",
+            "S": "VSS"
+        },
+        "XI0_MM7": {
+            "D": "VIN1b",
+            "G": "VIN1",
+            "S": "VDD"
+        },
+        "XI0_MM8": {
+            "D": "VIN1b",
+            "G": "VIN1",
+            "S": "VSS"
+        },
+        "XI3_MM28_f1": {
+            "D": "XI3_Bb",
+            "G": "VIN2b",
+            "S": "VSS"
+        },
+        "XI3_MM28_f2": {
+            "D": "XI3_Bb",
+            "G": "VIN2b",
+            "S": "VSS"
+        },
+        "XI3_MM5_f1": {
+            "D": "XI3_PDN",
+            "G": "XI3_Bb",
+            "S": "VSS"
+        },
+        "XI3_MM5_f2": {
+            "D": "XI3_PDN",
+            "G": "XI3_Bb",
+            "S": "VSS"
+        },
+        "XI3_MM4_f1": {
+            "D": "XI3_PDN",
+            "G": "VIN1b",
+            "S": "VSS"
+        },
+        "XI3_MM4_f2": {
+            "D": "XI3_PDN",
+            "G": "VIN1b",
+            "S": "VSS"
+        },
+        "XI3_MM3_f1": {
+            "D": "VOUT2",
+            "G": "VIN2b",
+            "S": "XI3_PDN"
+        },
+        "XI3_MM3_f2": {
+            "D": "VOUT2",
+            "G": "VIN2b",
+            "S": "XI3_PDN"
+        },
+        "XI3_MM2_f1": {
+            "D": "VOUT2",
+            "G": "XI3_Ab",
+            "S": "XI3_PDN"
+        },
+        "XI3_MM2_f2": {
+            "D": "VOUT2",
+            "G": "XI3_Ab",
+            "S": "XI3_PDN"
+        },
+        "XI3_MM25_f1": {
+            "D": "XI3_Ab",
+            "G": "VIN1b",
+            "S": "VSS"
+        },
+        "XI3_MM25_f2": {
+            "D": "XI3_Ab",
+            "G": "VIN1b",
+            "S": "VSS"
+        },
+        "XI3_MM29_f1": {
+            "D": "XI3_Bb",
+            "G": "VIN2b",
+            "S": "VDD"
+        },
+        "XI3_MM29_f2": {
+            "D": "XI3_Bb",
+            "G": "VIN2b",
+            "S": "VDD"
+        },
+        "XI3_MM9_f1": {
+            "D": "XI3_PUN",
+            "G": "XI3_Ab",
+            "S": "VDD"
+        },
+        "XI3_MM9_f2": {
+            "D": "XI3_PUN",
+            "G": "XI3_Ab",
+            "S": "VDD"
+        },
+        "XI3_MM8_f1": {
+            "D": "XI3_PUN",
+            "G": "XI3_Bb",
+            "S": "VDD"
+        },
+        "XI3_MM8_f2": {
+            "D": "XI3_PUN",
+            "G": "XI3_Bb",
+            "S": "VDD"
+        },
+        "XI3_MM7_f1": {
+            "D": "VOUT2",
+            "G": "VIN2b",
+            "S": "XI3_PUN"
+        },
+        "XI3_MM7_f2": {
+            "D": "VOUT2",
+            "G": "VIN2b",
+            "S": "XI3_PUN"
+        },
+        "XI3_MM6_f1": {
+            "D": "VOUT2",
+            "G": "VIN1b",
+            "S": "XI3_PUN"
+        },
+        "XI3_MM6_f2": {
+            "D": "VOUT2",
+            "G": "VIN1b",
+            "S": "XI3_PUN"
+        },
+        "XI3_MM24_f1": {
+            "D": "XI3_Ab",
+            "G": "VIN1b",
+            "S": "VDD"
+        },
+        "XI3_MM24_f2": {
+            "D": "XI3_Ab",
+            "G": "VIN1b",
+            "S": "VDD"
+        },
+        "XI2_MM28_f1": {
+            "D": "XI2_Bb",
+            "G": "VIN2b",
+            "S": "VSS"
+        },
+        "XI2_MM28_f2": {
+            "D": "XI2_Bb",
+            "G": "VIN2b",
+            "S": "VSS"
+        },
+        "XI2_MM5_f1": {
+            "D": "XI2_PDN",
+            "G": "XI2_Bb",
+            "S": "VSS"
+        },
+        "XI2_MM5_f2": {
+            "D": "XI2_PDN",
+            "G": "XI2_Bb",
+            "S": "VSS"
+        },
+        "XI2_MM4_f1": {
+            "D": "XI2_PDN",
+            "G": "VIN1b",
+            "S": "VSS"
+        },
+        "XI2_MM4_f2": {
+            "D": "XI2_PDN",
+            "G": "VIN1b",
+            "S": "VSS"
+        },
+        "XI2_MM3_f1": {
+            "D": "VOUT1",
+            "G": "VIN2b",
+            "S": "XI2_PDN"
+        },
+        "XI2_MM3_f2": {
+            "D": "VOUT1",
+            "G": "VIN2b",
+            "S": "XI2_PDN"
+        },
+        "XI2_MM2_f1": {
+            "D": "VOUT1",
+            "G": "XI2_Ab",
+            "S": "XI2_PDN"
+        },
+        "XI2_MM2_f2": {
+            "D": "VOUT1",
+            "G": "XI2_Ab",
+            "S": "XI2_PDN"
+        },
+        "XI2_MM25_f1": {
+            "D": "XI2_Ab",
+            "G": "VIN1b",
+            "S": "VSS"
+        },
+        "XI2_MM25_f2": {
+            "D": "XI2_Ab",
+            "G": "VIN1b",
+            "S": "VSS"
+        },
+        "XI2_MM29_f1": {
+            "D": "XI2_Bb",
+            "G": "VIN2b",
+            "S": "VDD"
+        },
+        "XI2_MM29_f2": {
+            "D": "XI2_Bb",
+            "G": "VIN2b",
+            "S": "VDD"
+        },
+        "XI2_MM9_f1": {
+            "D": "XI2_PUN",
+            "G": "XI2_Ab",
+            "S": "VDD"
+        },
+        "XI2_MM9_f2": {
+            "D": "XI2_PUN",
+            "G": "XI2_Ab",
+            "S": "VDD"
+        },
+        "XI2_MM8_f1": {
+            "D": "XI2_PUN",
+            "G": "XI2_Bb",
+            "S": "VDD"
+        },
+        "XI2_MM8_f2": {
+            "D": "XI2_PUN",
+            "G": "XI2_Bb",
+            "S": "VDD"
+        },
+        "XI2_MM7_f1": {
+            "D": "VOUT1",
+            "G": "VIN2b",
+            "S": "XI2_PUN"
+        },
+        "XI2_MM7_f2": {
+            "D": "VOUT1",
+            "G": "VIN2b",
+            "S": "XI2_PUN"
+        },
+        "XI2_MM6_f1": {
+            "D": "VOUT1",
+            "G": "VIN1b",
+            "S": "XI2_PUN"
+        },
+        "XI2_MM6_f2": {
+            "D": "VOUT1",
+            "G": "VIN1b",
+            "S": "XI2_PUN"
+        },
+        "XI2_MM24_f1": {
+            "D": "XI2_Ab",
+            "G": "VIN1b",
+            "S": "VDD"
+        },
+        "XI2_MM24_f2": {
+            "D": "XI2_Ab",
+            "G": "VIN1b",
+            "S": "VDD"
+        }
+    },
+    "blocks": {
+        "XI1": {
+            "subckt": "Inverter",
+            "devices": [
+                "XI1_MM7",
+                "XI1_MM8"
+            ]
+        },
+        "XI0": {
+            "subckt": "Inverter",
+            "devices": [
+                "XI0_MM7",
+                "XI0_MM8"
+            ]
+        },
+        "XI3": {
+            "subckt": "Xor",
+            "devices": [
+                "XI3_MM28_f1",
+                "XI3_MM28_f2",
+                "XI3_MM5_f1",
+                "XI3_MM5_f2",
+                "XI3_MM4_f1",
+                "XI3_MM4_f2",
+                "XI3_MM3_f1",
+                "XI3_MM3_f2",
+                "XI3_MM2_f1",
+                "XI3_MM2_f2",
+                "XI3_MM25_f1",
+                "XI3_MM25_f2",
+                "XI3_MM29_f1",
+                "XI3_MM29_f2",
+                "XI3_MM9_f1",
+                "XI3_MM9_f2",
+                "XI3_MM8_f1",
+                "XI3_MM8_f2",
+                "XI3_MM7_f1",
+                "XI3_MM7_f2",
+                "XI3_MM6_f1",
+                "XI3_MM6_f2",
+                "XI3_MM24_f1",
+                "XI3_MM24_f2"
+            ]
+        },
+        "XI2": {
+            "subckt": "Xor",
+            "devices": [
+                "XI2_MM28_f1",
+                "XI2_MM28_f2",
+                "XI2_MM5_f1",
+                "XI2_MM5_f2",
+                "XI2_MM4_f1",
+                "XI2_MM4_f2",
+                "XI2_MM3_f1",
+                "XI2_MM3_f2",
+                "XI2_MM2_f1",
+                "XI2_MM2_f2",
+                "XI2_MM25_f1",
+                "XI2_MM25_f2",
+                "XI2_MM29_f1",
+                "XI2_MM29_f2",
+                "XI2_MM9_f1",
+                "XI2_MM9_f2",
+                "XI2_MM8_f1",
+                "XI2_MM8_f2",
+                "XI2_MM7_f1",
+                "XI2_MM7_f2",
+                "XI2_MM6_f1",
+                "XI2_MM6_f2",
+                "XI2_MM24_f1",
+                "XI2_MM24_f2"
+            ]
+        }
+    }
+}

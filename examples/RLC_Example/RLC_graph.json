@@ -1,0 +1,106 @@
+{
+    "nodes": [
+        {
+            "id": "RR0",
+            "type": "res",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 1,
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 0.0,
+                "y": 1.6300000000000001,
+                "width": 0.668,
+                "height": 0.4,
+                "orientation": "R0"
+            },
+            "electrical_value": 1000.0
+        },
+        {
+            "id": "LL1",
+            "type": "ind",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 1,
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 0.962,
+                "y": 1.6300000000000001,
+                "width": 0.668,
+                "height": 0.4,
+                "orientation": "R0"
+            },
+            "electrical_value": 1e-09
+        },
+        {
+            "id": "CC2",
+            "type": "cap",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 1,
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null,
+                "cval": 0.0
+            },
+            "geometry": {
+                "x": 1.924,
+                "y": 1.6300000000000001,
+                "width": 0.668,
+                "height": 0.4,
+                "orientation": "R0"
+            },
+            "electrical_value": 1e-12
+        }
+    ],
+    "edges": [
+        {
+            "source": "RR0",
+            "target": "LL1",
+            "net": "net3"
+        },
+        {
+            "source": "RR0",
+            "target": "CC2",
+            "net": "net5"
+        },
+        {
+            "source": "LL1",
+            "target": "CC2",
+            "net": "net6"
+        }
+    ],
+    "terminal_nets": {
+        "RR0": {
+            "1": "net3",
+            "2": "net5"
+        },
+        "LL1": {
+            "1": "net3",
+            "2": "net6"
+        },
+        "CC2": {
+            "1": "net5",
+            "2": "net6"
+        }
+    },
+    "blocks": {}
+}

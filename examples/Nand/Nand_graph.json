@@ -1,0 +1,142 @@
+{
+    "nodes": [
+        {
+            "id": "MM2",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 0.454,
+                "y": -1.0230000000000001,
+                "width": 0.294,
+                "height": 0.6680000000000001,
+                "orientation": "R0"
+            }
+        },
+        {
+            "id": "MM1",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 0.454,
+                "y": -1.701,
+                "width": 0.294,
+                "height": 0.6680000000000001,
+                "orientation": "R0"
+            }
+        },
+        {
+            "id": "MM4",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 0.758,
+                "y": -0.34500000000000003,
+                "width": 0.294,
+                "height": 0.6680000000000001,
+                "orientation": "R0"
+            }
+        },
+        {
+            "id": "MM3",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 0.15,
+                "y": -0.34500000000000003,
+                "width": 0.294,
+                "height": 0.6680000000000001,
+                "orientation": "R0"
+            }
+        }
+    ],
+    "edges": [
+        {
+            "source": "MM2",
+            "target": "MM1",
+            "net": "net5"
+        },
+        {
+            "source": "MM2",
+            "target": "MM4",
+            "net": "B"
+        },
+        {
+            "source": "MM1",
+            "target": "MM4",
+            "net": "Y"
+        },
+        {
+            "source": "MM1",
+            "target": "MM3",
+            "net": "A"
+        },
+        {
+            "source": "MM4",
+            "target": "MM3",
+            "net": "Y"
+        }
+    ],
+    "terminal_nets": {
+        "MM2": {
+            "D": "net5",
+            "G": "B",
+            "S": "VSS"
+        },
+        "MM1": {
+            "D": "Y",
+            "G": "A",
+            "S": "net5"
+        },
+        "MM4": {
+            "D": "Y",
+            "G": "B",
+            "S": "VDD"
+        },
+        "MM3": {
+            "D": "Y",
+            "G": "A",
+            "S": "VDD"
+        }
+    },
+    "blocks": {}
+}
