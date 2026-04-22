@@ -1,0 +1,191 @@
+{
+    "version": "2.0",
+    "device_types": {
+        "pmos": {
+            "y_row": 0.668,
+            "default_width": 0.294,
+            "default_height": 0.818
+        },
+        "nmos": {
+            "y_row": 0.0,
+            "default_width": 0.294,
+            "default_height": 0.668
+        },
+        "res": {
+            "y_row": 1.63,
+            "default_width": 0.294,
+            "default_height": 0.4
+        },
+        "cap": {
+            "y_row": 1.63,
+            "default_width": 0.294,
+            "default_height": 0.4
+        },
+        "ind": {
+            "y_row": 1.63,
+            "default_width": 0.294,
+            "default_height": 0.4
+        }
+    },
+    "devices": {
+        "MM11": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 2.0,
+            "l": 1e-07,
+            "terminal_nets": {
+                "D": "IB",
+                "G": "IB",
+                "S": "VSS"
+            }
+        },
+        "MM3": {
+            "type": "nmos",
+            "m": 8,
+            "nf": 1,
+            "nfin": 2.0,
+            "l": 1e-07,
+            "terminal_nets": {
+                "D": "VOUT",
+                "G": "IB",
+                "S": "VSS"
+            }
+        },
+        "MM2": {
+            "type": "nmos",
+            "m": 4,
+            "nf": 1,
+            "nfin": 2.0,
+            "l": 1.0000000000000001e-07,
+            "terminal_nets": {
+                "D": "net8",
+                "G": "IB",
+                "S": "VSS"
+            }
+        },
+        "MM1": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 2.0,
+            "l": "'3*0.014u'",
+            "terminal_nets": {
+                "D": "net24",
+                "G": "VINN",
+                "S": "net8"
+            }
+        },
+        "MM0": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 2.0,
+            "l": "'3*0.014u'",
+            "terminal_nets": {
+                "D": "net38",
+                "G": "VINP",
+                "S": "net8"
+            }
+        },
+        "MM6": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 2.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "VOUT",
+                "G": "net24",
+                "S": "VDD"
+            }
+        },
+        "MM10": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 2.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "net24",
+                "G": "net38",
+                "S": "VDD"
+            }
+        },
+        "MM9": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 2.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "net38",
+                "G": "net38",
+                "S": "VDD"
+            }
+        },
+        "cC7": {
+            "type": "cap",
+            "m": 1,
+            "nf": 1.0,
+            "nfin": 1,
+            "l": 8.0,
+            "terminal_nets": {
+                "1": "net24",
+                "2": "net32"
+            }
+        },
+        "rR8": {
+            "type": "res",
+            "m": 1.0,
+            "nf": 1,
+            "nfin": 1,
+            "l": 3.72e-07,
+            "terminal_nets": {
+                "1": "net32",
+                "2": "VOUT"
+            }
+        }
+    },
+    "connectivity": {
+        "nets": {
+            "IB": [
+                "MM11",
+                "MM2",
+                "MM3"
+            ],
+            "VOUT": [
+                "MM3",
+                "MM6",
+                "rR8"
+            ],
+            "net8": [
+                "MM0",
+                "MM1",
+                "MM2"
+            ],
+            "net24": [
+                "MM1",
+                "MM10",
+                "MM6",
+                "cC7"
+            ],
+            "net38": [
+                "MM0",
+                "MM10",
+                "MM9"
+            ],
+            "net32": [
+                "cC7",
+                "rR8"
+            ]
+        }
+    },
+    "drc_rules": {
+        "fin_pitch": 0.014,
+        "row_pitch": 0.668,
+        "device_pitch": 0.294,
+        "abut_pitch": 0.07
+    },
+    "blocks": {}
+}

@@ -1,0 +1,432 @@
+{
+  "metadata": {
+    "pdk": "generic",
+    "abstraction_level": "block",
+    "selection_rule": "Individual fingers are read-only. Only Parent Blocks are interactive. Selection(finger) = Selection(parent_device) = Selection(parent_block).",
+    "matching_protection": "Any block with status LOCKED and behavior rigid is a pre-assembled matched group. Moving the block moves all contained devices and fingers as one unit. The AI is STRICTLY FORBIDDEN from moving individual devices or fingers within a LOCKED block."
+  },
+  "blocks": [],
+  "devices": {
+    "MM2": {
+      "device_id": "MM2",
+      "type": "nmos",
+      "params": {
+        "l": 1.4e-08,
+        "nf": 4,
+        "nfin": 2.0
+      },
+      "nets": {
+        "G": "C"
+      },
+      "geometry": {
+        "x": 0.735,
+        "y": -0.882,
+        "w": 3.581,
+        "h": 0.568,
+        "orientation": "R0"
+      },
+      "fingers": 4,
+      "relative_offsets": [
+        {
+          "finger_index": 1,
+          "dx": 0.0,
+          "dy": 0.0
+        },
+        {
+          "finger_index": 2,
+          "dx": 3.139,
+          "dy": 0.059
+        },
+        {
+          "finger_index": 3,
+          "dx": 3.213,
+          "dy": 0.059
+        },
+        {
+          "finger_index": 4,
+          "dx": 3.287,
+          "dy": 0.059
+        }
+      ],
+      "finger_width": 0.294
+    },
+    "MM1": {
+      "device_id": "MM1",
+      "type": "nmos",
+      "params": {
+        "l": 1.4e-08,
+        "nf": 8,
+        "nfin": 2.0
+      },
+      "nets": {
+        "G": "B",
+        "D": "C"
+      },
+      "geometry": {
+        "x": 2.978,
+        "y": -0.823,
+        "w": 0.812,
+        "h": 0.568,
+        "orientation": "R0"
+      },
+      "fingers": 8,
+      "relative_offsets": [
+        {
+          "finger_index": 1,
+          "dx": 0.0,
+          "dy": 0.0
+        },
+        {
+          "finger_index": 2,
+          "dx": 0.074,
+          "dy": 0.0
+        },
+        {
+          "finger_index": 3,
+          "dx": 0.148,
+          "dy": 0.0
+        },
+        {
+          "finger_index": 4,
+          "dx": 0.222,
+          "dy": 0.0
+        },
+        {
+          "finger_index": 5,
+          "dx": 0.296,
+          "dy": 0.0
+        },
+        {
+          "finger_index": 6,
+          "dx": 0.37,
+          "dy": 0.0
+        },
+        {
+          "finger_index": 7,
+          "dx": 0.444,
+          "dy": 0.0
+        },
+        {
+          "finger_index": 8,
+          "dx": 0.518,
+          "dy": 0.0
+        }
+      ],
+      "finger_width": 0.294
+    },
+    "MM0": {
+      "device_id": "MM0",
+      "type": "nmos",
+      "params": {
+        "l": 1.4e-08,
+        "nf": 16,
+        "nfin": 2.0
+      },
+      "nets": {
+        "G": "C"
+      },
+      "geometry": {
+        "x": 0.15,
+        "y": -0.882,
+        "w": 1.404,
+        "h": 0.568,
+        "orientation": "R0"
+      },
+      "fingers": 16,
+      "relative_offsets": [
+        {
+          "finger_index": 1,
+          "dx": 0.0,
+          "dy": 0.059
+        },
+        {
+          "finger_index": 2,
+          "dx": 0.879,
+          "dy": 0.0
+        },
+        {
+          "finger_index": 3,
+          "dx": 0.666,
+          "dy": 0.059
+        },
+        {
+          "finger_index": 4,
+          "dx": 0.74,
+          "dy": 0.059
+        },
+        {
+          "finger_index": 5,
+          "dx": 0.814,
+          "dy": 0.059
+        },
+        {
+          "finger_index": 6,
+          "dx": 0.888,
+          "dy": 0.059
+        },
+        {
+          "finger_index": 7,
+          "dx": 0.962,
+          "dy": 0.059
+        },
+        {
+          "finger_index": 8,
+          "dx": 1.036,
+          "dy": 0.059
+        },
+        {
+          "finger_index": 9,
+          "dx": 1.11,
+          "dy": 0.059
+        },
+        {
+          "finger_index": 10,
+          "dx": 0.074,
+          "dy": 0.059
+        },
+        {
+          "finger_index": 11,
+          "dx": 0.148,
+          "dy": 0.059
+        },
+        {
+          "finger_index": 12,
+          "dx": 0.222,
+          "dy": 0.059
+        },
+        {
+          "finger_index": 13,
+          "dx": 0.296,
+          "dy": 0.059
+        },
+        {
+          "finger_index": 14,
+          "dx": 0.37,
+          "dy": 0.059
+        },
+        {
+          "finger_index": 15,
+          "dx": 0.444,
+          "dy": 0.059
+        },
+        {
+          "finger_index": 16,
+          "dx": 0.518,
+          "dy": 0.059
+        }
+      ],
+      "finger_width": 0.294
+    },
+    "MM5": {
+      "device_id": "MM5",
+      "type": "pmos",
+      "params": {
+        "l": 1.4e-08,
+        "nf": 4,
+        "nfin": 2.0
+      },
+      "nets": {
+        "G": "X"
+      },
+      "geometry": {
+        "x": 0.588,
+        "y": 0.147,
+        "w": 2.94,
+        "h": 0.568,
+        "orientation": "R0"
+      },
+      "fingers": 4,
+      "relative_offsets": [
+        {
+          "finger_index": 1,
+          "dx": 0.0,
+          "dy": 0.588
+        },
+        {
+          "finger_index": 2,
+          "dx": 2.646,
+          "dy": 0.588
+        },
+        {
+          "finger_index": 3,
+          "dx": 0.0,
+          "dy": 0.0
+        },
+        {
+          "finger_index": 4,
+          "dx": 2.646,
+          "dy": 0.0
+        }
+      ],
+      "finger_width": 0.294
+    },
+    "MM4": {
+      "device_id": "MM4",
+      "type": "pmos",
+      "params": {
+        "l": 1.4e-08,
+        "nf": 8,
+        "nfin": 2.0
+      },
+      "nets": {
+        "G": "X",
+        "D": "Y"
+      },
+      "geometry": {
+        "x": 0.294,
+        "y": 0.147,
+        "w": 3.528,
+        "h": 0.568,
+        "orientation": "R0"
+      },
+      "fingers": 8,
+      "relative_offsets": [
+        {
+          "finger_index": 1,
+          "dx": 0.0,
+          "dy": 0.588
+        },
+        {
+          "finger_index": 2,
+          "dx": 1.176,
+          "dy": 0.588
+        },
+        {
+          "finger_index": 3,
+          "dx": 2.058,
+          "dy": 0.588
+        },
+        {
+          "finger_index": 4,
+          "dx": 3.234,
+          "dy": 0.588
+        },
+        {
+          "finger_index": 5,
+          "dx": 0.0,
+          "dy": 0.0
+        },
+        {
+          "finger_index": 6,
+          "dx": 1.176,
+          "dy": 0.0
+        },
+        {
+          "finger_index": 7,
+          "dx": 2.058,
+          "dy": 0.0
+        },
+        {
+          "finger_index": 8,
+          "dx": 3.234,
+          "dy": 0.0
+        }
+      ],
+      "finger_width": 0.294
+    },
+    "MM3": {
+      "device_id": "MM3",
+      "type": "pmos",
+      "params": {
+        "l": 1.4e-08,
+        "nf": 16,
+        "nfin": 2.0
+      },
+      "nets": {
+        "G": "X"
+      },
+      "geometry": {
+        "x": 0.0,
+        "y": 0.147,
+        "w": 4.116,
+        "h": 0.568,
+        "orientation": "R0"
+      },
+      "fingers": 16,
+      "relative_offsets": [
+        {
+          "finger_index": 1,
+          "dx": 0.0,
+          "dy": 0.588
+        },
+        {
+          "finger_index": 2,
+          "dx": 0.882,
+          "dy": 0.588
+        },
+        {
+          "finger_index": 3,
+          "dx": 1.176,
+          "dy": 0.588
+        },
+        {
+          "finger_index": 4,
+          "dx": 1.764,
+          "dy": 0.588
+        },
+        {
+          "finger_index": 5,
+          "dx": 2.058,
+          "dy": 0.588
+        },
+        {
+          "finger_index": 6,
+          "dx": 2.646,
+          "dy": 0.588
+        },
+        {
+          "finger_index": 7,
+          "dx": 2.94,
+          "dy": 0.588
+        },
+        {
+          "finger_index": 8,
+          "dx": 3.822,
+          "dy": 0.588
+        },
+        {
+          "finger_index": 9,
+          "dx": 0.0,
+          "dy": 0.0
+        },
+        {
+          "finger_index": 10,
+          "dx": 0.882,
+          "dy": 0.0
+        },
+        {
+          "finger_index": 11,
+          "dx": 1.176,
+          "dy": 0.0
+        },
+        {
+          "finger_index": 12,
+          "dx": 1.764,
+          "dy": 0.0
+        },
+        {
+          "finger_index": 13,
+          "dx": 2.058,
+          "dy": 0.0
+        },
+        {
+          "finger_index": 14,
+          "dx": 2.646,
+          "dy": 0.0
+        },
+        {
+          "finger_index": 15,
+          "dx": 2.94,
+          "dy": 0.0
+        },
+        {
+          "finger_index": 16,
+          "dx": 3.822,
+          "dy": 0.0
+        }
+      ],
+      "finger_width": 0.294
+    }
+  },
+  "topologies": []
+}

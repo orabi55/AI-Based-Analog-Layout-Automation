@@ -1,0 +1,72 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.mypy_cache/
+.tox/
+.coverage
+htmlcov/
+
+# Environments
+.venv/
+venv/
+env/
+ENV/
+bin/
+lib/
+develop-eggs/
+eggs/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDEs / Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+.project
+.pydevproject
+.settings/
+.qwen/
+.sixth/
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Logs
+logs/
+*.log
+
+# Local Config / Secrets
+.env
+.env.*
+!.env.example
+
+# App Specific Intermediate Files
+*_graph.json
+*_placed.json
+debug_raw_output.json
+*.oas
+*.gds
+*.sp
+
+# RAG / Vector DBs
+*/rag_examples_db/
+*/rag_db/
+chroma_db/
+faiss_index/
+
+# Archives
+*.rar
+*.zip
+*.7z
+*.tar.gz

@@ -1,0 +1,108 @@
+{
+    "version": "2.0",
+    "device_types": {
+        "pmos": {
+            "y_row": 0.668,
+            "default_width": 0.294,
+            "default_height": 0.818
+        },
+        "nmos": {
+            "y_row": 0.0,
+            "default_width": 0.294,
+            "default_height": 0.668
+        },
+        "res": {
+            "y_row": 1.63,
+            "default_width": 0.294,
+            "default_height": 0.4
+        },
+        "cap": {
+            "y_row": 1.63,
+            "default_width": 0.294,
+            "default_height": 0.4
+        },
+        "ind": {
+            "y_row": 1.63,
+            "default_width": 0.294,
+            "default_height": 0.4
+        }
+    },
+    "devices": {
+        "MM2": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "net5",
+                "G": "B",
+                "S": "VSS"
+            }
+        },
+        "MM1": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "Y",
+                "G": "A",
+                "S": "net5"
+            }
+        },
+        "MM4": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "Y",
+                "G": "B",
+                "S": "VDD"
+            }
+        },
+        "MM3": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "Y",
+                "G": "A",
+                "S": "VDD"
+            }
+        }
+    },
+    "connectivity": {
+        "nets": {
+            "net5": [
+                "MM1",
+                "MM2"
+            ],
+            "B": [
+                "MM2",
+                "MM4"
+            ],
+            "Y": [
+                "MM1",
+                "MM3",
+                "MM4"
+            ],
+            "A": [
+                "MM1",
+                "MM3"
+            ]
+        }
+    },
+    "drc_rules": {
+        "fin_pitch": 0.014,
+        "row_pitch": 0.668,
+        "device_pitch": 0.294,
+        "abut_pitch": 0.07
+    },
+    "blocks": {}
+}
