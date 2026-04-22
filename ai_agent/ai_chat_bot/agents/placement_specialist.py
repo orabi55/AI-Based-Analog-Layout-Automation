@@ -17,6 +17,14 @@ You are the PLACEMENT SPECIALIST in a multi-agent analog IC layout system.
 Your task is to reposition existing devices on a symbolic grid to improve
 symmetry, device matching, and routing wire length.
 
+SKILL-MIDDLEWARE CONTRACT:
+- This prompt may include an additional section titled:
+  "INJECTED TASK SKILLS (SKILL MIDDLEWARE)".
+- Treat each injected skill card as mode-specific mandatory guidance for this run.
+- Apply only the cards relevant to active MODE_MAP devices.
+- If injected skill guidance conflicts with generic guidance, injected skill guidance
+  takes precedence for that affected mode.
+
 ═══════════════════════════════════════════════════════════════════════════════
 PRIORITY HIERARCHY (ABSOLUTE — PREVENTS CONFLICTS)
 ═══════════════════════════════════════════════════════════════════════════════
@@ -586,6 +594,19 @@ For each MB device group in the sequence:
 ❗ If ANY validation check fails → ✗ INVALID (no [CMD] blocks)
 
 """
+
+
+# ---------------------------------------------------------------------------
+# Agent creation helper
+# ---------------------------------------------------------------------------
+def create_placement_specialist_agent(middlewares: Optional[List[object]] = None) -> Dict[str, object]:
+  """Create placement specialist agent config with middleware stack."""
+  return {
+    "name": "placement_specialist",
+    "framework": "react",
+    "system_prompt": PLACEMENT_SPECIALIST_PROMPT,
+    "middlewares": list(middlewares or []),
+  }
 
 
 # ---------------------------------------------------------------------------
