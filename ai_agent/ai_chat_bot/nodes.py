@@ -15,18 +15,27 @@ import ai_agent.ai_chat_bot.agents.topology_analyst as topology_analyst
 import ai_agent.ai_chat_bot.agents.strategy_selector as strategy_selector
 from ai_agent.ai_chat_bot.tools import tool_resolve_overlaps
 from ai_agent.ai_chat_bot.agents.strategy_selector import parse_placement_mode
-from ai_agent.ai_chat_bot.agents.placement_specialist import PLACEMENT_SPECIALIST_PROMPT, build_placement_context
+from ai_agent.ai_chat_bot.agents.placement_specialist import (
+    PLACEMENT_SPECIALIST_PROMPT,
+    build_placement_context,
+    create_placement_specialist_agent,
+)
 from ai_agent.ai_chat_bot.agents.drc_critic import DRC_CRITIC_PROMPT, run_drc_check, format_drc_violations_for_llm, compute_prescriptive_fixes
 from ai_agent.ai_chat_bot.agents.routing_previewer import ROUTING_PREVIEWER_PROMPT, score_routing, format_routing_for_llm
 from ai_agent.ai_chat_bot.tools import tool_validate_device_count
 from ai_agent.ai_chat_bot.finger_grouping import expand_logical_to_fingers, validate_finger_integrity
 from ai_agent.ai_chat_bot.cmd_utils import _extract_cmd_blocks, _apply_cmds_to_nodes
+from ai_agent.ai_chat_bot.skill_middleware import SkillMiddleware
 # Optional: Import your RAG save function if you have it
 # from ai_agent.rag_manager import save_run_as_example
 from ai_agent.ai_chat_bot.llm_factory import get_langchain_llm
 
 CHAT_HISTORY_JSON_PATH = Path(__file__).resolve().parents[1] / "chat_history.json"
 MAX_CHAT_HISTORY = 50  # Trim chat history to prevent unbounded growth
+_PLACEMENT_SKILL_MIDDLEWARE = SkillMiddleware()
+_PLACEMENT_SPECIALIST_AGENT = create_placement_specialist_agent(
+    middlewares=[_PLACEMENT_SKILL_MIDDLEWARE]
+)
 
 _VALID_CHAT_ROLES = {
     "human", "user", "ai", "assistant", "function", "tool", "system", "developer"
@@ -230,6 +239,89 @@ def _invoke_with_retry(messages, selected_model: str, task_weight: str, stage_ta
                 continue
             raise
 
+
+def _extract_agent_output_content(agent_result):
+    """Extract the final assistant content from a ReAct agent result payload."""
+    if isinstance(agent_result, dict):
+        messages = agent_result.get("messages", [])
+        if isinstance(messages, list):
+            # Prefer final assistant/ai message.
+            for msg in reversed(messages):
+                if isinstance(msg, dict):
+                    role = str(msg.get("role", msg.get("type", ""))).strip().lower()
+                    content = msg.get("content")
+                else:
+                    role = str(getattr(msg, "type", getattr(msg, "role", ""))).strip().lower()
+                    content = getattr(msg, "content", None)
+
+                if role in ("assistant", "ai") and content:
+                    return content
+
+            # Fallback: last non-empty content from message list.
+            for msg in reversed(messages):
+                if isinstance(msg, dict):
+                    content = msg.get("content")
+                else:
+                    content = getattr(msg, "content", None)
+                if content:
+                    return content
+
+        output = agent_result.get("output")
+        if output:
+            return output
+
+    return agent_result
+
+
+def _invoke_react_agent_with_retry(
+    system_prompt: str,
+    chat_history,
+    user_prompt: str,
+    selected_model: str,
+    task_weight: str,
+    stage_tag: str,
+    tools,
+):
+    """Invoke placement agent via ReAct framework with timeout-aware retries."""
+    max_retries = 1 if task_weight == "light" else 2
+    for attempt in range(max_retries + 1):
+        try:
+            from langchain.agents import create_agent
+
+            llm = get_langchain_llm(selected_model, task_weight=task_weight)
+            react_agent = create_agent(
+                model=llm,
+                tools=list(tools or []),
+                prompt=system_prompt,
+            )
+
+            history_messages = _normalize_chat_history(chat_history)[-8:]
+            input_messages = [
+                {
+                    "role": msg["role"],
+                    "content": _strip_thinking_text(msg["content"]),
+                }
+                for msg in history_messages
+            ]
+            input_messages.append(
+                {
+                    "role": "user",
+                    "content": _strip_thinking_text(str(user_prompt).strip()),
+                }
+            )
+
+            return react_agent.invoke({"messages": input_messages})
+        except Exception as exc:
+            msg = str(exc).lower()
+            is_timeout = "timed out" in msg or "timeout" in msg or "read operation timed out" in msg
+            if is_timeout and attempt < max_retries:
+                print(
+                    f"[{stage_tag}] ⚠ Timeout from provider; retrying ({attempt + 1}/{max_retries})...",
+                    flush=True,
+                )
+                continue
+            raise
+
 def node_topology_analyst(state: LayoutState):
     """
     Stage 1: Topology Analyst
@@ -412,21 +504,69 @@ def node_placement_specialist(state: LayoutState):
         f"{context_text}"
     )
 
+    placement_agent = _PLACEMENT_SPECIALIST_AGENT
+    placement_framework = str(placement_agent.get("framework", "plain")).strip().lower()
+    placement_system_prompt = str(
+        placement_agent.get("system_prompt", PLACEMENT_SPECIALIST_PROMPT)
+    )
+    placement_tools = []
+    for middleware in placement_agent.get("middlewares", []):
+        if isinstance(middleware, SkillMiddleware):
+            placement_system_prompt = middleware.build_react_system_prompt(
+                placement_system_prompt
+            )
+            placement_tools.extend(middleware.get_react_tools())
+            if middleware.skill_index:
+                print(
+                    f"[PLACEMENT] Skill catalog ids: {', '.join(sorted(middleware.skill_index.keys()))}",
+                    flush=True,
+                )
+
+    if placement_tools:
+        tool_names = [getattr(t, "name", "tool") for t in placement_tools]
+        print(f"[PLACEMENT] ReAct tools: {', '.join(tool_names)}", flush=True)
+
     placer_msgs = _build_llm_messages(
-        PLACEMENT_SPECIALIST_PROMPT,
+        placement_system_prompt,
         chat_history,
         placer_user,
     )
 
-    print(f"[PLACEMENT] Calling LLM ({selected_model}, weight=heavy)...", flush=True)
+    print(
+        f"[PLACEMENT] Calling {'ReAct agent' if placement_framework == 'react' else 'LLM'} ({selected_model}, weight=heavy)...",
+        flush=True,
+    )
 
     placement_text = ""
     try:
         print("[PLACEMENT] Prompt for Placement Specialist:")
         for msg in placer_msgs:
             print(f"  {msg['role'].upper()}: {msg['content']}")
-        placement_raw = _invoke_with_retry(placer_msgs, selected_model, "heavy", "PLACEMENT")
-        placement_text, placement_thinking = _split_content_and_thinking(placement_raw.content)
+
+        if placement_framework == "react":
+            try:
+                placement_result = _invoke_react_agent_with_retry(
+                    system_prompt=placement_system_prompt,
+                    chat_history=chat_history,
+                    user_prompt=placer_user,
+                    selected_model=selected_model,
+                    task_weight="heavy",
+                    stage_tag="PLACEMENT",
+                    tools=placement_tools,
+                )
+                placement_content = _extract_agent_output_content(placement_result)
+            except Exception as react_exc:
+                print(
+                    f"[PLACEMENT] ⚠ ReAct path failed ({react_exc}); falling back to direct invoke.",
+                    flush=True,
+                )
+                placement_raw = _invoke_with_retry(placer_msgs, selected_model, "heavy", "PLACEMENT")
+                placement_content = placement_raw.content
+        else:
+            placement_raw = _invoke_with_retry(placer_msgs, selected_model, "heavy", "PLACEMENT")
+            placement_content = placement_raw.content
+
+        placement_text, placement_thinking = _split_content_and_thinking(placement_content)
         placement_text = _strip_thinking_text(placement_text)
         stage2_cmds = _extract_cmd_blocks(placement_text)
         print(f"[PLACEMENT] ✓ LLM produced {len(stage2_cmds)} CMD block(s) ({len(placement_text)} chars)", flush=True)
