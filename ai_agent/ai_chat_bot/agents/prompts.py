@@ -243,7 +243,7 @@ def build_codegen_prompt(layout_context: dict | None) -> str:
 
 def _compute_grid_info(layout_context: dict | None) -> dict:
     """Extract grid info from the current layout context."""
-    default = {"pitch": 0.294, "pmos_y": 0.0, "nmos_y": 0.668, "row_pitch": 0.668}
+    default = {"pitch": 0.294, "pmos_y": 0.668, "nmos_y": 0.0, "row_pitch": 0.668}
     if not layout_context:
         return default
 
@@ -267,8 +267,8 @@ def _compute_grid_info(layout_context: dict | None) -> dict:
             nmos_ys.append(y)
 
     pitch = min(widths) if widths else 0.294
-    pmos_y = min(pmos_ys) if pmos_ys else 0.0
-    nmos_y = min(nmos_ys) if nmos_ys else 0.668
+    pmos_y = min(pmos_ys) if pmos_ys else 0.668   # PMOS default: 1 row above NMOS
+    nmos_y = min(nmos_ys) if nmos_ys else 0.0      # NMOS default: bottom row
 
     # Compute row_pitch from the gap between NMOS and PMOS rows
     row_pitch = 0.668
