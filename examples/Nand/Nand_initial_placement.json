@@ -15,8 +15,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2929.122,
-                "y": -1.701,
+                "x": 0.882,
+                "y": -1.0230000000000001,
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
@@ -37,8 +37,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2928.828,
-                "y": -1.701,
+                "x": 0.294,
+                "y": -1.6169999999999998,
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
@@ -59,8 +59,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2933.826,
-                "y": -1.033,
+                "x": 0.758,
+                "y": -0.34500000000000003,
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
@@ -81,8 +81,31 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2933.532,
-                "y": -1.033,
+                "x": 0.15,
+                "y": -0.34500000000000003,
+                "width": 0.294,
+                "height": 0.6680000000000001,
+                "orientation": "R0"
+            }
+        },
+        {
+            "id": "DUMMYN1",
+            "type": "nmos",
+            "is_dummy": true,
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 0.882,
+                "y": -1.617,
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
@@ -115,29 +138,5 @@
             "target": "MM3",
             "net": "Y"
         }
-    ],
-    "terminal_nets": {
-        "MM2": {
-            "D": "net5",
-            "G": "B",
-            "S": "VSS"
-        },
-        "MM1": {
-            "D": "Y",
-            "G": "A",
-            "S": "net5"
-        },
-        "MM4": {
-            "D": "Y",
-            "G": "B",
-            "S": "VDD"
-        },
-        "MM3": {
-            "D": "Y",
-            "G": "A",
-            "S": "VDD"
-        }
-    },
-    "abutment_candidates": [],
-    "no_abutment": false
+    ]
 }

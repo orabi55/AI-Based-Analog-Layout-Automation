@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QMenu,
 )
 from PySide6.QtCore import Qt, Signal, QPointF
-from PySide6.QtGui import QPainter, QPen, QPainterPath, QColor, QBrush, QAction
+from PySide6.QtGui import QPainter, QPen, QPainterPath, QColor, QBrush, QAction, QKeySequence
 
 try:
     from .device_item import DeviceItem
@@ -81,6 +81,7 @@ class HierarchyAwareScene(QGraphicsScene):
 class SymbolicEditor(QGraphicsView):
 
     device_clicked = Signal(str)
+    dummy_toggle_requested = Signal()
 
     def __init__(self):
         super().__init__()
@@ -102,6 +103,8 @@ class SymbolicEditor(QGraphicsView):
 
         # Enable pan with middle mouse
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.viewport().setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
         # Zoom parameters
         self.zoom_factor = 1.15
@@ -161,6 +164,7 @@ class SymbolicEditor(QGraphicsView):
         self._block_items = []       # list of actual BlockItem instances (symbol view)
         self._block_overlays_visible = True
         self._view_level = "symbol"   # 'symbol' or 'transistor'
+        self._device_render_mode = "detailed"
         self._centroid_items = []
 
         # Block colors
@@ -196,6 +200,27 @@ class SymbolicEditor(QGraphicsView):
     def set_dummy_place_callback(self, callback):
         """Callback called with candidate dict when user places a dummy."""
         self._dummy_place_callback = callback
+
+    def set_device_render_mode(self, mode):
+        self._device_render_mode = mode if mode in {"detailed", "outline"} else "detailed"
+        for item in self.device_items.values():
+            if hasattr(item, "set_render_mode"):
+                item.set_render_mode(self._device_render_mode)
+        if self._dummy_preview is not None and hasattr(self._dummy_preview, "set_render_mode"):
+            self._dummy_preview.set_render_mode(self._device_render_mode)
+        self.viewport().update()
+
+    def show_detailed_devices(self):
+        self.set_view_level("transistor")
+        self.set_device_render_mode("detailed")
+
+    def show_outline_devices(self):
+        self.set_view_level("transistor")
+        self.set_device_render_mode("outline")
+
+    def select_all_devices(self):
+        for item in self.device_items.values():
+            item.setSelected(True)
 
     def _snap_value(self, value):
         return round(value / self._snap_grid) * self._snap_grid
@@ -291,6 +316,7 @@ class SymbolicEditor(QGraphicsView):
                 candidate["width"],
                 candidate["height"],
             )
+            self._dummy_preview.set_render_mode(self._device_render_mode)
             self._dummy_preview.setOpacity(0.55)
             self._dummy_preview.setZValue(1000)
             # Disable interaction on the preview ghost
@@ -369,6 +395,7 @@ class SymbolicEditor(QGraphicsView):
                     x, y, width, height,
                     nf=nf,
                 )
+                item.set_render_mode(self._device_render_mode)
                 # Restore abutment state from OAS / saved data
                 abut = node.get("abutment", {})
                 if abut:
@@ -1554,6 +1581,14 @@ class SymbolicEditor(QGraphicsView):
 
     def keyPressEvent(self, event):
         """Handle global keyboard shortcuts."""
+        if event.matches(QKeySequence.StandardKey.SelectAll):
+            self.select_all_devices()
+            event.accept()
+            return
+        if event.key() == Qt.Key.Key_D and event.modifiers() == Qt.KeyboardModifier.NoModifier:
+            self.dummy_toggle_requested.emit()
+            event.accept()
+            return
         if event.key() == Qt.Key.Key_Escape:
             # Ascend from any descended hierarchy groups
             try:
@@ -1564,8 +1599,8 @@ class SymbolicEditor(QGraphicsView):
                         return
             except Exception:
                 pass
-        elif event.key() == Qt.Key.Key_D and not event.modifiers():
-            # 'D' key (without modifiers) - descend into hierarchy
+        elif event.key() == Qt.Key.Key_D and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+            # Ctrl+D - descend into hierarchy
             try:
                 self.descend_nearest_hierarchy()
                 event.accept()
@@ -1868,6 +1903,8 @@ class SymbolicEditor(QGraphicsView):
     # Pan with Middle Mouse
     # -------------------------------------------------
     def mousePressEvent(self, event):
+        self.setFocus(Qt.FocusReason.MouseFocusReason)
+        self.viewport().setFocus(Qt.FocusReason.MouseFocusReason)
         if self._dummy_mode and event.button() == Qt.MouseButton.LeftButton:
             scene_pos = self.mapToScene(event.pos())
             if self._commit_dummy_at(scene_pos):

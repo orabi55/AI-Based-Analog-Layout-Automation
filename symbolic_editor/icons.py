@@ -362,3 +362,114 @@ def icon_panel_toggle() -> QIcon:
     icon = _icon_from_painter(pm, p)
     _CACHE["panel_toggle"] = icon
     return icon
+
+
+def icon_open_file() -> QIcon:
+    if "open_file" in _CACHE:
+        return _CACHE["open_file"]
+    pm, p = _make_pixmap()
+    p.setPen(QPen(_FG, 1.9, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    p.setBrush(QBrush(QColor(_ACCENT.red(), _ACCENT.green(), _ACCENT.blue(), 45)))
+    body = QPainterPath()
+    body.moveTo(7, 10)
+    body.lineTo(13, 10)
+    body.lineTo(16, 13)
+    body.lineTo(25, 13)
+    body.lineTo(25, 24)
+    body.lineTo(7, 24)
+    body.closeSubpath()
+    p.drawPath(body)
+    p.setPen(QPen(_ACCENT, 2.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    p.drawLine(QPointF(11, 18), QPointF(20, 18))
+    p.drawLine(QPointF(16, 14), QPointF(20, 18))
+    p.drawLine(QPointF(16, 22), QPointF(20, 18))
+    icon = _icon_from_painter(pm, p)
+    _CACHE["open_file"] = icon
+    return icon
+
+
+def icon_import_file() -> QIcon:
+    if "import_file" in _CACHE:
+        return _CACHE["import_file"]
+    pm, p = _make_pixmap()
+    p.setPen(QPen(_FG, 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawRoundedRect(QRectF(8, 7, 16, 18), 3, 3)
+    p.setPen(QPen(_GREEN, 2.1, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    p.drawLine(QPointF(16, 6), QPointF(16, 18))
+    p.drawLine(QPointF(12, 14), QPointF(16, 18))
+    p.drawLine(QPointF(20, 14), QPointF(16, 18))
+    p.drawLine(QPointF(11, 24), QPointF(21, 24))
+    icon = _icon_from_painter(pm, p)
+    _CACHE["import_file"] = icon
+    return icon
+
+
+def icon_save_file() -> QIcon:
+    if "save_file" in _CACHE:
+        return _CACHE["save_file"]
+    pm, p = _make_pixmap()
+    p.setPen(QPen(_FG, 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    p.setBrush(QBrush(QColor(_ACCENT.red(), _ACCENT.green(), _ACCENT.blue(), 32)))
+    p.drawRoundedRect(QRectF(7, 6, 18, 20), 3, 3)
+    p.setBrush(QBrush(_FG))
+    p.drawRect(QRectF(11, 8, 10, 5))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.setPen(QPen(_ACCENT, 1.8))
+    p.drawRect(QRectF(11, 17, 10, 6))
+    icon = _icon_from_painter(pm, p)
+    _CACHE["save_file"] = icon
+    return icon
+
+
+def icon_export_file() -> QIcon:
+    if "export_file" in _CACHE:
+        return _CACHE["export_file"]
+    pm, p = _make_pixmap()
+    p.setPen(QPen(_FG, 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawRoundedRect(QRectF(7, 7, 18, 18), 3, 3)
+    p.setPen(QPen(_ORANGE, 2.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    p.drawLine(QPointF(16, 10), QPointF(16, 19))
+    p.drawLine(QPointF(12, 15), QPointF(16, 11))
+    p.drawLine(QPointF(20, 15), QPointF(16, 11))
+    p.drawLine(QPointF(11, 22), QPointF(21, 22))
+    icon = _icon_from_painter(pm, p)
+    _CACHE["export_file"] = icon
+    return icon
+
+
+def icon_abutment() -> QIcon:
+    if "abutment" in _CACHE:
+        return _CACHE["abutment"]
+    pm, p = _make_pixmap()
+    p.setPen(QPen(_FG, 1.6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    p.setBrush(QBrush(QColor(_ORANGE.red(), _ORANGE.green(), _ORANGE.blue(), 32)))
+    p.drawRoundedRect(QRectF(5, 9, 8, 14), 2, 2)
+    p.drawRoundedRect(QRectF(19, 9, 8, 14), 2, 2)
+    p.setPen(QPen(_ORANGE, 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+    p.drawLine(QPointF(13, 16), QPointF(19, 16))
+    p.drawLine(QPointF(16, 12), QPointF(16, 20))
+    icon = _icon_from_painter(pm, p)
+    _CACHE["abutment"] = icon
+    return icon
+
+
+def icon_ai_placement() -> QIcon:
+    if "ai_placement" in _CACHE:
+        return _CACHE["ai_placement"]
+    pm, p = _make_pixmap()
+    p.setPen(QPen(_ACCENT, 1.9, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    p.setBrush(QBrush(QColor(_ACCENT.red(), _ACCENT.green(), _ACCENT.blue(), 28)))
+    p.drawRoundedRect(QRectF(6, 6, 20, 20), 5, 5)
+    p.setPen(QPen(_FG, 1.6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+    p.drawLine(QPointF(10, 16), QPointF(14, 16))
+    p.drawLine(QPointF(18, 16), QPointF(22, 16))
+    p.drawLine(QPointF(16, 10), QPointF(16, 14))
+    p.drawLine(QPointF(16, 18), QPointF(16, 22))
+    p.setPen(QPen(_GREEN, 2.1, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+    p.drawLine(QPointF(12, 12), QPointF(20, 20))
+    p.drawLine(QPointF(20, 12), QPointF(12, 20))
+    icon = _icon_from_painter(pm, p)
+    _CACHE["ai_placement"] = icon
+    return icon

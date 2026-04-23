@@ -1,0 +1,64 @@
+{
+    "version": "2.0",
+    "device_types": {
+        "pmos": {
+            "y_row": 0.668,
+            "default_width": 0.294,
+            "default_height": 0.818
+        },
+        "nmos": {
+            "y_row": 0.0,
+            "default_width": 0.294,
+            "default_height": 0.668
+        },
+        "res": {
+            "y_row": 1.63,
+            "default_width": 0.294,
+            "default_height": 0.1
+        },
+        "cap": {
+            "y_row": 1.63,
+            "default_width": 0.294,
+            "default_height": 0.668
+        }
+    },
+    "devices": {
+        "rR0": {
+            "type": "res",
+            "m": 1.0,
+            "nf": 1,
+            "nfin": 1,
+            "l": 3.72e-07,
+            "terminal_nets": {
+                "1": "net2",
+                "2": "net5"
+            }
+        },
+        "cC2": {
+            "type": "cap",
+            "m": 1,
+            "nf": 4.0,
+            "nfin": 1,
+            "l": 8.0,
+            "terminal_nets": {
+                "1": "net5",
+                "2": "net6"
+            }
+        }
+    },
+    "connectivity": {
+        "nets": {
+            "net5": [
+                "cC2",
+                "rR0"
+            ]
+        }
+    },
+    "drc_rules": {
+        "fin_pitch": 0.014,
+        "row_pitch": 0.668,
+        "device_pitch": 0.294,
+        "abut_pitch": 0.07
+    },
+    "blocks": {}
+}
