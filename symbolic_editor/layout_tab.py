@@ -28,13 +28,15 @@ from PySide6.QtWidgets import (
     QFrame,
 )
 from PySide6.QtCore import Qt, QTimer, Signal
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QKeySequence, QShortcut
 
 try:
     from .chat_panel import ChatPanel
     from .device_tree import DeviceTreePanel
     from .editor_view import SymbolicEditor
     from .klayout_panel import KLayoutPanel
+    from .properties_panel import PropertiesPanel
+    from .view_toggle import SegmentedToggle
     from .widgets.generic_worker import GenericWorker
     from .widgets.loading_overlay import LoadingOverlay
     from .dialogs.import_dialog import ImportDialog
@@ -45,6 +47,8 @@ except ImportError:
     from device_tree import DeviceTreePanel
     from editor_view import SymbolicEditor
     from klayout_panel import KLayoutPanel
+    from properties_panel import PropertiesPanel
+    from view_toggle import SegmentedToggle
     from widgets.generic_worker import GenericWorker
     from widgets.loading_overlay import LoadingOverlay
     from dialogs.import_dialog import ImportDialog
@@ -65,6 +69,7 @@ class LayoutEditorTab(QWidget):
     selection_changed  = Signal(int)           # count
     grid_changed       = Signal(int, int, int, int)  # rows, cols, min_row, min_col
     title_changed      = Signal(str)           # document basename
+    workspace_mode_changed = Signal(str)
 
     def __init__(self, placement_file=None, parent=None):
         super().__init__(parent)
@@ -88,43 +93,92 @@ class LayoutEditorTab(QWidget):
 
         # Load placement data
         self._load_data(placement_file)
+        self._blocks = {}
+        self._workspace_mode = "both"
+        self._both_workspace_sizes = [860, 480]
+        self._pending_oas_path = None
 
         # ── Create panels ──────────────────────────────────────────
         self.device_tree = DeviceTreePanel()
+        self.properties_panel = PropertiesPanel()
         self.editor = SymbolicEditor()
         self.chat_panel = ChatPanel()
         self.klayout_panel = KLayoutPanel()
+        self._workspace_toggle = SegmentedToggle()
+        self._workspace_toggle.mode_changed.connect(self.set_workspace_mode)
 
         # ── Right-side vertical splitter ───────────────────────────
-        self._right_splitter = QSplitter(Qt.Orientation.Vertical)
-        self._right_splitter.addWidget(self.chat_panel)
-        self._right_splitter.addWidget(self.klayout_panel)
-        self._right_splitter.setStretchFactor(0, 1)
-        self._right_splitter.setStretchFactor(1, 1)
-        self._right_splitter.setSizes([480, 380])
-        self._right_splitter.setStyleSheet(
+        self._left_splitter = QSplitter(Qt.Orientation.Vertical)
+        self._left_splitter.addWidget(self.device_tree)
+        self._left_splitter.addWidget(self.properties_panel)
+        self._left_splitter.setStretchFactor(0, 1)
+        self._left_splitter.setStretchFactor(1, 1)
+        self._left_splitter.setSizes([460, 360])
+        self._left_splitter.setStyleSheet(
             "QSplitter::handle { background-color: #2d3548; height: 2px; }"
             "QSplitter::handle:hover { background-color: #4a90d9; }"
         )
 
         # ── Main horizontal splitter ──────────────────────────────
+        workspace_header = QFrame()
+        workspace_header.setFixedHeight(48)
+        workspace_header.setStyleSheet(
+            "background-color: #111821; border-bottom: 1px solid #2d3548;"
+        )
+        workspace_header_layout = QHBoxLayout(workspace_header)
+        workspace_header_layout.setContentsMargins(16, 0, 16, 0)
+        workspace_header_layout.setSpacing(12)
+
+        workspace_title = QLabel("Workspace")
+        workspace_title.setStyleSheet(
+            "color: #dbe5ef; font-family: 'Segoe UI'; font-size: 11pt; font-weight: 600;"
+        )
+        workspace_header_layout.addWidget(workspace_title)
+
+        workspace_hint = QLabel("Hierarchy-driven symbolic editing with physical preview")
+        workspace_hint.setStyleSheet(
+            "color: #708399; font-family: 'Segoe UI'; font-size: 9pt;"
+        )
+        workspace_header_layout.addWidget(workspace_hint)
+        workspace_header_layout.addStretch()
+        self._workspace_toggle.hide()
+
+        self._workspace_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self._workspace_splitter.addWidget(self.editor)
+        self._workspace_splitter.addWidget(self.klayout_panel)
+        self._workspace_splitter.setStretchFactor(0, 1)
+        self._workspace_splitter.setStretchFactor(1, 1)
+        self._workspace_splitter.setSizes(self._both_workspace_sizes)
+        self._workspace_splitter.setStyleSheet(
+            "QSplitter::handle { background-color: #2d3548; width: 2px; }"
+            "QSplitter::handle:hover { background-color: #4a90d9; }"
+        )
+
+        self._workspace_shell = QFrame()
+        self._workspace_shell.setStyleSheet("background-color: #0e1219;")
+        workspace_layout = QVBoxLayout(self._workspace_shell)
+        workspace_layout.setContentsMargins(0, 0, 0, 0)
+        workspace_layout.setSpacing(0)
+        workspace_layout.addWidget(workspace_header)
+        workspace_layout.addWidget(self._workspace_splitter, 1)
+
         self._splitter = QSplitter(Qt.Orientation.Horizontal)
-        self._splitter.addWidget(self.device_tree)
-        self._splitter.addWidget(self.editor)
-        self._splitter.addWidget(self._right_splitter)
+        self._splitter.addWidget(self._left_splitter)
+        self._splitter.addWidget(self._workspace_shell)
+        self._splitter.addWidget(self.chat_panel)
         self._splitter.setStretchFactor(0, 0)
         self._splitter.setStretchFactor(1, 1)
         self._splitter.setStretchFactor(2, 0)
-        self._splitter.setSizes([220, 860, 320])
-        self._tree_default_width = 220
-        self._chat_default_width = 320
+        self._splitter.setSizes([320, 980, 340])
+        self._sidebar_default_width = 320
+        self._chat_default_width = 340
 
         # ── Collapsed-panel reopen strips ─────────────────────────
-        self._tree_reopen_strip = self._make_reopen_strip("▶", "Show Device Hierarchy")
+        self._tree_reopen_strip = self._make_reopen_strip(">", "Show Hierarchy Sidebar")
         self._tree_reopen_strip.clicked.connect(self._toggle_device_tree)
         self._tree_reopen_strip.setVisible(False)
 
-        self._chat_reopen_strip = self._make_reopen_strip("◀", "Show AI Chat")
+        self._chat_reopen_strip = self._make_reopen_strip("<", "Show AI Chat")
         self._chat_reopen_strip.clicked.connect(self._toggle_chat_panel)
         self._chat_reopen_strip.setVisible(False)
 
@@ -149,16 +203,19 @@ class LayoutEditorTab(QWidget):
 
         # Populate panels
         self._refresh_panels()
+        self._init_workspace_shortcuts()
 
         # Fit view after initial load
         QTimer.singleShot(100, self.editor.fit_to_view)
 
         # ── Internal signal wiring ────────────────────────────────
-        self.device_tree.device_selected.connect(self.editor.highlight_device)
+        self.device_tree.device_selected.connect(self._on_tree_device_selected)
         self.device_tree.connection_selected.connect(self._on_connection_selected)
+        self.device_tree.block_selected.connect(self._on_tree_block_selected)
         self.editor.device_clicked.connect(self.device_tree.highlight_device)
+        self.editor.dummy_toggle_requested.connect(self._toggle_dummy_shortcut)
         self.editor.device_clicked.connect(self._on_canvas_device_clicked)
-        self.editor.scene.selectionChanged.connect(self._on_selection_count_changed)
+        self.editor.scene.selectionChanged.connect(self._on_editor_selection_changed)
 
         # AI command execution (batch for single undo)
         self._pending_cmds = []
@@ -177,6 +234,7 @@ class LayoutEditorTab(QWidget):
         # Loading overlay (per-tab)
         self.overlay = LoadingOverlay(self)
         self.overlay.hide()
+        self.set_workspace_mode(self._workspace_mode)
 
     # ─────────────────────────────────────────────────────────────────
     def resizeEvent(self, event):
@@ -187,6 +245,20 @@ class LayoutEditorTab(QWidget):
     def shutdown(self):
         """Gracefully stop the AI worker thread."""
         self.chat_panel.shutdown()
+
+    def _init_workspace_shortcuts(self):
+        """Keep workspace view shortcuts local to the active editor shell."""
+        self._shortcut_fit_view = QShortcut(QKeySequence("F"), self._workspace_shell)
+        self._shortcut_fit_view.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        self._shortcut_fit_view.activated.connect(self.editor.fit_to_view)
+
+        self._shortcut_detailed_view = QShortcut(QKeySequence("Shift+F"), self._workspace_shell)
+        self._shortcut_detailed_view.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        self._shortcut_detailed_view.activated.connect(self.editor.show_detailed_devices)
+
+        self._shortcut_outline_view = QShortcut(QKeySequence("Ctrl+F"), self._workspace_shell)
+        self._shortcut_outline_view.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        self._shortcut_outline_view.activated.connect(self.editor.show_outline_devices)
 
     # ── Public convenience properties ────────────────────────────
     @property
@@ -228,14 +300,14 @@ class LayoutEditorTab(QWidget):
         return btn
 
     def _toggle_device_tree(self):
-        if self.device_tree.isVisible():
-            self.device_tree.setVisible(False)
+        if self._left_splitter.isVisible():
+            self._left_splitter.setVisible(False)
             self._tree_reopen_strip.setVisible(True)
         else:
-            self.device_tree.setVisible(True)
+            self._left_splitter.setVisible(True)
             self._tree_reopen_strip.setVisible(False)
             sizes = self._splitter.sizes()
-            sizes[0] = self._tree_default_width
+            sizes[0] = self._sidebar_default_width
             self._splitter.setSizes(sizes)
 
     def _toggle_chat_panel(self):
@@ -250,7 +322,47 @@ class LayoutEditorTab(QWidget):
             self._splitter.setSizes(sizes)
 
     def _toggle_klayout_panel(self):
-        self.klayout_panel.setVisible(not self.klayout_panel.isVisible())
+        if self._workspace_mode == "symbolic":
+            self.set_workspace_mode("both")
+        else:
+            self.set_workspace_mode("symbolic")
+
+    def _toggle_dummy_shortcut(self):
+        win = self.window()
+        action = getattr(win, "_act_add_dummy", None)
+        if action is not None:
+            action.toggle()
+            return
+        self.set_dummy_mode(not self._dummy_mode)
+
+    def set_workspace_mode(self, mode):
+        if mode not in {"symbolic", "klayout", "both"}:
+            return
+
+        if getattr(self, "_workspace_mode", None) == "both" and hasattr(self, "_workspace_splitter"):
+            self._both_workspace_sizes = self._workspace_splitter.sizes()
+
+        self._workspace_mode = mode
+        self._workspace_toggle.set_mode(mode, emit=False)
+
+        if mode == "symbolic":
+            self.editor.setVisible(True)
+            self.klayout_panel.setVisible(False)
+            self._workspace_splitter.setSizes([1, 0])
+        elif mode == "klayout":
+            self.editor.setVisible(False)
+            self.klayout_panel.setVisible(True)
+            self._workspace_splitter.setSizes([0, 1])
+        else:
+            self.editor.setVisible(True)
+            self.klayout_panel.setVisible(True)
+            self._workspace_splitter.setSizes(self._both_workspace_sizes)
+        if mode != "klayout":
+            self.editor.setFocus(Qt.FocusReason.OtherFocusReason)
+        self.workspace_mode_changed.emit(mode)
+
+    def workspace_mode(self):
+        return self._workspace_mode
 
     def on_view_in_klayout(self):
         if not self._current_file:
@@ -258,7 +370,8 @@ class LayoutEditorTab(QWidget):
         json_dir = os.path.dirname(os.path.abspath(self._current_file))
         oas_files = glob.glob(os.path.join(json_dir, "*.oas"))
         if oas_files:
-            self.klayout_panel._oas_path = oas_files[0]
+            self.klayout_panel.set_oas_path(oas_files[0])
+            self.set_workspace_mode("klayout")
             self.klayout_panel._on_open_klayout()
 
     # =================================================================
@@ -277,7 +390,7 @@ class LayoutEditorTab(QWidget):
             try:
                 if self.editor and self.editor.scene.selectedItems():
                     self.editor.scene.clearSelection()
-                    self._on_selection_count_changed()
+                    self._on_editor_selection_changed()
                     released = True
             except RuntimeError:
                 pass
@@ -285,6 +398,10 @@ class LayoutEditorTab(QWidget):
                 event.accept()
                 return
         if event.key() == Qt.Key.Key_D and not event.modifiers():
+            self._toggle_dummy_shortcut()
+            event.accept()
+            return
+        if event.key() == Qt.Key.Key_D and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
             try:
                 if self.editor:
                     self.editor.descend_nearest_hierarchy()
@@ -417,6 +534,16 @@ class LayoutEditorTab(QWidget):
                 pass
         return terminal_nets
 
+    def _sync_klayout_source(self, explicit_oas=None, source_path=None):
+        oas_path = explicit_oas
+        if not oas_path and source_path:
+            source_dir = os.path.dirname(os.path.abspath(source_path))
+            oas_files = sorted(glob.glob(os.path.join(source_dir, "*.oas")))
+            if oas_files:
+                oas_path = oas_files[0]
+        self.klayout_panel.set_oas_path(oas_path)
+        self.klayout_panel.refresh_preview(oas_path if oas_path else None)
+
     def _refresh_panels(self, compact=False):
         if not self._original_data:
             return
@@ -433,6 +560,7 @@ class LayoutEditorTab(QWidget):
                         blocks[inst]["devices"].append(node.get("id"))
             if blocks:
                 self._original_data["blocks"] = blocks
+        self._blocks = blocks
         self.device_tree.set_edges(edges)
         self.device_tree.set_terminal_nets(self._terminal_nets)
         self.device_tree.load_devices(self.nodes, blocks=blocks)
@@ -447,19 +575,59 @@ class LayoutEditorTab(QWidget):
             item.signals.drag_started.connect(self._on_device_drag_start)
             item.signals.drag_finished.connect(self._on_device_drag_end)
         self._update_grid_counts()
-        self._on_selection_count_changed()
+        self._on_editor_selection_changed()
 
     # =================================================================
     #  Selection / grid helpers
     # =================================================================
+    def _find_node(self, dev_id):
+        for node in self.nodes or []:
+            if node.get("id") == dev_id:
+                return node
+        return None
+
+    def _show_device_properties(self, dev_id):
+        node = self._find_node(dev_id)
+        block_id = ((node or {}).get("block") or {}).get("instance")
+        block_data = self._blocks.get(block_id, {}) if block_id else {}
+        self.properties_panel.show_device_properties(
+            dev_id,
+            node,
+            terminal_nets=self._terminal_nets,
+            block_data=block_data,
+        )
+
+    def _sync_properties_from_selection(self):
+        selected_ids = self.editor.selected_device_ids()
+        if len(selected_ids) == 1:
+            self._show_device_properties(selected_ids[0])
+        elif len(selected_ids) > 1:
+            self.properties_panel.clear_properties(
+                f"{len(selected_ids)} devices selected.\nPick one device to inspect its details."
+            )
+        else:
+            self.properties_panel.clear_properties()
+
+    def _on_tree_device_selected(self, dev_id):
+        self.editor.highlight_device(dev_id)
+        self._show_device_properties(dev_id)
+        self._update_grid_counts()
+
+    def _on_tree_block_selected(self, block_id):
+        block_data = self._blocks.get(block_id, {})
+        self.properties_panel.show_block_properties(block_id, block_data)
+
     def _on_connection_selected(self, dev_id, net_name, _other):
         self.editor.highlight_device(dev_id)
+        self._show_device_properties(dev_id)
         self.editor._show_net_connections(dev_id, net_name)
 
     def _on_canvas_device_clicked(self, dev_id):
+        self._show_device_properties(dev_id)
         self._update_grid_counts()
 
-    def _on_selection_count_changed(self):
+    def _on_editor_selection_changed(self):
+        self._sync_properties_from_selection()
         self.selection_changed.emit(self.selection_count())
 
     def _update_grid_counts(self):
@@ -901,6 +1069,7 @@ class LayoutEditorTab(QWidget):
     #  Import from Netlist + Layout
     # =================================================================
     def load_example(self, sp_path, oas_path):
+        self._pending_oas_path = oas_path or None
         self.overlay.show_message(f"Loading {os.path.basename(sp_path)}...")
         self._import_worker = GenericWorker(self._run_parser_pipeline, sp_path, oas_path, True)
         self._import_worker.finished.connect(lambda data: self._on_import_completed(data, sp_path))
@@ -913,6 +1082,7 @@ class LayoutEditorTab(QWidget):
             return
         sp_path = dlg.sp_path
         oas_path = dlg.oas_path
+        self._pending_oas_path = oas_path or None
         abutment_enabled = dlg.is_abutment_enabled()
         self.overlay.show_message("Parsing design files...")
         self._import_worker = GenericWorker(self._run_parser_pipeline, sp_path, oas_path, abutment_enabled)
@@ -939,6 +1109,8 @@ class LayoutEditorTab(QWidget):
             compressed_path = out_path
             reduction = 0
         self._load_from_data_dict(data, out_path, False)
+        self._sync_klayout_source(explicit_oas=self._pending_oas_path, source_path=sp_path)
+        self._pending_oas_path = None
         num_nodes = len(data.get("nodes", []))
         msg = (
             f"Imported {num_nodes} devices from {os.path.basename(sp_path)}\n"
@@ -951,6 +1123,7 @@ class LayoutEditorTab(QWidget):
 
     def _on_import_error(self, err_msg):
         self.overlay.hide_overlay()
+        self._pending_oas_path = None
         QMessageBox.critical(self, "Import Failed", f"Failed to parse design files:\n\n{err_msg}")
 
     # =================================================================
@@ -1404,6 +1577,7 @@ class LayoutEditorTab(QWidget):
         self._terminal_nets = data.get("terminal_nets", {})
         self._current_file = file_path
         self._refresh_panels(compact=compact)
+        self._sync_klayout_source(source_path=file_path)
         self.title_changed.emit(os.path.basename(file_path))
         QTimer.singleShot(100, self.editor.fit_to_view)
 
@@ -1415,6 +1589,7 @@ class LayoutEditorTab(QWidget):
         self._current_file = file_path
         self._load_data(file_path)
         self._refresh_panels()
+        self._sync_klayout_source(source_path=file_path)
         self.title_changed.emit(os.path.basename(file_path))
 
     def do_save(self):
@@ -1844,4 +2019,4 @@ class LayoutEditorTab(QWidget):
             self._terminal_nets,
         )
         self._update_grid_counts()
-        self._on_selection_count_changed()
+        self._on_editor_selection_changed()

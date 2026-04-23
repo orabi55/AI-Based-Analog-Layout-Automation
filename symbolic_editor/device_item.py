@@ -32,6 +32,7 @@ class DeviceItem(QGraphicsRectItem):
         self._snap_grid_y = None
         self._flip_h = False
         self._flip_v = False
+        self._render_mode = "detailed"
         # Candidate highlight (auto-detected, green glow)
         self._hl_left  = None   # net name on the left  edge that can abut, or None
         self._hl_right = None   # net name on the right edge that can abut, or None
@@ -186,6 +187,10 @@ class DeviceItem(QGraphicsRectItem):
             return f"{base}_FV"
         return base
 
+    def set_render_mode(self, mode):
+        self._render_mode = mode if mode in {"detailed", "outline"} else "detailed"
+        self.update()
+
     def itemChange(self, change, value):
         """Snap dragged positions to grid so devices never float between tracks."""
         if (
@@ -243,6 +248,31 @@ class DeviceItem(QGraphicsRectItem):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         rect = self.rect()
+        if self._render_mode == "outline":
+            outline_color = QColor("#ff5252")
+            fill_color = QColor(255, 82, 82, 18)
+            painter.setBrush(QBrush(fill_color))
+            border_width = 2.2 if not self.isSelected() else 2.8
+            painter.setPen(QPen(outline_color, border_width, Qt.PenStyle.SolidLine))
+            painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 2, 2)
+
+            name_font_size = max(6, min(12, int(rect.width() * 0.085)))
+            name_font = QFont("Segoe UI", name_font_size, QFont.Weight.Bold)
+            painter.setFont(name_font)
+            painter.setPen(QColor("#ffffff"))
+            painter.drawText(
+                rect.adjusted(4, 4, -4, -4),
+                Qt.AlignmentFlag.AlignCenter,
+                self.device_name,
+            )
+
+            if self._match_color is not None:
+                lock_pen = QPen(self._match_color, 2.4, Qt.PenStyle.SolidLine)
+                painter.setPen(lock_pen)
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawRoundedRect(rect.adjusted(3, 3, -3, -3), 2, 2)
+            return
+
         w    = rect.width()
         h    = rect.height()
         x0   = rect.x()

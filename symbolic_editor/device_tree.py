@@ -1,24 +1,20 @@
 # -*- coding: utf-8 -*-
 """
-Device Tree Panel -- left sidebar showing device hierarchy and
-terminal connectivity.
+Design hierarchy panel with Instances, Nets, and Groups tabs.
 """
 
-import re
-
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
+    QFrame,
     QHBoxLayout,
     QLabel,
-    QFrame,
     QPushButton,
     QTreeWidget,
     QTreeWidgetItem,
-    QLineEdit,
+    QVBoxLayout,
+    QWidget,
 )
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QColor, QFont
 
 try:
     from .icons import icon_panel_toggle
@@ -27,18 +23,21 @@ except ImportError:
 
 
 class DeviceTreePanel(QWidget):
-    """Left panel showing devices, hierarchy, and terminal connectivity."""
+    """Left sidebar showing design hierarchy, nets, and groups."""
 
     device_selected = Signal(str)
-    connection_selected = Signal(str, str, str)  # (dev_id, net_name, other_dev_id)
-    block_selected = Signal(str)  # (instance_name) — emitted when block group clicked
-    toggle_requested = Signal()  # emitted when the user clicks the panel-toggle button
+    connection_selected = Signal(str, str, str)
+    block_selected = Signal(str)
+    toggle_requested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._terminal_nets = {}  # dev_id -> {"D": net, "G": net, "S": net}
+        self._terminal_nets = {}
         self._edges = []
-        self._conn_map = {}  # dev_id -> [(other_id, net), ...]
+        self._conn_map = {}
+        self._nodes = []
+        self._blocks = {}
+        self._active_tab = "instances"
         self._init_ui()
 
     def _init_ui(self):
@@ -46,26 +45,24 @@ class DeviceTreePanel(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # Header
         header = QFrame()
-        header.setFixedHeight(48)
+        header.setFixedHeight(44)
         header.setStyleSheet(
             "background-color: #1a1f2b;"
             "border-bottom: 1px solid #2d3548;"
         )
         header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(14, 0, 14, 0)
-        title = QLabel("📋 Device Hierarchy")
-        title.setFont(QFont("Segoe UI", 12, QFont.Weight.DemiBold))
-        title.setStyleSheet("color: #c8d0dc;")
-        header_layout.addWidget(title)
+        header_layout.setContentsMargins(12, 0, 12, 0)
 
+        title = QLabel("Design Hierarchy")
+        title.setFont(QFont("Segoe UI", 11, QFont.Weight.DemiBold))
+        title.setStyleSheet("color: #d7dfeb;")
+        header_layout.addWidget(title)
         header_layout.addStretch()
 
-        # Panel toggle button
         toggle_btn = QPushButton()
         toggle_btn.setIcon(icon_panel_toggle())
-        toggle_btn.setFixedSize(28, 28)
+        toggle_btn.setFixedSize(26, 26)
         toggle_btn.setToolTip("Hide panel")
         toggle_btn.setStyleSheet(
             """
@@ -84,83 +81,105 @@ class DeviceTreePanel(QWidget):
         )
         toggle_btn.clicked.connect(self.toggle_requested.emit)
         header_layout.addWidget(toggle_btn)
-
         layout.addWidget(header)
 
-        # Search / filter bar
-        self._search = QLineEdit()
-        self._search.setPlaceholderText("\U0001f50d  Filter devices\u2026")
-        self._search.setClearButtonEnabled(True)
-        self._search.setFixedHeight(30)
-        self._search.setStyleSheet(
-            """
-            QLineEdit {
-                background-color: #161c28;
-                border: 1px solid #2d3548;
-                border-radius: 6px;
-                padding: 2px 10px;
-                color: #c0cad8;
-                font-family: 'Segoe UI';
-                font-size: 11px;
-                margin: 6px 8px 4px 8px;
-            }
-            QLineEdit:focus {
-                border-color: #4a90d9;
-            }
-            """
+        tab_bar = QFrame()
+        tab_bar.setFixedHeight(40)
+        tab_bar.setStyleSheet(
+            "background-color: #151a23; border-bottom: 1px solid #2d3548;"
         )
-        self._search.textChanged.connect(self._on_filter_changed)
-        layout.addWidget(self._search)
+        tab_layout = QHBoxLayout(tab_bar)
+        tab_layout.setContentsMargins(8, 4, 8, 4)
+        tab_layout.setSpacing(4)
 
-        # Tree widget
+        tab_style = """
+        QPushButton {
+            background-color: transparent;
+            color: #808896;
+            border: none;
+            border-radius: 6px;
+            padding: 6px 16px;
+            font-family: 'Segoe UI';
+            font-size: 10pt;
+            font-weight: 600;
+        }
+        QPushButton:hover {
+            background-color: rgba(255,255,255,0.08);
+            color: #a8b4c4;
+        }
+        QPushButton:checked {
+            background-color: #2d4665;
+            color: #ffffff;
+        }
+        """
+
+        self.tab_instances = QPushButton("Instances")
+        self.tab_instances.setCheckable(True)
+        self.tab_instances.setChecked(True)
+        self.tab_instances.setStyleSheet(tab_style)
+        self.tab_instances.clicked.connect(lambda: self._switch_tab("instances"))
+        tab_layout.addWidget(self.tab_instances)
+
+        self.tab_nets = QPushButton("Nets")
+        self.tab_nets.setCheckable(True)
+        self.tab_nets.setStyleSheet(tab_style)
+        self.tab_nets.clicked.connect(lambda: self._switch_tab("nets"))
+        tab_layout.addWidget(self.tab_nets)
+
+        self.tab_groups = QPushButton("Groups")
+        self.tab_groups.setCheckable(True)
+        self.tab_groups.setStyleSheet(tab_style)
+        self.tab_groups.clicked.connect(lambda: self._switch_tab("groups"))
+        tab_layout.addWidget(self.tab_groups)
+
+        tab_layout.addStretch()
+        layout.addWidget(tab_bar)
+
         self.tree = QTreeWidget()
         self.tree.setHeaderHidden(True)
-        self.tree.setIndentation(20)
+        self.tree.setIndentation(16)
         self.tree.setAnimated(True)
         self.tree.setStyleSheet(
             """
             QTreeWidget {
-                background-color: #111621;
+                background-color: #0f1318;
                 border: none;
-                color: #c0cad8;
-                font-family: 'Segoe UI', sans-serif;
-                font-size: 12px;
-                padding: 6px;
+                color: #b8c4d4;
+                font-family: 'Segoe UI';
+                font-size: 11px;
+                padding: 4px;
             }
             QTreeWidget::item {
-                padding: 5px 8px;
-                border-radius: 6px;
-                margin: 1px 3px;
+                padding: 4px 6px;
+                border-radius: 4px;
+                margin: 1px 2px;
             }
             QTreeWidget::item:hover {
-                background-color: #1e2a3a;
+                background-color: #1a2230;
             }
             QTreeWidget::item:selected {
-                background-color: rgba(74, 144, 217, 0.25);
+                background-color: rgba(74, 144, 217, 0.30);
                 color: #ffffff;
             }
             QTreeWidget::branch {
-                background-color: #111621;
+                background-color: #0f1318;
             }
             QTreeWidget::branch:has-children:!has-siblings:closed,
-            QTreeWidget::branch:closed:has-children:has-siblings {
-                image: none;
-                border-image: none;
-            }
+            QTreeWidget::branch:closed:has-children:has-siblings,
             QTreeWidget::branch:open:has-children:!has-siblings,
             QTreeWidget::branch:open:has-children:has-siblings {
                 image: none;
                 border-image: none;
             }
             QScrollBar:vertical {
-                width: 8px;
+                width: 6px;
                 background: transparent;
-                border-radius: 4px;
+                border-radius: 3px;
             }
             QScrollBar::handle:vertical {
                 background: #2d3548;
-                border-radius: 4px;
-                min-height: 30px;
+                border-radius: 3px;
+                min-height: 24px;
             }
             QScrollBar::handle:vertical:hover {
                 background: #3d5066;
@@ -171,10 +190,16 @@ class DeviceTreePanel(QWidget):
             """
         )
         self.tree.itemClicked.connect(self._on_item_clicked)
-        layout.addWidget(self.tree)
+        layout.addWidget(self.tree, 1)
+
+    def _switch_tab(self, tab_name):
+        self._active_tab = tab_name
+        self.tab_instances.setChecked(tab_name == "instances")
+        self.tab_nets.setChecked(tab_name == "nets")
+        self.tab_groups.setChecked(tab_name == "groups")
+        self.load_devices(self._nodes, blocks=self._blocks)
 
     def set_edges(self, edges):
-        """Store edge data and build connectivity lookup."""
         self._edges = edges or []
         self._conn_map.clear()
         for edge in self._edges:
@@ -186,172 +211,172 @@ class DeviceTreePanel(QWidget):
                 self._conn_map.setdefault(tgt, []).append((src, net))
 
     def set_terminal_nets(self, terminal_nets):
-        """Store terminal-to-net mapping per device.
-        terminal_nets: {dev_id: {'D': net, 'G': net, 'S': net}}
-        """
         self._terminal_nets = terminal_nets or {}
 
     def load_devices(self, nodes, blocks=None):
-        """Populate tree from the placement JSON nodes.
-
-        Devices are grouped hierarchically:
-          Level 1: Parent device (e.g. MM3, MM6)
-          Level 2: Multiplier/array children (e.g. MM3_1..MM3_8, or MM9<1>..MM9<7>)
-          Level 3: Finger children (e.g. MM3_1_f1..MM3_1_fN)
-
-        Single devices (m=1, nf=1, no array) appear directly without nesting.
-
-        Args:
-            nodes: list of node dicts
-            blocks: optional {inst: {"subckt": str, "devices": [str, ...]}}
-        """
         self.tree.clear()
+        self._nodes = nodes or []
+        self._blocks = blocks or {}
 
-        # ── Block groups (if available) ──
-        if blocks:
-            block_colors = [
-                "#ffa500", "#00bfff", "#32cd32", "#ff69b4",
-                "#8a2be2", "#ffd700", "#00ced1", "#ff6347",
-            ]
-            blocks_root = QTreeWidgetItem(
-                self.tree, [f"🧩 Blocks ({len(blocks)})"]
-            )
-            blocks_root.setFont(0, QFont("Segoe UI", 11, QFont.Weight.Bold))
-            blocks_root.setForeground(0, QColor("#e0c97f"))
+        if self._active_tab == "instances":
+            self._populate_instances_tab()
+        elif self._active_tab == "nets":
+            self._populate_nets_tab()
+        else:
+            self._populate_groups_tab()
 
-            for idx, (inst_name, info) in enumerate(blocks.items()):
-                subckt = info.get("subckt", "?")
-                devices = info.get("devices", [])
-                color = block_colors[idx % len(block_colors)]
+    def _populate_instances_tab(self):
+        real_nmos = []
+        real_pmos = []
+        dummies = []
+        passives = []
 
+        for node in self._nodes:
+            dev_id = str(node.get("id", ""))
+            dev_type = str(node.get("type", "")).lower()
+            is_dummy = node.get("is_dummy", False) or dev_id.upper().startswith("DUMMY")
+            if is_dummy:
+                dummies.append(node)
+            elif dev_type == "pmos":
+                real_pmos.append(node)
+            elif dev_type == "nmos":
+                real_nmos.append(node)
+            else:
+                passives.append(node)
+
+        if real_nmos:
+            root = QTreeWidgetItem(self.tree, [f"NMOS  |  {len(real_nmos)} devices"])
+            root.setFont(0, QFont("Segoe UI", 10, QFont.Weight.Bold))
+            root.setForeground(0, QColor("#7ec8e3"))
+            for parent_name, (children, meta) in sorted(self._group_by_parent(real_nmos).items()):
+                self._add_hierarchy_group(root, parent_name, children, meta)
+            root.setExpanded(True)
+
+        if real_pmos:
+            root = QTreeWidgetItem(self.tree, [f"PMOS  |  {len(real_pmos)} devices"])
+            root.setFont(0, QFont("Segoe UI", 10, QFont.Weight.Bold))
+            root.setForeground(0, QColor("#e58a8a"))
+            for parent_name, (children, meta) in sorted(self._group_by_parent(real_pmos).items()):
+                self._add_hierarchy_group(root, parent_name, children, meta)
+            root.setExpanded(True)
+
+        if dummies:
+            root = QTreeWidgetItem(self.tree, [f"Dummies  |  {len(dummies)} devices"])
+            root.setFont(0, QFont("Segoe UI", 10, QFont.Weight.Bold))
+            root.setForeground(0, QColor("#d28ac4"))
+            for node in sorted(dummies, key=lambda item: item.get("id", "")):
+                self._add_device_item(root, node)
+            root.setExpanded(True)
+
+        if passives:
+            root = QTreeWidgetItem(self.tree, [f"Passives  |  {len(passives)} devices"])
+            root.setFont(0, QFont("Segoe UI", 10, QFont.Weight.Bold))
+            root.setForeground(0, QColor("#f0b772"))
+            for node in sorted(passives, key=lambda item: item.get("id", "")):
+                self._add_device_item(root, node)
+            root.setExpanded(True)
+
+    def _populate_nets_tab(self):
+        all_nets = self._collect_all_nets()
+        if not all_nets:
+            return
+
+        supply_nets = {"VDD", "VSS", "GND", "VCC", "AVDD", "AVSS", "DVDD", "DVSS"}
+        signal_nets = []
+        power_nets = []
+
+        for net_name, devices in sorted(all_nets.items()):
+            if net_name.upper() in supply_nets:
+                power_nets.append((net_name, devices))
+            else:
+                signal_nets.append((net_name, devices))
+
+        if signal_nets:
+            signals_root = QTreeWidgetItem(self.tree, [f"Signals  |  {len(signal_nets)}"])
+            signals_root.setFont(0, QFont("Segoe UI", 10, QFont.Weight.Bold))
+            signals_root.setForeground(0, QColor("#77aa77"))
+            for net_name, devices in signal_nets:
+                self._add_net_item(signals_root, net_name, devices)
+            signals_root.setExpanded(True)
+
+        if power_nets:
+            power_root = QTreeWidgetItem(self.tree, [f"Power  |  {len(power_nets)}"])
+            power_root.setFont(0, QFont("Segoe UI", 10, QFont.Weight.Bold))
+            power_root.setForeground(0, QColor("#cc8844"))
+            for net_name, devices in power_nets:
+                self._add_net_item(power_root, net_name, devices)
+            power_root.setExpanded(True)
+
+    def _populate_groups_tab(self):
+        if self._blocks:
+            blocks_root = QTreeWidgetItem(self.tree, [f"Blocks  |  {len(self._blocks)}"])
+            blocks_root.setFont(0, QFont("Segoe UI", 10, QFont.Weight.Bold))
+            blocks_root.setForeground(0, QColor("#d9c279"))
+            for block_name, info in sorted(self._blocks.items()):
                 block_item = QTreeWidgetItem(
                     blocks_root,
-                    [f"📦 {inst_name}: {subckt}  ({len(devices)} devices)"]
+                    [f"{block_name}  |  {len(info.get('devices', []))} devices"],
                 )
                 block_item.setFont(0, QFont("Segoe UI", 10, QFont.Weight.DemiBold))
-                block_item.setForeground(0, QColor(color))
-                # Store block instance name for click handling
-                block_item.setData(0, Qt.ItemDataRole.UserRole, None)
-                block_item.setData(0, Qt.ItemDataRole.UserRole + 3, inst_name)
-
-                # Add member devices under this block
-                for dev_id in devices:
-                    dev_node = next(
-                        (n for n in nodes if n.get("id") == dev_id), None
-                    )
-                    if dev_node:
-                        self._add_device_item(block_item, dev_node)
-
-                block_item.setExpanded(True)
-
+                block_item.setForeground(0, QColor("#d9c279"))
+                block_item.setData(0, Qt.ItemDataRole.UserRole, "__block__")
+                block_item.setData(0, Qt.ItemDataRole.UserRole + 3, block_name)
+                for dev_id in sorted(info.get("devices", [])):
+                    child = QTreeWidgetItem(block_item, [f"  {dev_id}"])
+                    child.setForeground(0, QColor("#93a4b7"))
+                    child.setFont(0, QFont("Segoe UI", 9))
+                    child.setData(0, Qt.ItemDataRole.UserRole, dev_id)
+                block_item.setExpanded(False)
             blocks_root.setExpanded(True)
 
-        # ── Group devices by parent (hierarchical grouping) ──
-        parent_groups = self._group_by_parent(nodes)
+        parent_groups = {}
+        for parent_name, (children, _meta) in self._group_by_parent(self._nodes).items():
+            if len(children) > 1:
+                parent_groups[parent_name] = [n.get("id", "") for n in children]
 
-        # ── Separate into NMOS / PMOS ──
-        nmos_groups, pmos_groups = {}, {}
-        for parent_name, (children, meta) in parent_groups.items():
-            if children:
-                dev_type = children[0].get("type", "nmos")
-            else:
-                dev_type = "nmos"
-            if dev_type == "pmos":
-                pmos_groups[parent_name] = (children, meta)
-            else:
-                nmos_groups[parent_name] = (children, meta)
-
-        # NMOS group
-        if nmos_groups:
-            nmos_root = QTreeWidgetItem(
-                self.tree, [f"⬜ NMOS Devices ({len(nmos_groups)} groups)"]
-            )
-            nmos_root.setFont(0, QFont("Segoe UI", 11, QFont.Weight.Bold))
-            nmos_root.setForeground(0, QColor("#7ec8e3"))
-            for parent_name in sorted(nmos_groups.keys()):
-                children, meta = nmos_groups[parent_name]
-                self._add_hierarchy_group(nmos_root, parent_name, children, meta)
-            nmos_root.setExpanded(True)
-
-        # PMOS group
-        if pmos_groups:
-            pmos_root = QTreeWidgetItem(
-                self.tree, [f"⬜ PMOS Devices ({len(pmos_groups)} groups)"]
-            )
-            pmos_root.setFont(0, QFont("Segoe UI", 11, QFont.Weight.Bold))
-            pmos_root.setForeground(0, QColor("#e87474"))
-            for parent_name in sorted(pmos_groups.keys()):
-                children, meta = pmos_groups[parent_name]
-                self._add_hierarchy_group(pmos_root, parent_name, children, meta)
-            pmos_root.setExpanded(True)
-
-    # ── Hierarchical grouping helpers ─────────────────────────────────
+        if parent_groups:
+            groups_root = QTreeWidgetItem(self.tree, [f"Device Groups  |  {len(parent_groups)}"])
+            groups_root.setFont(0, QFont("Segoe UI", 10, QFont.Weight.Bold))
+            groups_root.setForeground(0, QColor("#bc9ce0"))
+            for group_name, dev_ids in sorted(parent_groups.items()):
+                group_item = QTreeWidgetItem(
+                    groups_root,
+                    [f"{group_name}  |  {len(dev_ids)} devices"],
+                )
+                group_item.setFont(0, QFont("Segoe UI", 10, QFont.Weight.DemiBold))
+                group_item.setForeground(0, QColor("#bc9ce0"))
+                for dev_id in sorted(dev_ids):
+                    child = QTreeWidgetItem(group_item, [f"  {dev_id}"])
+                    child.setForeground(0, QColor("#9a8eb8"))
+                    child.setFont(0, QFont("Segoe UI", 9))
+                    child.setData(0, Qt.ItemDataRole.UserRole, dev_id)
+                group_item.setExpanded(False)
+            groups_root.setExpanded(True)
 
     def _group_by_parent(self, nodes):
-        """Group expanded finger nodes by their logical parent device.
-
-        Each node's electrical dict contains:
-          - parent: original device name (set by parse_mos on each child)
-          - m: original multiplier count
-          - array_size: not used anymore; array count = number of children
-          - multiplier_index: m-level index (for array/multiplier copies)
-          - finger_index: f-level index (for finger children)
-
-        Returns dict: parent_name -> (child_nodes, meta_dict)
-        """
         groups = {}
         for node in nodes:
             elec = node.get("electrical", {})
             parent = elec.get("parent")
-
-            if parent:
-                if parent not in groups:
-                    groups[parent] = {
-                        "children": [],
-                        "m": elec.get("m", 1),
-                        "type": node.get("type", "nmos"),
-                    }
-                groups[parent]["children"].append(node)
-            else:
-                # Standalone device (not expanded)
-                name = node.get("id", "unknown")
-                groups[name] = {
-                    "children": [node],
+            key = parent or node.get("id", "unknown")
+            if key not in groups:
+                groups[key] = {
+                    "children": [],
                     "m": elec.get("m", 1),
                     "type": node.get("type", "nmos"),
                 }
+            groups[key]["children"].append(node)
 
         return {
-            name: (info["children"], {
-                "m": info["m"],
-                "type": info["type"],
-            })
+            name: (info["children"], {"m": info["m"], "type": info["type"]})
             for name, info in groups.items()
         }
 
     def _add_hierarchy_group(self, parent, name, children, meta):
-        """Add a hierarchical device group to the tree.
-
-        Display hierarchy:
-          🔷 MM9 (array=8)          ← Level 0: parent
-            ├── 🔸 MM9_m1 (nf=1)     ← Level 1: array/multiplier copy
-            │   └── 🔹 MM9_m1        ← Level 2: finger (if nf>1)
-            ├── 🔸 MM9_m2 (nf=1)
-            └── ...
-
-          🔷 MM6 (m=3, nf=5)        ← Level 0: parent
-            ├── 🔸 MM6_m1 (nf=5)     ← Level 1: multiplier copy
-            │   ├── 🔹 MM6_m1_f1     ← Level 2: fingers
-            │   └── ...
-            └── ...
-
-          🔷 MM1 (nf=1, nfin=4)     ← Single device, no nesting
-        """
-        m = meta.get("m", 1)
+        m_count = meta.get("m", 1)
         dev_type = meta.get("type", "nmos")
         total_children = len(children)
 
-        # Determine structure from children's indices
         has_mult = any(
             n.get("electrical", {}).get("multiplier_index") is not None
             for n in children
@@ -360,244 +385,207 @@ class DeviceTreePanel(QWidget):
             n.get("electrical", {}).get("finger_index") is not None
             for n in children
         )
-        has_array = any(
-            n.get("electrical", {}).get("array_index") is not None
-            for n in children
-        )
 
-        # Compute m-level and f-level counts
         if has_mult:
-            mult_indices = set()
-            for n in children:
-                mi = n.get("electrical", {}).get("multiplier_index")
-                if mi is not None:
-                    mult_indices.add(mi)
-            m_count = len(mult_indices)
+            m_indices = {
+                n.get("electrical", {}).get("multiplier_index")
+                for n in children
+                if n.get("electrical", {}).get("multiplier_index") is not None
+            }
+            m_groups = len(m_indices)
         else:
-            m_count = 1
+            m_groups = 1
 
         if has_finger:
-            # Count fingers per multiplier group
             fingers_per_mult = {}
-            for n in children:
-                mi = n.get("electrical", {}).get("multiplier_index", 0)
-                fi = n.get("electrical", {}).get("finger_index")
-                if fi is not None:
-                    fingers_per_mult.setdefault(mi, set()).add(fi)
-            # All multiplier groups should have the same finger count
-            nf_per_mult = max(len(v) for v in fingers_per_mult.values()) if fingers_per_mult else 1
+            for node in children:
+                elec = node.get("electrical", {})
+                mult_idx = elec.get("multiplier_index", 1)
+                finger_idx = elec.get("finger_index")
+                if finger_idx is not None:
+                    fingers_per_mult.setdefault(mult_idx, set()).add(finger_idx)
+            nf_per_group = max((len(vals) for vals in fingers_per_mult.values()), default=1)
         else:
-            nf_per_mult = 1
+            nf_per_group = total_children if not has_mult else 1
 
-        # For finger-only devices (no m-level), nf = total_children
-        if not has_mult:
-            nf_per_mult = total_children
-
-        # --- Single device ---
-        if m_count == 1 and nf_per_mult == 1:
-            assert len(children) == 1
+        if m_groups == 1 and nf_per_group == 1 and len(children) == 1:
             self._add_device_item(parent, children[0])
             return
 
-        # --- Build parent label ---
-        label_parts = [f"🔷 {name}"]
-        if has_array and m_count > 1:
-            label_parts.append(f"(array={m_count})")
-        elif m_count > 1 and nf_per_mult > 1:
-            label_parts.append(f"(m={m_count}, nf={nf_per_mult})")
-        elif m_count > 1:
-            label_parts.append(f"(m={m_count})")
-        elif nf_per_mult > 1:
-            label_parts.append(f"(nf={nf_per_mult})")
+        label = [name]
+        if m_groups > 1 and nf_per_group > 1:
+            label.append(f"m={m_groups}, nf={nf_per_group}")
+        elif m_groups > 1:
+            label.append(f"m={m_groups}")
+        elif nf_per_group > 1:
+            label.append(f"nf={nf_per_group}")
 
-        parent_label = " ".join(label_parts)
-        parent_item = QTreeWidgetItem(parent, [parent_label])
-        parent_item.setFont(0, QFont("Segoe UI", 11, QFont.Weight.DemiBold))
-
-        if dev_type == "pmos":
-            parent_item.setForeground(0, QColor("#e87474"))
-        else:
-            parent_item.setForeground(0, QColor("#7ec8e3"))
-
+        parent_item = QTreeWidgetItem(parent, [f"{label[0]}  |  {label[1] if len(label) > 1 else 'group'}"])
+        parent_item.setFont(0, QFont("Segoe UI", 10, QFont.Weight.DemiBold))
+        parent_item.setForeground(0, QColor("#e58a8a" if dev_type == "pmos" else "#7ec8e3"))
         parent_item.setData(0, Qt.ItemDataRole.UserRole, None)
         parent_item.setData(0, Qt.ItemDataRole.UserRole + 1, children[0].get("id", ""))
         parent_item.setExpanded(False)
 
-        # --- Sort children by multiplier index, then finger index ---
-        def _sort_key(node):
+        def sort_key(node):
             elec = node.get("electrical", {})
-            mi = elec.get("multiplier_index") or 0
-            fi = elec.get("finger_index") or 0
-            return (mi, fi)
-        children.sort(key=_sort_key)
+            return (
+                elec.get("multiplier_index") or 0,
+                elec.get("finger_index") or 0,
+                node.get("id", ""),
+            )
 
-        # --- Two-level tree: multiplier groups with finger children ---
-        if m_count > 1 and nf_per_mult > 1:
-            # Group children by multiplier index
-            mult_groups = {}
+        children = sorted(children, key=sort_key)
+
+        if m_groups > 1 and nf_per_group > 1:
+            grouped = {}
             for child in children:
-                elec = child.get("electrical", {})
-                mi = elec.get("multiplier_index", 1)
-                mult_groups.setdefault(mi, []).append(child)
-
-            for mi in sorted(mult_groups.keys()):
-                m_children = mult_groups[mi]
-                m_children.sort(key=lambda n: n.get("electrical", {}).get("finger_index", 0))
-
-                m_label = f"🔸 {name}_m{mi} (nf={len(m_children)})"
-                m_item = QTreeWidgetItem(parent_item, [m_label])
-                m_item.setFont(0, QFont("Segoe UI", 10, QFont.Weight.DemiBold))
-                m_item.setForeground(0, QColor("#c0a060"))
-                m_item.setData(0, Qt.ItemDataRole.UserRole, None)
-                m_item.setData(0, Qt.ItemDataRole.UserRole + 1, m_children[0].get("id", ""))
-                m_item.setExpanded(False)
-
-                for child in m_children:
-                    self._add_finger_item(m_item, child)
-
-        # --- One-level tree: multiplier/array copies only ---
-        elif m_count > 1 and nf_per_mult == 1:
+                mult_idx = child.get("electrical", {}).get("multiplier_index", 1)
+                grouped.setdefault(mult_idx, []).append(child)
+            for mult_idx, mult_children in sorted(grouped.items()):
+                mult_item = QTreeWidgetItem(
+                    parent_item,
+                    [f"{name}_m{mult_idx}  |  {len(mult_children)} fingers"],
+                )
+                mult_item.setFont(0, QFont("Segoe UI", 9, QFont.Weight.DemiBold))
+                mult_item.setForeground(0, QColor("#d5b46b"))
+                mult_item.setData(0, Qt.ItemDataRole.UserRole, None)
+                mult_item.setData(0, Qt.ItemDataRole.UserRole + 1, mult_children[0].get("id", ""))
+                for child in mult_children:
+                    self._add_device_item(mult_item, child)
+        else:
             for child in children:
                 self._add_device_item(parent_item, child)
 
-        # --- One-level tree: fingers only ---
-        elif m_count == 1 and nf_per_mult > 1:
-            for child in children:
-                self._add_device_item(parent_item, child)
-
-    def _add_finger_item(self, parent, dev):
-        """Add a finger device item with its terminal connections."""
-        dev_id = dev.get("id", "unknown")
-        elec = dev.get("electrical", {})
-        nf = elec.get("nf", 1)
-        nfin = elec.get("nfin", "?")
-        info = f"🔹 {dev_id}  (nf={nf}, nfin={nfin})"
+    def _add_device_item(self, parent, node):
+        dev_id = node.get("id", "unknown")
+        elec = node.get("electrical", {})
+        info = f"{dev_id}  |  nf={elec.get('nf', 1)}, nfin={elec.get('nfin', '?')}"
         item = QTreeWidgetItem(parent, [info])
         item.setData(0, Qt.ItemDataRole.UserRole, dev_id)
-        item.setFont(0, QFont("Segoe UI", 11))
-
-        self._add_terminal_connections(item, dev_id)
-
-    def _add_device_item(self, parent, dev):
-        """Add a device and its terminal connections as tree items."""
-        dev_id = dev.get("id", "unknown")
-        elec = dev.get("electrical", {})
-        info = f"🔹 {dev_id}  (nf={elec.get('nf', 1)}, nfin={elec.get('nfin', '?')})"
-        item = QTreeWidgetItem(parent, [info])
-        item.setData(0, Qt.ItemDataRole.UserRole, dev_id)
-        item.setFont(0, QFont("Segoe UI", 11))
-
+        item.setFont(0, QFont("Segoe UI", 9))
+        dtype = str(node.get("type", "")).lower()
+        if node.get("is_dummy") or dev_id.upper().startswith("DUMMY"):
+            item.setForeground(0, QColor("#d28ac4"))
+        elif dtype == "pmos":
+            item.setForeground(0, QColor("#e58a8a"))
+        elif dtype == "nmos":
+            item.setForeground(0, QColor("#7ec8e3"))
+        else:
+            item.setForeground(0, QColor("#f0b772"))
         self._add_terminal_connections(item, dev_id)
 
     def _add_terminal_connections(self, item, dev_id):
-        """Add terminal net and connection sub-items under a device item."""
         term_nets = self._terminal_nets.get(dev_id, {})
         connections = self._conn_map.get(dev_id, [])
-
-        # Build net -> [connected devices] map
         net_to_devs = {}
         for other_id, net in connections:
             net_to_devs.setdefault(net, []).append(other_id)
 
-        # Show each terminal with its net and connected devices
-        for term_label, term_key, icon in [
-            ("Gate", "G", "🟦"),
-            ("Drain", "D", "🟩"),
-            ("Source", "S", "🟨"),
-        ]:
+        for term_label, term_key in [("Gate", "G"), ("Drain", "D"), ("Source", "S")]:
             net_name = term_nets.get(term_key, "?")
             connected = net_to_devs.get(net_name, [])
             if connected:
-                devs_str = ", ".join(connected)
-                text = f"{icon} {term_label} ({net_name}) → {devs_str}"
+                text = f"  {term_key}  |  {net_name} -> {', '.join(sorted(connected))}"
             else:
-                text = f"{icon} {term_label} ({net_name})"
-
+                text = f"  {term_key}  |  {net_name}"
             sub = QTreeWidgetItem(item, [text])
-            sub.setForeground(0, QColor("#8899aa"))
-            sub.setFont(0, QFont("Segoe UI", 10))
+            sub.setForeground(0, QColor("#7f91a5"))
+            sub.setFont(0, QFont("Segoe UI", 9))
             sub.setData(0, Qt.ItemDataRole.UserRole, None)
             sub.setData(0, Qt.ItemDataRole.UserRole + 1, dev_id)
             sub.setData(0, Qt.ItemDataRole.UserRole + 2, net_name)
 
+    def _collect_all_nets(self):
+        net_to_devices = {}
+        for dev_id, terminals in self._terminal_nets.items():
+            for _term, net_name in terminals.items():
+                if net_name:
+                    net_to_devices.setdefault(net_name, [])
+                    if dev_id not in net_to_devices[net_name]:
+                        net_to_devices[net_name].append(dev_id)
+        return net_to_devices
+
+    def _add_net_item(self, parent, net_name, devices):
+        text = f"{net_name}  |  {len(devices)} devices"
+        item = QTreeWidgetItem(parent, [text])
+        item.setFont(0, QFont("Segoe UI", 10, QFont.Weight.DemiBold))
+        item.setForeground(0, QColor("#8fbc8f"))
+        item.setData(0, Qt.ItemDataRole.UserRole, "__net__")
+        item.setData(0, Qt.ItemDataRole.UserRole + 1, net_name)
+        item.setData(0, Qt.ItemDataRole.UserRole + 4, sorted(devices))
+
+        for dev_id in sorted(devices):
+            term_nets = self._terminal_nets.get(dev_id, {})
+            terms = [term for term, net in term_nets.items() if net == net_name]
+            term_str = "/".join(terms) if terms else "?"
+            child = QTreeWidgetItem(item, [f"  {dev_id}.{term_str}"])
+            child.setFont(0, QFont("Segoe UI", 9))
+            child.setForeground(0, QColor("#92b89b"))
+            child.setData(0, Qt.ItemDataRole.UserRole, dev_id)
+        item.setExpanded(False)
+
     def highlight_device(self, dev_id):
-        """Highlight the tree item matching the given device id (recursive)."""
         self.tree.blockSignals(True)
         self.tree.clearSelection()
 
-        def _search(parent):
-            for i in range(parent.childCount()):
-                child = parent.child(i)
-                # Check direct device role
+        def expand_ancestors(item):
+            parent = item.parent()
+            while parent is not None:
+                parent.setExpanded(True)
+                parent = parent.parent()
+
+        def search(parent):
+            for index in range(parent.childCount()):
+                child = parent.child(index)
                 if child.data(0, Qt.ItemDataRole.UserRole) == dev_id:
+                    expand_ancestors(child)
                     child.setSelected(True)
                     self.tree.scrollToItem(child)
                     return True
-                # Check fallback role (hierarchy groups)
                 if child.data(0, Qt.ItemDataRole.UserRole + 1) == dev_id:
+                    expand_ancestors(child)
                     child.setSelected(True)
                     self.tree.scrollToItem(child)
                     return True
-                if _search(child):
+                if search(child):
                     return True
             return False
 
-        _search(self.tree.invisibleRootItem())
+        found = search(self.tree.invisibleRootItem())
+        if not found and self._active_tab != "instances":
+            self.tree.blockSignals(False)
+            self._switch_tab("instances")
+            self.tree.blockSignals(True)
+            self.tree.clearSelection()
+            search(self.tree.invisibleRootItem())
         self.tree.blockSignals(False)
 
-    def _on_item_clicked(self, item, column):
-        dev_id = item.data(0, Qt.ItemDataRole.UserRole)
-        if dev_id:
-            # Device item clicked
-            self.device_selected.emit(dev_id)
-        else:
-            # Check if this is a block group item
+    def _on_item_clicked(self, item, _column):
+        role = item.data(0, Qt.ItemDataRole.UserRole)
+
+        if role == "__block__":
             block_inst = item.data(0, Qt.ItemDataRole.UserRole + 3)
             if block_inst:
                 self.block_selected.emit(block_inst)
-                return
+            return
 
-            # Check if this is a hierarchy group item (parent/mult/array)
-            # These store the first child's device id in UserRole+1
-            fallback_dev = item.data(0, Qt.ItemDataRole.UserRole + 1)
-            if fallback_dev:
-                self.device_selected.emit(fallback_dev)
-                return
+        if role == "__net__":
+            net_name = item.data(0, Qt.ItemDataRole.UserRole + 1)
+            devices = item.data(0, Qt.ItemDataRole.UserRole + 4) or []
+            if net_name and devices:
+                self.device_selected.emit(devices[0])
+                self.connection_selected.emit(devices[0], net_name, "")
+            item.setExpanded(not item.isExpanded())
+            return
 
-            # Connection sub-item clicked
-            parent_dev = item.data(0, Qt.ItemDataRole.UserRole + 1)
-            net_name = item.data(0, Qt.ItemDataRole.UserRole + 2)
-            if parent_dev and net_name:
-                self.device_selected.emit(parent_dev)
+        if role:
+            self.device_selected.emit(role)
+            return
+
+        parent_dev = item.data(0, Qt.ItemDataRole.UserRole + 1)
+        net_name = item.data(0, Qt.ItemDataRole.UserRole + 2)
+        if parent_dev:
+            self.device_selected.emit(parent_dev)
+            if net_name and net_name != "?":
                 self.connection_selected.emit(parent_dev, net_name, "")
-
-    # ── Search / Filter ──────────────────────────────────────────────
-    def _on_filter_changed(self, text):
-        """Show only tree items whose text matches the filter (case-insensitive)."""
-        query = text.strip().lower()
-        root = self.tree.invisibleRootItem()
-        self._apply_filter(root, query)
-
-    def _apply_filter(self, item, query):
-        """Recursively show/hide items. Returns True if this item or any child is visible."""
-        if not query:
-            # Show everything when the search box is empty
-            for i in range(item.childCount()):
-                child = item.child(i)
-                child.setHidden(False)
-                self._apply_filter(child, query)
-            return True
-
-        any_visible = False
-        for i in range(item.childCount()):
-            child = item.child(i)
-            child_text = (child.text(0) or "").lower()
-            child_match = query in child_text
-            descendant_match = self._apply_filter(child, query)
-            visible = child_match or descendant_match
-            child.setHidden(not visible)
-            if visible:
-                any_visible = True
-                # Auto-expand parent groups that contain a match
-                child.setExpanded(True)
-        return any_visible

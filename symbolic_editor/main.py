@@ -37,6 +37,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QHBoxLayout,
     QMenu,
+    QStatusBar,
 )
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import (
@@ -49,6 +50,27 @@ from PySide6.QtGui import (
 )
 
 from layout_tab import LayoutEditorTab
+from view_toggle import SegmentedToggle
+from icons import (
+    icon_undo,
+    icon_redo,
+    icon_fit_view,
+    icon_zoom_in,
+    icon_zoom_out,
+    icon_zoom_reset,
+    icon_select_all,
+    icon_delete,
+    icon_swap,
+    icon_flip_h,
+    icon_flip_v,
+    icon_add_dummy,
+    icon_open_file,
+    icon_import_file,
+    icon_save_file,
+    icon_export_file,
+    icon_abutment,
+    icon_ai_placement,
+)
 from widgets.welcome_screen import WelcomeScreen
 
 
@@ -84,13 +106,16 @@ class MainWindow(QMainWindow):
 
         # ── Menu bar & Toolbar ───────────────────────────────────
         self._create_menu_bar()
+        self._create_file_toolbar()
         self._create_toolbar()
+        self._create_status_bar()
 
         # ── Open initial file if given ───────────────────────────
         if initial_file and os.path.isfile(initial_file):
             self._new_tab(initial_file)
         else:
             self._stack.setCurrentIndex(0)  # show welcome
+            self._set_chrome_visible(False)
 
     # =================================================================
     #  Tab helpers
@@ -105,16 +130,21 @@ class MainWindow(QMainWindow):
         idx = self._tab_widget.addTab(tab, title)
         self._tab_widget.setCurrentIndex(idx)
         self._stack.setCurrentIndex(1)  # show tabs
+        self._set_chrome_visible(True)
+        self.setWindowTitle(f"Symbolic Layout Editor — {title}")
+        tab.editor.setFocus(Qt.FocusReason.OtherFocusReason)
 
         # Connect tab signals → toolbar updates
         tab.undo_state_changed.connect(self._sync_undo_redo)
         tab.selection_changed.connect(self._sync_selection)
         tab.grid_changed.connect(self._sync_grid)
         tab.title_changed.connect(lambda t, t_=tab: self._on_tab_title_changed(t_, t))
+        tab.workspace_mode_changed.connect(lambda _m, t_=tab: self._on_tab_workspace_mode_changed(t_))
 
         # Initial sync
         self._sync_undo_redo(tab.can_undo(), tab.can_redo())
         self._sync_selection(tab.selection_count())
+        self._sync_mode_toggles()
         return tab
 
     def _close_tab(self, index):
@@ -124,6 +154,8 @@ class MainWindow(QMainWindow):
         self._tab_widget.removeTab(index)
         if self._tab_widget.count() == 0:
             self._stack.setCurrentIndex(0)  # show welcome
+            self._set_chrome_visible(False)
+            self.setWindowTitle("Symbolic Layout Editor")
 
     def _on_tab_changed(self, index):
         tab = self.current_tab()
@@ -131,6 +163,8 @@ class MainWindow(QMainWindow):
             return
         self._sync_undo_redo(tab.can_undo(), tab.can_redo())
         self._sync_selection(tab.selection_count())
+        self._sync_mode_toggles()
+        tab.editor.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def _on_tab_title_changed(self, tab, title):
         idx = self._tab_widget.indexOf(tab)
@@ -138,6 +172,10 @@ class MainWindow(QMainWindow):
             self._tab_widget.setTabText(idx, title)
         if tab is self.current_tab():
             self.setWindowTitle(f"Symbolic Layout Editor — {title}")
+
+    def _on_tab_workspace_mode_changed(self, tab):
+        if tab is self.current_tab():
+            self._sync_mode_toggles()
 
     # =================================================================
     #  Welcome-screen handlers
@@ -163,6 +201,10 @@ class MainWindow(QMainWindow):
     def _sync_undo_redo(self, can_undo, can_redo):
         self._act_undo.setEnabled(can_undo)
         self._act_redo.setEnabled(can_redo)
+        if hasattr(self, "_tb_act_undo"):
+            self._tb_act_undo.setEnabled(can_undo)
+        if hasattr(self, "_tb_act_redo"):
+            self._tb_act_redo.setEnabled(can_redo)
 
     def _sync_selection(self, count):
         self._sel_label.setText(f"  Sel: {count}  ")
@@ -174,6 +216,22 @@ class MainWindow(QMainWindow):
         self._row_spin.setValue(rows)
         self._col_spin.setValue(cols)
         self._ignore_grid_spin = False
+
+    def _sync_mode_toggles(self):
+        tab = self.current_tab()
+        dummy_checked = bool(getattr(tab, "_dummy_mode", False)) if tab else False
+        abut_checked = bool(getattr(tab, "_abutment_mode", False)) if tab else False
+        for action, checked in (
+            (self._act_add_dummy, dummy_checked),
+            (self._act_abutment, abut_checked),
+        ):
+            blocked = action.blockSignals(True)
+            action.setChecked(checked)
+            action.blockSignals(blocked)
+        blocked = self._workspace_quick_toggle.blockSignals(True)
+        self._workspace_quick_toggle.setEnabled(tab is not None)
+        self._workspace_quick_toggle.set_mode(tab.workspace_mode() if tab else "both", emit=False)
+        self._workspace_quick_toggle.blockSignals(blocked)
 
     # =================================================================
     #  Menu bar
@@ -235,7 +293,8 @@ class MainWindow(QMainWindow):
         self._act_undo.setEnabled(False)
         self._act_redo.setEnabled(False)
         edit_menu.addSeparator()
-        edit_menu.addAction("Select &All", lambda: self._fwd("do_select_all"), QKeySequence.StandardKey.SelectAll)
+        self._act_select_all = edit_menu.addAction("Select &All", lambda: self._fwd("do_select_all"), QKeySequence.StandardKey.SelectAll)
+        self._act_select_all.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         edit_menu.addAction("&Delete Selected", lambda: self._fwd("do_delete"), QKeySequence("Del"))
         edit_menu.addSeparator()
 
@@ -268,7 +327,7 @@ class MainWindow(QMainWindow):
 
         # ── View ─────────────────────────────────────────────────
         view_menu = mb.addMenu("&View")
-        view_menu.addAction("Fit to View", lambda: self._fwd_editor("fit_to_view"), QKeySequence("Ctrl+0"))
+        view_menu.addAction("Fit to View", lambda: self._fwd_editor("fit_to_view"))
         view_menu.addAction("Zoom In", lambda: self._fwd_editor("zoom_in"), QKeySequence("Ctrl+="))
         view_menu.addAction("Zoom Out", lambda: self._fwd_editor("zoom_out"), QKeySequence("Ctrl+-"))
         view_menu.addAction("Reset Zoom", lambda: self._fwd_editor("zoom_reset"))
@@ -277,9 +336,13 @@ class MainWindow(QMainWindow):
         view_menu.addAction("Toggle Chat Panel", lambda: self._fwd("_toggle_chat_panel"))
         view_menu.addAction("Toggle KLayout Preview", lambda: self._fwd("_toggle_klayout_panel"))
         view_menu.addSeparator()
-        view_menu.addAction("Hierarchical View", lambda: self._fwd_editor("set_view_level", 0), QKeySequence("Ctrl+1"))
-        view_menu.addAction("Block View", lambda: self._fwd_editor("set_view_level", 1), QKeySequence("Ctrl+2"))
-        view_menu.addAction("Flat View", lambda: self._fwd_editor("set_view_level", 2), QKeySequence("Ctrl+3"))
+        view_menu.addAction("Detailed Device View", lambda: self._fwd_editor("show_detailed_devices"))
+        view_menu.addAction("Outline Device View", lambda: self._fwd_editor("show_outline_devices"))
+        view_menu.addAction("Block Symbols", lambda: self._fwd_editor("set_view_level", "symbol"))
+        view_menu.addSeparator()
+        view_menu.addAction("Symbolic Workspace", lambda: self._fwd("set_workspace_mode", "symbolic"), QKeySequence("Ctrl+1"))
+        view_menu.addAction("KLayout Workspace", lambda: self._fwd("set_workspace_mode", "klayout"), QKeySequence("Ctrl+2"))
+        view_menu.addAction("Both Views", lambda: self._fwd("set_workspace_mode", "both"), QKeySequence("Ctrl+3"))
 
         # ── Design ───────────────────────────────────────────────
         design_menu = mb.addMenu("&Design")
@@ -288,6 +351,7 @@ class MainWindow(QMainWindow):
         design_menu.addAction("Merge Shared Drain", lambda: self._fwd("do_merge_dd"))
         design_menu.addAction("Flip Horizontal", lambda: self._fwd("do_flip_h"), QKeySequence("Ctrl+H"))
         design_menu.addAction("Flip Vertical", lambda: self._fwd("do_flip_v"), QKeySequence("Ctrl+J"))
+        design_menu.addAction("Toggle Dummy Placement", self._toggle_dummy_action)
         design_menu.addSeparator()
         design_menu.addAction("Match Devices…", lambda: self._fwd("do_match"), QKeySequence("Ctrl+M"))
         design_menu.addAction("Unlock Matched", lambda: self._fwd("do_unlock_match"), QKeySequence("Ctrl+U"))
@@ -299,19 +363,152 @@ class MainWindow(QMainWindow):
     # =================================================================
     #  Toolbar
     # =================================================================
+    def _create_file_toolbar(self):
+        tb = QToolBar("File Quick Actions")
+        tb.setMovable(False)
+        tb.setFloatable(False)
+        tb.setAllowedAreas(Qt.ToolBarArea.TopToolBarArea)
+        tb.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+        tb.setIconSize(QSize(16, 16))
+        tb.setStyleSheet(
+            "QToolBar { background-color: #12161f; border: none; border-bottom: 1px solid #2d3548; spacing: 2px; padding: 2px 8px 4px 8px; }"
+            "QToolBar::separator { background-color: #2d3548; width: 1px; margin: 4px 6px; }"
+            "QToolButton { background: transparent; border: 1px solid transparent; border-radius: 6px; "
+            "padding: 4px; min-width: 24px; min-height: 24px; }"
+            "QToolButton:hover { background-color: #1e2a3a; border-color: #31445c; }"
+            "QToolButton:pressed { background-color: #24354a; }"
+            "QLabel { color: #8a9caf; font-family: 'Segoe UI'; font-size: 8.5pt; font-weight: 600; padding: 0 2px 0 6px; }"
+        )
+        self._file_toolbar = tb
+        self.addToolBar(Qt.ToolBarArea.TopToolBarArea, tb)
+
+        self._quick_act_import = QAction(icon_import_file(), "Import Netlist + Layout", self)
+        self._quick_act_import.setToolTip("Import netlist + layout (Ctrl+I)")
+        self._quick_act_import.triggered.connect(self._on_import)
+        tb.addAction(self._quick_act_import)
+
+        self._quick_act_open = QAction(icon_open_file(), "Open JSON", self)
+        self._quick_act_open.setToolTip("Open placement JSON (Ctrl+O)")
+        self._quick_act_open.triggered.connect(self._on_open_file)
+        tb.addAction(self._quick_act_open)
+
+        self._quick_act_save = QAction(icon_save_file(), "Save", self)
+        self._quick_act_save.setToolTip("Save current layout (Ctrl+S)")
+        self._quick_act_save.triggered.connect(lambda: self._fwd("do_save"))
+        tb.addAction(self._quick_act_save)
+
+        self._quick_act_export = QAction(icon_export_file(), "Export JSON", self)
+        self._quick_act_export.setToolTip("Export placement JSON")
+        self._quick_act_export.triggered.connect(lambda: self._fwd("do_export_json"))
+        tb.addAction(self._quick_act_export)
+
+        tb.addSeparator()
+        self._workspace_toggle_label = QLabel("View")
+        tb.addWidget(self._workspace_toggle_label)
+        self._workspace_quick_toggle = SegmentedToggle(variant="toolbar")
+        self._workspace_quick_toggle.setToolTip("Switch workspace view")
+        self._workspace_quick_toggle.mode_changed.connect(self._on_workspace_mode_changed)
+        self._workspace_quick_toggle.setEnabled(False)
+        tb.addWidget(self._workspace_quick_toggle)
+
     def _create_toolbar(self):
         tb = QToolBar("Main")
         tb.setMovable(False)
-        tb.setIconSize(QSize(20, 20))
+        tb.setFloatable(False)
+        tb.setAllowedAreas(Qt.ToolBarArea.LeftToolBarArea)
+        tb.setOrientation(Qt.Orientation.Vertical)
+        tb.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+        tb.setIconSize(QSize(18, 18))
         tb.setStyleSheet(
-            "QToolBar { background-color: #12161f; border-bottom: 1px solid #2d3548; spacing: 4px; padding: 2px 6px; }"
-            "QToolButton { background: transparent; border: 1px solid transparent; border-radius: 4px; "
-            "padding: 4px 8px; color: #c8d0dc; font-family: 'Segoe UI'; font-size: 9pt; }"
-            "QToolButton:hover { background-color: #2d3f54; border-color: #3d5066; }"
-            "QToolButton:pressed { background-color: #4a90d9; }"
-            "QToolButton:checked { background-color: #3d5066; border-color: #4a90d9; }"
+            "QToolBar { background-color: #10151d; border-right: 1px solid #2d3548; spacing: 4px; padding: 6px 5px; }"
+            "QToolButton { background: transparent; border: 1px solid transparent; border-radius: 8px; "
+            "padding: 5px; color: #c8d0dc; min-width: 28px; min-height: 28px; }"
+            "QToolButton:hover { background-color: #1e2a3a; border-color: #3d5066; }"
+            "QToolButton:pressed { background-color: #2d3f54; }"
+            "QToolButton:checked { background-color: #243a53; border-color: #4a90d9; }"
         )
-        self.addToolBar(tb)
+        self._toolbar = tb
+        self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, tb)
+
+        self._tb_act_undo = QAction(icon_undo(), "Undo", self)
+        self._tb_act_undo.setToolTip("Undo (Ctrl+Z)")
+        self._tb_act_undo.setEnabled(False)
+        self._tb_act_undo.triggered.connect(lambda: self._fwd("do_undo"))
+        tb.addAction(self._tb_act_undo)
+
+        self._tb_act_redo = QAction(icon_redo(), "Redo", self)
+        self._tb_act_redo.setToolTip("Redo (Ctrl+Y)")
+        self._tb_act_redo.setEnabled(False)
+        self._tb_act_redo.triggered.connect(lambda: self._fwd("do_redo"))
+        tb.addAction(self._tb_act_redo)
+        tb.addSeparator()
+
+        self._tb_act_fit = QAction(icon_fit_view(), "Fit View", self)
+        self._tb_act_fit.setToolTip("Fit to view (F)")
+        self._tb_act_fit.triggered.connect(lambda: self._fwd_editor("fit_to_view"))
+        tb.addAction(self._tb_act_fit)
+
+        self._tb_act_zoom_in = QAction(icon_zoom_in(), "Zoom In", self)
+        self._tb_act_zoom_in.setToolTip("Zoom in")
+        self._tb_act_zoom_in.triggered.connect(lambda: self._fwd_editor("zoom_in"))
+        tb.addAction(self._tb_act_zoom_in)
+
+        self._tb_act_zoom_out = QAction(icon_zoom_out(), "Zoom Out", self)
+        self._tb_act_zoom_out.setToolTip("Zoom out")
+        self._tb_act_zoom_out.triggered.connect(lambda: self._fwd_editor("zoom_out"))
+        tb.addAction(self._tb_act_zoom_out)
+
+        self._tb_act_zoom_reset = QAction(icon_zoom_reset(), "Reset Zoom", self)
+        self._tb_act_zoom_reset.setToolTip("Reset zoom")
+        self._tb_act_zoom_reset.triggered.connect(lambda: self._fwd_editor("zoom_reset"))
+        tb.addAction(self._tb_act_zoom_reset)
+        tb.addSeparator()
+
+        self._tb_act_swap = QAction(icon_swap(), "Swap", self)
+        self._tb_act_swap.setToolTip("Swap selected devices (Ctrl+Shift+X)")
+        self._tb_act_swap.triggered.connect(lambda: self._fwd("do_swap"))
+        tb.addAction(self._tb_act_swap)
+
+        self._tb_act_flip_h = QAction(icon_flip_h(), "Flip Horizontal", self)
+        self._tb_act_flip_h.setToolTip("Flip horizontal (Ctrl+H)")
+        self._tb_act_flip_h.triggered.connect(lambda: self._fwd("do_flip_h"))
+        tb.addAction(self._tb_act_flip_h)
+
+        self._tb_act_flip_v = QAction(icon_flip_v(), "Flip Vertical", self)
+        self._tb_act_flip_v.setToolTip("Flip vertical (Ctrl+J)")
+        self._tb_act_flip_v.triggered.connect(lambda: self._fwd("do_flip_v"))
+        tb.addAction(self._tb_act_flip_v)
+        tb.addSeparator()
+
+        self._act_add_dummy = QAction(icon_add_dummy(), "Toggle Dummy Placement", self)
+        self._act_add_dummy.setCheckable(True)
+        self._act_add_dummy.setToolTip("Toggle dummy placement mode (D)")
+        self._act_add_dummy.toggled.connect(self._on_toggle_dummy)
+        tb.addAction(self._act_add_dummy)
+
+        self._act_abutment = QAction(icon_abutment(), "Abutment Analysis", self)
+        self._act_abutment.setCheckable(True)
+        self._act_abutment.setToolTip("Analyze & apply abutment candidates")
+        self._act_abutment.toggled.connect(self._on_toggle_abutment)
+        tb.addAction(self._act_abutment)
+
+        self._tb_act_ai = QAction(icon_ai_placement(), "Run AI Placement", self)
+        self._tb_act_ai.setToolTip("Run AI placement (Ctrl+P)")
+        self._tb_act_ai.triggered.connect(lambda: self._fwd("do_ai_placement"))
+        tb.addAction(self._tb_act_ai)
+        tb.addSeparator()
+
+        self._ignore_grid_spin = False
+        self._tb_act_select_all = QAction(icon_select_all(), "Select All", self)
+        self._tb_act_select_all.setToolTip("Select all devices (Ctrl+A)")
+        self._tb_act_select_all.triggered.connect(lambda: self._fwd("do_select_all"))
+        tb.addAction(self._tb_act_select_all)
+
+        self._tb_act_delete = QAction(icon_delete(), "Delete Selected", self)
+        self._tb_act_delete.setToolTip("Delete selected devices (Delete)")
+        self._tb_act_delete.triggered.connect(lambda: self._fwd("do_delete"))
+        tb.addAction(self._tb_act_delete)
+        return
 
         tb.addAction("⬅", lambda: self._fwd("do_undo")).setToolTip("Undo (Ctrl+Z)")
         tb.addAction("➡", lambda: self._fwd("do_redo")).setToolTip("Redo (Ctrl+Y)")
@@ -374,6 +571,50 @@ class MainWindow(QMainWindow):
         )
         tb.addWidget(self._sel_label)
 
+    def _create_status_bar(self):
+        sb = QStatusBar(self)
+        sb.setSizeGripEnabled(False)
+        sb.setStyleSheet(
+            "QStatusBar { background-color: #10151d; border-top: 1px solid #2d3548; color: #9aa7b7; }"
+            "QStatusBar::item { border: none; }"
+        )
+        self.setStatusBar(sb)
+
+        spin_style = (
+            "QSpinBox { background: #1a1f2b; color: #e0e8f0; border: 1px solid #2d3548; "
+            "border-radius: 5px; padding: 2px 6px; min-width: 52px; }"
+            "QSpinBox:focus { border-color: #4a90d9; }"
+        )
+
+        sb.addPermanentWidget(QLabel("Rows"))
+        self._row_spin = QSpinBox()
+        self._row_spin.setRange(1, 20)
+        self._row_spin.setValue(2)
+        self._row_spin.setStyleSheet(spin_style)
+        self._row_spin.valueChanged.connect(self._on_row_spin_changed)
+        sb.addPermanentWidget(self._row_spin)
+
+        sb.addPermanentWidget(QLabel("Cols"))
+        self._col_spin = QSpinBox()
+        self._col_spin.setRange(1, 50)
+        self._col_spin.setValue(4)
+        self._col_spin.setStyleSheet(spin_style)
+        self._col_spin.valueChanged.connect(self._on_col_spin_changed)
+        sb.addPermanentWidget(self._col_spin)
+
+        self._sel_label = QLabel("  Sel: 0  ")
+        self._sel_label.setStyleSheet(
+            "color: #8899aa; font-family: 'Segoe UI'; font-size: 9pt; "
+            "background: #161c28; border: 1px solid #2d3548; border-radius: 5px; padding: 3px 10px;"
+        )
+        sb.addPermanentWidget(self._sel_label)
+
+    def _set_chrome_visible(self, visible):
+        self.menuBar().setVisible(visible)
+        self._file_toolbar.setVisible(visible)
+        self._toolbar.setVisible(visible)
+        self.statusBar().setVisible(visible)
+
     # =================================================================
     #  Forward helpers (delegate to active tab)
     # =================================================================
@@ -392,7 +633,6 @@ class MainWindow(QMainWindow):
     # =================================================================
     def _on_new_tab(self):
         self._new_tab()
-        self._stack.setCurrentIndex(0)  # show welcome in new empty tab area
 
     def _close_current_tab(self):
         idx = self._tab_widget.currentIndex()
@@ -403,6 +643,14 @@ class MainWindow(QMainWindow):
         tab = self.current_tab()
         if tab:
             tab.set_dummy_mode(checked)
+
+    def _on_workspace_mode_changed(self, mode):
+        tab = self.current_tab()
+        if tab:
+            tab.set_workspace_mode(mode)
+
+    def _toggle_dummy_action(self):
+        self._act_add_dummy.toggle()
 
     def _on_toggle_abutment(self, checked):
         tab = self.current_tab()
@@ -466,26 +714,27 @@ class MainWindow(QMainWindow):
                 border-bottom: 1px solid #2d3548;
             }
             QTabBar::tab {
-                background-color: #161c28;
-                color: #8899aa;
-                border: 1px solid #2d3548;
+                background-color: #171c24;
+                color: #8d9aac;
+                border: 1px solid transparent;
                 border-bottom: none;
-                border-top-left-radius: 6px;
-                border-top-right-radius: 6px;
-                padding: 6px 18px;
+                border-top-left-radius: 7px;
+                border-top-right-radius: 7px;
+                padding: 5px 14px;
+                margin-top: 4px;
                 margin-right: 2px;
                 font-family: 'Segoe UI';
-                font-size: 10pt;
-                min-width: 120px;
+                font-size: 9.5pt;
+                min-width: 96px;
             }
             QTabBar::tab:selected {
-                background-color: #1a2230;
-                color: #e0e8f0;
-                border-color: #4a90d9;
+                background-color: #1d2430;
+                color: #eef4fb;
+                border-color: #2d3548;
                 font-weight: 600;
             }
             QTabBar::tab:hover:!selected {
-                background-color: #1e2a3a;
+                background-color: #202937;
                 color: #c8d0dc;
             }
             QTabBar::close-button {
