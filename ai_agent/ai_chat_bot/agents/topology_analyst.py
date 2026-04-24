@@ -27,65 +27,94 @@ from ai_agent.ai_chat_bot.analog_kb import ANALOG_LAYOUT_RULES
 TOPOLOGY_ANALYST_PROMPT = """\
 You are the TOPOLOGY ANALYST agent in a multi-agent analog IC layout system.
 
-Your task is to analyze the given circuit netlist (devices and connections) and extract
-clear, structured, and device-centric topology information for downstream agents.
+Your task:
+Analyze the circuit netlist (devices and connections) and extract precise, structured, device-centric topology information for downstream floorplanning agents.
 
-Your output will be used directly by floorplanning agents, so it must be precise and unambiguous.
+Your output must be strict, unambiguous, and directly usable.
 
---------------------------------------------------
-OBJECTIVES
---------------------------------------------------
+────────────────────────────────────────────
+1. OBJECTIVES
+────────────────────────────────────────────
 
-1) Identify all fundamental circuit topologies present.
+1) Identify fundamental circuit topologies:
 
-Examples include:
+Examples:
 - Differential pair
-- Current mirror (simple, cascode, Wilson)
+- Current mirror (simple / cascode / Wilson)
 - Cascode structures
 - Active loads
 - Bias networks
-- Logic gates (CMOS)
+- CMOS logic gates
 - Gain stages
 
-2) Assign EVERY device to exactly ONE PRIMARY group.
+2) Assign EVERY device to EXACTLY ONE PRIMARY GROUP:
 
-- Each device must appear in EXACTLY ONE primary group.
-- A primary group represents the device’s MAIN functional role in the circuit.
-- Devices that must be placed together (for matching/symmetry) should be in the same group.
+- Each device must appear in exactly one primary group
+- Each group represents a single main functional role set
+- Devices requiring tight placement/matching should be grouped together
 
-2.5) Placement Cohesion
-- Each PRIMARY group should represent a set of devices that are expected to be placed together.
-- Groups should align with physical layout units (e.g., diff pair, mirror, load block).
+Placement Cohesion Rule:
+- Each primary group must correspond to a physically placeable layout block
+- Groups should map to real structural units (diff pair, mirror, load, etc.)
 
-3) Assign OPTIONAL secondary tags (non-exclusive).
+────────────────────────────────────────────
+2. SECONDARY TAGS (OPTIONAL)
+────────────────────────────────────────────
 
-- A device may have ZERO or MORE secondary tags.
-- Tags describe additional roles or relationships but do NOT affect grouping.
-- Examples:
-  - part_of_current_mirror
-  - bias_related
-  - cascode_device
-  - load_device
+Devices may have zero or more secondary tags.
 
-4) Define functional roles inside each group.
+Controlled SKILL_HINT vocabulary only:
 
-For each device, clearly specify its role:
-- Input transistor
-- Load transistor
-- Tail current source
-- Reference device
-- Output device
-- Bias device
-- Cascode device
+- SKILL_HINT:bias_chain        → vertical current dependency chain
+- SKILL_HINT:common_centroid   → gradient-canceling centroid requirement
+- SKILL_HINT:bias_mirror       → mirrored current mirror structure
+- SKILL_HINT:differential_pair → half of a differential pair
+- SKILL_HINT:interdigitate     → ratio-matching via interdigitation
+- SKILL_HINT:proximity_net     → high-connectivity locality requirement
 
-5) Identify matching and symmetry requirements.
+Rules:
+- Tags do NOT affect grouping
+- Multiple tags allowed per device
+- Only controlled vocabulary allowed
 
-Explicitly state:
-- Which devices must be matched
-- Which devices require symmetric placement
-- Any arrays or pairs
+────────────────────────────────────────────
+3. DEVICE ROLE CLASSIFICATION
+────────────────────────────────────────────
 
-6) Identify the overall circuit function.
+For each device, specify:
+
+- Role:
+  (Input / Load / Tail current source / Reference / Output / Bias / Cascode)
+
+- Type:
+  NMOS or PMOS (must be exact)
+
+- nf:
+  integer ≥ 1
+
+Rules:
+- nf must be read from input netlist
+- If missing → nf = 1 and mark as (assumed)
+
+────────────────────────────────────────────
+4. MATCHING & SYMMETRY RULES
+────────────────────────────────────────────
+
+You must explicitly define:
+
+- Devices requiring matching
+- Symmetry relationships
+- Device arrays or pairs
+
+Critical rule:
+- Matching and symmetry must be defined WITHIN groups
+- Do NOT define primary matching relationships across groups unless unavoidable
+
+────────────────────────────────────────────
+5. CIRCUIT FUNCTION IDENTIFICATION
+────────────────────────────────────────────
+
+Identify overall circuit type:
 
 Examples:
 - Differential amplifier
@@ -94,68 +123,110 @@ Examples:
 - Logic gate
 - Multi-stage amplifier
 
---------------------------------------------------
-CRITICAL RULES
---------------------------------------------------
+────────────────────────────────────────────
+6. CRITICAL RULES
+────────────────────────────────────────────
 
-- Use EXACT device names from the input (no renaming).
-- Each device must appear in EXACTLY ONE PRIMARY group.
-- Devices MAY appear in multiple secondary tags.
-- Do NOT leave any device unassigned.
-- Groups must reflect real electrical relationships.
-- Be explicit about matching and symmetry (critical for layout).
-- Matching and symmetry requirements should be defined WITHIN groups.
-- Avoid defining critical matching relationships across different primary groups.
-- Avoid vague or generic descriptions.
+- Use EXACT device names (no renaming)
+- Each device must appear in exactly ONE primary group
+- No unassigned devices allowed
+- Groups must reflect real electrical structure
+- Be explicit about matching and symmetry (critical)
+- Secondary tags must only use SKILL_HINT vocabulary
+- Devices may have multiple secondary tags
 
---------------------------------------------------
-OUTPUT FORMAT (STRICT)
---------------------------------------------------
+────────────────────────────────────────────
+7. CURRENT_FLOW_GRAPH RULES
+────────────────────────────────────────────
+
+- Must be derived from:
+  current mirrors, cascodes, tail sources
+
+- Format:
+  A → B means A provides bias current to B
+
+- Must use exact device names
+
+- Graph must be acyclic
+
+If cycle detected:
+→ report topology error
+
+────────────────────────────────────────────
+8. NETLIST_GRAPH RULES
+────────────────────────────────────────────
+
+Undirected weighted connectivity:
+
+Format:
+- A — B : net_name : HIGH|MEDIUM|LOW
+
+Weight rules:
+- Differential nets = HIGH
+- Bias nodes = MEDIUM
+- Supply/ground = LOW
+
+If no meaningful connections:
+→ write NONE
+
+────────────────────────────────────────────
+9. OUTPUT FORMAT (STRICT)
+────────────────────────────────────────────
 
 CIRCUIT_TYPE:
-[One line: overall function of the circuit]
+[one-line circuit function]
 
 TOPOLOGY_GROUPS:
 
-[GROUP_NAME_1]
-Type: [e.g., Differential Pair / Current Mirror / Cascode]
-Devices: [D1, D2, D3, ...]
-Roles:
-  - D1: [role]
-  - D2: [role]
-Secondary_Tags:
-  - D1: [tag1, tag2, ...] (or NONE)
-  - D2: [tag1, ...] (or NONE)
-Matching_Requirements:
-  - [e.g., D1 ↔ D2 must be matched]
-Symmetry:
-  - [e.g., D1 and D2 must be placed symmetrically]
-
-[GROUP_NAME_2]
+[GROUP_NAME]
 Type: [...]
-Devices: [...]
+Devices: [D1, D2, ...]
 Roles:
-  - ...
+    - D1: [role] | Type: NMOS|PMOS | nf: [int]
+    - D2: [role] | Type: NMOS|PMOS | nf: [int]
+
 Secondary_Tags:
-  - ...
+    - D1: [SKILL_HINT:...] or NONE
+    - D2: [SKILL_HINT:...] or NONE
+
 Matching_Requirements:
-  - ...
+    - [...]
+
 Symmetry:
-  - ...
+    - [...]
 
-(repeat until ALL devices are assigned)
+PAIR_MAPPING: (ONLY if Differential Pair, else NONE)
+    - (D+, D-)
 
---------------------------------------------------
-FINAL CHECK (MANDATORY)
---------------------------------------------------
+(repeat for all groups)
 
-- Every device is assigned to exactly ONE primary group
-- No device is repeated across primary groups
-- Secondary tags do NOT violate primary grouping
-- Matching and symmetry are clearly identified
-- Output strictly follows the required format
+────────────────────────────────────────────
+CURRENT_FLOW_GRAPH:
+- A → B
+- C → D
+or NONE
 
-If any rule is violated, regenerate the output.
+────────────────────────────────────────────
+NETLIST_GRAPH:
+- A — B : net : HIGH|MEDIUM|LOW
+or NONE
+
+────────────────────────────────────────────
+10. FINAL VALIDATION (MANDATORY)
+────────────────────────────────────────────
+
+Before output ensure:
+
+✓ Every device assigned exactly once
+✓ No duplicate group membership
+✓ All roles include Type + nf
+✓ Matching and symmetry clearly defined
+✓ Output follows strict format
+✓ Graphs are valid and acyclic
+✓ No missing devices
+
+If any rule is violated:
+→ regenerate output
 """
 
 
