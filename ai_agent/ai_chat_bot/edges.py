@@ -7,8 +7,18 @@ def route_after_drc(state: LayoutState):
     if state.get("drc_pass", False):
         return "node_human_viewer"  # If DRC passed, proceed to human viewer
     
-    if state.get("drc_retry_count", 0) < MAX_DRC_RETRIES:
+    retry_count = state.get("drc_retry_count", 0)
+    if retry_count < MAX_DRC_RETRIES:
         return "node_drc_critic"  # Loop back for another attempt
+    
+    # On final failure with many violations remaining, route back to
+    # placement specialist which will use deterministic fallback.
+    drc_flags = state.get("drc_flags", [])
+    if len(drc_flags) > 5:
+        from ai_agent.ai_chat_bot.pipeline_log import ip_step
+        ip_step("5/5 DRC Critic",
+                f"catastrophic failure ({len(drc_flags)} violations) — re-routing to placement")
+        return "node_placement_specialist"
     
     # If we run out of retries, we must move forward to avoid an infinite loop
     return "node_human_viewer"  # Proceed to human viewer even if DRC fails after max retries

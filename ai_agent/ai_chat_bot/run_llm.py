@@ -30,8 +30,8 @@ def _parse_retry_delay(exc: Exception) -> float:
                 if detail.get("@type", "").endswith("RetryInfo"):
                     delay_str = detail.get("retryDelay", "2s")
                     return float(re.sub(r"[^0-9.]", "", delay_str))
-    except Exception:
-        pass
+    except (AttributeError, KeyError, TypeError, ValueError):
+        pass  # Non-standard error format; fall through to regex fallback
 
     delay_match = re.search(
         r"retry in ([\d.]+)s", str(exc), re.IGNORECASE

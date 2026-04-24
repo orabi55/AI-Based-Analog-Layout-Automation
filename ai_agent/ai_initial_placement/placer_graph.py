@@ -1,8 +1,15 @@
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
 from ai_agent.ai_chat_bot.state import LayoutState
-from ai_agent.ai_chat_bot.nodes import *
-from ai_agent.ai_chat_bot.edges import *
+from ai_agent.ai_chat_bot.nodes import (
+    node_topology_analyst,
+    node_strategy_selector,
+    node_placement_specialist,
+    node_finger_expansion,
+    node_drc_critic,
+    node_human_viewer,
+)
+from ai_agent.ai_chat_bot.edges import route_after_drc
 
 # Initialize checkpointer (required for human-in-the-loop interrupts)
 memory = MemorySaver()
@@ -31,7 +38,11 @@ builder.add_edge("node_strategy_selector", "node_placement_specialist")
 builder.add_edge("node_placement_specialist", "node_finger_expansion")
 builder.add_edge("node_finger_expansion", "node_drc_critic")
 
-builder.add_edge("node_drc_critic", END)
+# Conditional DRC routing: loop back if DRC fails and retries remain,
+# otherwise proceed to human viewer for review.
+builder.add_conditional_edges("node_drc_critic", route_after_drc)
+
+builder.add_edge("node_human_viewer", END)
 
 # 5. Compile Graph
 app = builder.compile(checkpointer=memory)

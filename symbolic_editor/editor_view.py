@@ -5,7 +5,25 @@ grid-snapped editing.
 """
 
 import math
+import logging
+import os
 from typing import List, Dict
+
+
+def _ip_ui_quiet() -> bool:
+    """True while initial placement runs with step-only console mode."""
+    return os.environ.get("PLACEMENT_STEPS_ONLY", "0").lower() in (
+        "1", "true", "yes",
+    )
+
+
+def _dev_diag_print(*args, **kwargs) -> None:
+    """Non-error hierarchy/matched-group messages.
+    Suppressed by default. Set EDITOR_VERBOSE=1 to re-enable."""
+    if os.environ.get("EDITOR_VERBOSE", "0").lower() not in ("1", "true", "yes"):
+        return
+    kwargs.setdefault("flush", True)
+    print(*args, **kwargs)
 
 from PySide6.QtWidgets import (
     QGraphicsView,
@@ -75,7 +93,7 @@ class HierarchyAwareScene(QGraphicsScene):
                 finally:
                     self.blockSignals(False)
         except Exception:
-            pass  # Fail silently to avoid breaking selection
+            logging.debug("HierarchyAwareScene selection error", exc_info=True)
 
 
 class SymbolicEditor(QGraphicsView):
@@ -475,12 +493,22 @@ class SymbolicEditor(QGraphicsView):
         Only creates groups for devices with m>1, nf>1, or array suffix.
         Single devices are not grouped.
         """
+        # ── Deduplication guard: skip if nodes haven't changed ────────
+        import hashlib
+        ids_hash = hashlib.md5(
+            "|".join(sorted(n.get("id", "") for n in nodes)).encode()
+        ).hexdigest()
+        if hasattr(self, '_hierarchy_hash') and self._hierarchy_hash == ids_hash:
+            _dev_diag_print("[HIERARCHY] Skipped — nodes unchanged since last build")
+            return
+        self._hierarchy_hash = ids_hash
+
         # Clear old groups
         for g in self._hierarchy_groups:
             try:
                 self.scene.removeItem(g)
-            except Exception:
-                pass
+            except RuntimeError:
+                logging.debug("Failed to remove hierarchy group from scene", exc_info=True)
         self._hierarchy_groups.clear()
 
         # ── Step 1: Group devices by parent ──────────────────────────────
@@ -502,7 +530,8 @@ class SymbolicEditor(QGraphicsView):
                 else:
                     # Device has no parent - treat it as its own hierarchy group
                     standalone_devices.append((node, item))
-            except Exception:
+            except (KeyError, AttributeError, TypeError):
+                logging.debug("Failed to group device by parent", exc_info=True)
                 continue
 
         # ── Step 2: Build hierarchy info for each group ──────────────────
@@ -643,7 +672,7 @@ class SymbolicEditor(QGraphicsView):
                 continue
 
         # ── Step 3: Create hierarchy groups for standalone devices ─────────
-        print(f"[HIERARCHY] Processing {len(standalone_devices)} standalone devices")
+        _dev_diag_print(f"[HIERARCHY] Processing {len(standalone_devices)} standalone devices")
         for node, item in standalone_devices:
             try:
                 dev_id = node.get("id", "unknown")
@@ -652,7 +681,7 @@ class SymbolicEditor(QGraphicsView):
                 m = node.get("parameters", {}).get("m", 1)
                 nf = node.get("parameters", {}).get("nf", 1)
                 
-                print(f"[HIERARCHY] Standalone {dev_id}: m={m}, nf={nf}")
+                _dev_diag_print(f"[HIERARCHY] Standalone {dev_id}: m={m}, nf={nf}")
                 
                 hierarchy_info = {
                     "m": m,
@@ -668,7 +697,9 @@ class SymbolicEditor(QGraphicsView):
                     color=fill, border_color=border,
                 )
                 
-                print(f"[HIERARCHY] Created group for {dev_id}: _is_descended={group_item._is_descended}, device visible={item.isVisible()}")
+                _dev_diag_print(
+                    f"[HIERARCHY] Created group for {dev_id}: _is_descended={group_item._is_descended}, device visible={item.isVisible()}"
+                )
                 
                 # Wire up signals
                 group_item.signals.drag_finished.connect(self._on_hierarchy_drag_finished)
@@ -749,8 +780,8 @@ class SymbolicEditor(QGraphicsView):
 
                 # ── Filter 1: Skip if G is a power net ──────────
                 if g_net.upper() in _POWER_NETS:
-                    print(f"[MATCHED GROUP] Skipped: {members} — "
-                          f"G={g_net} is a power net (dummy or static)")
+                    _dev_diag_print(f"[MATCHED GROUP] Skipped: {members} — "
+                                    f"G={g_net} is a power net (dummy or static)")
                     continue
 
                 # ── Filter 2: Only match same device type ────────────
@@ -761,8 +792,10 @@ class SymbolicEditor(QGraphicsView):
                 for dev_type, typed_members in type_groups.items():
                     if len(typed_members) > 1:
                         matched_sets.append(set(typed_members))
-                        print(f"[MATCHED GROUP] Auto-detected ({dev_type}): "
-                              f"{typed_members} (shared G={g_net}, S={s_net})")
+                        _dev_diag_print(
+                            f"[MATCHED GROUP] Auto-detected ({dev_type}): "
+                            f"{typed_members} (shared G={g_net}, S={s_net})"
+                        )
 
         # ─── Merge sibling groups ────────────────────────────────────
         for matched_parents in matched_sets:
@@ -783,15 +816,17 @@ class SymbolicEditor(QGraphicsView):
                 item._sibling_group = mega_group
                 item._match_locked = True  # flag for visual feedback
 
-            print(f"[MATCHED GROUP] Merged {len(mega_group)} items across "
-                  f"{len(matched_parents)} parents: {sorted(matched_parents)}")
+            _dev_diag_print(
+                f"[MATCHED GROUP] Merged {len(mega_group)} items across "
+                f"{len(matched_parents)} parents: {sorted(matched_parents)}"
+            )
 
     def _on_hierarchy_drag_finished(self, group):
         """After moving a hierarchy group, sync positions back to node data."""
         try:
             self._sync_hierarchy_to_nodes(group)
         except Exception:
-            pass
+            logging.warning("Failed to sync hierarchy after drag", exc_info=True)
 
     def _on_hierarchy_descend(self, group):
         pass
@@ -821,7 +856,7 @@ class SymbolicEditor(QGraphicsView):
             # Device is not blocked by any hierarchy group
             return True
         except Exception:
-            # On any error, allow selection (fallback to old behavior)
+            logging.debug("Device selection check error, allowing selection", exc_info=True)
             return True
 
     def _is_hierarchy_descended(self, device_item, owning_group):
@@ -873,7 +908,7 @@ class SymbolicEditor(QGraphicsView):
                             group.descend()
                     return
         except Exception:
-            pass
+            logging.debug("Failed to descend into selected hierarchy", exc_info=True)
 
     def descend_nearest_hierarchy(self):
         """Descend into the currently selected hierarchy group."""
@@ -884,7 +919,7 @@ class SymbolicEditor(QGraphicsView):
                     group.descend()
                     return
         except Exception:
-            pass
+            logging.debug("Failed to descend into nearest hierarchy", exc_info=True)
 
     def ascend_all_hierarchy(self):
         """Ascend from all descended hierarchy groups."""
@@ -893,14 +928,14 @@ class SymbolicEditor(QGraphicsView):
                 if group._is_descended:
                     group.ascend()
         except Exception:
-            pass
+            logging.warning("Failed to ascend all hierarchies", exc_info=True)
 
     def _sync_hierarchy_to_nodes(self, group):
         """Update node data when a hierarchy group is moved."""
         try:
             self._sync_node_positions()
         except Exception:
-            pass
+            logging.warning("Failed to sync hierarchy to nodes", exc_info=True)
 
     # NOTE: keyPressEvent is defined later in the class (line ~1351)
     # The actual keyPressEvent handles both Escape (ascend) and D (descend)
@@ -1242,7 +1277,7 @@ class SymbolicEditor(QGraphicsView):
         if (self._terminal_nets
                 and hasattr(self, '_last_parent_groups')
                 and self._last_parent_groups):
-            print("[TERMINAL NETS] Re-wiring matched groups with net data...")
+            _dev_diag_print("[TERMINAL NETS] Re-wiring matched groups with net data...")
             self._wire_matched_group_locking(
                 self._last_parent_groups, self._last_raw_nodes)
 
@@ -1558,7 +1593,7 @@ class SymbolicEditor(QGraphicsView):
                     if child.isVisible():
                         rects.append(child.sceneBoundingRect())
         except Exception:
-            pass
+            logging.debug("Failed to collect hierarchy bounding rects", exc_info=True)
         union = rects[0]
         for r in rects[1:]:
             union = union.united(r)
@@ -1598,7 +1633,7 @@ class SymbolicEditor(QGraphicsView):
                         event.accept()
                         return
             except Exception:
-                pass
+                logging.debug("Escape key hierarchy ascend failed", exc_info=True)
         elif event.key() == Qt.Key.Key_D and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
             # Ctrl+D - descend into hierarchy
             try:
@@ -1606,7 +1641,7 @@ class SymbolicEditor(QGraphicsView):
                 event.accept()
                 return
             except Exception:
-                pass
+                logging.debug("Ctrl+D descend failed", exc_info=True)
         super().keyPressEvent(event)
 
     # -------------------------------------------------

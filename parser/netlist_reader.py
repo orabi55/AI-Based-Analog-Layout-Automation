@@ -90,11 +90,20 @@ def parse_value(value: str) -> float:
         'g': 1e9
     }
 
-    # try long suffix first (meg)
+    # try long suffix first (meg) to avoid 'm' matching inside 'meg'
     for suffix in sorted(scale.keys(), key=len, reverse=True):
         if value.endswith(suffix):
-            number = value[:-len(suffix)]
-            return float(number) * scale[suffix]
+            number_part = value[:-len(suffix)]
+            # Validate that the remaining part is a valid number
+            if not number_part:
+                # The entire string IS the suffix (e.g. just "meg")
+                # which is not a valid SPICE value on its own
+                break
+            try:
+                return float(number_part) * scale[suffix]
+            except ValueError:
+                # Suffix matched but prefix isn't numeric — keep trying
+                continue
 
     # pure number
     return float(value)

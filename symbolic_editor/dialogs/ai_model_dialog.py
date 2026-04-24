@@ -137,10 +137,10 @@ class AIModelSelectionDialog(QDialog):
         self.settings_stack.addWidget(alibaba_desc_box)
 
         # 7. Vertex AI Gemini
-        self.vertex_gemini_project = QLineEdit(os.environ.get("VERTEX_PROJECT_ID", ""))
+        self.vertex_gemini_project = QLineEdit(os.environ.get("VERTEX_PROJECT_ID", "project-03484c74-0ab0-4f9e-b48"))
         self.vertex_gemini_project.setPlaceholderText("Google Cloud Project ID")
-        self.vertex_gemini_location = QLineEdit(os.environ.get("VERTEX_LOCATION", "us-central1"))
-        self.vertex_gemini_location.setPlaceholderText("us-central1")
+        self.vertex_gemini_location = QLineEdit(os.environ.get("VERTEX_LOCATION", "global"))
+        self.vertex_gemini_location.setPlaceholderText("global")
         self.vertex_gemini_page = self._create_multi_page(
             [("Project ID:", self.vertex_gemini_project), ("Location:", self.vertex_gemini_location)],
             "Uses Google Cloud ADC. No API key needed. Run 'gcloud auth application-default login' first."
@@ -148,10 +148,10 @@ class AIModelSelectionDialog(QDialog):
         self.settings_stack.addWidget(self.vertex_gemini_page)
 
         # 7. Vertex AI Claude
-        self.vertex_claude_project = QLineEdit(os.environ.get("VERTEX_PROJECT_ID", ""))
+        self.vertex_claude_project = QLineEdit(os.environ.get("VERTEX_PROJECT_ID", "project-03484c74-0ab0-4f9e-b48"))
         self.vertex_claude_project.setPlaceholderText("Google Cloud Project ID")
-        self.vertex_claude_location = QLineEdit(os.environ.get("VERTEX_LOCATION", "us-east5"))
-        self.vertex_claude_location.setPlaceholderText("us-east5")
+        self.vertex_claude_location = QLineEdit(os.environ.get("VERTEX_LOCATION", "global"))
+        self.vertex_claude_location.setPlaceholderText("global")
         self.vertex_claude_page = self._create_multi_page(
             [("Project ID:", self.vertex_claude_project), ("Location:", self.vertex_claude_location)],
             "Anthropic Claude via Google Cloud Model Garden. Uses ADC auth."
@@ -299,9 +299,9 @@ class AIModelSelectionDialog(QDialog):
         selected = self.get_selected_model()
         vertex_location = ""
         if selected == "VertexGemini":
-            vertex_location = self.vertex_gemini_location.text().strip() or "us-central1"
+            vertex_location = self.vertex_gemini_location.text().strip() or "global"
         elif selected == "VertexClaude":
-            vertex_location = self.vertex_claude_location.text().strip() or "us-east5"
+            vertex_location = self.vertex_claude_location.text().strip() or "global"
         
         if vertex_location:
             os.environ["VERTEX_LOCATION"] = vertex_location

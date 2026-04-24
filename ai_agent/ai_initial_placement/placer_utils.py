@@ -342,6 +342,13 @@ def _validate_placement(original_nodes: list, result) -> list:
     if extra:
         errors.append(f"EXTRA (invented) devices: {sorted(extra)}")
 
+    # Duplicate ID check
+    from collections import Counter
+    id_counts = Counter(n.get("id") for n in placed_nodes if isinstance(n, dict) and n.get("id"))
+    duplicates = [dev_id for dev_id, count in id_counts.items() if count > 1]
+    if duplicates:
+        errors.append(f"DUPLICATE devices (appear multiple times): {sorted(duplicates)}")
+
     # Overlap check — uses actual device widths (bounding-box aligned, zero gap)
     rows = defaultdict(list)
     for n in placed_nodes:
@@ -647,11 +654,9 @@ def _build_abutment_chains(nodes: list, candidates: list) -> list[list[str]]:
         if a in id_set and b in id_set:
             union(a, b)
 
-    # CRITICAL FIX: ALSO union from embedded abutment flags
     # This ensures hierarchy siblings (MM0_f1, MM0_f2, etc.) expanded by
     # expand_groups are properly chained even if not in explicit candidates.
     # We ALWAYS check flags, regardless of whether candidates exist.
-    from collections import defaultdict
     rows = defaultdict(list)
     for n in nodes:
         y = round(float(n.get("geometry", {}).get("y", 0.0)), 3)
@@ -732,12 +737,23 @@ def _heal_abutment_positions(nodes: list, candidates: list,
     """
     ABUT_SPACING = 0.070   # µm between abutted device origins
     PITCH        = 0.294   # µm between non-abutted device origins
-    PASSIVE_Y    = 1.630   # dedicated passive row Y coordinate
 
     if not nodes:
         return nodes
 
     # ── Step 0: Enforce passive device row ──────────────────────────────
+    # Compute PASSIVE_Y dynamically based on actual transistor rows
+    # so passives never overlap with transistors regardless of row count.
+    all_ys = [round(float(n.get("geometry", {}).get("y", 0.0)), 3)
+              for n in nodes if n.get("type") not in ("res", "cap")]
+    max_transistor_y = max(all_ys) if all_ys else 0.0
+    max_height = max(
+        (float(n.get("geometry", {}).get("height", 0.668))
+         for n in nodes if n.get("type") not in ("res", "cap")),
+        default=0.668,
+    )
+    PASSIVE_Y = round(max_transistor_y + max_height + PITCH, 6)
+
     # Collect passives, force them into their own row, pack by width
     passives = [n for n in nodes if n.get("type") in ("res", "cap")]
     if passives:
@@ -872,14 +888,15 @@ def _heal_abutment_positions(nodes: list, candidates: list,
                     cursor = round(cursor + dev_w, 6)
 
         # 5. Clean abutment flags for standalone devices
+        # Singletons have no abutment partner, so both flags MUST be False.
+        # Keeping stale flags would cause _force_abutment_spacing to enforce
+        # 0.070µm spacing on non-abutted neighbors, creating overlaps.
         for seg in segments:
             if len(seg) == 1:
                 dev = seg[0]
-                abut = dev.get("abutment", {})
-                # Only preserve cross-pair flags; clear both for singletons
                 dev["abutment"] = {
-                    "abut_left":  abut.get("abut_left",  False),
-                    "abut_right": abut.get("abut_right", False),
+                    "abut_left":  False,
+                    "abut_right": False,
                 }
 
     return nodes
@@ -907,46 +924,74 @@ def _force_abutment_spacing(nodes: list, candidates: list = None) -> list:
     list
         The safety-corrected mutated node dictionaries.
     """
-    from collections import defaultdict
-    
     ABUT_SPACING = 0.070
     PITCH = 0.294
-    
-    # Group by row
+
+    # Build expected abutment pairs from candidates (inter-device) and
+    # intra-group parent key (multi-finger siblings). This prevents corrupted
+    # flags from forcing wrong spacing between unrelated devices.
+    expected_pairs: set[tuple[str, str]] = set()
+    if candidates:
+        for c in candidates:
+            expected_pairs.add((str(c.get("dev_a", "")), str(c.get("dev_b", ""))))
+    parent_of = {n.get("id", ""): re.sub(r'_[mf]\d+$', '', n.get("id", ""))
+                 for n in nodes if n.get("id", "")}
+
     row_buckets = defaultdict(list)
     for n in nodes:
         y = round(float(n.get("geometry", {}).get("y", 0.0)), 3)
         row_buckets[y].append(n)
-    
+
     fixed_count = 0
-    
+
     for y_key, row_nodes in row_buckets.items():
         # Sort by X
         row_sorted = sorted(row_nodes, key=lambda n: n.get("geometry", {}).get("x", 0.0))
-        
-        # Find all devices with abutment flags
+
+        # Find all devices with abutment flags and fix spacing with cascade
         for i in range(len(row_sorted) - 1):
             n1 = row_sorted[i]
             n2 = row_sorted[i + 1]
-            
+            n1_id = n1.get("id", "")
+            n2_id = n2.get("id", "")
+
             abut1 = n1.get("abutment", {})
             abut2 = n2.get("abutment", {})
-            
-            # If n1 has abut_right and n2 has abut_left, they MUST be spaced at 0.070
+
+            # If n1 has abut_right and n2 has abut_left, they MAY need fixing
             if abut1.get("abut_right") and abut2.get("abut_left"):
+                pair = (n1_id, n2_id)
+                is_expected = (
+                    pair in expected_pairs
+                    or parent_of.get(n1_id, n1_id) == parent_of.get(n2_id, n2_id)
+                )
+                if not is_expected:
+                    print(f"[FORCE_FIX] WARNING: unexpected abutment flags for {pair} "
+                          f"(parents: {parent_of.get(n1_id)} vs {parent_of.get(n2_id)}). Skipping.")
+                    continue
+
                 x1 = n1.get("geometry", {}).get("x", 0.0)
                 x2 = n2.get("geometry", {}).get("x", 0.0)
                 expected_x2 = round(x1 + ABUT_SPACING, 6)
-                
+
                 if abs(x2 - expected_x2) > 0.001:
-                    print(f"[FORCE_FIX] Moving {n2['id']} from x={x2:.4f} to x={expected_x2:.4f} "
+                    shift = round(expected_x2 - x2, 6)
+                    print(f"[FORCE_FIX] Moving {n2_id} from x={x2:.4f} to x={expected_x2:.4f} "
                           f"(was {abs(x2 - x1):.4f}, should be {ABUT_SPACING:.3f})")
                     n2.setdefault("geometry", {})["x"] = expected_x2
                     fixed_count += 1
-    
+
+                    # Cascade the shift to ALL subsequent devices in this row
+                    # to prevent overlaps caused by moving n2
+                    for j in range(i + 2, len(row_sorted)):
+                        later = row_sorted[j]
+                        later_geo = later.setdefault("geometry", {})
+                        later_x = later_geo.get("x", 0.0)
+                        later_geo["x"] = round(later_x + shift, 6)
+
     if fixed_count > 0:
         print(f"[FORCE_FIX] Fixed {fixed_count} device position(s)")
-    
+
     return nodes
 
 
@@ -1218,7 +1263,8 @@ Return ONLY raw JSON. No markdown, no explanation.
 
 def _convert_slots_to_geometry(slot_data: dict,
                                original_nodes: list,
-                               abutment_candidates: list | None = None) -> list:
+                               abutment_candidates: list | None = None,
+                               row_y_map: dict[str, float] | None = None) -> list:
     """Convert AI slot-based output to exact geometry coordinates.
 
     Parameters
@@ -1227,6 +1273,9 @@ def _convert_slots_to_geometry(slot_data: dict,
                           each a list of device IDs in left-to-right order.
     original_nodes      : list of original node dicts with full metadata.
     abutment_candidates : list of ``{dev_a, dev_b, ...}`` dicts.
+    row_y_map          : optional dict mapping device type ("nmos"/"pmos")
+                         to the Y coordinate for that row. Defaults to legacy
+                         2-row values (nmos=0.000, pmos=0.668).
 
     Returns
     -------
@@ -1234,7 +1283,7 @@ def _convert_slots_to_geometry(slot_data: dict,
     """
     ABUT_SPACING = 0.070
     STANDARD_PITCH = 0.294
-    ROW_Y = {"nmos": 0.000, "pmos": 0.668}
+    ROW_Y = row_y_map if row_y_map else {"nmos": 0.000, "pmos": 0.668}
 
     # Build lookup from original nodes
     node_map: dict[str, dict] = {
@@ -1242,21 +1291,26 @@ def _convert_slots_to_geometry(slot_data: dict,
         if isinstance(n, dict) and "id" in n
     }
 
-    # Build abutment pair lookup: (dev_a, dev_b) means A abuts right → B
+    # Build abutment pair lookup: (dev_a, dev_b) means A abuts right -> B
     abut_pairs: set[tuple[str, str]] = set()
     if abutment_candidates:
         for c in abutment_candidates:
             abut_pairs.add((c["dev_a"], c["dev_b"]))
-    # Also check embedded flags from original nodes
+    # Also check embedded flags from original nodes.
+    # Only pair devices that are adjacent within the same row
+    # (sorted by X) to avoid false cross-row abutment pairs.
+    row_buckets: dict[float, list] = defaultdict(list)
     for n in original_nodes:
-        abut = n.get("abutment", {})
-        nid = n.get("id", "")
-        if abut.get("abut_right"):
-            # Find the device that has abut_left and is next in some chain
-            for m in original_nodes:
-                if (m.get("abutment", {}).get("abut_left")
-                        and m.get("id", "") != nid):
-                    abut_pairs.add((nid, m["id"]))
+        y = round(float(n.get("geometry", {}).get("y", 0.0)), 3)
+        row_buckets[y].append(n)
+    for y_key, row_nodes in row_buckets.items():
+        row_sorted = sorted(row_nodes, key=lambda n: n.get("geometry", {}).get("x", 0.0))
+        for i in range(len(row_sorted) - 1):
+            n1 = row_sorted[i]
+            n2 = row_sorted[i + 1]
+            if (n1.get("abutment", {}).get("abut_right")
+                    and n2.get("abutment", {}).get("abut_left")):
+                abut_pairs.add((n1.get("id", ""), n2.get("id", "")))
 
     placed_nodes: list[dict] = []
 
