@@ -190,7 +190,7 @@ RELATIONSHIP TO OTHER SKILLS
 - Subordinate to Bias Chain (vertical order cannot be changed)
 - Works WITH Proximity_NET (but refines within clusters)
 - Works WITH Diffusion Sharing (balances density post-merge)
-
+-Operates strictly at the Step 5 Topological Grid level. Dummy insertions must reserve integer slot indices BEFORE Step 6 physical X/Y coordinate mapping occurs.
 ────────────────────────────────────
 OUTPUT REQUIREMENT
 ────────────────────────────────────

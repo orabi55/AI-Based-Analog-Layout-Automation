@@ -163,7 +163,7 @@ VALID IF:
      |centroid(Di) - center| ≤ ε
    where:
      center = (N - 1) / 2
-     ε ≤ 0.5 slot
+     ε = 0.0. "Centroid alignment must be mathematically exact based on modulo 2. If exact parity cannot be achieved on the grid or half-grid, it fails."
 
 4) Distribution quality:
    no clustering of same device beyond local symmetry requirement

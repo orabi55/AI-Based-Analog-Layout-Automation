@@ -154,7 +154,7 @@ RELATIONSHIP TO OTHER SKILLS
 - Compatible with CC/IG/MB inside local clusters
 - Strongly interacts with Proximity_NET (reinforces clustering)
 - Acts AFTER symmetry structure is defined
-
+-Acts purely as a post-placement compaction step. Evaluates adjacent assigned slots and merges compatible boundaries without altering the integer slot order or centroid math.
 ────────────────────────────────────
 OUTPUT REQUIREMENT
 ────────────────────────────────────

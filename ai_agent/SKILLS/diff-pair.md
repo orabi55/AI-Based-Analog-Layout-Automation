@@ -149,8 +149,7 @@ VALID IF:
 3) Environment equivalence:
    E(A+) ≈ E(A-) within tolerance ε
 
-4) Finger consistency:
-   nf(A+) == nf(A-) OR symmetric distribution proven
+4) Finger consistency: nf(A+) == nf(A-) EXACTLY. Unequal counts immediately trigger ✗ INVALID.
 
 5) Structural integrity:
    no pair is broken across rows or clusters
