@@ -5,6 +5,7 @@ import copy
 import json
 import re
 import time
+import logging
 from pathlib import Path
 from ai_agent.ai_chat_bot.run_llm import run_llm
 from langgraph.types import interrupt
@@ -29,6 +30,7 @@ from ai_agent.ai_chat_bot.skill_middleware import SkillMiddleware
 # Optional: Import your RAG save function if you have it
 # from ai_agent.rag_manager import save_run_as_example
 from ai_agent.ai_chat_bot.llm_factory import get_langchain_llm
+from ai_agent.ai_chat_bot.pipeline_log import steps_only, vprint, ip_step
 
 CHAT_HISTORY_JSON_PATH = Path(__file__).resolve().parents[1] / "chat_history.json"
 MAX_CHAT_HISTORY = 50  # Trim chat history to prevent unbounded growth
@@ -122,8 +124,8 @@ def _strip_thinking_text(text: str) -> str:
             parsed = json.loads(stripped)
             visible, _ = _split_content_and_thinking(parsed)
             cleaned = visible
-        except Exception:
-            pass
+        except (json.JSONDecodeError, ValueError):
+            logging.debug("Failed to parse thinking content as JSON", exc_info=True)
 
     # Remove inline serialized thinking objects.
     cleaned = re.sub(
@@ -139,7 +141,7 @@ def _strip_thinking_text(text: str) -> str:
 
 
 def _print_thinking_block(stage_tag: str, thinking_text: str):
-    if not thinking_text:
+    if not thinking_text or steps_only():
         return
     print(f"[{stage_tag}] Thinking Block:", flush=True)
     print(thinking_text, flush=True)
@@ -329,24 +331,24 @@ def node_topology_analyst(state: LayoutState):
     a confirmation question.
     """
     t0 = time.time()
-    print("\n" + "═"*60, flush=True)
-    print("  STAGE 1: TOPOLOGY ANALYST", flush=True)
-    print("═"*60, flush=True)
+    vprint("\n" + "═"*60, flush=True)
+    vprint("  STAGE 1: TOPOLOGY ANALYST", flush=True)
+    vprint("═"*60, flush=True)
     nodes = state.get("nodes", [])
     terminal_nets = state.get("terminal_nets", {})
     user_message = state.get("user_message", "Please analyze the layout topology.")
     chat_history = state.get("chat_history", [])
     selected_model = state.get("selected_model", "Gemini")
 
-    print(f"[TOPO] Devices: {len(nodes)} | Nets: {len(terminal_nets)} | Model: {selected_model}", flush=True)
+    vprint(f"[TOPO] Devices: {len(nodes)} | Nets: {len(terminal_nets)} | Model: {selected_model}", flush=True)
 
     logical_nodes = aggregate_to_logical_devices(nodes)
-    print(f"[TOPO] Aggregated {len(nodes)} fingers → {len(logical_nodes)} logical devices", flush=True)
+    vprint(f"[TOPO] Aggregated {len(nodes)} fingers → {len(logical_nodes)} logical devices", flush=True)
     
     constraint_text = topology_analyst.analyze_json(
         logical_nodes, terminal_nets
     )
-    print(f"[TOPO] Extracted {len(constraint_text.splitlines())} constraint lines", flush=True)
+    vprint(f"[TOPO] Extracted {len(constraint_text.splitlines())} constraint lines", flush=True)
 
     analyst_user = (
         f"User request: {user_message}\n\n"
@@ -359,20 +361,20 @@ def node_topology_analyst(state: LayoutState):
         analyst_user,
     )
 
-    print(f"[TOPO] Calling LLM ({selected_model}, weight=light)...", flush=True)
+    vprint(f"[TOPO] Calling LLM ({selected_model}, weight=light)...", flush=True)
 
     try:
-        print("[TOPO] Prompt for Topology Analyst:")
+        vprint("[TOPO] Prompt for Topology Analyst:")
         for msg in analyst_msgs:
-            print(f"  {msg['role'].upper()}: {msg['content']}")
+            vprint(f"  {msg['role'].upper()}: {msg['content']}")
         analyst_response = _invoke_with_retry(analyst_msgs, selected_model, "light", "TOPO")
         analysis_txt, analysis_thinking = _split_content_and_thinking(analyst_response.content)
         analysis_txt = _strip_thinking_text(analysis_txt)
         preview = analysis_txt[:200].replace('\n', ' ')
-        print(f"[TOPO] ✓ LLM response ({len(analysis_txt)} chars): \"{preview}...\"", flush=True)
+        vprint(f"[TOPO] ✓ LLM response ({len(analysis_txt)} chars): \"{preview}...\"", flush=True)
         _print_thinking_block("TOPO", analysis_thinking)
     except Exception as exc:
-        print(f"[TOPO] ✗ LLM failed: {exc}", flush=True)
+        vprint(f"[TOPO] ✗ LLM failed: {exc}", flush=True)
         analysis_txt = None
 
     updated_chat_history = _update_and_save_chat_history(
@@ -383,7 +385,12 @@ def node_topology_analyst(state: LayoutState):
     )
 
     elapsed = time.time() - t0
-    print(f"[TOPO] Stage 1 complete in {elapsed:.1f}s", flush=True)
+    nchar = len(analysis_txt) if analysis_txt else 0
+    n_constraints = len(constraint_text.splitlines()) if constraint_text else 0
+    if analysis_txt:
+        ip_step("1/5 Topology Analyst", f"ok ({elapsed:.1f}s, {nchar} chars, {n_constraints} constraints)")
+    else:
+        ip_step("1/5 Topology Analyst", f"no LLM text ({elapsed:.1f}s, {n_constraints} constraints)")
 
     return {
         "constraint_text": constraint_text,
@@ -399,9 +406,9 @@ def node_strategy_selector(state: LayoutState):
     pauses execution to wait for their input, and parses their selection.
     """
     t0 = time.time()
-    print("\n" + "═"*60, flush=True)
-    print("  STAGE 2: STRATEGY SELECTOR", flush=True)
-    print("═"*60, flush=True)
+    vprint("\n" + "═"*60, flush=True)
+    vprint("  STAGE 2: STRATEGY SELECTOR", flush=True)
+    vprint("═"*60, flush=True)
     analysis_txt = state.get("Analysis_result", "")
     constraint_text = state.get("constraint_text", "")
     chat_history = state.get("chat_history", [])
@@ -416,20 +423,20 @@ def node_strategy_selector(state: LayoutState):
         f"Layout Constraints:\n{constraint_text}\n\n"
     )
 
-    print(f"[STRATEGY] Calling LLM ({selected_model}, weight=light)...", flush=True)
+    vprint(f"[STRATEGY] Calling LLM ({selected_model}, weight=light)...", flush=True)
 
     try:
-        print("[STRATEGY] Prompt for Strategy Selector:") 
+        vprint("[STRATEGY] Prompt for Strategy Selector:") 
         for msg in strategy_prompt:
-            print(f"  {msg['role'].upper()}: {msg['content']}")
+            vprint(f"  {msg['role'].upper()}: {msg['content']}")
         strategy_response = _invoke_with_retry(strategy_prompt, selected_model, "light", "STRATEGY")
         strategy_text, strategy_thinking = _split_content_and_thinking(strategy_response.content)
         strategy_text = _strip_thinking_text(strategy_text)
         preview = strategy_text[:200].replace('\n', ' ')
-        print(f"[STRATEGY] ✓ Strategies ({len(strategy_text)} chars): \"{preview}...\"", flush=True)
+        vprint(f"[STRATEGY] ✓ Strategies ({len(strategy_text)} chars): \"{preview}...\"", flush=True)
         _print_thinking_block("STRATEGY", strategy_thinking)
     except Exception as exc:
-        print(f"[STRATEGY] ✗ LLM failed: {exc}", flush=True)
+        vprint(f"[STRATEGY] ✗ LLM failed: {exc}", flush=True)
         strategy_text = ""
 
 
@@ -439,7 +446,11 @@ def node_strategy_selector(state: LayoutState):
     )
 
     elapsed = time.time() - t0
-    print(f"[STRATEGY] Stage 2 complete in {elapsed:.1f}s", flush=True)
+    nchar = len(strategy_text) if strategy_text else 0
+    if strategy_text:
+        ip_step("2/5 Strategy Selector", f"ok ({elapsed:.1f}s, {nchar} chars)")
+    else:
+        ip_step("2/5 Strategy Selector", f"no strategies ({elapsed:.1f}s)")
     
     return {
         "strategy_result": strategy_text,
@@ -454,9 +465,9 @@ def node_placement_specialist(state: LayoutState):
     inventory conservation, row-based analog constraints, and routing quality.
     """
     t0 = time.time()
-    print("\n" + "═"*60, flush=True)
-    print("  STAGE 3: PLACEMENT SPECIALIST", flush=True)
-    print("═"*60, flush=True)
+    vprint("\n" + "═"*60, flush=True)
+    vprint("  STAGE 3: PLACEMENT SPECIALIST", flush=True)
+    vprint("═"*60, flush=True)
     nodes = state.get("nodes", [])
     constraint_text = state.get("constraint_text", "")
     user_message = state.get("user_message", "Optimize placement.")
@@ -472,15 +483,17 @@ def node_placement_specialist(state: LayoutState):
     if not working_nodes:
         working_nodes = copy.deepcopy(nodes)
 
-    print(f"[PLACEMENT] Devices: {len(nodes)} | Edges: {len(edges)} | Pending CMDs: {len(pending_cmds)} | Model: {selected_model}", flush=True)
+    vprint(f"[PLACEMENT] Devices: {len(nodes)} | Edges: {len(edges)} | Pending CMDs: {len(pending_cmds)} | Model: {selected_model}", flush=True)
 
     #  Handle Human-in-the-Loop Manual Edits(returning from final stage)
     # =====================================================================
     if pending_cmds:
-        print(f"[PLACEMENT] ↺ Human loopback detected! Applying {len(pending_cmds)} manual edits directly.", flush=True)
+        vprint(f"[PLACEMENT] ↺ Human loopback detected! Applying {len(pending_cmds)} manual edits directly.", flush=True)
         updated_nodes = _apply_cmds_to_nodes(working_nodes, pending_cmds)
         elapsed = time.time() - t0
-        print(f"[PLACEMENT] Applied {len(pending_cmds)} edits in {elapsed:.1f}s", flush=True)
+        vprint(f"[PLACEMENT] Applied {len(pending_cmds)} edits in {elapsed:.1f}s", flush=True)
+        if steps_only():
+            ip_step("3/5 Placement specialist", f"loopback: applied {len(pending_cmds)} manual edit(s) ({elapsed:.1f}s)")
         return {
             "placement_nodes": updated_nodes,
             "pending_cmds": [],  #Clear cmds so we don't apply them twice
@@ -521,14 +534,14 @@ def node_placement_specialist(state: LayoutState):
             # Register load_skill tool so the agent can call it automatically
             placement_tools.extend(middleware.tools)
             if middleware.skill_index:
-                print(
+                vprint(
                     f"[PLACEMENT] Skill catalog ids: {', '.join(sorted(middleware.skill_index.keys()))}",
                     flush=True,
                 )
 
     if placement_tools:
         tool_names = [getattr(t, "name", "tool") for t in placement_tools]
-        print(f"[PLACEMENT] ReAct tools (auto-callable): {', '.join(tool_names)}", flush=True)
+        vprint(f"[PLACEMENT] ReAct tools (auto-callable): {', '.join(tool_names)}", flush=True)
 
     placer_msgs = _build_llm_messages(
         placement_system_prompt,
@@ -536,16 +549,16 @@ def node_placement_specialist(state: LayoutState):
         placer_user,
     )
 
-    print(
+    vprint(
         f"[PLACEMENT] Calling {'ReAct agent' if placement_framework == 'react' else 'LLM'} ({selected_model}, weight=heavy)...",
         flush=True,
     )
 
     placement_text = ""
     try:
-        print("[PLACEMENT] Prompt for Placement Specialist:")
+        vprint("[PLACEMENT] Prompt for Placement Specialist:")
         for msg in placer_msgs:
-            print(f"  {msg['role'].upper()}: {msg['content']}")
+            vprint(f"  {msg['role'].upper()}: {msg['content']}")
 
         if placement_framework == "react":
             try:
@@ -560,7 +573,7 @@ def node_placement_specialist(state: LayoutState):
                 )
                 placement_content = _extract_agent_output_content(placement_result)
             except Exception as react_exc:
-                print(
+                vprint(
                     f"[PLACEMENT] ⚠ ReAct path failed ({react_exc}); falling back to direct invoke.",
                     flush=True,
                 )
@@ -573,10 +586,10 @@ def node_placement_specialist(state: LayoutState):
         placement_text, placement_thinking = _split_content_and_thinking(placement_content)
         placement_text = _strip_thinking_text(placement_text)
         stage2_cmds = _extract_cmd_blocks(placement_text)
-        print(f"[PLACEMENT] ✓ LLM produced {len(stage2_cmds)} CMD block(s) ({len(placement_text)} chars)", flush=True)
+        vprint(f"[PLACEMENT] ✓ LLM produced {len(stage2_cmds)} CMD block(s) ({len(placement_text)} chars)", flush=True)
         _print_thinking_block("PLACEMENT", placement_thinking)
     except Exception as exc:
-        print(f"[PLACEMENT] ✗ LLM failed: {exc}", flush=True)
+        vprint(f"[PLACEMENT] ✗ LLM failed: {exc}", flush=True)
         placement_text = "[PLACEMENT] LLM failed to generate a response."
         stage2_cmds = []
 
@@ -594,16 +607,18 @@ def node_placement_specialist(state: LayoutState):
     conservation = tool_validate_device_count(nodes, working_nodes)
     if not conservation["pass"]:
         missing_ids = conservation.get("missing", [])
-        print(f"[PLACEMENT] ⚠ CONSERVATION FAILURE: missing devices {missing_ids}", flush=True)
-        print("[PLACEMENT] Reverting placement to original nodes.", flush=True)
+        vprint(f"[PLACEMENT] ⚠ CONSERVATION FAILURE: missing devices {missing_ids}", flush=True)
+        vprint("[PLACEMENT] Reverting placement to original nodes.", flush=True)
         working_nodes = copy.deepcopy(nodes)
         stage2_cmds = []
     else:
-        print(f"[PLACEMENT] ✓ Device conservation OK ({conservation['original_count']} devices)", flush=True)
+        vprint(f"[PLACEMENT] ✓ Device conservation OK ({conservation['original_count']} devices)", flush=True)
 
     current_pending = state.get("pending_cmds", [])
     elapsed = time.time() - t0
-    print(f"[PLACEMENT] Stage 3 complete in {elapsed:.1f}s — {len(current_pending + stage2_cmds)} total CMDs", flush=True)
+    ncmd = len(current_pending) + len(stage2_cmds)
+    cons = 'ok' if conservation['pass'] else 'FAILED'
+    ip_step("3/5 Placement Specialist", f"{ncmd} command(s), {elapsed:.1f}s, conservation={cons}")
 
     return {
         "placement_nodes": working_nodes,
@@ -614,20 +629,20 @@ def node_placement_specialist(state: LayoutState):
 
 def node_finger_expansion(state: LayoutState):
     t0 = time.time()
-    print("\n" + "─"*60, flush=True)
-    print("  FINGER EXPANSION (deterministic)", flush=True)
-    print("─"*60, flush=True)
+    vprint("\n" + "─"*60, flush=True)
+    vprint("  FINGER EXPANSION (deterministic)", flush=True)
+    vprint("─"*60, flush=True)
     logical_nodes = state.get("placement_nodes", [])
     original_nodes = state.get("nodes", []) 
-    print(f"[FINGER] Logical: {len(logical_nodes)} | Original: {len(original_nodes)}", flush=True)
+    vprint(f"[FINGER] Logical: {len(logical_nodes)} | Original: {len(original_nodes)}", flush=True)
     
     physical_nodes = expand_logical_to_fingers(logical_nodes, original_nodes)
-    print(f"[FINGER] Expanded to {len(physical_nodes)} physical nodes", flush=True)
+    vprint(f"[FINGER] Expanded to {len(physical_nodes)} physical nodes", flush=True)
     
     validate_finger_integrity(original_nodes, physical_nodes)
     
     elapsed = time.time() - t0
-    print(f"[FINGER] Complete in {elapsed:.1f}s", flush=True)
+    ip_step("4/5 Finger Expansion", f"{len(physical_nodes)} device(s) ({elapsed:.1f}s)")
     
     return {"placement_nodes": physical_nodes,
             "deterministic_snapshot": copy.deepcopy(physical_nodes),
@@ -642,9 +657,9 @@ def node_drc_critic(state: LayoutState):
     """
     t0 = time.time()
     retry_num = state.get("drc_retry_count", 0)
-    print("\n" + "═"*60, flush=True)
-    print(f"  STAGE 4: DRC CRITIC (attempt {retry_num + 1})", flush=True)
-    print("═"*60, flush=True)
+    vprint("\n" + "═"*60, flush=True)
+    vprint(f"  STAGE 4: DRC CRITIC (attempt {retry_num + 1})", flush=True)
+    vprint("═"*60, flush=True)
     nodes           = state.get("placement_nodes", [])
     pending_cmds    = state.get("pending_cmds", [])
     chat_history    = state.get("chat_history", [])
@@ -665,7 +680,9 @@ def node_drc_critic(state: LayoutState):
 
     if drc_result["pass"]:
         elapsed = time.time() - t0
-        print(f"[DRC] ✓ Clean placement! No violations. ({elapsed:.1f}s)", flush=True)
+        vprint(f"[DRC] ✓ Clean placement! No violations. ({elapsed:.1f}s)", flush=True)
+        if steps_only():
+            ip_step("5/5 DRC critic", f"pass — attempt {retry_num + 1} ({elapsed:.1f}s)")
         updated_chat_history = _update_and_save_chat_history(
             chat_history=chat_history,
             user_content="",
@@ -680,7 +697,7 @@ def node_drc_critic(state: LayoutState):
         }
 
     n_violations = len(drc_result['violations'])
-    print(f"[DRC] ✗ Found {n_violations} violations. Attempting fix...", flush=True)
+    vprint(f"[DRC] ✗ Found {n_violations} violations. Attempting fix...", flush=True)
 
     # ── Build LLM prompt ──
     prior_cmds_text = "\n".join(
@@ -709,17 +726,17 @@ def node_drc_critic(state: LayoutState):
     )
 
     # ── LLM correction pass ──
-    print(f"[DRC] Calling LLM ({selected_model}, weight=heavy)...", flush=True)
+    vprint(f"[DRC] Calling LLM ({selected_model}, weight=heavy)...", flush=True)
     critic_response = ""
     try:
         critic_raw_response = _invoke_with_retry(critic_msgs, selected_model, "heavy", "DRC")
         critic_response, drc_thinking = _split_content_and_thinking(critic_raw_response.content)
         critic_response = _strip_thinking_text(critic_response)
         critic_cmds = _extract_cmd_blocks(critic_response)
-        print(f"[DRC] ✓ LLM proposed {len(critic_cmds)} fix(es)", flush=True)
+        vprint(f"[DRC] ✓ LLM proposed {len(critic_cmds)} fix(es)", flush=True)
         _print_thinking_block("DRC", drc_thinking)
     except Exception as exc:
-        print(f"[DRC] ✗ LLM Error: {exc}", flush=True)
+        vprint(f"[DRC] ✗ LLM Error: {exc}", flush=True)
         critic_response = f"[DRC] LLM Error: {exc}"
         critic_cmds = []
 
@@ -731,11 +748,11 @@ def node_drc_critic(state: LayoutState):
     )
 
     prescriptive_cmds = compute_prescriptive_fixes(drc_result, gap_px, nodes=nodes)
-    print(f"[DRC] Prescriptive engine generated {len(prescriptive_cmds)} fix(es)", flush=True)
+    vprint(f"[DRC] Prescriptive engine generated {len(prescriptive_cmds)} fix(es)", flush=True)
 
     # ── Merge ──
     if not critic_cmds:
-        print("[DRC] Using prescriptive fixes entirely (LLM had none).", flush=True)
+        vprint("[DRC] Using prescriptive fixes entirely (LLM had none).", flush=True)
         merged_cmds = prescriptive_cmds
     else:
         llm_dev_ids = {
@@ -748,25 +765,29 @@ def node_drc_critic(state: LayoutState):
             if (p.get("device") or p.get("device_id") or p.get("id") or
                 p.get("device_a") or p.get("a", "")) not in llm_dev_ids
         ]
-        print(f"[DRC] Merged: {len(critic_cmds)} LLM + {len(merged_cmds) - len(critic_cmds)} prescriptive", flush=True)
+        vprint(f"[DRC] Merged: {len(critic_cmds)} LLM + {len(merged_cmds) - len(critic_cmds)} prescriptive", flush=True)
 
     # ── Apply corrections on top of the deterministic snapshot ──
-    merged_all_cmds = list(pending_cmds) + list(merged_cmds)
+    # FIX: Only use the ORIGINAL placement commands + LATEST DRC fix commands.
+    # Previous DRC attempts' commands are discarded to prevent contradictory
+    # command accumulation (BUG-8).
+    accumulated_cmds = list(pending_cmds) + list(merged_cmds)
     seen_cmds = set()
-    accumulated_cmds = []
-    for cmd in merged_all_cmds:
+    deduped_cmds = []
+    for cmd in accumulated_cmds:
         sig = json.dumps(cmd, sort_keys=True)
         if sig in seen_cmds:
             continue
         seen_cmds.add(sig)
-        accumulated_cmds.append(cmd)
+        deduped_cmds.append(cmd)
+    accumulated_cmds = deduped_cmds
 
     fixed_nodes = _apply_cmds_to_nodes(snapshot, accumulated_cmds)
 
     # ── Final physics guard ──
     moved_ids = tool_resolve_overlaps(fixed_nodes)
     if moved_ids:
-        print(f"[DRC] Physics guard nudged {len(moved_ids)} device(s)", flush=True)
+        vprint(f"[DRC] Physics guard nudged {len(moved_ids)} device(s)", flush=True)
         moved_map = {n["id"]: n for n in fixed_nodes if n["id"] in moved_ids}
         for dev_id, node in moved_map.items():
             accumulated_cmds.append({
@@ -789,9 +810,9 @@ def node_drc_critic(state: LayoutState):
     final_drc = run_drc_check(fixed_nodes, gap_um)
     remaining = len(final_drc.get('violations', []))
     if final_drc["pass"]:
-        print(f"[DRC] ✓ All violations cleared!", flush=True)
+        vprint(f"[DRC] ✓ All violations cleared!", flush=True)
     else:
-        print(f"[DRC] ⚠ {remaining} violation(s) remain after fixes", flush=True)
+        vprint(f"[DRC] ⚠ {remaining} violation(s) remain after fixes", flush=True)
 
     structured_flags = []
     for v in final_drc.get("structured", []):
@@ -809,7 +830,13 @@ def node_drc_critic(state: LayoutState):
         structured_flags.append({"value": str(v)})
 
     elapsed = time.time() - t0
-    print(f"[DRC] Stage 4 complete in {elapsed:.1f}s — {len(accumulated_cmds)} CMDs | DRC {'PASS' if final_drc['pass'] else 'FAIL'}", flush=True)
+    retries_left = max(0, 2 - retry_num)  # MAX_DRC_RETRIES from edges.py
+    if final_drc["pass"]:
+        ip_step("5/5 DRC Critic", f"pass — attempt {retry_num + 1} ({elapsed:.1f}s)")
+    else:
+        ip_step("5/5 DRC Critic",
+                f"attempt {retry_num + 1}, fail ({retries_left} left), "
+                f"{len(accumulated_cmds)} cmd(s) ({elapsed:.1f}s)")
 
     return {
         "placement_nodes":  fixed_nodes,

@@ -21,6 +21,10 @@ _editor_dir = os.path.dirname(os.path.abspath(__file__))
 if _editor_dir not in sys.path:
     sys.path.insert(0, _editor_dir)
 
+# Initialize centralized logging (before any other project imports)
+from config.logging_config import configure_logging
+configure_logging()
+
 from PySide6.QtWidgets import (
     QApplication,
     QMainWindow,

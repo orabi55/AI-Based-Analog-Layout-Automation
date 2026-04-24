@@ -9,7 +9,8 @@ DEFAULT_MIN_DEVICE_SPACING_UM: float = 0.294
 NMOS_ROW_Y_MIN: float = 0.0
 
 def _log(msg: str):
-    print(f"[CMD] {msg}")
+    from ai_agent.ai_chat_bot.pipeline_log import vprint
+    vprint(f"[CMD] {msg}")
 
 def _device_is_nmos(node: dict) -> bool:
     dev_type = str(node.get("type", "")).lower()

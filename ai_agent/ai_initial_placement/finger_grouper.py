@@ -29,13 +29,11 @@ from collections import defaultdict
 from typing import Dict, List, Tuple
 
 # ---------------------------------------------------------------------------
-# Constants
+# Constants — sourced from centralized design rules config
 # ---------------------------------------------------------------------------
-PMOS_Y       = 0.668   # µm — default initial PMOS row (multi-row: any multiple of ROW_PITCH above NMOS rows)
-NMOS_Y       = 0.000   # µm — default initial NMOS row (multi-row: any multiple of ROW_PITCH)
-ROW_PITCH    = 0.668   # µm — standard row-to-row pitch
-FINGER_PITCH = 0.070   # µm — abutted finger-to-finger pitch
-STD_PITCH    = 0.294   # µm — non-abutted device pitch (diffusion break)
+from config.design_rules import (
+    PMOS_Y, NMOS_Y, ROW_PITCH, FINGER_PITCH, PITCH_UM as STD_PITCH,
+)
 
 # Regex: split "MM9<3>_f4" → ("MM9", "3", "4")  (legacy array-bus)
 _BUS_RE   = re.compile(r'^(.+?)<(\d+)>(?:_f(\d+))?$')
@@ -597,7 +595,7 @@ def build_finger_group_section(finger_map: dict, group_nodes: list) -> str:
             gn = grp_info.get(grp_id, {})
             elec = gn.get("electrical", {})
             tot  = elec.get("total_fingers", len(members))
-            w    = gn.get("geometry", {}).get("width", round(tot * FINGER_PITCH, 6))
+            w    = gn.get("geometry", {}).get("width", round(tot * STD_PITCH, 6))
 
             if gn.get("_matched_block"):
                 # This is a pre-interdigitated fixed block
@@ -703,9 +701,16 @@ def _generate_abba_pattern(
         return result
 
     # Unequal → ensure A is the longer list
+    # Re-tag _match_owner after swap so tags reflect the ORIGINAL device
+    # identity, not the list position.
     if nb > na:
         a_list, b_list = b_list, a_list
         na, nb = nb, na
+        # Fix tags: a_list items now carry "B" but should be "A" (and vice versa)
+        for node in a_list:
+            node["_match_owner"] = "A"
+        for node in b_list:
+            node["_match_owner"] = "B"
 
     # Distribute B fingers evenly within A fingers
     # Insert b_idx at position round((b_idx + 0.5) * na / nb)
@@ -824,6 +829,9 @@ def merge_matched_groups(
         - `merged_blocks` (dict): Audit trail mapping `block_id -> {"members": [grpA, grpB], "technique": "ABBA"}`.
     """
     _POWER = frozenset({"VDD", "VSS", "GND", "VCC", "AVDD", "AVSS", ""})
+
+    if group_terminal_nets:
+        _enrich_matching_info(matching_info, group_terminal_nets, group_nodes)
 
     # Collect all pairs to merge (diff pairs + current mirrors + cross-coupled)
     pairs_to_merge: List[Tuple[str, str, str]] = []  # (grpA, grpB, technique)
@@ -1335,24 +1343,13 @@ def pre_assign_rows(
 
 
 
-def _snap_to_row_grid(y: float) -> float:
-    """
-    Quantize an arbitrary float Y coordinate to the standard `ROW_PITCH` grid spacing.
-
-    Parameters
-    ----------
-    y : float
-        Raw float coordinate (e.g., from an LLM hallucination or drift).
-
-    Returns
-    -------
-    float
-        The nearest valid row increment float (e.g., 0.0, 0.668, 1.336).
-    """
+def _snap_to_row_grid(y: float, pitch: float | None = None) -> float:
+    """Quantize Y to a row grid. Uses *pitch* if given, else ROW_PITCH."""
+    p = pitch if pitch and pitch > 0 else ROW_PITCH
     if y < 0:
         y = 0.0
-    row_index = round(y / ROW_PITCH)   # nearest integer row index
-    return round(row_index * ROW_PITCH, 6)
+    row_index = round(y / p)
+    return round(row_index * p, 6)
 
 
 def expand_groups(
@@ -1360,6 +1357,7 @@ def expand_groups(
         finger_map: dict,
         matching_info: dict | None = None,
         no_abutment: bool = False,
+        original_group_nodes: dict[str, dict] | None = None,
 ) -> list:
     """
     Explode optimized LLM groupings back into physical multi-finger atomic elements.
@@ -1380,6 +1378,10 @@ def expand_groups(
     no_abutment : bool, optional
         Force diffusion breaks everywhere by reverting standard FINGER_PITCH to
         STD_PITCH arrays. Defaults to False.
+    original_group_nodes : dict, optional
+        Mapping of group_id -> original group node dict (from ``group_fingers``).
+        Used to retrieve private metadata (e.g. ``_matched_block``, ``_block_pitch``)
+        that LLMs typically strip from their output. Defaults to None.
 
     Returns
     -------
@@ -1425,10 +1427,9 @@ def expand_groups(
         group_heights[grp_id] = max(computed_height, llm_height, 0.5) + 0.05
 
         group_types[grp_id] = dev_type
-
-        # Snap to row grid
-        snapped_y = _snap_to_row_grid(raw_y)
-        group_ys[grp_id] = snapped_y
+        # DON'T re-snap — trust the Y from the geometry engine which already
+        # used a dynamic row pitch based on actual device heights.
+        group_ys[grp_id] = round(float(raw_y), 6)
 
     # --- Pass 2: enforce strict PMOS/NMOS bounding box separation --------
     # Compute the maximum top edge of any NMOS device: max(nmos_y + nmos_height)
@@ -1492,9 +1493,11 @@ def expand_groups(
         orient   = grp_geom.get("orientation", "R0")
 
         # Determine pitch for this group
-        is_matched_block = grp_placed.get("_matched_block", False)
+        # Prefer original group metadata (LLMs strip private fields)
+        orig_meta = original_group_nodes.get(grp_id, {}) if original_group_nodes else {}
+        is_matched_block = orig_meta.get("_matched_block", grp_placed.get("_matched_block", False))
         if is_matched_block and not no_abutment:
-            pitch = grp_placed.get("_block_pitch", default_pitch)
+            pitch = orig_meta.get("_block_pitch", grp_placed.get("_block_pitch", default_pitch))
         else:
             pitch = default_pitch
 
@@ -1509,6 +1512,7 @@ def expand_groups(
                 "x":           fx,
                 "y":           final_y,
                 "orientation": orient,
+                "width":       pitch,
             })
 
             # Clean up internal metadata
@@ -1534,12 +1538,12 @@ def expand_groups(
             expanded.append(node)
 
     # --- Pass 4: resolve inter-group overlaps per row ----------------------
-    print(f"[expand_groups] Before overlap resolution: {len(expanded)} devices expanded")
+    from ai_agent.ai_chat_bot.pipeline_log import vprint as _vp
+    _vp(f"[expand_groups] Before overlap resolution: {len(expanded)} devices expanded")
     expanded = _resolve_row_overlaps(expanded, no_abutment)
-    print(f"[expand_groups] After overlap resolution: returning {len(expanded)} devices")
+    _vp(f"[expand_groups] After overlap resolution: returning {len(expanded)} devices")
     
     # POST-EXPANSION VALIDATION: Check for duplicate positions
-    from collections import defaultdict
     pos_check = defaultdict(list)
     for n in expanded:
         x = n.get("geometry", {}).get("x", -1)
@@ -1548,9 +1552,9 @@ def expand_groups(
     
     duplicates = {pos: ids for pos, ids in pos_check.items() if len(ids) > 1}
     if duplicates:
-        print(f"[expand_groups] WARNING: {len(duplicates)} position(s) have multiple devices:")
+        _vp(f"[expand_groups] WARNING: {len(duplicates)} position(s) have multiple devices:")
         for pos, ids in list(duplicates.items())[:5]:
-            print(f"  Position {pos}: {ids}")
+            _vp(f"  Position {pos}: {ids}")
 
     return expanded
 
@@ -1579,10 +1583,11 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
     if not nodes:
         return nodes
 
-    pitch_abut = FINGER_PITCH  # 0.070
+    pitch_abut = STD_PITCH if no_abutment else FINGER_PITCH  # 0.294 or 0.070
     pitch_std  = STD_PITCH     # 0.294
 
-    print(f"[resolve_overlaps] Starting with {len(nodes)} devices")
+    from ai_agent.ai_chat_bot.pipeline_log import vprint as _vp
+    _vp(f"[resolve_overlaps] Starting with {len(nodes)} devices")
 
     # Group by (Y, type) — PMOS and NMOS are always in separate buckets
     type_rows: Dict[Tuple[float, str], List[dict]] = defaultdict(list)
@@ -1591,7 +1596,7 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
         dev_type = n.get("type", "nmos")
         type_rows[(y, dev_type)].append(n)
 
-    print(f"[resolve_overlaps] Found {len(type_rows)} type-rows")
+    _vp(f"[resolve_overlaps] Found {len(type_rows)} type-rows")
 
     for (y_key, _dev_type), row_nodes in type_rows.items():
         # --- Step 1: Identify chains by parent name -----------------------
@@ -1601,12 +1606,7 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
             parent = _transistor_key(nid)
             chains[parent].append(node)
 
-        print(f"[resolve_overlaps] Row y={y_key} ({_dev_type}): {len(chains)} chains")
-        
-        # DEBUG: Show chain sizes
-        for parent, chain_devs in chains.items():
-            if len(chain_devs) > 1:
-                print(f"  Chain '{parent}': {len(chain_devs)} devices - {[d.get('id', '?') for d in chain_devs[:5]]}")
+        _vp(f"[resolve_overlaps] Row y={y_key} ({_dev_type}): {len(chains)} chains")
 
         # --- Step 2: Sort each chain's devices by their internal index ------
         for parent, chain_devices in chains.items():
@@ -1618,34 +1618,47 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
             key=lambda ch: ch[0].get("geometry", {}).get("x", 0.0),
         )
 
-        # --- Step 4: Place chains left-to-right ---------------------------
+        # --- Step 4: Place chains left-to-right, gap-preserving -----------
         if not sorted_chains:
             continue
 
-        # CRITICAL FIX: Validate that chains have valid starting X coordinates
-        # If all devices have X=0, we need to start at a reasonable position
-        first_x = sorted_chains[0][0].get("geometry", {}).get("x", 0.0)
-        cursor = first_x
-        
-        # If the first device has X=0 but has a width, ensure we don't start at negative
-        if cursor < 0:
-            cursor = 0.0
-
+        # Compute original chain footprints (first x → last x + width)
+        # so we can detect overlaps and preserve intentional LLM gaps.
+        chain_footprints: list[Tuple[float, float]] = []
         for chain in sorted_chains:
-            # DEBUG: Log chain placement
-            chain_ids = [d.get("id", "?") for d in chain]
-            print(f"[resolve_overlaps] Placing chain at cursor={cursor:.4f}: {chain_ids[:3]}...")
-            
+            xs = [d.get("geometry", {}).get("x", 0.0) for d in chain]
+            widths = [d.get("geometry", {}).get("width", pitch_std) for d in chain]
+            first_x = min(xs) if xs else 0.0
+            last_x = max(xs) if xs else 0.0
+            last_w = widths[xs.index(last_x)] if xs else pitch_std
+            chain_footprints.append((first_x, last_x + last_w))
+
+        min_inter_chain_gap = pitch_std
+        cursor = chain_footprints[0][0]  # start at first chain's original X
+
+        for chain_idx, chain in enumerate(sorted_chains):
+            chain_first_orig, chain_last_orig = chain_footprints[chain_idx]
+
+            # If this chain starts before the cursor (overlap), shift it right.
+            # Otherwise preserve its original position (gap-preserving).
+            if chain_idx > 0 and chain_first_orig < cursor:
+                shift = round(cursor - chain_first_orig, 6)
+                _vp(f"[resolve_overlaps] Shifting chain by +{shift:.4f} to resolve overlap")
+                chain_start = cursor
+            else:
+                shift = 0.0
+                chain_start = chain_first_orig
+
             for dev_idx, dev in enumerate(chain):
                 geo = dev.get("geometry", {})
-                geo["x"] = round(cursor, 6)
+                geo["x"] = round(chain_start, 6)
                 geo["y"] = round(float(y_key), 6)
 
                 is_last = (dev_idx == len(chain) - 1)
 
                 if not is_last:
                     # Within chain: abut spacing
-                    cursor = round(cursor + pitch_abut, 6)
+                    chain_start = round(chain_start + pitch_abut, 6)
                     dev.setdefault("abutment", {})["abut_right"] = True
                     next_dev = chain[dev_idx + 1]
                     next_dev.setdefault("abutment", {})["abut_left"] = True
@@ -1654,7 +1667,10 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
                     dev_w = geo.get("width", pitch_std)
                     if dev_w < pitch_std * 0.5:
                         dev_w = pitch_std
-                    cursor = round(cursor + dev_w, 6)
+                    chain_start = round(chain_start + dev_w, 6)
+
+            # Update cursor for next chain: enforce minimum gap
+            cursor = round(max(chain_start, chain_last_orig + shift) + min_inter_chain_gap, 6)
 
         # Clean abutment flags for standalone (single-device) chains
         for chain in chains.values():

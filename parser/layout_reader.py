@@ -9,6 +9,7 @@ Supports both flat and hierarchical layouts:
 
 import gdstk
 import math
+import logging
 
 
 def _is_transistor_cell(cell_name):
@@ -78,8 +79,8 @@ def _parse_pcell_params(*objs):
                             param_key = parts[0].strip()
                             val = parts[-1].strip()
                             params[param_key] = val
-        except Exception:
-            pass
+        except (AttributeError, IndexError, TypeError):
+            logging.debug("Failed to parse pcell property", exc_info=True)
     return params
 
 

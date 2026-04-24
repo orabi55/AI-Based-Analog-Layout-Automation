@@ -320,8 +320,8 @@ def _validate_placement(original_nodes: list, result) -> list:
     if extra:
         errors.append(f"EXTRA (invented) devices: {sorted(extra)}")
 
-    # 2. No x-collisions in the same row
-    row_slots: dict = defaultdict(list)
+    # 2. No x-collisions in the same row (bounding-box overlap check)
+    rows: dict = defaultdict(list)
     for n in placed_nodes:
         if not isinstance(n, dict):
             continue
@@ -332,15 +332,23 @@ def _validate_placement(original_nodes: list, result) -> list:
         if x is None:
             errors.append(f"Device {dev_id} has no x-coordinate.")
             continue
-        slot = round(float(x) / 0.294)
-        row_slots[(dev_type, slot)].append(dev_id)
+        w = float(geo.get("width", 0.294))
+        rows[(dev_type, round(float(geo.get("y", 0.0)), 3))].append({
+            "id": dev_id, "x": float(x), "width": w,
+        })
 
-    for (dev_type, slot), ids in row_slots.items():
-        if len(ids) > 1:
-            errors.append(
-                f"OVERLAP in {dev_type} row at x-slot {slot} "
-                f"(x~={slot*0.294:.4f}um): {ids}"
-            )
+    for (dev_type, y), devs in rows.items():
+        devs_sorted = sorted(devs, key=lambda d: d["x"])
+        for i in range(len(devs_sorted) - 1):
+            d1 = devs_sorted[i]
+            d2 = devs_sorted[i + 1]
+            min_x2 = d1["x"] + d1["width"]
+            if d2["x"] < min_x2 - 0.001:
+                errors.append(
+                    f"OVERLAP in {dev_type} row y={y}: "
+                    f"{d1['id']} (x={d1['x']:.4f}, w={d1['width']:.4f}) and "
+                    f"{d2['id']} (x={d2['x']:.4f}) — overlap by {min_x2 - d2['x']:.4f}um"
+                )
 
     # 3. PMOS/NMOS must not swap rows
     for n in placed_nodes:
@@ -563,9 +571,12 @@ CRITICAL: Your response MUST be complete valid JSON. Do NOT truncate the output.
             # Restore original Y-coordinate frame before saving
             placement["nodes"] = _restore_coords(placed_nodes, y_offset)
 
-            # Save result
+            # Save result while preserving the full input schema.
+            # Some downstream flows expect keys like edges/terminal_nets to remain.
+            output_payload = dict(graph_data)
+            output_payload["nodes"] = placement["nodes"]
             with open(output_json, "w") as f:
-                json.dump(placement, f, indent=4)
+                json.dump(output_payload, f, indent=4)
 
             print("Placement saved to:", output_json)
             return

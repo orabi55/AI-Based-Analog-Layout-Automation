@@ -11,8 +11,8 @@
 ## Quick Start
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/orabi55/AI-Based-Analog-Layout-Automation.git
+# 1. Clone the repository (new_main branch)
+git clone -b new_main https://github.com/orabi55/AI-Based-Analog-Layout-Automation.git
 cd AI-Based-Analog-Layout-Automation
 
 # 2. Create a virtual environment
@@ -78,11 +78,28 @@ python symbolic_editor/main.py examples/std_cell/Std_Cell_initial_placement.json
 - Click to place; the dummy snaps to the nearest free grid slot in the closest PMOS or NMOS row.
 - Dummy devices are rendered with dedicated pink styling to distinguish them from active transistors.
 
-### AI Chat Panel (Multi-Agent Pipeline)
-- Built-in chat with **LLM cascade** (Gemini, Groq, OpenAI, DeepSeek, Ollama).
-- **4-stage pipeline**: Topology Analysis > Placement > DRC Check > Routing Preview.
-- AI can execute layout commands: swap, move, flip, merge, add dummy, delete, and more.
-- Chat messages appear with timestamps; layout context is sent automatically.
+### Multi-Tab GUI Architecture
+- **Tabbed Workspace:** Open multiple `.oas`/`.sp` pairs or JSON saves simultaneously.
+- **Isolated Environments:** Each tab maintains its own isolated AI chat history, canvas state, and placement pipeline.
+- **Welcome Screen:** "Quick Start" project launcher directly from the main window.
+- **Minimap Navigation:** Scalable minimap in the bottom right for instant navigation across large designs.
+- **Searchable Device Tree:** Instantly filter devices via regex or substring in the hierarchy panel.
+- **Command Palette:** Press `Ctrl+Shift+P` for quick, fuzzy-searchable access to all actions.
+
+### AI Placement & Multi-Agent Pipeline
+- **Topology Analyst (Fast LLM):** Scans the netlist to categorize every transistor (Diff-Pair, Current Mirror, Cascode, Tail, Latch, Switch).
+- **Deterministic Placement Engine:** Eliminates LLM hallucination. Uses topology classifications to deterministically assign functional rows (e.g. `[TAIL] [DIFF_PAIR] [LATCH]`).
+- **Matching Enforcement:** Automatically forces **ABBA interdigitation** for diff-pairs and **centroid adjacent** placement for mirrors/latches.
+- **Square-Ratio Packing:** Smart row-splitting guarantees an optimal 1:1 square aspect ratio instead of extremely wide strips.
+- **DRC Healing & Symmetry:** Aligns rows to a center vertical axis to ensure perfectly symmetric layout output.
+- **Simulated Annealing (SA) Post-Optimization:** Rapid intra-row device swapping to minimize Half-Perimeter Wirelength (HPWL).
+- **Abutment Engine:** Automatically identifies shared Source/Drain nets and snaps adjacent fingers to 0.070µm pitch to save area.
+
+### Broad AI Provider Support
+- **Google Vertex AI (Cloud ADC):** Run Gemini and Claude securely via Google Cloud Application Default Credentials (no API key needed).
+- **Alibaba DashScope (Qwen):** Ultra-fast, cost-effective placement models (`qwen-plus`, `qwen3.6-max`).
+- **Google AI Studio (Gemini), Groq, OpenAI, DeepSeek, Ollama.**
+- Built-in chat panel for interacting directly with the layout context.
 
 ### Keyboard Shortcuts
 
@@ -91,10 +108,12 @@ python symbolic_editor/main.py examples/std_cell/Std_Cell_initial_placement.json
 | `Ctrl+I` | Import from Netlist + Layout |
 | `Ctrl+P` | Run AI Initial Placement |
 | `Ctrl+O` | Load placement JSON |
-| `Ctrl+S` | Save |
+| `Ctrl+S` | Save current tab |
 | `Ctrl+Shift+S` | Save As |
 | `Ctrl+E` | Export JSON |
 | `Ctrl+Shift+E` | Export to OAS |
+| `Ctrl+W` | Close current tab |
+| `Ctrl+Shift+P`| Open Command Palette |
 | `G` | Merge S-S (selected pair) |
 | `Shift+G` | Merge D-D (selected pair) |
 | `M` | Toggle move mode |
@@ -119,10 +138,12 @@ copy .env.example .env   # Windows
 
 At minimum, set **one** of these (Gemini recommended):
 
-| Provider | Env Variable | Free Tier |
+| Provider | Env Variable | Free Tier / Notes |
 |----------|-------------|-----------|
 | Google Gemini | `GEMINI_API_KEY` | Yes — [aistudio.google.com](https://aistudio.google.com) |
 | Groq | `GROQ_API_KEY` | Yes — [console.groq.com](https://console.groq.com) |
+| Alibaba Qwen | `ALIBABA_API_KEY` | Very cheap — [DashScope](https://dashscope.aliyun.com) |
+| Google Vertex | `VERTEX_PROJECT_ID` | Enterprise ADC — run `gcloud auth application-default login` |
 | OpenAI | `OPENAI_API_KEY` | No (Paid) |
 | DeepSeek | `DEEPSEEK_API_KEY` | No (Paid) |
 

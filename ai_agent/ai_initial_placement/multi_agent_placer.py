@@ -55,8 +55,21 @@ import os
 import json
 import copy
 import re
+import math
+import sys
 from collections import defaultdict
 from typing import Optional
+
+
+def _print(*args, **kwargs):
+    """Encoding-safe print for Windows consoles (charmap codec)."""
+    kwargs.setdefault("flush", True)
+    try:
+        print(*args, **kwargs)
+    except UnicodeEncodeError:
+        text = " ".join(str(a) for a in args)
+        enc = sys.stdout.encoding or "utf-8"
+        print(text.encode(enc, errors="replace").decode(enc, errors="replace"), **kwargs)
 
 from ai_agent.ai_initial_placement.placer_utils import (
     sanitize_json,
@@ -70,6 +83,11 @@ from ai_agent.ai_initial_placement.placer_utils import (
     _convert_slots_to_geometry,   # fallback for legacy 2-row schema
     _heal_abutment_positions,
     compress_graph_for_prompt,
+)
+from ai_agent.ai_initial_placement.finger_grouper import (
+    group_fingers, expand_groups,
+    detect_matching_groups, build_matching_section,
+    _enrich_matching_info,
 )
 
 # -------------------------------------------------------------------
@@ -168,7 +186,7 @@ def _call_llm(prompt: str, selected_model: str,
                 raise ValueError("GEMINI_API_KEY not set")
             client = genai.Client(api_key=api_key)
             model_name = _GEMINI_MODELS.get(stage_key, _GEMINI_MODELS["default"])
-            print(f"[MultiAgent] Gemini → {stage_key}: model='{model_name}'")
+            _print(f"[MultiAgent] Gemini → {stage_key}: model='{model_name}'")
             resp = client.models.generate_content(
                 model=model_name,
                 contents=prompt,
@@ -183,7 +201,7 @@ def _call_llm(prompt: str, selected_model: str,
                 base_url="https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
             )
             model_name = _ALIBABA_MODELS.get(stage_key, _ALIBABA_MODELS["default"])
-            print(f"[MultiAgent] Alibaba → {stage_key}: model='{model_name}'")
+            _print(f"[MultiAgent] Alibaba → {stage_key}: model='{model_name}'")
             resp = client.chat.completions.create(
                 model=model_name,
                 messages=[{"role": "user", "content": prompt}],
@@ -201,7 +219,7 @@ def _call_llm(prompt: str, selected_model: str,
                 stage_key, _VERTEX_MODELS["default"]
             )
             location = loc_override or os.getenv("VERTEX_LOCATION", "us-central1")
-            print(f"[MultiAgent] VertexGemini → {stage_key}: model='{model_name}', location='{location}'")
+            _print(f"[MultiAgent] VertexGemini → {stage_key}: model='{model_name}', location='{location}'")
             client = genai.Client(
                 vertexai=True, project=project, location=location,
             )
@@ -219,7 +237,7 @@ def _call_llm(prompt: str, selected_model: str,
                 region=os.getenv("VERTEX_LOCATION", "us-east5"),
             )
             model_name = "claude-3-5-sonnet-v2@20241022" if stage_key == "Placement" else "claude-3-5-sonnet@20240620"
-            print(f"[MultiAgent] VertexClaude → {stage_key}: model='{model_name}'")
+            _print(f"[MultiAgent] VertexClaude → {stage_key}: model='{model_name}'")
             resp = client.messages.create(
                 model=model_name,
                 max_tokens=8192,
@@ -228,7 +246,7 @@ def _call_llm(prompt: str, selected_model: str,
             return (resp.content[0].text or "").strip()
 
         else:
-            print(f"{tag} WARNING: Unknown provider '{selected_model}', falling back to Gemini.")
+            _print(f"{tag} WARNING: Unknown provider '{selected_model}', falling back to Gemini.")
             from google import genai
             from google.genai import types as gtypes
             api_key = os.getenv("GEMINI_API_KEY", "")
@@ -243,7 +261,7 @@ def _call_llm(prompt: str, selected_model: str,
             return (resp.text or "").strip()
 
     except Exception as exc:
-        print(f"{tag} LLM error (non-fatal): {exc}")
+        _print(f"{tag} LLM error (non-fatal): {exc}")
         return ""
 
 
@@ -279,16 +297,32 @@ def _stage_topology(nodes: list, terminal_nets: dict, edges: list,
     str
         Multi-line constraint text injected into every subsequent prompt.
     """
-    print("[MultiAgent] Stage 1/4: Topology Analyst…")
+    _print("[MultiAgent] Stage 1/4: Topology Analyst...")
 
     safe_tn = terminal_nets if isinstance(terminal_nets, dict) else {}
+
+    # Build group-level terminal_nets by aggregating from child finger nodes.
+    # terminal_nets has keys like "MM6_m1" but group nodes have IDs like "MM6".
+    # We pick the first child's nets as representative for the group.
+    from ai_agent.ai_initial_placement.finger_grouper import _transistor_key
+    group_terminal_nets: dict = {}
+    for raw_id, tn in safe_tn.items():
+        parent = _transistor_key(raw_id)
+        if parent not in group_terminal_nets:
+            group_terminal_nets[parent] = dict(tn)
+    # Also add any direct matches (terminal_nets keyed by group name)
+    for node in nodes:
+        dev_id = str(node.get("id", ""))
+        if dev_id not in group_terminal_nets and dev_id in safe_tn:
+            group_terminal_nets[dev_id] = dict(safe_tn[dev_id])
+
     gate_groups:   dict = defaultdict(list)
     drain_groups:  dict = defaultdict(list)
     source_groups: dict = defaultdict(list)
 
     for node in nodes:
-        dev_id  = str(node.get("id", ""))
-        nets    = safe_tn.get(dev_id) or safe_tn.get(re.sub(r'_[mf]\d+$', '', dev_id), {})
+        dev_id = str(node.get("id", ""))
+        nets = group_terminal_nets.get(dev_id, {})
         g = str(nets.get("G", "")).upper()
         d = str(nets.get("D", "")).upper()
         s = str(nets.get("S", "")).upper()
@@ -307,37 +341,35 @@ def _stage_topology(nodes: list, terminal_nets: dict, edges: list,
         f"Total: {len(nodes)} ({len(pmos)} PMOS, {len(nmos)} NMOS)",
     ]
 
-    # Electrical parameters per device
     for n in sorted(nodes, key=lambda x: x.get("id", "")):
         e = n.get("electrical", {})
+        tn = group_terminal_nets.get(n["id"], {})
         lines.append(
             f"  {n['id']:12s}  type={n.get('type','?'):5s}  "
             f"m={e.get('m',1)}  nf={e.get('nf',1)}  "
-            f"nfin={e.get('nfin',1)}  l={e.get('l','?')}"
+            f"G={tn.get('G','?')}  D={tn.get('D','?')}  S={tn.get('S','?')}"
         )
 
     lines.append("\n=== CONNECTIVITY GROUPS ===")
+    id_to_node = {str(n.get("id", "")): n for n in nodes}
 
-    # Shared-gate → current mirrors or diff-pair loads
     for net, devs in sorted(gate_groups.items()):
         if len(devs) >= 2:
-            types = {node.get("type") for node in nodes if node.get("id") in devs}
-            tag   = "DIFF-PAIR?" if len(types) > 1 else "MIRROR/MATCHED"
-            lines.append(f"  shared-gate  [{net}] ({tag}): {' ↔ '.join(devs)}")
+            types = {id_to_node.get(d, {}).get("type") for d in devs}
+            tag = "DIFF-PAIR?" if len(types) > 1 else "MIRROR/MATCHED"
+            lines.append(f"  shared-gate  [{net}] ({tag}): {', '.join(devs)}")
 
-    # Shared-drain → cascode / folded connections
     for net, devs in sorted(drain_groups.items()):
         if len(devs) >= 2:
-            lines.append(f"  shared-drain [{net}]: {' ↔ '.join(devs)}")
+            lines.append(f"  shared-drain [{net}]: {', '.join(devs)}")
 
-    # Shared-source → tail / bias chains
     for net, devs in sorted(source_groups.items()):
         if len(devs) >= 2:
-            lines.append(f"  shared-src   [{net}]: {' ↔ '.join(devs)}")
+            lines.append(f"  shared-src   [{net}]: {', '.join(devs)}")
 
     constraint_text = "\n".join(lines)
 
-    # ── LLM enrichment ───────────────────────────────────────────
+    # -- LLM enrichment --
     adjacency_str = _build_net_adjacency(nodes, edges)
     inventory_str = _build_device_inventory(nodes)
 
@@ -374,11 +406,21 @@ Format: 6-10 bullet points. Be specific. Use device IDs.
             + constraint_text
         )
 
-    n_mirr  = sum(1 for devs in gate_groups.values()  if len(devs) >= 2)
-    n_casc  = sum(1 for devs in drain_groups.values() if len(devs) >= 2)
-    print(f"[MultiAgent]   {len(pmos)} PMOS  {len(nmos)} NMOS  "
+    n_mirr = sum(1 for devs in gate_groups.values() if len(devs) >= 2)
+    n_casc = sum(1 for devs in drain_groups.values() if len(devs) >= 2)
+    _print(f"[MultiAgent]   {len(pmos)} PMOS  {len(nmos)} NMOS  "
           f"| {n_mirr} mirror/matched group(s)  {n_casc} cascode group(s)")
-    return constraint_text
+
+    # -- Matching detection using rich analysis from finger_grouper --
+    matching_section = build_matching_section(
+        nodes, edges, group_terminal_nets
+    )
+    if matching_section:
+        constraint_text += "\n\n" + matching_section
+        n_match_lines = len([l for l in matching_section.splitlines() if l.strip()])
+        _print(f"[MultiAgent]   Matching analysis: {n_match_lines} constraint lines injected")
+
+    return constraint_text, group_terminal_nets
 
 
 ###############################################################################
@@ -420,7 +462,6 @@ def _build_multirow_prompt(nodes: list, edges: list, graph_data: dict,
     # Width per device ≈ 0.294µm, row pitch = 0.668µm.
     # For a square: n_devices_per_row * 0.294 ≈ n_total_rows * 0.668
     # So: devices_per_row ≈ sqrt(N * 0.668 / 0.294) ≈ sqrt(N * 2.27)
-    import math
     n_total   = len(nmos_ids) + len(pmos_ids)
     avg_width = sum(_device_width(n) for n in nodes) / max(1, len(nodes))
     devs_per_row = max(4, int(math.sqrt(n_total * ROW_PITCH / avg_width)))
@@ -442,7 +483,7 @@ def _build_multirow_prompt(nodes: list, edges: list, graph_data: dict,
         f"  DO NOT put {len(pmos_ids)} devices in a single row — split by function.\n"
     )
 
-    print(f"[MultiAgent]   Square-ratio target: {target_nmos_rows} NMOS rows × "
+    _print(f"[MultiAgent]   Square-ratio target: {target_nmos_rows} NMOS rows × "
           f"{target_nmos_per} dev + {target_pmos_rows} PMOS rows × {target_pmos_per} dev")
 
     return f"""\
@@ -554,6 +595,410 @@ CRITICAL CHECKS before outputting:
 
 
 ###############################################################################
+# 2.5  Deterministic Topology-Driven Placement
+###############################################################################
+
+_POWER_RAIL = frozenset({"VDD", "VSS", "GND", "VCC", "AVDD", "AVSS", ""})
+
+
+def _deterministic_placement(
+        nodes: list,
+        edges: list,
+        group_terminal_nets: dict,
+        abutment_candidates: list,
+) -> list:
+    """
+    Fully deterministic placement engine driven by circuit topology.
+
+    Uses terminal net analysis to classify every device into a functional
+    role (diff pair, tail, mirror, cascode, latch, switch) and assigns
+    it to the correct row with symmetric ordering.
+
+    Returns placed node dicts (same format as _stage_placement output).
+    """
+    _print("[MultiAgent] Stage 2/4: Deterministic Topology-Driven Placement...")
+
+    node_map = {n["id"]: n for n in nodes}
+    pmos_ids = {n["id"] for n in nodes if n.get("type") == "pmos"}
+    nmos_ids = {n["id"] for n in nodes if n.get("type") == "nmos"}
+
+    # ── Classify every device into functional roles ─────────────────
+    roles: dict = {}  # dev_id -> role string
+    used: set = set()
+
+    # 1. Diff pair: gate = VINP or VINN
+    vinp, vinn = [], []
+    for gid, tn in group_terminal_nets.items():
+        g = str(tn.get("G", "")).upper()
+        if "VINP" in g or "INP" in g:
+            vinp.append(gid)
+        elif "VINN" in g or "INN" in g:
+            vinn.append(gid)
+    for d in vinp + vinn:
+        roles[d] = "diff_pair"
+        used.add(d)
+
+    # 2. Cross-coupled latch: D of A = G of B AND D of B = G of A
+    cross_coupled = []
+    gids = list(group_terminal_nets.keys())
+    for i, ga in enumerate(gids):
+        for gb in gids[i + 1:]:
+            ta = group_terminal_nets[ga]
+            tb = group_terminal_nets[gb]
+            if (ta.get("D") and ta["D"] == tb.get("G") and
+                    tb.get("D") and tb["D"] == ta.get("G")):
+                cross_coupled.append((ga, gb))
+                if ga not in used:
+                    roles[ga] = "cross_coupled"
+                    used.add(ga)
+                if gb not in used:
+                    roles[gb] = "cross_coupled"
+                    used.add(gb)
+
+    # 3. Tail current: shares a non-power source/drain net with diff pair
+    diff_ids = set(vinp + vinn)
+    diff_source_nets = set()
+    for did in diff_ids:
+        tn = group_terminal_nets.get(did, {})
+        s = str(tn.get("S", "")).upper()
+        if s and s not in _POWER_RAIL:
+            diff_source_nets.add(s)
+
+    for gid, tn in group_terminal_nets.items():
+        if gid in used:
+            continue
+        d_net = str(tn.get("D", "")).upper()
+        s_net = str(tn.get("S", "")).upper()
+        if d_net in diff_source_nets or s_net in diff_source_nets:
+            roles[gid] = "tail"
+            used.add(gid)
+
+    # 4. CLK switches: gate = CLK
+    for gid, tn in group_terminal_nets.items():
+        if gid in used:
+            continue
+        g = str(tn.get("G", "")).upper()
+        if g == "CLK":
+            roles[gid] = "clk_switch"
+            used.add(gid)
+
+    # 5. Current mirrors: same-type, shared gate, one diode-connected
+    gate_groups: dict = defaultdict(list)
+    for gid, tn in group_terminal_nets.items():
+        g = str(tn.get("G", "")).upper()
+        if g and g not in _POWER_RAIL and g != "CLK":
+            gate_groups[g].append(gid)
+
+    for g_net, members in gate_groups.items():
+        if len(members) < 2:
+            continue
+        types = {node_map.get(m, {}).get("type", "") for m in members}
+        if len(types) != 1:
+            continue
+        # Check diode-connected
+        has_diode = any(
+            str(group_terminal_nets.get(m, {}).get("D", "")).upper() == g_net
+            for m in members
+        )
+        if has_diode:
+            for m in members:
+                if m not in used:
+                    roles[m] = "mirror"
+                    used.add(m)
+
+    # 6. Cascode: shares drain net with a device of different type
+    drain_groups_map: dict = defaultdict(list)
+    for gid, tn in group_terminal_nets.items():
+        d = str(tn.get("D", "")).upper()
+        if d and d not in _POWER_RAIL:
+            drain_groups_map[d].append(gid)
+
+    for d_net, members in drain_groups_map.items():
+        if len(members) < 2:
+            continue
+        for m in members:
+            if m not in used:
+                roles[m] = "cascode"
+                used.add(m)
+
+    # 7. Remaining unclassified -> "other"
+    for n in nodes:
+        if n["id"] not in used:
+            roles[n["id"]] = "other"
+
+    # ── Log role classification ─────────────────────────────────────
+    role_summary = defaultdict(list)
+    for dev_id, role in roles.items():
+        role_summary[role].append(dev_id)
+    for role, devs in sorted(role_summary.items()):
+        _print(f"[MultiAgent]   Role [{role}]: {', '.join(sorted(devs))}")
+
+    # ── Assign to rows by function ──────────────────────────────────
+    # NMOS rows (bottom to top): tail -> diff_pair -> cascode -> latch
+    # PMOS rows (bottom to top): mirror/load -> cascode -> switches
+    nmos_rows_plan: list = []
+    pmos_rows_plan: list = []
+
+    def _add_row(rows_list, label, dev_ids, expected_type):
+        """Add a row if any devices of the expected type exist."""
+        typed = [d for d in dev_ids if d in (pmos_ids if expected_type == "pmos" else nmos_ids)]
+        if typed:
+            rows_list.append({"label": label, "devices": typed})
+
+    # NMOS rows
+    nmos_tail = [d for d, r in roles.items() if r == "tail" and d in nmos_ids]
+    nmos_diff = [d for d, r in roles.items() if r == "diff_pair" and d in nmos_ids]
+    nmos_casc = [d for d, r in roles.items() if r == "cascode" and d in nmos_ids]
+    nmos_latch = [d for d, r in roles.items() if r == "cross_coupled" and d in nmos_ids]
+    nmos_clk = [d for d, r in roles.items() if r == "clk_switch" and d in nmos_ids]
+    nmos_mirror = [d for d, r in roles.items() if r == "mirror" and d in nmos_ids]
+    nmos_other = [d for d, r in roles.items() if r == "other" and d in nmos_ids]
+
+    if nmos_tail:
+        nmos_rows_plan.append({"label": "TAIL_CURRENT", "devices": sorted(nmos_tail)})
+    if nmos_diff:
+        # Interdigitate: VINP and VINN devices alternating
+        nmos_vinp = [d for d in nmos_diff if d in vinp]
+        nmos_vinn = [d for d in nmos_diff if d in vinn]
+        interdig = _interdigitate_matched(nmos_vinp, nmos_vinn)
+        nmos_rows_plan.append({"label": "DIFF_PAIR", "devices": interdig})
+    if nmos_casc:
+        nmos_rows_plan.append({"label": "NMOS_CASCODE", "devices": sorted(nmos_casc)})
+    if nmos_latch:
+        nmos_rows_plan.append({"label": "NMOS_LATCH", "devices": sorted(nmos_latch)})
+    if nmos_clk:
+        nmos_rows_plan.append({"label": "NMOS_CLK_SWITCH", "devices": sorted(nmos_clk)})
+    if nmos_mirror:
+        nmos_rows_plan.append({"label": "NMOS_MIRROR", "devices": sorted(nmos_mirror)})
+    if nmos_other:
+        nmos_rows_plan.append({"label": "NMOS_MISC", "devices": sorted(nmos_other)})
+
+    # PMOS rows
+    pmos_mirror = [d for d, r in roles.items() if r == "mirror" and d in pmos_ids]
+    pmos_diff = [d for d, r in roles.items() if r == "diff_pair" and d in pmos_ids]
+    pmos_casc = [d for d, r in roles.items() if r == "cascode" and d in pmos_ids]
+    pmos_latch = [d for d, r in roles.items() if r == "cross_coupled" and d in pmos_ids]
+    pmos_clk = [d for d, r in roles.items() if r == "clk_switch" and d in pmos_ids]
+    pmos_other = [d for d, r in roles.items() if r == "other" and d in pmos_ids]
+
+    if pmos_mirror:
+        pmos_rows_plan.append({"label": "PMOS_MIRROR_LOAD", "devices": sorted(pmos_mirror)})
+    if pmos_diff:
+        pmos_vinp = [d for d in pmos_diff if d in vinp]
+        pmos_vinn = [d for d in pmos_diff if d in vinn]
+        interdig = _interdigitate_matched(pmos_vinp, pmos_vinn)
+        pmos_rows_plan.append({"label": "PMOS_DIFF_PAIR", "devices": interdig})
+    if pmos_latch:
+        pmos_rows_plan.append({"label": "PMOS_LATCH", "devices": sorted(pmos_latch)})
+    if pmos_casc:
+        pmos_rows_plan.append({"label": "PMOS_CASCODE", "devices": sorted(pmos_casc)})
+    if pmos_clk:
+        pmos_rows_plan.append({"label": "PMOS_CLK_SWITCH", "devices": sorted(pmos_clk)})
+    if pmos_other:
+        pmos_rows_plan.append({"label": "PMOS_MISC", "devices": sorted(pmos_other)})
+
+    # Fallback: if no rows planned, single row each
+    if not nmos_rows_plan:
+        nmos_rows_plan = [{"label": "NMOS", "devices": sorted(nmos_ids)}]
+    if not pmos_rows_plan:
+        pmos_rows_plan = [{"label": "PMOS", "devices": sorted(pmos_ids)}]
+
+    # ── Log row plan ────────────────────────────────────────────────
+    total_rows = len(nmos_rows_plan) + len(pmos_rows_plan)
+    _print(f"[MultiAgent]   Row plan: {len(nmos_rows_plan)} NMOS + "
+          f"{len(pmos_rows_plan)} PMOS = {total_rows} rows")
+    for r in nmos_rows_plan:
+        _print(f"[MultiAgent]     NMOS [{r['label']}]: {', '.join(r['devices'])}")
+    for r in pmos_rows_plan:
+        _print(f"[MultiAgent]     PMOS [{r['label']}]: {', '.join(r['devices'])}")
+
+    # ── Convert to geometry ─────────────────────────────────────────
+    placed = _convert_multirow_to_geometry(
+        {"nmos_rows": nmos_rows_plan, "pmos_rows": pmos_rows_plan},
+        nodes, abutment_candidates,
+    )
+    _print(f"[MultiAgent]   Placed {len(placed)} device(s) in "
+          f"{len(nmos_rows_plan)} NMOS row(s) + {len(pmos_rows_plan)} PMOS row(s).")
+    return placed
+
+
+def _interdigitate_matched(group_a: list, group_b: list) -> list:
+    """
+    Interdigitate two matched groups in ABBA pattern for symmetry.
+    A=[a1,a2], B=[b1,b2] -> [a1, b1, b2, a2]  (ABBA)
+    If unequal sizes or single devices, just alternate.
+    """
+    if not group_a and not group_b:
+        return []
+    if not group_a:
+        return list(group_b)
+    if not group_b:
+        return list(group_a)
+
+    a = sorted(group_a)
+    b = sorted(group_b)
+
+    if len(a) == len(b):
+        # True ABBA: A1 B1 B2 A2 | A3 B3 B4 A4 ...
+        result = []
+        i = 0
+        while i < len(a):
+            if i + 1 < len(a):
+                result.extend([a[i], b[i], b[i+1], a[i+1]])
+                i += 2
+            else:
+                result.extend([a[i], b[i]])
+                i += 1
+        return result
+    else:
+        # Simple alternation for unequal sizes
+        result = []
+        for i in range(max(len(a), len(b))):
+            if i < len(a):
+                result.append(a[i])
+            if i < len(b):
+                result.append(b[i])
+        return result
+
+
+def _enforce_matching_in_rows(
+        placed_nodes: list,
+        group_terminal_nets: dict,
+) -> list:
+    """
+    Comprehensive post-processing of LLM placement:
+
+    1. Extract the multi-row structure from placed geometry
+    2. Split wide rows to achieve near-square aspect ratio
+    3. Re-order within rows for matching (ABBA, centroid, cross-coupled)
+    4. Re-run geometry engine with optimised row plan
+    5. Log quality metrics
+    """
+    if not placed_nodes or not group_terminal_nets:
+        return placed_nodes
+
+    # ── Classify devices for matching ───────────────────────────────
+    vinp_ids, vinn_ids = set(), set()
+    cross_pairs = []
+
+    for gid, tn in group_terminal_nets.items():
+        g = str(tn.get("G", "")).upper()
+        if "VINP" in g or "INP" in g:
+            vinp_ids.add(gid)
+        elif "VINN" in g or "INN" in g:
+            vinn_ids.add(gid)
+
+    gids_list = list(group_terminal_nets.keys())
+    for i, ga in enumerate(gids_list):
+        for gb in gids_list[i + 1:]:
+            ta, tb = group_terminal_nets[ga], group_terminal_nets[gb]
+            if (ta.get("D") and ta["D"] == tb.get("G") and
+                    tb.get("D") and tb["D"] == ta.get("G")):
+                cross_pairs.append((ga, gb))
+
+    # ── Extract row structure from placed geometry ──────────────────
+    row_buckets: dict = defaultdict(list)
+    type_map = {}
+    for n in placed_nodes:
+        y = round(float(n.get("geometry", {}).get("y", 0.0)), 3)
+        row_buckets[y].append(n)
+        type_map[n["id"]] = str(n.get("type", "")).lower()
+
+    # Sort rows by Y, separate NMOS (lower) and PMOS (upper)
+    sorted_ys = sorted(row_buckets.keys())
+    nmos_rows_raw = []
+    pmos_rows_raw = []
+
+    for y in sorted_ys:
+        row_nodes = sorted(row_buckets[y], key=lambda n: n["geometry"]["x"])
+        dev_ids = [n["id"] for n in row_nodes]
+        row_type = type_map.get(dev_ids[0], "nmos") if dev_ids else "nmos"
+        label = f"ROW_Y{y}"
+        if row_type == "pmos":
+            pmos_rows_raw.append({"label": label, "devices": dev_ids})
+        else:
+            nmos_rows_raw.append({"label": label, "devices": dev_ids})
+
+    # ── Split wide rows for square aspect ratio ────────────────────
+    # Compute target devices per row from total count
+    all_ids = [n["id"] for n in placed_nodes]
+    n_total = len(all_ids)
+    avg_width = 0.294  # STD_PITCH approximation
+    target_per_row = max(3, int(math.sqrt(n_total * ROW_PITCH / avg_width)))
+    target_per_row = min(target_per_row, MAX_ROW_DEVS)
+
+    def _split_row(row_dict, max_per_row):
+        """Split a row if it has too many devices."""
+        devs = row_dict["devices"]
+        label = row_dict["label"]
+        if len(devs) <= max_per_row:
+            return [row_dict]
+        chunks = []
+        idx = 0
+        while devs:
+            chunk = devs[:max_per_row]
+            devs = devs[max_per_row:]
+            chunks.append({"label": f"{label}_{idx}", "devices": chunk})
+            idx += 1
+        return chunks
+
+    nmos_rows = []
+    for r in nmos_rows_raw:
+        nmos_rows.extend(_split_row(r, target_per_row))
+    pmos_rows = []
+    for r in pmos_rows_raw:
+        pmos_rows.extend(_split_row(r, target_per_row))
+
+    rows_split = (len(nmos_rows) + len(pmos_rows)) - (len(nmos_rows_raw) + len(pmos_rows_raw))
+    if rows_split > 0:
+        _print(f"[MultiAgent]   Row splitting: {rows_split} row(s) split "
+              f"(target {target_per_row} dev/row for square ratio)")
+
+    # ── Re-order within rows for matching ──────────────────────────
+    fixes_applied = 0
+    for row in nmos_rows + pmos_rows:
+        devs = row["devices"]
+
+        # Diff pair interdigitation
+        row_vinp = [d for d in devs if d in vinp_ids]
+        row_vinn = [d for d in devs if d in vinn_ids]
+        if row_vinp and row_vinn:
+            others = [d for d in devs if d not in vinp_ids and d not in vinn_ids]
+            interdig = _interdigitate_matched(row_vinp, row_vinn)
+            half = len(others) // 2
+            row["devices"] = others[:half] + interdig + others[half:]
+            fixes_applied += 1
+
+        # Cross-coupled: force adjacent at center
+        for ga, gb in cross_pairs:
+            if ga in devs and gb in devs:
+                others = [d for d in row["devices"] if d != ga and d != gb]
+                half = len(others) // 2
+                row["devices"] = others[:half] + [ga, gb] + others[half:]
+                fixes_applied += 1
+
+    if fixes_applied:
+        _print(f"[MultiAgent]   Matching enforcement: {fixes_applied} row(s) re-ordered")
+
+    # ── Log final row plan ─────────────────────────────────────────
+    total_rows = len(nmos_rows) + len(pmos_rows)
+    _print(f"[MultiAgent]   Final row plan: {len(nmos_rows)} NMOS + "
+          f"{len(pmos_rows)} PMOS = {total_rows} rows")
+    for r in nmos_rows:
+        _print(f"[MultiAgent]     NMOS [{r['label']}]: {', '.join(r['devices'])}")
+    for r in pmos_rows:
+        _print(f"[MultiAgent]     PMOS [{r['label']}]: {', '.join(r['devices'])}")
+
+    # ── Re-run geometry engine with improved row plan ──────────────
+    placed = _convert_multirow_to_geometry(
+        {"nmos_rows": nmos_rows, "pmos_rows": pmos_rows},
+        placed_nodes, [],  # No abutment candidates at group level
+    )
+
+    return placed
+
+
+###############################################################################
 # 3.  Multi-Row Geometry Engine
 ###############################################################################
 
@@ -571,19 +1016,29 @@ def _build_abut_pairs(nodes: list, candidates: list) -> set:
     Returns
     -------
     set of (str, str)
-        Abutted device ID pairs in directed order (a abuts right → b).
+        Abutted device ID pairs in directed order (a abuts right -> b).
     """
     pairs: set = set()
     for c in (candidates or []):
         pairs.add((str(c.get("dev_a", "")), str(c.get("dev_b", ""))))
+
+    # Build row-grouped adjacency from embedded flags to avoid
+    # false cross-row abutment pairs.  Only devices in the SAME row
+    # (Y rounded to 3dp) with adjacent X positions qualify.
+    row_buckets: dict[float, list] = defaultdict(list)
     for n in nodes:
-        abut = n.get("abutment", {})
-        nid  = str(n.get("id", ""))
-        if abut.get("abut_right"):
-            for m in nodes:
-                mid = str(m.get("id", ""))
-                if m.get("abutment", {}).get("abut_left") and mid != nid:
-                    pairs.add((nid, mid))
+        y = round(float(n.get("geometry", {}).get("y", 0.0)), 3)
+        row_buckets[y].append(n)
+
+    for y_key, row_nodes in row_buckets.items():
+        row_sorted = sorted(row_nodes, key=lambda n: n.get("geometry", {}).get("x", 0.0))
+        for i in range(len(row_sorted) - 1):
+            n1 = row_sorted[i]
+            n2 = row_sorted[i + 1]
+            if (n1.get("abutment", {}).get("abut_right")
+                    and n2.get("abutment", {}).get("abut_left")):
+                pairs.add((str(n1.get("id", "")), str(n2.get("id", ""))))
+
     return pairs
 
 
@@ -612,7 +1067,7 @@ def _place_row(devices: list, row_y: float, node_map: dict,
     cursor = 0.0
     for idx, dev_id in enumerate(devices):
         if dev_id not in node_map:
-            print(f"[MultiAgent][geo] WARNING: '{dev_id}' not in node_map — skipping")
+            _print(f"[MultiAgent][geo] WARNING: '{dev_id}' not in node_map — skipping")
             continue
         node = copy.deepcopy(node_map[dev_id])
         geo  = node.setdefault("geometry", {})
@@ -714,12 +1169,12 @@ def _convert_multirow_to_geometry(multirow_data: dict, original_nodes: list,
         (float(n.get("geometry", {}).get("height", 0.5)) for n in original_nodes),
         default=0.5
     )
-    row_pitch = round(max(ROW_PITCH, max_height * 1.25), 3)  # 25% gap for routing
-    pmos_nmos_gap = round(max_height * 1.5, 3)  # 50% extra gap between types
+    row_pitch = round(max(ROW_PITCH, max_height + 0.15), 3)  # 0.15um routing gap
+    pmos_nmos_gap = round(row_pitch, 3)  # same as row pitch (no wasted space)
 
-    print(f"[MultiAgent]   Row pitch: {row_pitch:.3f}µm "
+    _print(f"[MultiAgent]   Row pitch: {row_pitch:.3f}µm "
           f"(device height={max_height:.3f}µm, gap={row_pitch - max_height:.3f}µm)")
-    print(f"[MultiAgent]   PMOS/NMOS gap: {pmos_nmos_gap:.3f}µm")
+    _print(f"[MultiAgent]   PMOS/NMOS gap: {pmos_nmos_gap:.3f}µm")
 
     n_nmos = len(nmos_rows)
     n_pmos = len(pmos_rows)
@@ -735,7 +1190,7 @@ def _convert_multirow_to_geometry(multirow_data: dict, original_nodes: list,
         y       = nmos_ys[row_idx]
         devices = [d for d in row.get("devices", []) if d not in placed_ids]
         label   = row.get("label", f"nmos_row_{row_idx}")
-        print(f"[MultiAgent]   NMOS row {row_idx} [{label}]  y={y:.3f}  "
+        _print(f"[MultiAgent]   NMOS row {row_idx} [{label}]  y={y:.3f}  "
               f"{len(devices)} device(s)")
         row_nodes = _place_row(devices, y, node_map, abut_pairs)
         placed_nodes.extend(row_nodes)
@@ -746,7 +1201,7 @@ def _convert_multirow_to_geometry(multirow_data: dict, original_nodes: list,
         y       = pmos_ys[row_idx]
         devices = [d for d in row.get("devices", []) if d not in placed_ids]
         label   = row.get("label", f"pmos_row_{row_idx}")
-        print(f"[MultiAgent]   PMOS row {row_idx} [{label}]  y={y:.3f}  "
+        _print(f"[MultiAgent]   PMOS row {row_idx} [{label}]  y={y:.3f}  "
               f"{len(devices)} device(s)")
         row_nodes = _place_row(devices, y, node_map, abut_pairs)
         placed_nodes.extend(row_nodes)
@@ -783,7 +1238,7 @@ def _convert_multirow_to_geometry(multirow_data: dict, original_nodes: list,
         orphan["abutment"] = {"abut_left": False, "abut_right": False}
         placed_nodes.append(orphan)
         placed_ids.add(nid)
-        print(f"[MultiAgent]   Orphan '{nid}' ({dev_type}) → ({x:.3f}, {y:.3f})")
+        _print(f"[MultiAgent]   Orphan '{nid}' ({dev_type}) → ({x:.3f}, {y:.3f})")
 
     # ── Center all rows for symmetric layout ──────────────────────
     # Compute each row's bounding width (last device x + its width),
@@ -813,9 +1268,11 @@ def _convert_multirow_to_geometry(multirow_data: dict, original_nodes: list,
                     n["geometry"]["x"] = round(float(n["geometry"]["x"]) + shift, 6)
 
     # ── Log layout metrics ──────────────────────────────────────────
-    total_height = (pmos_ys[-1] if pmos_ys else 0) + max_height - (nmos_ys[0] if nmos_ys else 0)
+    nmos_base = nmos_ys[0] if nmos_ys else 0.0
+    pmos_top  = (pmos_ys[-1] + max_height) if pmos_ys else 0.0
+    total_height = max(pmos_top, (nmos_ys[-1] + max_height) if nmos_ys else 0.0) - nmos_base
     aspect = global_max_width / total_height if total_height > 0 else 0
-    print(f"[MultiAgent]   Layout: {global_max_width:.3f}µm × {total_height:.3f}µm "
+    _print(f"[MultiAgent]   Layout: {global_max_width:.3f}µm × {total_height:.3f}µm "
           f"(aspect={aspect:.2f}, target≈1.0)")
 
     return placed_nodes
@@ -842,13 +1299,23 @@ def _validate_multirow(nodes: list, placed: list) -> list:
     orig_types = {n["id"]: n.get("type", "?") for n in nodes}
     placed_ids = {p.get("id") for p in placed if isinstance(p, dict) and p.get("id")}
 
-    # 1. Coverage
+    # 1. Coverage + duplicates
     missing = orig_ids - placed_ids
+    extra   = placed_ids - orig_ids
     if missing:
         errors.append(f"MISSING devices: {sorted(missing)}")
+    if extra:
+        errors.append(f"EXTRA (invented) devices: {sorted(extra)}")
 
-    # 2. Same-row overlap (distance-based, not slot-based)
-    MIN_SPACING = ABUT_SPACING * 0.9  # ~0.063 µm — anything closer is a collision
+    from collections import Counter
+    id_counts = Counter(p.get("id") for p in placed if isinstance(p, dict) and p.get("id"))
+    duplicates = [dev_id for dev_id, count in id_counts.items() if count > 1]
+    if duplicates:
+        errors.append(f"DUPLICATE devices: {sorted(duplicates)}")
+
+    # 2. Same-row overlap (bounding-box based, not slot-based)
+    # For non-abutted pairs: n2.x must be >= n1.x + n1.width (no overlap)
+    # For abutted pairs: n2.x must be exactly n1.x + ABUT_SPACING (0.070 µm)
     row_devs: dict = defaultdict(list)
     for p in placed:
         if not isinstance(p, dict):
@@ -856,18 +1323,35 @@ def _validate_multirow(nodes: list, placed: list) -> list:
         geo = p.get("geometry", {})
         x   = float(geo.get("x", 0.0))
         y   = round(float(geo.get("y", 0.0)), 3)
-        row_devs[y].append((x, p.get("id", "?")))
+        w   = float(geo.get("width", STD_PITCH))
+        row_devs[y].append((x, w, p.get("id", "?"), p))
 
     for y, devs in row_devs.items():
         devs_sorted = sorted(devs, key=lambda d: d[0])
         for i in range(len(devs_sorted) - 1):
-            x_a, id_a = devs_sorted[i]
-            x_b, id_b = devs_sorted[i + 1]
-            if abs(x_b - x_a) < MIN_SPACING:
-                errors.append(
-                    f"X-COLLISION in row y={y:.3f}: '{id_a}' and '{id_b}' "
-                    f"only {abs(x_b - x_a):.4f}µm apart (min={MIN_SPACING:.4f}µm)"
-                )
+            x_a, w_a, id_a, node_a = devs_sorted[i]
+            x_b, w_b, id_b, node_b = devs_sorted[i + 1]
+            # Check if this is an abutted pair
+            abut_a = node_a.get("abutment", {})
+            abut_b = node_b.get("abutment", {})
+            is_abutted = abut_a.get("abut_right") and abut_b.get("abut_left")
+            if is_abutted:
+                # Abutted: must be exactly ABUT_SPACING apart
+                if abs(x_b - x_a - ABUT_SPACING) > 0.005:
+                    errors.append(
+                        f"Abutment spacing error in row y={y:.3f}: "
+                        f"'{id_a}' and '{id_b}' "
+                        f"delta X={x_b - x_a:.4f}µm, expected {ABUT_SPACING:.3f}µm"
+                    )
+            else:
+                # Non-abutted: n2.x must be >= n1.x + n1.width
+                min_x_b = x_a + w_a
+                if x_b < min_x_b - 0.001:
+                    errors.append(
+                        f"OVERLAP in row y={y:.3f}: '{id_a}' and '{id_b}' "
+                        f"n2.x={x_b:.4f} < n1.x+n1.w={min_x_b:.4f} "
+                        f"(bounding boxes overlap by {min_x_b - x_b:.4f}µm)"
+                    )
 
     # 3. Type must not change
     for p in placed:
@@ -913,7 +1397,7 @@ def _stage_placement(nodes: list, edges: list, graph_data: dict,
     list
         Placed node dicts with geometry.
     """
-    print("[MultiAgent] Stage 2/4: Placement Specialist (multi-row)…")
+    _print("[MultiAgent] Stage 2/4: Placement Specialist (multi-row)…")
 
     abutment_str = _format_abutment_candidates(abutment_candidates)
     prompt       = _build_multirow_prompt(nodes, edges, graph_data,
@@ -924,7 +1408,7 @@ def _stage_placement(nodes: list, edges: list, graph_data: dict,
 
     last_error = None
     for attempt in range(1, MAX_RETRIES + 1):
-        print(f"[MultiAgent]   Placement attempt {attempt}/{MAX_RETRIES}…")
+        _print(f"[MultiAgent]   Placement attempt {attempt}/{MAX_RETRIES}…")
         raw = _call_llm(prompt, selected_model, task_weight,
                         stage=f"Placement#{attempt}")
         if not raw:
@@ -938,6 +1422,16 @@ def _stage_placement(nodes: list, edges: list, graph_data: dict,
         except Exception as exc:
             last_error = f"JSON parse failed: {exc}"
             prompt += f"\n\nJSON PARSE FAILED ({exc}). Return ONLY valid JSON."
+            continue
+
+        if not isinstance(data, dict):
+            last_error = (
+                f"Parsed JSON root must be an object, got {type(data).__name__}"
+            )
+            prompt += (
+                "\n\nINVALID OUTPUT SHAPE: return a JSON object with "
+                "'nmos_rows' and 'pmos_rows' keys."
+            )
             continue
 
         # Handle legacy schema returned by a stubborn model
@@ -990,10 +1484,10 @@ def _stage_placement(nodes: list, edges: list, graph_data: dict,
 
         if missing_nmos:
             nmos_rows.append({"label": "misc_nmos", "devices": missing_nmos})
-            print(f"[MultiAgent]   Auto-appended NMOS: {missing_nmos}")
+            _print(f"[MultiAgent]   Auto-appended NMOS: {missing_nmos}")
         if missing_pmos:
             pmos_rows.append({"label": "misc_pmos", "devices": missing_pmos})
-            print(f"[MultiAgent]   Auto-appended PMOS: {missing_pmos}")
+            _print(f"[MultiAgent]   Auto-appended PMOS: {missing_pmos}")
 
         # ── Geometry conversion ─────────────────────────────────────
         try:
@@ -1018,12 +1512,12 @@ def _stage_placement(nodes: list, edges: list, graph_data: dict,
 
         n_nmos_rows = len(nmos_rows)
         n_pmos_rows = len(pmos_rows)
-        print(f"[MultiAgent]   ✓ Placed {len(placed)} device(s) in "
+        _print(f"[MultiAgent]   ✓ Placed {len(placed)} device(s) in "
               f"{n_nmos_rows} NMOS row(s) + {n_pmos_rows} PMOS row(s).")
         return placed
 
     # ── Deterministic fallback ─────────────────────────────────────
-    print(f"[MultiAgent]   All LLM attempts failed ({last_error}). "
+    _print(f"[MultiAgent]   All LLM attempts failed ({last_error}). "
           "Using deterministic fallback.")
     return _deterministic_fallback(nodes, abutment_candidates)
 
@@ -1147,7 +1641,7 @@ def _deterministic_fallback(nodes: list, abutment_candidates: list) -> list:
         pmos_rows = [{"label": "pmos", "devices": pmos_ids}]
 
     n_total_rows = len(nmos_rows) + len(pmos_rows)
-    print(f"[MultiAgent]   Deterministic fallback: {len(nmos_rows)} NMOS row(s) + "
+    _print(f"[MultiAgent]   Deterministic fallback: {len(nmos_rows)} NMOS row(s) + "
           f"{len(pmos_rows)} PMOS row(s) = {n_total_rows} total")
 
     return _convert_multirow_to_geometry(
@@ -1183,7 +1677,7 @@ def _stage_drc_and_heal(placed_nodes: list, abutment_candidates: list,
     list
         Geometrically corrected node dicts.
     """
-    print("[MultiAgent] Stage 3/4: DRC & Healing…")
+    _print("[MultiAgent] Stage 3/4: DRC & Healing…")
 
     # ── Group nodes by row (y-value) ───────────────────────────────
     row_buckets: dict = defaultdict(list)
@@ -1196,7 +1690,8 @@ def _stage_drc_and_heal(placed_nodes: list, abutment_candidates: list,
     for y_key, row_nodes in row_buckets.items():
         # Sort by current x (preserves relative LLM ordering)
         row_sorted = sorted(row_nodes, key=lambda n: n.get("geometry", {}).get("x", 0.0))
-        cursor = 0.0
+        # Preserve the row's original leftmost position rather than forcing x=0
+        cursor = row_sorted[0].get("geometry", {}).get("x", 0.0) if row_sorted else 0.0
         for idx, node in enumerate(row_sorted):
             geo      = node.setdefault("geometry", {})
             nid      = node.get("id", "")
@@ -1215,7 +1710,34 @@ def _stage_drc_and_heal(placed_nodes: list, abutment_candidates: list,
     if not no_abutment:
         placed_nodes = _force_abutment_spacing(placed_nodes, abutment_candidates)
 
-    print("[MultiAgent]   DRC healing complete.")
+    _print("[MultiAgent]   DRC healing complete.")
+
+    # ── Re-center all rows for symmetric layout ──────────────────────
+    row_nodes_by_y: dict = defaultdict(list)
+    for p in placed_nodes:
+        ry = round(float(p.get("geometry", {}).get("y", 0.0)), 3)
+        row_nodes_by_y[ry].append(p)
+
+    global_max_width = 0.0
+    row_widths = {}
+    for ry, rnodes in row_nodes_by_y.items():
+        if rnodes:
+            rightmost = max(rnodes, key=lambda n: float(n["geometry"]["x"]))
+            row_w = float(rightmost["geometry"]["x"]) + _device_width(rightmost)
+            row_widths[ry] = row_w
+            global_max_width = max(global_max_width, row_w)
+
+    if global_max_width > 0:
+        for ry, rnodes in row_nodes_by_y.items():
+            if not rnodes:
+                continue
+            row_w = row_widths.get(ry, 0)
+            shift = round((global_max_width - row_w) / 2.0, 6)
+            if shift > 0.001:
+                for n in rnodes:
+                    n["geometry"]["x"] = round(float(n["geometry"]["x"]) + shift, 6)
+        _print(f"[MultiAgent]   Rows re-centered (max width={global_max_width:.3f}µm)")
+
     return placed_nodes
 
 
@@ -1245,12 +1767,12 @@ def _run_sa(nodes: list, edges: list, abutment_candidates: list) -> list:
     """
     try:
         from ai_agent.ai_initial_placement.sa_optimizer import optimize_placement
-        print("[MultiAgent] Running SA Post-Optimisation…")
+        _print("[MultiAgent] Running SA Post-Optimisation…")
         result = optimize_placement(nodes, edges, abutment_candidates=abutment_candidates)
-        print("[MultiAgent] SA complete.")
+        _print("[MultiAgent] SA complete.")
         return result
     except Exception as sa_err:
-        print(f"[MultiAgent] SA failed (non-fatal): {sa_err}")
+        _print(f"[MultiAgent] SA failed (non-fatal): {sa_err}")
         return nodes
 
 
@@ -1290,6 +1812,7 @@ def multi_agent_generate_placement(
         Defaults to "Gemini".
     task_weight : str
         "light" or "heavy" logic mapping. Defaults to "heavy".
+    run_sa : bool
         Run Simulated Annealing post-pass. Default: False.
 
     Raises
@@ -1299,9 +1822,13 @@ def multi_agent_generate_placement(
     FileNotFoundError
         If ``input_json_path`` does not exist.
     """
-    print(f"\n[MultiAgent] ═══ Autonomous Multi-Row Placement — {selected_model} ═══")
+    _print(f"\n[MultiAgent] === Autonomous Multi-Row Placement -- {selected_model} ===")
 
-    # ── Load ────────────────────────────────────────────────────────
+    # Suppress expand/resolve noise during placement
+    if os.environ.get("PLACEMENT_DEBUG_FULL_LOG", "0").lower() not in ("1", "true", "yes"):
+        os.environ["PLACEMENT_STEPS_ONLY"] = "1"
+
+    # -- Load --
     with open(input_json_path, "r", encoding="utf-8") as f:
         graph_data = json.load(f)
 
@@ -1316,42 +1843,67 @@ def multi_agent_generate_placement(
 
     n_pmos = sum(1 for n in nodes if str(n.get("type", "")).lower() == "pmos")
     n_nmos = sum(1 for n in nodes if str(n.get("type", "")).lower() == "nmos")
-    print(f"[MultiAgent] Loaded {len(nodes)} devices ({n_pmos} PMOS, {n_nmos} NMOS), "
+    _print(f"[MultiAgent] Loaded {len(nodes)} devices ({n_pmos} PMOS, {n_nmos} NMOS), "
           f"{len(edges)} edges.")
 
     # ── Normalise Y-coordinates (same as all working placers) ───────
     norm_nodes, y_offset = _normalise_coords(nodes)
     if abs(y_offset) > 1e-9:
-        print(f"[MultiAgent] Y-offset applied: {y_offset:+.4f} µm")
+        _print(f"[MultiAgent] Y-offset applied: {y_offset:+.4f} µm")
 
-    prompt_graph        = dict(graph_data)
-    prompt_graph["nodes"] = norm_nodes
+    # ── Collapse finger-level nodes → transistor groups for LLM ──────
+    group_nodes, group_edges, finger_map = group_fingers(norm_nodes, edges)
+    _print(f"[MultiAgent] Finger grouping: {len(norm_nodes)} nodes → {len(group_nodes)} groups")
+
+    prompt_graph = dict(graph_data)
+    prompt_graph["nodes"] = group_nodes
+    prompt_graph["edges"] = group_edges
 
     # ── Stage 1/4: Topology Analyst (flash — fast analysis) ─────────
-    print(f"[MultiAgent] Model assignment per stage:")
+    _print(f"[MultiAgent] Model assignment per stage:")
     if selected_model == "VertexGemini":
         for k, (m, loc) in _VERTEX_MODELS.items():
             if k == "default": continue
-            print(f"[MultiAgent]   {k:20s} → {m} (location={loc or 'default'})")
+            _print(f"[MultiAgent]   {k:20s} → {m} (location={loc or 'default'})")
     elif selected_model == "Gemini":
         for k, m in _GEMINI_MODELS.items():
             if k == "default": continue
-            print(f"[MultiAgent]   {k:20s} → {m}")
+            _print(f"[MultiAgent]   {k:20s} → {m}")
     elif selected_model == "Alibaba":
         for k, m in _ALIBABA_MODELS.items():
             if k == "default": continue
-            print(f"[MultiAgent]   {k:20s} → {m}")
+            _print(f"[MultiAgent]   {k:20s} → {m}")
 
-    constraint_text = _stage_topology(
-        norm_nodes, terminal_nets, edges, selected_model, "light"
+    constraint_text, group_terminal_nets = _stage_topology(
+        group_nodes, terminal_nets, group_edges, selected_model, "light"
     )
 
-    # ── Stage 2/4: Multi-Row Placement Specialist ──────────────────
-    placed_nodes = _stage_placement(
-        norm_nodes, edges, prompt_graph,
-        abutment_candidates, constraint_text,
-        selected_model, "heavy",
+    # -- Stage 2/4: LLM Placement + Deterministic Matching Enforcement --
+    try:
+        placed_groups = _stage_placement(
+            group_nodes, group_edges, prompt_graph,
+            abutment_candidates, constraint_text,
+            selected_model, "heavy",
+        )
+        # Post-process: enforce matching/symmetry within rows
+        placed_groups = _enforce_matching_in_rows(
+            placed_groups, group_terminal_nets
+        )
+    except Exception as exc:
+        _print(f"[MultiAgent]   LLM placement failed ({exc}), using deterministic fallback...")
+        placed_groups = _deterministic_placement(
+            group_nodes, group_edges, group_terminal_nets,
+            abutment_candidates,
+        )
+
+    # ── Expand groups back to finger-level nodes ───────────────────
+    original_group_nodes = {n["id"]: n for n in group_nodes}
+    placed_nodes = expand_groups(
+        placed_groups, finger_map,
+        no_abutment=no_abutment,
+        original_group_nodes=original_group_nodes,
     )
+    _print(f"[MultiAgent] Expanded {len(placed_groups)} groups → {len(placed_nodes)} finger nodes")
 
     # ── Stage 3/4: DRC & Abutment Healing ──────────────────────────
     placed_nodes = _stage_drc_and_heal(placed_nodes, abutment_candidates, no_abutment)
@@ -1364,7 +1916,7 @@ def multi_agent_generate_placement(
     # ── Restore original Y-coordinate frame ────────────────────────
     placed_nodes = _restore_coords(placed_nodes, y_offset)
 
-    # ── Validate PMOS/NMOS separation in final output ───────────────
+    # -- Validate PMOS/NMOS separation in final output --
     orig_type = {n["id"]: n.get("type", "?") for n in nodes}
     pmos_ys   = [round(float(p.get("geometry", {}).get("y", 0)), 4)
                  for p in placed_nodes if orig_type.get(p.get("id", "")) == "pmos"]
@@ -1372,12 +1924,40 @@ def multi_agent_generate_placement(
                  for p in placed_nodes if orig_type.get(p.get("id", "")) == "nmos"]
     if pmos_ys and nmos_ys:
         if min(pmos_ys) <= max(nmos_ys):
-            print(f"[MultiAgent] ⚠  PMOS/NMOS overlap detected in final output "
-                  f"(min PMOS y={min(pmos_ys):.4f} ≤ max NMOS y={max(nmos_ys):.4f}). "
+            _print(f"[MultiAgent] [!!] PMOS/NMOS overlap detected in final output "
+                  f"(min PMOS y={min(pmos_ys):.4f} <= max NMOS y={max(nmos_ys):.4f}). "
                   "Check DRC after import.")
         else:
-            print(f"[MultiAgent] ✓  PMOS/NMOS separation OK "
-                  f"(PMOS ≥ {min(pmos_ys):.4f} > NMOS ≤ {max(nmos_ys):.4f})")
+            _print(f"[MultiAgent] [OK] PMOS/NMOS separation OK "
+                  f"(PMOS >= {min(pmos_ys):.4f} > NMOS <= {max(nmos_ys):.4f})")
+
+    # -- Quality Report --
+    all_xs = [float(p.get("geometry", {}).get("x", 0)) for p in placed_nodes]
+    all_ys = [float(p.get("geometry", {}).get("y", 0)) for p in placed_nodes]
+    widths = [_device_width(p) for p in placed_nodes]
+    heights = [float(p.get("geometry", {}).get("height", 0.5)) for p in placed_nodes]
+
+    if all_xs and all_ys:
+        layout_w = max(x + w for x, w in zip(all_xs, widths)) - min(all_xs)
+        layout_h = max(y + h for y, h in zip(all_ys, heights)) - min(all_ys)
+        aspect = layout_w / layout_h if layout_h > 0 else 0
+
+        n_rows = len(set(round(y, 3) for y in all_ys))
+        n_nmos_rows = len(set(round(y, 3) for y in nmos_ys)) if nmos_ys else 0
+        n_pmos_rows = len(set(round(y, 3) for y in pmos_ys)) if pmos_ys else 0
+
+        _print(f"\n[MultiAgent] === PLACEMENT QUALITY REPORT ===")
+        _print(f"[MultiAgent]   Layout Size  : {layout_w:.3f}um x {layout_h:.3f}um")
+        _print(f"[MultiAgent]   Aspect Ratio : {aspect:.2f} (target: 1.0)")
+        _print(f"[MultiAgent]   Rows         : {n_rows} total ({n_nmos_rows} NMOS + {n_pmos_rows} PMOS)")
+        _print(f"[MultiAgent]   Devices      : {len(placed_nodes)} placed")
+        if aspect > 0.7 and aspect < 1.4:
+            _print(f"[MultiAgent]   Shape        : [OK] Near-square")
+        elif aspect >= 1.4:
+            _print(f"[MultiAgent]   Shape        : [!!] Wide - consider more rows")
+        else:
+            _print(f"[MultiAgent]   Shape        : [!!] Tall - consider fewer rows")
+        _print(f"[MultiAgent] =================================")
 
     # ── Write output ────────────────────────────────────────────────
     output = dict(graph_data)
@@ -1385,7 +1965,7 @@ def multi_agent_generate_placement(
     with open(output_json_path, "w", encoding="utf-8") as f:
         json.dump(output, f, indent=4)
 
-    print(f"[MultiAgent] ═══ Complete — {len(placed_nodes)} devices placed "
+    _print(f"[MultiAgent] ═══ Complete — {len(placed_nodes)} devices placed "
           f"→ {output_json_path} ═══\n")
 
 
@@ -1399,4 +1979,4 @@ if __name__ == "__main__":
             selected_model=sys.argv[3] if len(sys.argv) > 3 else "Gemini",
         )
     else:
-        print("Usage: python multi_agent_placer.py <input.json> <output.json> [model]")
+        _print("Usage: python multi_agent_placer.py <input.json> <output.json> [model]")

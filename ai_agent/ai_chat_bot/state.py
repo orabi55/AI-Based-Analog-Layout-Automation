@@ -35,3 +35,8 @@ class LayoutState(TypedDict):
     
     # Human Approval
     approved: bool
+
+    # Pipeline config (passed from UI)
+    run_sa: bool
+    no_abutment: bool
+    abutment_candidates: List[Dict]

@@ -5,6 +5,7 @@ Streams ai_initial_placement.placer_graph and emits stage/final updates.
 """
 
 import json
+import os
 import uuid
 from typing import cast
 
@@ -35,17 +36,22 @@ class PlacerGraphWorker(QObject):
         except ImportError:
             self.thread_config = {"configurable": {"thread_id": str(uuid.uuid4())}}
 
-    @Slot(str, str, list, str)
+    @Slot(str, str, list, str, bool, bool, list)
     def process_initial_placement_request(
         self,
         layout_context_json: str,
         user_message: str = "Optimize initial placement.",
         chat_history=None,
         selected_model: str = "Gemini",
+        run_sa: bool = False,
+        no_abutment: bool = False,
+        abutment_candidates: list = None,
     ):
         """Start a new graph run from a serialized layout context JSON."""
         if chat_history is None:
             chat_history = []
+        if abutment_candidates is None:
+            abutment_candidates = []
 
         try:
             layout_context = json.loads(layout_context_json) if layout_context_json else {}
@@ -75,6 +81,10 @@ class PlacerGraphWorker(QObject):
             "gap_px": layout_context.get("gap_px", 0.0),
             "drc_retry_count": 0,
             "routing_pass_count": 0,
+            # New fields — passed from UI
+            "run_sa": run_sa,
+            "no_abutment": no_abutment,
+            "abutment_candidates": abutment_candidates,
         }
 
         try:
@@ -84,6 +94,35 @@ class PlacerGraphWorker(QObject):
             })
         except ImportError:
             self.thread_config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+
+        # Console: short [IP] step lines only — see ai_agent/ai_chat_bot/pipeline_log.py
+        # Set PLACEMENT_DEBUG_FULL_LOG=1 before launch to print full prompts / LLM_FACTORY.
+        if os.environ.get("PLACEMENT_DEBUG_FULL_LOG", "0").lower() not in (
+            "1", "true", "yes",
+        ):
+            os.environ["PLACEMENT_STEPS_ONLY"] = "1"
+
+        # Suppress noisy SDK loggers during placement
+        import logging as _logging
+        for _noisy in ("google_genai", "google.genai", "google.auth",
+                        "google.api_core", "google", "httpx", "httpcore",
+                        "openai", "dashscope", "grpc"):
+            _logging.getLogger(_noisy).setLevel(_logging.WARNING)
+
+        # Print pipeline banner
+        nodes = layout_context.get("nodes", [])
+        n_pmos = sum(1 for n in nodes if str(n.get("type", "")).lower() == "pmos")
+        n_nmos = sum(1 for n in nodes if str(n.get("type", "")).lower() == "nmos")
+
+        from ai_agent.ai_chat_bot.pipeline_log import pipeline_start
+        pipeline_start("LangGraph Pipeline", 5, {
+            "model": selected_model,
+            "devices": len(nodes),
+            "n_pmos": n_pmos,
+            "n_nmos": n_nmos,
+            "abutment": not no_abutment,
+            "sa": run_sa,
+        })
 
         self._stream_graph(initial_state)
 
@@ -105,6 +144,9 @@ class PlacerGraphWorker(QObject):
 
         except Exception as exc:
             self.error_occurred.emit(f"Graph Execution Error: {exc}")
+        finally:
+            # Allow full diagnostic logs for the rest of the app session
+            os.environ.pop("PLACEMENT_STEPS_ONLY", None)
 
     def _finalize_pipeline(self):
         """Build a summary and emit final placement payload."""
@@ -139,10 +181,19 @@ class PlacerGraphWorker(QObject):
 
         drc_pass = final_state.get("drc_pass", False)
         drc_flags = final_state.get("drc_flags", [])
-        drc_status = "Pass" if drc_pass else f"{len(drc_flags)} violation(s)"
+        n_violations = len(drc_flags)
+        drc_status = "✓ Clean" if drc_pass else f"✗ {n_violations} violation(s)"
+
+        # Print pipeline summary
+        from ai_agent.ai_chat_bot.pipeline_log import pipeline_end
+        pipeline_end({
+            "drc_status": drc_status,
+            "n_placed": len(placement_nodes),
+            "pmos_nmos_sep": "✓ OK" if drc_pass else "Check editor",
+        })
 
         summary = (
-            "[Initial Placement Graph Complete]\n"
+            "[Initial Placement Complete]\n"
             f"- DRC: {drc_status}\n"
             f"- Nodes: {len(placement_nodes)} placed"
         )

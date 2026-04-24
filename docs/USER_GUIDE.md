@@ -53,7 +53,7 @@
 ### Step 1 — Clone the Repository
 
 ```bash
-git clone https://github.com/orabi55/AI-Based-Analog-Layout-Automation.git
+git clone -b new_main https://github.com/orabi55/AI-Based-Analog-Layout-Automation.git
 cd AI-Based-Analog-Layout-Automation
 ```
 
@@ -156,6 +156,7 @@ The application window has three main panels:
 
 ### Device Hierarchy (Left Panel)
 - Tree view of all devices grouped by type (PMOS, NMOS, Dummies).
+- **Searchable:** Instantly filter devices by typing substring or regex in the search bar.
 - Click a device to select it on the canvas and highlight its net connections.
 - Collapsible — click the header or use **Edit → Toggle Device Hierarchy**.
 
@@ -164,6 +165,7 @@ The application window has three main panels:
 - **Top row** = PMOS devices, **Bottom row** = NMOS devices.
 - Devices are drawn as rectangles with Source (S), Gate (G), and Drain (D) labels.
 - Net connections are shown as coloured dashed curves when a device is selected.
+- **Minimap Navigation:** A scalable minimap in the bottom right corner lets you instantly pan around large designs.
 - Dark background (#0e1219) with high-contrast device colors.
 
 ### AI Chat Panel (Right)
@@ -179,19 +181,22 @@ The application window has three main panels:
 - **Modes**: Move mode (M), Dummy mode (D).
 - **View**: Zoom In, Zoom Out, Fit (F), Row/Col controls.
 
-### Menu Bar
+### Menu Bar & Command Palette
+
+You can press **`Ctrl+Shift+P`** anywhere to open the **Command Palette**. It allows fast fuzzy-searching of all available GUI actions, so you don't have to hunt through menus.
 
 | Menu | Item | Shortcut | Description |
 |------|------|----------|-------------|
 | **File** | Load | `Ctrl+O` | Open an existing placement JSON |
 | | Import from Netlist + Layout | `Ctrl+I` | Parse .sp + .oas and show the circuit graph |
-| | Save | `Ctrl+S` | Save current layout to file |
+| | Save | `Ctrl+S` | Save current tab |
 | | Save As | `Ctrl+Shift+S` | Save to a new file |
 | | Export JSON | `Ctrl+E` | Export placement as JSON |
 | | Export to OAS | `Ctrl+Shift+E` | Export placement back to OAS layout |
+| | Close Tab | `Ctrl+W` | Close the current workspace tab |
 | | View in KLayout | — | Open current layout in KLayout |
-| **Design** | Run AI Initial Placement | `Ctrl+P` | Send current graph to Gemini for AI placement |
-| **View** | (placeholders) | — | Future view options |
+| **Design** | Run AI Initial Placement | `Ctrl+P` | Generate optimized deterministic / AI placement |
+| **View** | Command Palette | `Ctrl+Shift+P` | Quick action search menu |
 
 ---
 
@@ -300,16 +305,17 @@ Once you have a circuit graph loaded (from Step 1 or from an existing JSON), you
 
 | Step | What It Does |
 |------|--------------|
-| 1 | Sends the current graph JSON (nodes + edges) to the **Gemini LLM** |
-| 2 | The LLM analyzes net adjacency, device types, and analog design rules |
-| 3 | It generates optimized x/y coordinates for every device |
-| 4 | The result is validated (no overlaps, correct row assignments) |
-| 5 | The canvas is updated and a `*_initial_placement.json` is saved |
+| 1 | The **Topology Analyst** (fast LLM) categorizes transistors into functional roles (diff-pair, mirror, cascode, tail, latch, clk-switch). |
+| 2 | The **Deterministic Placement Engine** takes over, organizing devices into logical rows based on function (e.g., `[TAIL] [DIFF_PAIR] [LATCH]`). |
+| 3 | **Matching Enforcement:** Automatically enforces ABBA interdigitation for diff-pairs and centroid/adjacent placement for current mirrors and latches. |
+| 4 | **Square-Ratio Packing:** Smartly splits long rows to achieve an optimal ~1:1 square aspect ratio. |
+| 5 | **DRC Healing & Abutment:** Re-packs rows, snaps adjacent devices sharing S/D nets to 0.07µm abutment spacing, and centers rows for physical symmetry. |
+| 6 | **SA Post-Optimization:** Rapid intra-row Simulated Annealing swaps devices to minimize total wirelength (HPWL). |
 
 #### Requirements
 
-- A valid **`GEMINI_API_KEY`** must be set in your `.env` file.
-- Internet connection for the API call.
+- A valid API key in `.env` (Gemini, Groq, or Alibaba) OR **Google Cloud ADC** configured via `gcloud auth application-default login` for Vertex AI support.
+- Internet connection for the Topology Analyst stage.
 
 > **Tip:** If AI placement fails (e.g., no API key), an error message will appear and your original layout positions are preserved.
 
@@ -511,10 +517,12 @@ A placement JSON file contains:
 | `Ctrl+I` | Import from Netlist + Layout |
 | `Ctrl+P` | Run AI Initial Placement |
 | `Ctrl+O` | Load placement JSON |
-| `Ctrl+S` | Save |
+| `Ctrl+S` | Save current tab |
 | `Ctrl+Shift+S` | Save As |
 | `Ctrl+E` | Export JSON |
 | `Ctrl+Shift+E` | Export to OAS |
+| `Ctrl+W` | Close current tab |
+| `Ctrl+Shift+P`| Open Command Palette |
 | `G` | Merge S-S (selected pair) |
 | `Shift+G` | Merge D-D (selected pair) |
 | `M` | Toggle move mode |

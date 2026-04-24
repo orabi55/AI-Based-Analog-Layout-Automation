@@ -14,6 +14,7 @@ import json
 import copy
 import glob
 import re
+import logging
 
 from PySide6.QtWidgets import (
     QSplitter,
@@ -280,7 +281,7 @@ class LayoutEditorTab(QWidget):
     def selection_count(self):
         try:
             return len(self.editor.selected_device_ids())
-        except Exception:
+        except (AttributeError, RuntimeError):
             return 0
 
     # =================================================================
@@ -407,8 +408,8 @@ class LayoutEditorTab(QWidget):
                     self.editor.descend_nearest_hierarchy()
                     event.accept()
                     return
-            except Exception:
-                pass
+            except (AttributeError, RuntimeError):
+                logging.debug("Ctrl+D hierarchy descend failed", exc_info=True)
         if event.key() == Qt.Key.Key_M and not event.modifiers():
             self._toggle_move_mode()
             event.accept()
@@ -530,8 +531,8 @@ class LayoutEditorTab(QWidget):
                             terminal_nets[tokens[0]] = {
                                 "D": tokens[1], "G": tokens[2], "S": tokens[3],
                             }
-            except Exception:
-                pass
+            except (IOError, OSError, IndexError):
+                logging.debug("Failed to parse SPICE terminal nets", exc_info=True)
         return terminal_nets
 
     def _sync_klayout_source(self, explicit_oas=None, source_path=None):
@@ -1106,6 +1107,7 @@ class LayoutEditorTab(QWidget):
             compressed_size = os.path.getsize(compressed_path)
             reduction = (1 - compressed_size / original_size) * 100 if original_size > 0 else 0
         except Exception:
+            logging.warning("Failed to compress graph data, using full format", exc_info=True)
             compressed_path = out_path
             reduction = 0
         self._load_from_data_dict(data, out_path, False)
@@ -1143,16 +1145,6 @@ class LayoutEditorTab(QWidget):
         run_multi_agent = dialog.get_multi_agent_enabled()
         dialog.apply_api_keys()
 
-        # ── Debug output ──
-        print("\n" + "\u2588"*60, flush=True)
-        print("  AI INITIAL PLACEMENT", flush=True)
-        print("\u2588"*60, flush=True)
-        print(f"[AI-PLACE] Model       : {model_choice}", flush=True)
-        print(f"[AI-PLACE] Multi-Agent  : {run_multi_agent}", flush=True)
-        print(f"[AI-PLACE] Abutment    : {abutment_enabled}", flush=True)
-        print(f"[AI-PLACE] SA Post-Opt : {run_sa}", flush=True)
-        print(f"[AI-PLACE] Devices     : {len(self.nodes)}", flush=True)
-
         self._sync_node_positions()
         data = copy.deepcopy(self._build_output_data())
         if "terminal_nets" not in data:
@@ -1164,7 +1156,10 @@ class LayoutEditorTab(QWidget):
         data["no_abutment"] = not abutment_enabled
         abut_label = "with abutment" if abutment_enabled else "no abutment"
         sa_label = ", +SA" if run_sa else ""
-        self.overlay.show_message(f"Running AI initial placement ({model_choice}, {abut_label}{sa_label})...")
+        pipeline_label = "Multi-Agent" if run_multi_agent else "LangGraph"
+        self.overlay.show_message(
+            f"Running AI initial placement ({pipeline_label}, {model_choice}, {abut_label}{sa_label})..."
+        )
         self._saved_locked_positions = {}
         for group in self._matched_groups:
             for gid in group["ids"]:
@@ -1172,8 +1167,10 @@ class LayoutEditorTab(QWidget):
                 if node:
                     geo = node.get("geometry", {})
                     self._saved_locked_positions[gid] = {"x": geo.get("x", 0), "y": geo.get("y", 0)}
-        print(f"[AI-PLACE] \u25B6 Launching worker thread...", flush=True)
-        self._ai_worker = GenericWorker(self._run_ai_initial_placement, data, model_choice, run_sa, run_multi_agent)
+        self._ai_worker = GenericWorker(
+            self._run_ai_initial_placement,
+            data, model_choice, run_sa, run_multi_agent, abutment_enabled,
+        )
         self._ai_worker.finished.connect(self._on_ai_placement_completed)
         self._ai_worker.error.connect(self._on_ai_placement_error)
         self._ai_worker.start()
@@ -1236,18 +1233,16 @@ class LayoutEditorTab(QWidget):
             try:
                 from parser.layout_reader import extract_layout_instances
                 layout_instances = extract_layout_instances(oas_path)
-            except Exception:
-                pass
+            except (ImportError, OSError) as exc:
+                logging.warning("Failed to extract layout instances: %s", exc)
         if layout_instances:
             try:
                 from parser.device_matcher import match_devices
                 device_mapping = match_devices(netlist, layout_instances)
-            except Exception:
+            except (ImportError, ValueError) as exc:
+                logging.warning("Failed to match devices: %s", exc)
                 device_mapping = {}
-        PITCH_UM = 0.294
-        ROW_HEIGHT_UM = 0.668
-        BLOCK_GAP_UM = PITCH_UM * 2
-        PASSIVE_ROW_GAP = PITCH_UM
+        from config.design_rules import PITCH_UM, ROW_HEIGHT_UM, BLOCK_GAP_UM, PASSIVE_ROW_GAP_UM as PASSIVE_ROW_GAP
         nodes = []
         terminal_nets = {}
         node_by_name = {}
@@ -1445,13 +1440,68 @@ class LayoutEditorTab(QWidget):
         return compressed
 
     @staticmethod
-    def _run_ai_initial_placement(data, model_choice="Gemini", run_sa=False, run_multi_agent=False):
+    def _run_ai_initial_placement(data, model_choice="Gemini", run_sa=False,
+                                   run_multi_agent=False, abutment_enabled=True):
         import tempfile
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tmp_in:
             json.dump(data, tmp_in, indent=2)
             tmp_in_path = tmp_in.name
         tmp_out_path = tmp_in_path.replace(".json", "_placed.json")
         try:
+            # ── Multi-Agent Pipeline (slot-based, multi-row) ──────────────
+            if run_multi_agent:
+                from ai_agent.ai_initial_placement.multi_agent_placer import (
+                    multi_agent_generate_placement,
+                )
+                from ai_agent.ai_chat_bot.pipeline_log import pipeline_start
+
+                nodes = data.get("nodes", [])
+                n_pmos = sum(1 for n in nodes if str(n.get("type", "")).lower() == "pmos")
+                n_nmos = sum(1 for n in nodes if str(n.get("type", "")).lower() == "nmos")
+                pipeline_start("Multi-Agent Pipeline", 4, {
+                    "model": model_choice,
+                    "devices": len(nodes),
+                    "n_pmos": n_pmos,
+                    "n_nmos": n_nmos,
+                    "abutment": abutment_enabled,
+                    "sa": run_sa,
+                })
+
+                multi_agent_generate_placement(
+                    input_json_path=tmp_in_path,
+                    output_json_path=tmp_out_path,
+                    selected_model=model_choice,
+                    run_sa=run_sa,
+                )
+
+                with open(tmp_out_path, "r", encoding="utf-8") as f:
+                    placed_data = json.load(f)
+
+                placed_nodes_list = placed_data.get("nodes", [])
+                if placed_nodes_list:
+                    placed_map = {
+                        n["id"]: n for n in placed_nodes_list
+                        if isinstance(n, dict) and "id" in n
+                    }
+                    for node in data["nodes"]:
+                        if isinstance(node, dict) and node.get("id") in placed_map:
+                            placed_node = placed_map[node["id"]]
+                            geometry = placed_node.get("geometry")
+                            if geometry is None:
+                                geometry = {
+                                    k: placed_node[k]
+                                    for k in ("x", "y", "width", "height", "orientation")
+                                    if k in placed_node
+                                }
+                            if geometry:
+                                node["geometry"].update(geometry)
+                            # Preserve abutment flags from multi-agent output
+                            abut = placed_node.get("abutment")
+                            if abut:
+                                node["abutment"] = abut
+                return data
+
+            # ── LangGraph Pipeline (CMD-block based) ──────────────────────
             from ai_agent.ai_initial_placement.placer_graph_worker import PlacerGraphWorker
 
             final_payload = {}
@@ -1465,6 +1515,9 @@ class LayoutEditorTab(QWidget):
             def _on_error(err_msg):
                 graph_error["message"] = str(err_msg or "Graph execution failed.")
 
+            no_abutment = not abutment_enabled
+            abutment_candidates = data.get("abutment_candidates", [])
+
             graph_worker = PlacerGraphWorker()
             graph_worker.visual_viewer_signal.connect(_on_visual)
             graph_worker.error_occurred.connect(_on_error)
@@ -1474,6 +1527,9 @@ class LayoutEditorTab(QWidget):
                 "Optimize initial placement.",
                 [],
                 model_choice,
+                run_sa=run_sa,
+                no_abutment=no_abutment,
+                abutment_candidates=abutment_candidates,
             )
 
             if graph_error["message"]:
@@ -1747,6 +1803,7 @@ class LayoutEditorTab(QWidget):
                 else:
                     highlight_ids = set(device_items.keys())
             except Exception:
+                logging.debug("DRC highlight failed, highlighting all devices", exc_info=True)
                 highlight_ids = set(device_items.keys())
         else:
             highlight_ids = set(device_items.keys())

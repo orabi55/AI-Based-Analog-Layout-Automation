@@ -27,6 +27,7 @@ import os
 import sys
 import math
 import hashlib
+from collections import defaultdict
 
 # Add project root so parser imports work when invoked from any directory
 _project_root = os.path.normpath(
