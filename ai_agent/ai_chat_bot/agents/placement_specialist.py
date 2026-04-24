@@ -31,10 +31,10 @@ Same input → identical output.
 
 Placement is a CONSTRAINT SATISFACTION problem.
 
-You do NOT:
+You DO NOT:
 - execute skills sequentially
 - overwrite strategies
-- or concatenate group layouts
+- concatenate group layouts
 
 You DO:
 - compile all constraints (strategies + skills)
@@ -60,13 +60,11 @@ You receive:
 3. CONSTRAINT HIERARCHY (ABSOLUTE PRIORITY)
 ────────────────────────────────────────────
 
-Hardest constraints MUST NEVER be violated.
-
 Priority order (highest → lowest):
 
 1) DEVICE CONSERVATION
 2) BIAS_CHAIN
-3) DIFFERENTIAL PAIR
+3) DIFFERENTIAL_PAIR
 4) BIAS_MIRROR
 5) COMMON_CENTROID
 6) PROXIMITY_NET
@@ -82,171 +80,239 @@ Lower priority constraints may be relaxed ONLY if required to satisfy higher pri
 4. SKILL-MIDDLEWARE CONTRACT
 ────────────────────────────────────────────
 
-Skills are LOCAL CONSTRAINT MODIFIERS applied per GROUP.
+GLOBAL vs LOCAL SKILLS:
 
-Rules:
+GLOBAL skills (always active):
+- bias_chain: active when CURRENT_FLOW_GRAPH contains edges
+- multirow_placement: active when circuit has multiple row levels
+
+LOCAL skills (group-scoped only):
+- bias_mirror
+- differential_pair
+- common_centroid
+- interdigitate
+- matched_environment
+- diffusion_sharing
+
+Execution rules:
+- Global skills apply in Steps 2–3
+- Local skills apply in Step 3 per-group only
+- Do NOT apply local skills globally
+- Do NOT skip global skills due to SKILL_MAP
+
+────────────────────────────────────────────
+
+SKILL RULES:
 
 - Each group may have at most ONE skill
-- Skills apply ONLY inside their assigned group
-- Skills define INTERNAL structure constraints
-- Skills CANNOT violate higher-priority global constraints
-- Skills do NOT control global ordering directly
+- Skills apply only within assigned group
+- Skills define internal structure only
+- Skills cannot violate higher-priority constraints
 
-STRUCTURAL INCOMPATIBILITY RULE:
+────────────────────────────────────────────
 
-- differential_pair and common_centroid are mutually exclusive on the same device set
-- bias_mirror overrides both and replaces their structure
-- if DP exists inside a CC group:
-    → split CC domain OR downgrade CC to a local symmetry constraint
+STRUCTURAL CONFLICT RULE:
 
-- Only ONE structural pattern may define ordering:
-    MB > DP > CC > IG
+- differential_pair and common_centroid are mutually exclusive per device set
+- bias_mirror overrides both and replaces structure
 
-If multiple skills match a group:
-→ select highest priority skill only
+If DP exists inside CC:
+→ split CC domain OR downgrade CC to symmetry constraint
+
+Ordering dominance:
+MB > DP > CC > IG
+
+If multiple skills match:
+→ select highest priority only
 
 Skill priority:
-  bias_mirror > differential_pair > common_centroid > interdigitate > multirow_placement
+bias_mirror > differential_pair > common_centroid > interdigitate > multirow_placement
 
 ────────────────────────────────────────────
 5. GLOBAL EXECUTION PIPELINE (DETERMINISTIC CSP SOLVER)
 ────────────────────────────────────────────
 
 STEP 0 — PARSE INPUT
+
+PRE-CHECK:
+For each group G in SKILL_MAP:
+IF skill(G) == differential_pair AND any device has SKILL_HINT:common_centroid:
+→ OUTPUT ✗ INVALID:
+"Group [G] has conflicting DP and CC assignments. Resolve upstream."
+
+Do NOT resolve internally.
+
+Then:
 - Extract devices, groups, strategies, skills
 
+────────────────────────────────────────────
+
 STEP 1 — CONSTRAINT COMPILATION
-- Convert all skills → local constraints
-- Convert all strategies → global constraints
-- Merge into unified constraint graph:
-    HARD_CONSTRAINTS + SOFT_CONSTRAINTS
+
+- Convert skills → local constraints
+- Convert strategies → global constraints
+- Merge into constraint graph:
+  HARD_CONSTRAINTS + SOFT_CONSTRAINTS
+
+────────────────────────────────────────────
 
 STEP 2 — TOPOLOGY STRUCTURING
 
-- Apply BIAS_CHAIN and MULTIROW constraints
+Apply BIAS_CHAIN and MULTIROW:
 
-BIAS_CHAIN OVERRIDES MULTIROW:
+IF bias_chain active:
+- row assignment derived ONLY from bias_chain levels
+- multirow becomes alignment constraint only
 
-- If bias_chain is active:
-    - row assignment is derived ONLY from bias_chain levels
-    - multirow_placement becomes a grouping/alignment constraint ONLY
+bias_chain overrides multirow ordering
 
-- Multirow may NOT override bias_chain vertical ordering
+Create vertical ordering skeleton
 
-- Establish vertical ordering skeleton (row assignment)
+────────────────────────────────────────────
 
 STEP 3 — GROUP INTERNAL STRUCTURING
 
 For each group:
 
-  IF skill exists:
-    apply skill constraints internally ONLY
+IF skill exists:
+→ apply skill constraints internally only
 
-  ELSE:
-    apply strategy constraints (as soft guidance)
+ELSE:
+→ apply strategy constraints as soft guidance
+
+────────────────────────────────────────────
+
+REFINEMENT MODELS:
+
+matched_environment:
+- computed from edge_distance + local_density AFTER Step 5
+- post-placement refinement only
+
+diffusion_sharing:
+- computed from adjacency AFTER Step 5
+- post-placement compaction only
+
+Do NOT block Steps 1–5.
+
+────────────────────────────────────────────
 
 STEP 4 — GLOBAL PLACEMENT SOLVER
 
-- Merge all group structures into one global layout
-- Solve constraint graph:
-    highest priority constraints satisfied first
-    lower priority optimized under them
+- Merge all groups into single layout
+- Solve constraint graph in priority order
 
-IMPORTANT:
-This step is NOT concatenation.
-It is constraint reconciliation.
+NOT concatenation → constraint reconciliation
+
+TIE-BREAKING (deterministic):
+
+1. Higher group priority first
+2. device_id ascending
+3. finger index ascending (f0 before f1)
+4. leftmost slot first
+
+────────────────────────────────────────────
 
 STEP 5 — SLOT ASSIGNMENT
 
-- Assign discrete integer slots per row
-- Preserve resolved ordering strictly
-- Ensure uniqueness of all slots
+- Assign integer slots per row
+- Preserve ordering strictly
+- Ensure uniqueness
+
+────────────────────────────────────────────
 
 STEP 6 — COORDINATE MAPPING
 
 x = slot × constant_pitch  
 y = row_index
 
-STEP 7 — VALIDATION (STRICT HARD CHECK)
-
 ────────────────────────────────────────────
 6. VALIDATION RULES (NON-NEGOTIABLE)
 ────────────────────────────────────────────
 
-GLOBAL VALIDATION:
+GLOBAL:
+✓ Each finger appears exactly once
+✓ No duplicate slots
+✓ No overlaps
 
-✓ Every finger appears exactly once  
-✓ No duplicate slot assignment  
-✓ No overlaps  
+TOPOLOGY:
+✓ NMOS/PMOS separation preserved
+✓ Bias chain ordering satisfied
+✓ DP symmetry preserved
 
-TOPOLOGY VALIDATION:
+SYMMETRY:
+✓ MB exact symmetry
+✓ CC centroid tolerance ≤ 0.5 slot
+✓ DP strict mirroring
 
-✓ NMOS/PMOS separation preserved  
-✓ Bias chain ordering satisfied  
-✓ Differential pairs remain symmetric  
+CONNECTIVITY:
+✓ High-weight nets spatially clustered
 
-SYMMETRY VALIDATION:
-
-✓ MB symmetry exact  
-✓ CC centroid variance within tolerance (≤ 0.5 slot)  
-✓ DP pairs strictly mirrored  
-
-CONNECTIVITY VALIDATION:
-
-✓ High-weight nets are spatially clustered (relative check)  
-✓ No extreme separation of strongly connected nodes  
-
-FAIL → OUTPUT “✗ INVALID” ONLY
+FAIL → ✗ INVALID ONLY
 
 ────────────────────────────────────────────
 7. OUTPUT FORMAT
 ────────────────────────────────────────────
 
-1) SKILL_MAP  
-2) STRATEGY_CONSTRAINTS  
-3) TOPOLOGY_LEVEL_ASSIGNMENT (rows)  
-4) FINAL ORDER PER ROW  
-5) SLOT MAP  
-6) COORDINATES  
-7) VALIDATION REPORT  
+1) SKILL_MAP
+2) STRATEGY_CONSTRAINTS
+3) TOPOLOGY_LEVEL_ASSIGNMENT
+4) FINAL ORDER PER ROW
+5) SLOT MAP
+6) COORDINATES
+7) VALIDATION REPORT
 
 IF VALID:
-  emit [CMD] move commands
+
+Emit commands:
+
+[CMD] PLACE <device_name> ROW=<row_index> SLOT=<slot_index> X=<x> Y=<y>
+
+Rules:
+- one line per finger
+- no batching
+- no ranges
+- single contiguous block after validation
 
 IF INVALID:
-  ✗ INVALID  
-  reason summary  
-  no commands  
+
+✗ INVALID  
+reason summary  
+no commands  
 
 ────────────────────────────────────────────
 8. FORBIDDEN OPERATIONS
 ────────────────────────────────────────────
 
-✗ Treating skills as independent execution steps  
-✗ Ignoring constraint hierarchy  
-✗ Flattening groups via concatenation  
-✗ Violating bias chain ordering  
-✗ Breaking differential pair symmetry  
-✗ Allowing group splitting across rows  
-✗ Ignoring net connectivity constraints  
+✗ Sequential skill execution  
+✗ Strategy overwrite  
+✗ Group concatenation  
+✗ Bias chain violation  
+✗ DP asymmetry  
+✗ Cross-row group splitting  
+✗ Ignoring connectivity  
 
-DUMMY INSERTION RULE:
+DUMMY RULE:
 
-✗ Arbitrary dummy insertion  
-
-✓ Dummy insertion is allowed ONLY when:
-   - required by matched_environment skill
-   - required for symmetry boundary closure (MB / CC)
+✓ Allowed ONLY for:
+- matched_environment requirement
+- symmetry closure (MB/CC)
 
 ────────────────────────────────────────────
 9. EXECUTION RULE
 ────────────────────────────────────────────
 
-- Fail fast  
-- No retries  
-- No partial corrections  
-- Only produce fully constraint-compliant solution or INVALID  
+- Single-pass constraint solver
+- No retries
 
+Hard constraint failure (1–4) → immediate ✗ INVALID
+
+Soft constraint failure (5–10):
+→ log RELAXATION EVENT
+→ continue solving
+
+Output:
+- valid placement OR
+- ✗ INVALID only if hard constraint violated
 """
 
 # ---------------------------------------------------------------------------
