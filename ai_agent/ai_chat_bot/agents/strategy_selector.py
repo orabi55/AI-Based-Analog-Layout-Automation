@@ -143,6 +143,11 @@ Preferred strategy ordering:
 - Symmetry may be relaxed if connectivity dominates
 - Do NOT over-constrain symmetry in high-connectivity regions
 
+3.13 THE FATAL CONFLICT RULE (STRICT)
+- NEVER generate a strategy with [SKILL_HINT: common_centroid] for devices that belong to a group assigned 'differential_pair' in the SKILL_MAP.
+- This specific combination will trigger an immediate FATAL system crash downstream.
+- Differential pairs MUST only use DP, MB, or Matched Environment hints.
+
 ────────────────────────────────────────────
 4. OUTPUT FORMAT
 ────────────────────────────────────────────
@@ -162,11 +167,12 @@ SKILL_MAP:
   [GROUP_NAME]: [skill_id]
 
 RULES:
-- One skill per group
-- Choose highest-priority applicable skill
+- One STRUCTURAL skill per group (bias_mirror, differential_pair, common_centroid, interdigitate).
+- REFINEMENT skills (matched_environment, diffusion_sharing) are EXEMPT from the one-skill limit and can be appended to any group.
+- Choose highest-priority applicable structural skill.
 
 Skill priority:
-bias_mirror > differential_pair > common_centroid > interdigitate > multirow_placement > proximity_net
+differential_pair > bias_mirror > common_centroid > interdigitate > multirow_placement > proximity_net
 
 Special rule:
 - Groups in bias chains:

@@ -104,7 +104,7 @@ Execution rules:
 
 SKILL RULES:
 
-- Each group may have at most ONE skill
+- Each group may have at most ONE skill, Refinement skills (diffusion_sharing, matched_environment) are EXEMPT from the one-skill limit. They apply to all valid groups post-placement.
 - Skills apply only within assigned group
 - Skills define internal structure only
 - Skills cannot violate higher-priority constraints
@@ -119,14 +119,13 @@ STRUCTURAL CONFLICT RULE:
 If DP exists inside CC:
 → split CC domain OR downgrade CC to symmetry constraint
 
-Ordering dominance:
-MB > DP > CC > IG
+Ordering dominance: DP > MB > CC > IG
 
 If multiple skills match:
 → select highest priority only
 
-Skill priority:
-bias_mirror > differential_pair > common_centroid > interdigitate > multirow_placement
+Skill priority: 
+differential_pair > bias_mirror > common_centroid > interdigitate > multirow_placement
 
 ────────────────────────────────────────────
 5. GLOBAL EXECUTION PIPELINE (DETERMINISTIC CSP SOLVER)
@@ -208,13 +207,12 @@ TIE-BREAKING (deterministic):
 1. Higher group priority first
 2. device_id ascending
 3. finger index ascending (f0 before f1)
-4. leftmost slot first
+4. topological center-out ordering
 
 ────────────────────────────────────────────
 
 STEP 5 — SLOT ASSIGNMENT
-
-- Assign integer slots per row
+-Assign integer slots per row. Dynamically expand grid indices to accommodate DUMMY insertions from matched_environment before passing to Step 6.
 - Preserve ordering strictly
 - Ensure uniqueness
 
@@ -241,7 +239,7 @@ TOPOLOGY:
 
 SYMMETRY:
 ✓ MB exact symmetry
-✓ CC centroid tolerance ≤ 0.5 slot
+✓ CC centroid exact parity (ε = 0.0)
 ✓ DP strict mirroring
 
 CONNECTIVITY:

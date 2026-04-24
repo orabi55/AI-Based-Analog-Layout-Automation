@@ -152,7 +152,7 @@ RELATIONSHIP TO OTHER SKILLS
 
 - Subordinate to Bias Chain (cannot break vertical stack)
 - Subordinate to Differential Pair (cannot break pair symmetry)
-- May relax CC / IG / MB locally if net benefit is high
+- Must STRICTLY obey CC / MB / DP constraints. Proximity optimization operates ONLY within the valid geometric solutions of higher-priority symmetry rules.
 - Defines horizontal clustering pressure across full layout
 
 ────────────────────────────────────
