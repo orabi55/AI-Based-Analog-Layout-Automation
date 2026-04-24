@@ -55,7 +55,7 @@ def render_oas_to_pixmap(oas_path, width=800, height=600):
         return None
 
     # Use a temp file for the intermediate PNG
-    fd, tmp_png = tempfile.mkstemp(suffix=".png", prefix="klayout_preview_")
+    fd, tmp_png = tempfile.mkstemp(suffix=".png", prefix="klayout_preview_", dir=os.getcwd())
     os.close(fd)
 
     try:

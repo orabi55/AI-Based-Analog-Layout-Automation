@@ -20,6 +20,7 @@ class LayoutState(TypedDict):
     # Placement
     placement_nodes: List[Dict] 
     deterministic_snapshot: List[Dict]
+    original_placement_cmds: List[Dict]
     # DRC
     drc_flags: List[Dict]
     drc_pass: bool
@@ -37,6 +38,5 @@ class LayoutState(TypedDict):
     approved: bool
 
     # Pipeline config (passed from UI)
-    run_sa: bool
     no_abutment: bool
     abutment_candidates: List[Dict]

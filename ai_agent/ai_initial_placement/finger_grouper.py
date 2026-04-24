@@ -27,6 +27,7 @@ import re
 import copy
 from collections import defaultdict
 from typing import Dict, List, Tuple
+from ai_agent.ai_chat_bot.pipeline_log import vprint
 
 # ---------------------------------------------------------------------------
 # Constants — sourced from centralized design rules config
@@ -959,7 +960,7 @@ def merge_matched_groups(
         }
         merged_ids.update([grp_a_id, grp_b_id])
 
-        print(f"[merge_matched] {grp_a_id} + {grp_b_id} -> {block_id} "
+        vprint(f"[merge_matched] {grp_a_id} + {grp_b_id} -> {block_id} "
               f"({technique}, {total_fingers} fingers, "
               f"pitch={'abut' if use_abutment else 'std'}, "
               f"width={block_width:.3f} um)")
@@ -1243,12 +1244,12 @@ def pre_assign_rows(
             # Only constrain the wider type
             if pmos_total >= nmos_total:
                 pmos_max = balanced_max
-                print(f"[pre_assign_rows] Rectangular balancing: "
+                vprint(f"[pre_assign_rows] Rectangular balancing: "
                       f"PMOS={pmos_total:.3f} > NMOS={nmos_total:.3f} "
                       f"-> splitting PMOS rows (max={pmos_max:.3f} um)")
             else:
                 nmos_max = balanced_max
-                print(f"[pre_assign_rows] Rectangular balancing: "
+                vprint(f"[pre_assign_rows] Rectangular balancing: "
                       f"NMOS={nmos_total:.3f} > PMOS={pmos_total:.3f} "
                       f"-> splitting NMOS rows (max={nmos_max:.3f} um)")
 
@@ -1335,9 +1336,9 @@ def pre_assign_rows(
 
     total_nmos = len(nmos_rows)
     total_pmos = len(pmos_rows)
-    print(f"[pre_assign_rows] {total_nmos} NMOS row(s), {total_pmos} PMOS row(s)")
+    vprint(f"[pre_assign_rows] {total_nmos} NMOS row(s), {total_pmos} PMOS row(s)")
     for line in lines:
-        print(f"  {line.strip()}")
+        vprint(f"  {line.strip()}")
 
     return updated, row_summary_str
 

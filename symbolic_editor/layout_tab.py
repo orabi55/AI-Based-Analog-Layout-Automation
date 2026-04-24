@@ -235,6 +235,7 @@ class LayoutEditorTab(QWidget):
         # Loading overlay (per-tab)
         self.overlay = LoadingOverlay(self)
         self.overlay.hide()
+        self.overlay.cancel_requested.connect(self._cancel_ai_placement)
         self.set_workspace_mode(self._workspace_mode)
 
     # ─────────────────────────────────────────────────────────────────
@@ -1141,8 +1142,7 @@ class LayoutEditorTab(QWidget):
         model_choice = dialog.get_selected_model()
         self.chat_panel.selected_model = model_choice
         abutment_enabled = dialog.is_abutment_enabled()
-        run_sa = dialog.is_sa_enabled()
-        run_multi_agent = dialog.get_multi_agent_enabled()
+
         dialog.apply_api_keys()
 
         self._sync_node_positions()
@@ -1155,10 +1155,10 @@ class LayoutEditorTab(QWidget):
             data["abutment_candidates"] = []
         data["no_abutment"] = not abutment_enabled
         abut_label = "with abutment" if abutment_enabled else "no abutment"
-        sa_label = ", +SA" if run_sa else ""
-        pipeline_label = "Multi-Agent" if run_multi_agent else "LangGraph"
+        pipeline_label = "LangGraph"
         self.overlay.show_message(
-            f"Running AI initial placement ({pipeline_label}, {model_choice}, {abut_label}{sa_label})..."
+            f"Running AI initial placement ({pipeline_label}, {model_choice}, {abut_label})...",
+            show_cancel=True
         )
         self._saved_locked_positions = {}
         for group in self._matched_groups:
@@ -1169,11 +1169,23 @@ class LayoutEditorTab(QWidget):
                     self._saved_locked_positions[gid] = {"x": geo.get("x", 0), "y": geo.get("y", 0)}
         self._ai_worker = GenericWorker(
             self._run_ai_initial_placement,
-            data, model_choice, run_sa, run_multi_agent, abutment_enabled,
+            data, model_choice, abutment_enabled,
         )
         self._ai_worker.finished.connect(self._on_ai_placement_completed)
         self._ai_worker.error.connect(self._on_ai_placement_error)
         self._ai_worker.start()
+
+    def _cancel_ai_placement(self):
+        if hasattr(self, "_ai_worker") and self._ai_worker and self._ai_worker.isRunning():
+            self._ai_worker.terminate()
+            self._ai_worker.wait()
+            self.overlay.hide_overlay()
+            
+            if hasattr(self, "chat_panel"):
+                self.chat_panel._append_message("AI", "❌ Placement process cancelled by user.", "#3d1a1a", "#ff6b6b")
+                
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "Cancelled", "Initial placement was cancelled.")
 
     def _on_ai_placement_completed(self, data):
         self.overlay.hide_overlay()
@@ -1440,66 +1452,15 @@ class LayoutEditorTab(QWidget):
         return compressed
 
     @staticmethod
-    def _run_ai_initial_placement(data, model_choice="Gemini", run_sa=False,
-                                   run_multi_agent=False, abutment_enabled=True):
+    def _run_ai_initial_placement(data, model_choice="Gemini", abutment_enabled=True):
         import tempfile
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tmp_in:
+        import os
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, dir=os.getcwd()) as tmp_in:
             json.dump(data, tmp_in, indent=2)
             tmp_in_path = tmp_in.name
         tmp_out_path = tmp_in_path.replace(".json", "_placed.json")
         try:
-            # ── Multi-Agent Pipeline (slot-based, multi-row) ──────────────
-            if run_multi_agent:
-                from ai_agent.ai_initial_placement.multi_agent_placer import (
-                    multi_agent_generate_placement,
-                )
-                from ai_agent.ai_chat_bot.pipeline_log import pipeline_start
 
-                nodes = data.get("nodes", [])
-                n_pmos = sum(1 for n in nodes if str(n.get("type", "")).lower() == "pmos")
-                n_nmos = sum(1 for n in nodes if str(n.get("type", "")).lower() == "nmos")
-                pipeline_start("Multi-Agent Pipeline", 4, {
-                    "model": model_choice,
-                    "devices": len(nodes),
-                    "n_pmos": n_pmos,
-                    "n_nmos": n_nmos,
-                    "abutment": abutment_enabled,
-                    "sa": run_sa,
-                })
-
-                multi_agent_generate_placement(
-                    input_json_path=tmp_in_path,
-                    output_json_path=tmp_out_path,
-                    selected_model=model_choice,
-                    run_sa=run_sa,
-                )
-
-                with open(tmp_out_path, "r", encoding="utf-8") as f:
-                    placed_data = json.load(f)
-
-                placed_nodes_list = placed_data.get("nodes", [])
-                if placed_nodes_list:
-                    placed_map = {
-                        n["id"]: n for n in placed_nodes_list
-                        if isinstance(n, dict) and "id" in n
-                    }
-                    for node in data["nodes"]:
-                        if isinstance(node, dict) and node.get("id") in placed_map:
-                            placed_node = placed_map[node["id"]]
-                            geometry = placed_node.get("geometry")
-                            if geometry is None:
-                                geometry = {
-                                    k: placed_node[k]
-                                    for k in ("x", "y", "width", "height", "orientation")
-                                    if k in placed_node
-                                }
-                            if geometry:
-                                node["geometry"].update(geometry)
-                            # Preserve abutment flags from multi-agent output
-                            abut = placed_node.get("abutment")
-                            if abut:
-                                node["abutment"] = abut
-                return data
 
             # ── LangGraph Pipeline (CMD-block based) ──────────────────────
             from ai_agent.ai_initial_placement.placer_graph_worker import PlacerGraphWorker
@@ -1527,7 +1488,6 @@ class LayoutEditorTab(QWidget):
                 "Optimize initial placement.",
                 [],
                 model_choice,
-                run_sa=run_sa,
                 no_abutment=no_abutment,
                 abutment_candidates=abutment_candidates,
             )

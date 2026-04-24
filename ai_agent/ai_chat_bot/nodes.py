@@ -415,6 +415,13 @@ def node_strategy_selector(state: LayoutState):
     user_message = state.get("user_message", "Select a strategy based on the analysis.")
     selected_model = state.get("selected_model", "Gemini")
 
+    chat_history = _update_and_save_chat_history(
+        chat_history=chat_history,
+        user_content="",
+        node_role="System",
+        node_content="Starting **Strategy Selector**... I am converting the topology analysis into high-level placement strategies, ensuring matching devices stay together and rows are balanced."
+    )
+
     strategy_prompt = _build_llm_messages(
         strategy_selector.STRATEGY_SELECTOR_PROMPT,
         chat_history,
@@ -543,6 +550,13 @@ def node_placement_specialist(state: LayoutState):
         tool_names = [getattr(t, "name", "tool") for t in placement_tools]
         vprint(f"[PLACEMENT] ReAct tools (auto-callable): {', '.join(tool_names)}", flush=True)
 
+    chat_history = _update_and_save_chat_history(
+        chat_history=chat_history,
+        user_content="",
+        node_role="System",
+        node_content="Starting **Placement Specialist**... I am generating exact grid coordinates for all devices, satisfying abutment and symmetry rules while matching the square aspect ratio goal."
+    )
+
     placer_msgs = _build_llm_messages(
         placement_system_prompt,
         chat_history,
@@ -561,24 +575,16 @@ def node_placement_specialist(state: LayoutState):
             vprint(f"  {msg['role'].upper()}: {msg['content']}")
 
         if placement_framework == "react":
-            try:
-                placement_result = _invoke_react_agent_with_retry(
-                    system_prompt=placement_system_prompt,
-                    chat_history=chat_history,
-                    user_prompt=placer_user,
-                    selected_model=selected_model,
-                    task_weight="heavy",
-                    stage_tag="PLACEMENT",
-                    tools=placement_tools,
-                )
-                placement_content = _extract_agent_output_content(placement_result)
-            except Exception as react_exc:
-                vprint(
-                    f"[PLACEMENT] ⚠ ReAct path failed ({react_exc}); falling back to direct invoke.",
-                    flush=True,
-                )
-                placement_raw = _invoke_with_retry(placer_msgs, selected_model, "heavy", "PLACEMENT")
-                placement_content = placement_raw.content
+            placement_result = _invoke_react_agent_with_retry(
+                system_prompt=placement_system_prompt,
+                chat_history=chat_history,
+                user_prompt=placer_user,
+                selected_model=selected_model,
+                task_weight="heavy",
+                stage_tag="PLACEMENT",
+                tools=placement_tools,
+            )
+            placement_content = _extract_agent_output_content(placement_result)
         else:
             placement_raw = _invoke_with_retry(placer_msgs, selected_model, "heavy", "PLACEMENT")
             placement_content = placement_raw.content
@@ -623,6 +629,7 @@ def node_placement_specialist(state: LayoutState):
     return {
         "placement_nodes": working_nodes,
         "pending_cmds": current_pending + stage2_cmds,
+        "original_placement_cmds": current_pending + stage2_cmds,
         "chat_history": updated_chat_history,
     }
 
@@ -660,9 +667,18 @@ def node_drc_critic(state: LayoutState):
     vprint("\n" + "═"*60, flush=True)
     vprint(f"  STAGE 4: DRC CRITIC (attempt {retry_num + 1})", flush=True)
     vprint("═"*60, flush=True)
+
+    chat_history    = state.get("chat_history", [])
+    chat_history = _update_and_save_chat_history(
+        chat_history=chat_history,
+        user_content="",
+        node_role="System",
+        node_content=f"Starting **DRC Critic (Attempt {retry_num + 1})**... I am checking for device overlaps and enforcing minimum design rule spacing."
+    )
+
     nodes           = state.get("placement_nodes", [])
     pending_cmds    = state.get("pending_cmds", [])
-    chat_history    = state.get("chat_history", [])
+    # chat_history already fetched and updated above — do NOT re-fetch from stale state
     gap_px          = state.get("gap_px", 0.0)
     terminal_nets   = state.get("terminal_nets", {})
     edges           = state.get("edges", [])
@@ -771,16 +787,18 @@ def node_drc_critic(state: LayoutState):
     # FIX: Only use the ORIGINAL placement commands + LATEST DRC fix commands.
     # Previous DRC attempts' commands are discarded to prevent contradictory
     # command accumulation (BUG-8).
-    accumulated_cmds = list(pending_cmds) + list(merged_cmds)
-    seen_cmds = set()
-    deduped_cmds = []
+    original_cmds = state.get("original_placement_cmds", [])
+    accumulated_cmds = list(original_cmds) + list(merged_cmds)
+    deduped_dict = {}
     for cmd in accumulated_cmds:
-        sig = json.dumps(cmd, sort_keys=True)
-        if sig in seen_cmds:
-            continue
-        seen_cmds.add(sig)
-        deduped_cmds.append(cmd)
-    accumulated_cmds = deduped_cmds
+        dev_id = cmd.get("device") or cmd.get("device_id") or cmd.get("id") or cmd.get("device_a") or cmd.get("a", "")
+        action = cmd.get("action", "")
+        if action and dev_id:
+            deduped_dict[(action, dev_id)] = cmd
+        else:
+            sig = json.dumps(cmd, sort_keys=True)
+            deduped_dict[sig] = cmd
+    accumulated_cmds = list(deduped_dict.values())
 
     fixed_nodes = _apply_cmds_to_nodes(snapshot, accumulated_cmds)
 
@@ -796,15 +814,16 @@ def node_drc_critic(state: LayoutState):
                 "x": float(node["geometry"]["x"]),
                 "y": float(node["geometry"]["y"]),
             })
-        seen_cmds = set()
-        deduped_cmds = []
+        deduped_dict = {}
         for cmd in accumulated_cmds:
-            sig = json.dumps(cmd, sort_keys=True)
-            if sig in seen_cmds:
-                continue
-            seen_cmds.add(sig)
-            deduped_cmds.append(cmd)
-        accumulated_cmds = deduped_cmds
+            dev_id = cmd.get("device") or cmd.get("device_id") or cmd.get("id") or cmd.get("device_a") or cmd.get("a", "")
+            action = cmd.get("action", "")
+            if action and dev_id:
+                deduped_dict[(action, dev_id)] = cmd
+            else:
+                sig = json.dumps(cmd, sort_keys=True)
+                deduped_dict[sig] = cmd
+        accumulated_cmds = list(deduped_dict.values())
 
     # ── Post-guard DRC re-check ──
     final_drc = run_drc_check(fixed_nodes, gap_um)
@@ -847,127 +866,7 @@ def node_drc_critic(state: LayoutState):
         "drc_retry_count":  retry_num + 1,
     }
 
-def node_routing_previewer(state: LayoutState):
-    """
-    Stage 5: Routing Pre-Viewer
-    One LLM swap pass for routing improvement.
-    """
-    t0 = time.time()
-    current_passes = state.get("routing_pass_count", 0)
-    print("\n" + "═"*60, flush=True)
-    print(f"  STAGE 5: ROUTING PREVIEWER (pass {current_passes + 1})", flush=True)
-    print("═"*60, flush=True)
-    nodes         = state.get("placement_nodes", [])
-    edges         = state.get("edges", [])
-    terminal_nets = state.get("terminal_nets", {})
-    pending_cmds  = state.get("pending_cmds", [])
-    chat_history  = state.get("chat_history", [])
-    user_message  = state.get("user_message", "")
 
-    working_nodes = [n for n in nodes]  # shallow copy
-
-    initial_routing = score_routing(working_nodes, edges, terminal_nets)
-    initial_cost    = initial_routing.get("placement_cost", float("inf"))
-    initial_score   = initial_routing.get("score", 0)
-    wire_len        = initial_routing.get("total_wire_length", 0)
-    print(f"[ROUTING] Initial — cost: {initial_cost:.4f} | score: {initial_score} | wire_len: {wire_len:.2f}", flush=True)
-
-    # Early exit if already optimal 
-    if initial_score < 3 and wire_len < 5.0:
-        elapsed = time.time() - t0
-        print(f"[ROUTING] ✓ Already optimal — skipping. ({elapsed:.1f}s)", flush=True)
-        updated_chat_history = _update_and_save_chat_history(
-            chat_history=chat_history,
-            user_content="",
-            node_role="Routing Previewer Assistant",
-            node_content="Routing already optimal. No additional swaps were needed.",
-        )
-        return {
-            "routing_result":    initial_routing,
-            "chat_history":      updated_chat_history,
-            "routing_pass_count": current_passes + 1,
-        }
-
-    routing_text = format_routing_for_llm(initial_routing, working_nodes, terminal_nets)
-    current_positions = ", ".join(
-        f"{n['id']}@({round(float(n['geometry']['x']), 3)},"
-        f"{round(float(n['geometry']['y']), 3)})"
-        for n in working_nodes if not n.get("is_dummy")
-    )
-
-    router_user = (
-        f"User request: {user_message}\n\n"
-        f"{routing_text}\n\n"
-        f"Current positions: {current_positions}"
-    )
-    selected_model = state.get("selected_model", "Gemini")
-
-    router_msgs = _build_llm_messages(
-        ROUTING_PREVIEWER_PROMPT,
-        chat_history,
-        router_user,
-    )
-
-    # ── LLM swap pass ──
-    print(f"[ROUTING] Calling LLM ({selected_model}, weight=heavy)...", flush=True)
-    applied_cmds = []
-    router_response = ""
-    try:
-        router_raw_response = _invoke_with_retry(router_msgs, selected_model, "heavy", "ROUTING")
-        router_response, routing_thinking = _split_content_and_thinking(router_raw_response.content)
-        router_response = _strip_thinking_text(router_response)
-        router_cmds     = _extract_cmd_blocks(router_response)
-        print(f"[ROUTING] ✓ LLM proposed {len(router_cmds)} swap(s)", flush=True)
-        _print_thinking_block("ROUTING", routing_thinking)
-    except Exception as exc:
-        print(f"[ROUTING] ✗ LLM error: {exc}", flush=True)
-        router_response = f"[ROUTING] LLM Error: {exc}"
-        router_cmds = []
-
-    updated_chat_history = _update_and_save_chat_history(
-        chat_history=chat_history,
-        user_content="",
-        node_role="Routing Previewer Assistant",
-        node_content=router_response,
-    )
-
-    if router_cmds:
-        trial_nodes = _apply_cmds_to_nodes(working_nodes, router_cmds)
-        tool_resolve_overlaps(trial_nodes)
-        new_routing = score_routing(trial_nodes, edges, terminal_nets)
-        new_cost    = new_routing.get("placement_cost", float("inf"))
-
-        if new_cost < initial_cost:
-            improvement = ((initial_cost - new_cost) / initial_cost * 100) if initial_cost > 0 else 0
-            print(f"[ROUTING] ✓ LLM improved cost: {initial_cost:.4f} → {new_cost:.4f} ({improvement:.1f}% better)", flush=True)
-            working_nodes   = trial_nodes
-            initial_routing = new_routing
-            initial_cost    = new_cost
-            applied_cmds    = router_cmds
-        else:
-            print(f"[ROUTING] ✗ LLM swaps rejected: {new_cost:.4f} >= {initial_cost:.4f}", flush=True)
-
-    # ── Accumulate commands ──
-    merged_cmds = list(pending_cmds) + list(applied_cmds)
-    seen_cmds = set()
-    accumulated_cmds = []
-    for cmd in merged_cmds:
-        sig = json.dumps(cmd, sort_keys=True)
-        if sig in seen_cmds:
-            continue
-        seen_cmds.add(sig)
-        accumulated_cmds.append(cmd)
-
-    elapsed = time.time() - t0
-    print(f"[ROUTING] Stage 5 complete in {elapsed:.1f}s — {len(accumulated_cmds)} CMDs | cost={initial_cost:.4f}", flush=True)
-
-    return {
-        "placement_nodes":    working_nodes,
-        "routing_result":     initial_routing,
-        "pending_cmds":       accumulated_cmds,
-        "routing_pass_count": current_passes + 1,
-        "chat_history":       updated_chat_history,
-    }
 
 def node_human_viewer(state: LayoutState):
     """

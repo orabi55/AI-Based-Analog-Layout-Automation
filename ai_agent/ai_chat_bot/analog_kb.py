@@ -8,7 +8,7 @@ to give the LLM domain knowledge without needing training on layout manuals.
 Reference: Razavi "Design of Analog CMOS Integrated Circuits", Chapter 6-8.
 """
 
-ANALOG_LAYOUT_RULES = """
+ANALOG_LAYOUT_RULES = r"""
 === ANALOG LAYOUT KNOWLEDGE BASE ===
  Very important note:Device with same id"MM1,MM0...."May have many fingers like MM1_f1,MM1_f2 but all of them are same transistor
 
