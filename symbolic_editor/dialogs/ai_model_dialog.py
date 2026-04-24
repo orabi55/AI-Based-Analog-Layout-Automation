@@ -123,7 +123,7 @@ class AIModelSelectionDialog(QDialog):
         self.settings_stack.addWidget(self.gemini_page)
 
         # 6. Alibaba DashScope (Qwen)
-        self.alibaba_api_key = QLineEdit(os.environ.get("ALIBABA_API_KEY", "******"))
+        self.alibaba_api_key = QLineEdit(os.environ.get("ALIBABA_API_KEY", "sk-567af8d3cf51494faa346579ba523add"))
         self.alibaba_model_combo = QComboBox()
         self.alibaba_model_combo.setEditable(True)
         self.alibaba_model_combo.addItems(["qwen-plus", "qwen3.6-flash", "qwen3.6-max-preview", "qwen3.6-35b-a3b"])
@@ -164,18 +164,7 @@ class AIModelSelectionDialog(QDialog):
         options_group = QGroupBox("Placement Options")
         options_layout = QVBoxLayout(options_group)
 
-        self.check_multi_agent = QCheckBox("Use Autonomous Multi-Agent Pipeline")
-        self.check_multi_agent.setChecked(True)
-        self.check_multi_agent.setStyleSheet("color: #c8d0dc; font-size: 10pt; font-weight: bold; spacing: 10px;")
-        options_layout.addWidget(self.check_multi_agent)
 
-        multi_desc = QLabel(
-            "Uses the intelligent 'Layout Copilot' pipeline: Topology Analyst \u2192 "
-            "Strategy Selector \u2192 Placement Specialist \u2192 DRC Critic \u2192 Routing Previewer."
-        )
-        multi_desc.setStyleSheet("color: #8899aa; font-size: 9pt; margin-left: 28px; margin-bottom: 8px;")
-        multi_desc.setWordWrap(True)
-        options_layout.addWidget(multi_desc)
 
         self.check_abutment = QCheckBox("Enable Abutment (Diffusion Sharing)")
         self.check_abutment.setChecked(True)
@@ -191,18 +180,7 @@ class AIModelSelectionDialog(QDialog):
         abutment_desc.setWordWrap(True)
         options_layout.addWidget(abutment_desc)
 
-        self.check_sa = QCheckBox("Run Post-Optimization (Simulated Annealing)")
-        self.check_sa.setChecked(True)
-        self.check_sa.setStyleSheet("color: #c8d0dc; font-size: 10pt; font-weight: normal; spacing: 10px;")
-        options_layout.addWidget(self.check_sa)
 
-        sa_desc = QLabel(
-            "After AI placement, run a local SA optimizer to swap devices "
-            "within each row and minimise total wire length. Adds ~1-3 seconds."
-        )
-        sa_desc.setStyleSheet("color: #8899aa; font-size: 9pt; margin-left: 28px;")
-        sa_desc.setWordWrap(True)
-        options_layout.addWidget(sa_desc)
 
         main_layout.addWidget(options_group)
         main_layout.addStretch()
@@ -270,12 +248,8 @@ class AIModelSelectionDialog(QDialog):
 
     def is_abutment_enabled(self):
         return self.check_abutment.isChecked()
-
-    def is_sa_enabled(self):
-        return self.check_sa.isChecked()
         
-    def get_multi_agent_enabled(self):
-        return self.check_multi_agent.isChecked()
+
 
     def apply_api_keys(self):
         # Update environment variables based on user changes

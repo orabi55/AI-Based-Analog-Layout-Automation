@@ -2,6 +2,7 @@ import json
 import re
 from collections import defaultdict
 import copy
+from ai_agent.ai_chat_bot.pipeline_log import vprint
 
 # ---------------------------------------------------------------------------
 # Robust JSON sanitizer
@@ -122,7 +123,7 @@ def sanitize_json(text: str) -> dict:
         try:
             result = json.loads(attempt)
             if isinstance(result, dict) and "nodes" in result:
-                print(f"[sanitize_json] Recovered JSON by trimming {trim} chars from end")
+                vprint(f"[sanitize_json] Recovered JSON by trimming {trim} chars from end")
                 return result
         except json.JSONDecodeError:
             continue
@@ -859,11 +860,10 @@ def _heal_abutment_positions(nodes: list, candidates: list,
         if not segments:
             continue
 
-        # Use the leftmost X in the first segment's devices as the cursor start
-        first_dev_x = min(
-            d.get("geometry", {}).get("x", 0.0) for d in segments[0]
-        )
-        cursor = first_dev_x
+        # Use a uniform start X=0.0 for all rows to ensure consistent vertical alignment.
+        # (Previously used the AI's raw X from the first segment, which caused
+        # different rows to start at different offsets — BUG-9)
+        cursor = 0.0
 
         for seg_idx, segment in enumerate(segments):
             for dev_idx, dev in enumerate(segment):
@@ -966,7 +966,7 @@ def _force_abutment_spacing(nodes: list, candidates: list = None) -> list:
                     or parent_of.get(n1_id, n1_id) == parent_of.get(n2_id, n2_id)
                 )
                 if not is_expected:
-                    print(f"[FORCE_FIX] WARNING: unexpected abutment flags for {pair} "
+                    vprint(f"[FORCE_FIX] WARNING: unexpected abutment flags for {pair} "
                           f"(parents: {parent_of.get(n1_id)} vs {parent_of.get(n2_id)}). Skipping.")
                     continue
 
@@ -976,7 +976,7 @@ def _force_abutment_spacing(nodes: list, candidates: list = None) -> list:
 
                 if abs(x2 - expected_x2) > 0.001:
                     shift = round(expected_x2 - x2, 6)
-                    print(f"[FORCE_FIX] Moving {n2_id} from x={x2:.4f} to x={expected_x2:.4f} "
+                    vprint(f"[FORCE_FIX] Moving {n2_id} from x={x2:.4f} to x={expected_x2:.4f} "
                           f"(was {abs(x2 - x1):.4f}, should be {ABUT_SPACING:.3f})")
                     n2.setdefault("geometry", {})["x"] = expected_x2
                     fixed_count += 1
@@ -990,7 +990,7 @@ def _force_abutment_spacing(nodes: list, candidates: list = None) -> list:
                         later_geo["x"] = round(later_x + shift, 6)
 
     if fixed_count > 0:
-        print(f"[FORCE_FIX] Fixed {fixed_count} device position(s)")
+        vprint(f"[FORCE_FIX] Fixed {fixed_count} device position(s)")
 
     return nodes
 
@@ -1178,189 +1178,4 @@ COMPRESSED DEVICE GRAPH (parent-level summary):
 # ---------------------------------------------------------------------------
 # Slot-Based Prompt (for structured-output models like Gemini / Claude)
 # ---------------------------------------------------------------------------
-def generate_vlsi_slot_prompt(original_nodes: list,
-                              edges: list,
-                              graph_data: dict,
-                              abutment_str: str = "") -> str:
-    """
-    Construct the modern Slot-Based JSON sequence prompt string.
 
-    Rather than allowing floating-point calculation hallucinations, this prompt
-    strictly demands only deterministic sequence assignments (left-to-right
-    transistor order). Coordinates are mathmatically inferred client-side later
-    by `_convert_slots_to_geometry`.
-
-    Parameters
-    ----------
-    original_nodes : list
-        Source-of-truth JSON architecture for devices.
-    edges : list
-        Raw edge adjacency array to reconstruct the topologies inline.
-    graph_data : dict
-        Fully exported graph containing hierarchical definitions.
-    abutment_str : str, optional
-        Mandatory topological abutments (`_format_abutment_candidates`).
-
-    Returns
-    -------
-    str
-        The fully assembled natural-language placement prompt, expecting
-        a JSON object strictly containing `{ "nmos_order": [], "pmos_order": [] }`.
-    """
-    # Separate devices by type
-    pmos_ids = sorted(n["id"] for n in original_nodes if n.get("type") == "pmos")
-    nmos_ids = sorted(n["id"] for n in original_nodes if n.get("type") == "nmos")
-
-    # Build net-adjacency for context
-    adjacency_str = _build_net_adjacency(original_nodes, edges)
-    block_str = _build_block_info(original_nodes, graph_data)
-
-    # Abutment chain info
-    abut_chains_section = ""
-    if abutment_str and abutment_str.strip():
-        abut_chains_section = f"""
-ABUTMENT CHAINS (devices that MUST appear consecutively in the ordering):
-{abutment_str}
-"""
-
-    return f"""You are a VLSI analog placement engineer.
-
-YOUR TASK: Determine the optimal LEFT-TO-RIGHT ordering of transistors in each row.
-You do NOT calculate coordinates — just decide the best sequence.
-
-DEVICES TO PLACE:
-  NMOS row: {', '.join(nmos_ids)}
-  PMOS row: {', '.join(pmos_ids)}
-
-SIGNAL NET CONNECTIVITY (devices sharing a net should be near each other):
-{adjacency_str}
-
-BLOCK GROUPING (same-block devices must be contiguous):
-{block_str}
-{abut_chains_section}
-RULES:
-1. Place devices that share signal nets ADJACENT to each other to minimise wire length.
-2. Keep same-block devices CONTIGUOUS — never interleave blocks.
-3. Multi-finger devices (e.g. MM0_m1, MM0_m2, ...) must appear consecutively in order.
-4. Abutment chain devices MUST appear consecutively in the exact chain order.
-5. Optimise for minimum total wire length (HPWL).
-
-OUTPUT FORMAT (strict JSON):
-Return ONLY a JSON object with exactly two keys:
-- "nmos_order": array of ALL {len(nmos_ids)} NMOS device IDs in left-to-right order
-- "pmos_order": array of ALL {len(pmos_ids)} PMOS device IDs in left-to-right order
-
-EXAMPLE:
-{{
-  "nmos_order": ["MM0_m1", "MM0_m2", "MM1_m1"],
-  "pmos_order": ["MM3_m1", "MM4_m1"]
-}}
-
-CRITICAL: Include EVERY device ID exactly once. Missing or duplicate IDs = failure.
-Return ONLY raw JSON. No markdown, no explanation.
-"""
-
-
-def _convert_slots_to_geometry(slot_data: dict,
-                               original_nodes: list,
-                               abutment_candidates: list | None = None,
-                               row_y_map: dict[str, float] | None = None) -> list:
-    """Convert AI slot-based output to exact geometry coordinates.
-
-    Parameters
-    ----------
-    slot_data           : dict with ``nmos_order`` and ``pmos_order`` keys,
-                          each a list of device IDs in left-to-right order.
-    original_nodes      : list of original node dicts with full metadata.
-    abutment_candidates : list of ``{dev_a, dev_b, ...}`` dicts.
-    row_y_map          : optional dict mapping device type ("nmos"/"pmos")
-                         to the Y coordinate for that row. Defaults to legacy
-                         2-row values (nmos=0.000, pmos=0.668).
-
-    Returns
-    -------
-    list — fully placed node dicts with correct geometry.
-    """
-    ABUT_SPACING = 0.070
-    STANDARD_PITCH = 0.294
-    ROW_Y = row_y_map if row_y_map else {"nmos": 0.000, "pmos": 0.668}
-
-    # Build lookup from original nodes
-    node_map: dict[str, dict] = {
-        n["id"]: n for n in original_nodes
-        if isinstance(n, dict) and "id" in n
-    }
-
-    # Build abutment pair lookup: (dev_a, dev_b) means A abuts right -> B
-    abut_pairs: set[tuple[str, str]] = set()
-    if abutment_candidates:
-        for c in abutment_candidates:
-            abut_pairs.add((c["dev_a"], c["dev_b"]))
-    # Also check embedded flags from original nodes.
-    # Only pair devices that are adjacent within the same row
-    # (sorted by X) to avoid false cross-row abutment pairs.
-    row_buckets: dict[float, list] = defaultdict(list)
-    for n in original_nodes:
-        y = round(float(n.get("geometry", {}).get("y", 0.0)), 3)
-        row_buckets[y].append(n)
-    for y_key, row_nodes in row_buckets.items():
-        row_sorted = sorted(row_nodes, key=lambda n: n.get("geometry", {}).get("x", 0.0))
-        for i in range(len(row_sorted) - 1):
-            n1 = row_sorted[i]
-            n2 = row_sorted[i + 1]
-            if (n1.get("abutment", {}).get("abut_right")
-                    and n2.get("abutment", {}).get("abut_left")):
-                abut_pairs.add((n1.get("id", ""), n2.get("id", "")))
-
-    placed_nodes: list[dict] = []
-
-    for row_key, dev_type in [("nmos_order", "nmos"), ("pmos_order", "pmos")]:
-        device_ids = slot_data.get(row_key, [])
-        if not device_ids:
-            continue
-
-        row_y = ROW_Y.get(dev_type, 0.0)
-        cursor = 0.0
-
-        for i, dev_id in enumerate(device_ids):
-            if dev_id not in node_map:
-                print(f"[slot→geo] WARNING: '{dev_id}' not found in node_map, skipping")
-                continue
-
-            orig = copy.deepcopy(node_map[dev_id])
-            geo = orig.setdefault("geometry", {})
-            geo["x"] = round(cursor, 6)
-            geo["y"] = row_y
-            geo.setdefault("orientation", "R0")
-
-            # Determine spacing to next device
-            if i < len(device_ids) - 1:
-                next_id = device_ids[i + 1]
-                is_abutted = (dev_id, next_id) in abut_pairs
-
-                if is_abutted:
-                    orig.setdefault("abutment", {})["abut_right"] = True
-                    cursor = round(cursor + ABUT_SPACING, 6)
-                else:
-                    dev_w = geo.get("width", STANDARD_PITCH)
-                    orig.setdefault("abutment", {})["abut_right"] = False
-                    cursor = round(cursor + dev_w, 6)
-
-            # Set abut_left flag based on previous device
-            if i > 0:
-                prev_id = device_ids[i - 1]
-                if (prev_id, dev_id) in abut_pairs:
-                    orig.setdefault("abutment", {})["abut_left"] = True
-                else:
-                    orig.setdefault("abutment", {})["abut_left"] = False
-            else:
-                orig.setdefault("abutment", {})["abut_left"] = False
-
-            placed_nodes.append(orig)
-
-    # Handle passive devices (res, cap) — just keep original positions
-    for n in original_nodes:
-        if n.get("type") in ("res", "cap"):
-            placed_nodes.append(copy.deepcopy(n))
-
-    return placed_nodes

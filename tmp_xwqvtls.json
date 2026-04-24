@@ -1,0 +1,7323 @@
+{
+  "nodes": [
+    {
+      "id": "MM5_m1",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM5",
+        "m": 4,
+        "multiplier_index": 1,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 8.908,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM5_m2",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM5",
+        "m": 4,
+        "multiplier_index": 2,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 8.982,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM5_m3",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM5",
+        "m": 4,
+        "multiplier_index": 3,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 9.056,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM5_m4",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM5",
+        "m": 4,
+        "multiplier_index": 4,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 9.129999999999997,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": false
+      }
+    },
+    {
+      "id": "MM4_m1",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM4",
+        "m": 4,
+        "multiplier_index": 1,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 8.611999999999998,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": false,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM4_m2",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM4",
+        "m": 4,
+        "multiplier_index": 2,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 8.686,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM4_m3",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM4",
+        "m": 4,
+        "multiplier_index": 3,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 8.76,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM4_m4",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM4",
+        "m": 4,
+        "multiplier_index": 4,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 8.834,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM3_m1",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM3",
+        "m": 8,
+        "multiplier_index": 1,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 7.789999999999999,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": false,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM3_m2",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM3",
+        "m": 8,
+        "multiplier_index": 2,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 7.863999999999999,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM3_m3",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM3",
+        "m": 8,
+        "multiplier_index": 3,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 7.937999999999999,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM3_m4",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM3",
+        "m": 8,
+        "multiplier_index": 4,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 8.011999999999999,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM3_m5",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM3",
+        "m": 8,
+        "multiplier_index": 5,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 8.085999999999999,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM3_m6",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM3",
+        "m": 8,
+        "multiplier_index": 6,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 8.159999999999998,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM3_m7",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM3",
+        "m": 8,
+        "multiplier_index": 7,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 8.233999999999998,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM3_m8",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM3",
+        "m": 8,
+        "multiplier_index": 8,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 8.307999999999998,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": false
+      }
+    },
+    {
+      "id": "MM2_m1",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM2",
+        "m": 8,
+        "multiplier_index": 1,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 3.935999999999999,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": false,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM2_m2",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM2",
+        "m": 8,
+        "multiplier_index": 2,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 4.009999999999998,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM2_m3",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM2",
+        "m": 8,
+        "multiplier_index": 3,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 4.083999999999998,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM2_m4",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM2",
+        "m": 8,
+        "multiplier_index": 4,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 4.157999999999998,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": false
+      }
+    },
+    {
+      "id": "MM2_m5",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM2",
+        "m": 8,
+        "multiplier_index": 5,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 5.121999999999999,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": false,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM2_m6",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM2",
+        "m": 8,
+        "multiplier_index": 6,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 5.195999999999998,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM2_m7",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM2",
+        "m": 8,
+        "multiplier_index": 7,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 5.269999999999998,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM2_m8",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM2",
+        "m": 8,
+        "multiplier_index": 8,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 5.343999999999998,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": false
+      }
+    },
+    {
+      "id": "MM1_m1",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM1",
+        "m": 8,
+        "multiplier_index": 1,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 0.9719999999999986,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": false,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM1_m2",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM1",
+        "m": 8,
+        "multiplier_index": 2,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 1.0459999999999985,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM1_m3",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM1",
+        "m": 8,
+        "multiplier_index": 3,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 1.1199999999999986,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM1_m4",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM1",
+        "m": 8,
+        "multiplier_index": 4,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 1.1939999999999986,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM1_m5",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM1",
+        "m": 8,
+        "multiplier_index": 5,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 1.2679999999999987,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM1_m6",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM1",
+        "m": 8,
+        "multiplier_index": 6,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 1.3419999999999987,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM1_m7",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM1",
+        "m": 8,
+        "multiplier_index": 7,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 1.4159999999999988,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM1_m8",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM1",
+        "m": 8,
+        "multiplier_index": 8,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 1.4899999999999975,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": false
+      }
+    },
+    {
+      "id": "MM0_m1",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM0",
+        "m": 8,
+        "multiplier_index": 1,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 0.14999999999999858,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": false,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM0_m2",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM0",
+        "m": 8,
+        "multiplier_index": 2,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 0.22399999999999842,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM0_m3",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM0",
+        "m": 8,
+        "multiplier_index": 3,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 0.29799999999999843,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM0_m4",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM0",
+        "m": 8,
+        "multiplier_index": 4,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 0.37199999999999844,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM0_m5",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM0",
+        "m": 8,
+        "multiplier_index": 5,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 0.44599999999999845,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM0_m6",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM0",
+        "m": 8,
+        "multiplier_index": 6,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 0.5199999999999985,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM0_m7",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM0",
+        "m": 8,
+        "multiplier_index": 7,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 0.5939999999999984,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM0_m8",
+      "type": "pmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM0",
+        "m": 8,
+        "multiplier_index": 8,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 0.6679999999999975,
+        "y": -0.49499999999999966,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": false
+      }
+    },
+    {
+      "id": "MM9_m8",
+      "type": "nmos",
+      "electrical": {
+        "l": 2.8000000000000003e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM9",
+        "m": 1,
+        "multiplier_index": 8,
+        "finger_index": null,
+        "array_index": 7
+      },
+      "geometry": {
+        "x": 6.309999999999998,
+        "y": -2.151,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM9_m7",
+      "type": "nmos",
+      "electrical": {
+        "l": 2.8000000000000003e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM9",
+        "m": 1,
+        "multiplier_index": 7,
+        "finger_index": null,
+        "array_index": 6
+      },
+      "geometry": {
+        "x": 6.236,
+        "y": -2.151,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": false,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM9_m6",
+      "type": "nmos",
+      "electrical": {
+        "l": 2.8000000000000003e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM9",
+        "m": 1,
+        "multiplier_index": 6,
+        "finger_index": null,
+        "array_index": 5
+      },
+      "geometry": {
+        "x": 5.721999999999998,
+        "y": -2.151,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM9_m5",
+      "type": "nmos",
+      "electrical": {
+        "l": 2.8000000000000003e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM9",
+        "m": 1,
+        "multiplier_index": 5,
+        "finger_index": null,
+        "array_index": 4
+      },
+      "geometry": {
+        "x": 5.648,
+        "y": -2.151,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": false,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM9_m4",
+      "type": "nmos",
+      "electrical": {
+        "l": 2.8000000000000003e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM9",
+        "m": 1,
+        "multiplier_index": 4,
+        "finger_index": null,
+        "array_index": 3
+      },
+      "geometry": {
+        "x": 5.121999999999999,
+        "y": -1.323,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      }
+    },
+    {
+      "id": "MM9_m3",
+      "type": "nmos",
+      "electrical": {
+        "l": 2.8000000000000003e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM9",
+        "m": 1,
+        "multiplier_index": 3,
+        "finger_index": null,
+        "array_index": 2
+      },
+      "geometry": {
+        "x": 4.817999999999999,
+        "y": -2.979,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      }
+    },
+    {
+      "id": "MM9_m2",
+      "type": "nmos",
+      "electrical": {
+        "l": 2.8000000000000003e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM9",
+        "m": 1,
+        "multiplier_index": 2,
+        "finger_index": null,
+        "array_index": 1
+      },
+      "geometry": {
+        "x": 4.523999999999999,
+        "y": -2.979,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      }
+    },
+    {
+      "id": "MM9_m1",
+      "type": "nmos",
+      "electrical": {
+        "l": 2.8000000000000003e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM9",
+        "m": 1,
+        "multiplier_index": 1,
+        "finger_index": null,
+        "array_index": 0
+      },
+      "geometry": {
+        "x": 4.2299999999999995,
+        "y": -2.979,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      }
+    },
+    {
+      "id": "MM8_m8",
+      "type": "nmos",
+      "electrical": {
+        "l": 2.8000000000000003e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM8",
+        "m": 1,
+        "multiplier_index": 8,
+        "finger_index": null,
+        "array_index": 7
+      },
+      "geometry": {
+        "x": 3.936,
+        "y": -2.979,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      }
+    },
+    {
+      "id": "MM8_m7",
+      "type": "nmos",
+      "electrical": {
+        "l": 2.8000000000000003e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM8",
+        "m": 1,
+        "multiplier_index": 7,
+        "finger_index": null,
+        "array_index": 6
+      },
+      "geometry": {
+        "x": 3.935999999999999,
+        "y": -1.323,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      }
+    },
+    {
+      "id": "MM8_m6",
+      "type": "nmos",
+      "electrical": {
+        "l": 2.8000000000000003e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM8",
+        "m": 1,
+        "multiplier_index": 6,
+        "finger_index": null,
+        "array_index": 5
+      },
+      "geometry": {
+        "x": 3.6319999999999975,
+        "y": -2.151,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": false
+      }
+    },
+    {
+      "id": "MM8_m5",
+      "type": "nmos",
+      "electrical": {
+        "l": 2.8000000000000003e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM8",
+        "m": 1,
+        "multiplier_index": 5,
+        "finger_index": null,
+        "array_index": 4
+      },
+      "geometry": {
+        "x": 3.5579999999999994,
+        "y": -2.151,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": false,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM8_m4",
+      "type": "nmos",
+      "electrical": {
+        "l": 2.8000000000000003e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM8",
+        "m": 1,
+        "multiplier_index": 4,
+        "finger_index": null,
+        "array_index": 3
+      },
+      "geometry": {
+        "x": 3.0439999999999974,
+        "y": -2.151,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": false
+      }
+    },
+    {
+      "id": "MM8_m3",
+      "type": "nmos",
+      "electrical": {
+        "l": 2.8000000000000003e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM8",
+        "m": 1,
+        "multiplier_index": 3,
+        "finger_index": null,
+        "array_index": 2
+      },
+      "geometry": {
+        "x": 2.9699999999999993,
+        "y": -2.151,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": false,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM8_m2",
+      "type": "nmos",
+      "electrical": {
+        "l": 2.8000000000000003e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM8",
+        "m": 1,
+        "multiplier_index": 2,
+        "finger_index": null,
+        "array_index": 1
+      },
+      "geometry": {
+        "x": 2.4559999999999977,
+        "y": -2.151,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM8_m1",
+      "type": "nmos",
+      "electrical": {
+        "l": 2.8000000000000003e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM8",
+        "m": 1,
+        "multiplier_index": 1,
+        "finger_index": null,
+        "array_index": 0
+      },
+      "geometry": {
+        "x": 2.3819999999999992,
+        "y": -2.151,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": false,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM10_m4",
+      "type": "nmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM10",
+        "m": 1,
+        "multiplier_index": 4,
+        "finger_index": null,
+        "array_index": 3
+      },
+      "geometry": {
+        "x": 7.485999999999998,
+        "y": -2.151,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": false
+      }
+    },
+    {
+      "id": "MM10_m3",
+      "type": "nmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM10",
+        "m": 1,
+        "multiplier_index": 3,
+        "finger_index": null,
+        "array_index": 2
+      },
+      "geometry": {
+        "x": 7.412,
+        "y": -2.151,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": false,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM10_m2",
+      "type": "nmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM10",
+        "m": 1,
+        "multiplier_index": 2,
+        "finger_index": null,
+        "array_index": 1
+      },
+      "geometry": {
+        "x": 6.897999999999998,
+        "y": -2.151,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": false
+      }
+    },
+    {
+      "id": "MM10_m1",
+      "type": "nmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": "MM10",
+        "m": 1,
+        "multiplier_index": 1,
+        "finger_index": null,
+        "array_index": 0
+      },
+      "geometry": {
+        "x": 6.824,
+        "y": -2.151,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": false,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM7",
+      "type": "nmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": null,
+        "m": 1,
+        "multiplier_index": null,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 1.8679999999999977,
+        "y": -2.151,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": true,
+        "abut_right": true
+      }
+    },
+    {
+      "id": "MM6",
+      "type": "nmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 7.0,
+        "w": 0,
+        "parent": null,
+        "m": 1,
+        "multiplier_index": null,
+        "finger_index": null,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 1.7939999999999992,
+        "y": -2.151,
+        "width": 0.294,
+        "height": 0.8180000000000001,
+        "orientation": "R0"
+      },
+      "abutment": {
+        "abut_left": false,
+        "abut_right": true
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "MM5_m1",
+      "target": "MM5_m2",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m1",
+      "target": "MM5_m3",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m1",
+      "target": "MM5_m4",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m1",
+      "target": "MM4_m1",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m1",
+      "target": "MM4_m2",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m1",
+      "target": "MM4_m3",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m1",
+      "target": "MM4_m4",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m1",
+      "target": "MM2_m1",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM5_m1",
+      "target": "MM2_m2",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM5_m1",
+      "target": "MM2_m3",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM5_m1",
+      "target": "MM2_m4",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM5_m1",
+      "target": "MM2_m5",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM5_m1",
+      "target": "MM2_m6",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM5_m1",
+      "target": "MM2_m7",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM5_m1",
+      "target": "MM2_m8",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM5_m1",
+      "target": "MM7",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m1",
+      "target": "MM6",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m1",
+      "target": "MM1_m1",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m1",
+      "target": "MM1_m2",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m1",
+      "target": "MM1_m3",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m1",
+      "target": "MM1_m4",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m1",
+      "target": "MM1_m5",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m1",
+      "target": "MM1_m6",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m1",
+      "target": "MM1_m7",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m1",
+      "target": "MM1_m8",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m2",
+      "target": "MM5_m3",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m2",
+      "target": "MM5_m4",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m2",
+      "target": "MM4_m1",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m2",
+      "target": "MM4_m2",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m2",
+      "target": "MM4_m3",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m2",
+      "target": "MM4_m4",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m2",
+      "target": "MM2_m1",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM5_m2",
+      "target": "MM2_m2",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM5_m2",
+      "target": "MM2_m3",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM5_m2",
+      "target": "MM2_m4",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM5_m2",
+      "target": "MM2_m5",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM5_m2",
+      "target": "MM2_m6",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM5_m2",
+      "target": "MM2_m7",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM5_m2",
+      "target": "MM2_m8",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM5_m2",
+      "target": "MM7",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m2",
+      "target": "MM6",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m2",
+      "target": "MM1_m1",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m2",
+      "target": "MM1_m2",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m2",
+      "target": "MM1_m3",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m2",
+      "target": "MM1_m4",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m2",
+      "target": "MM1_m5",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m2",
+      "target": "MM1_m6",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m2",
+      "target": "MM1_m7",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m2",
+      "target": "MM1_m8",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m3",
+      "target": "MM5_m4",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m3",
+      "target": "MM4_m1",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m3",
+      "target": "MM4_m2",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m3",
+      "target": "MM4_m3",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m3",
+      "target": "MM4_m4",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m3",
+      "target": "MM2_m1",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM5_m3",
+      "target": "MM2_m2",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM5_m3",
+      "target": "MM2_m3",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM5_m3",
+      "target": "MM2_m4",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM5_m3",
+      "target": "MM2_m5",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM5_m3",
+      "target": "MM2_m6",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM5_m3",
+      "target": "MM2_m7",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM5_m3",
+      "target": "MM2_m8",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM5_m3",
+      "target": "MM7",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m3",
+      "target": "MM6",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m3",
+      "target": "MM1_m1",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m3",
+      "target": "MM1_m2",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m3",
+      "target": "MM1_m3",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m3",
+      "target": "MM1_m4",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m3",
+      "target": "MM1_m5",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m3",
+      "target": "MM1_m6",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m3",
+      "target": "MM1_m7",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m3",
+      "target": "MM1_m8",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m4",
+      "target": "MM4_m1",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m4",
+      "target": "MM4_m2",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m4",
+      "target": "MM4_m3",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m4",
+      "target": "MM4_m4",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m4",
+      "target": "MM2_m1",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM5_m4",
+      "target": "MM2_m2",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM5_m4",
+      "target": "MM2_m3",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM5_m4",
+      "target": "MM2_m4",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM5_m4",
+      "target": "MM2_m5",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM5_m4",
+      "target": "MM2_m6",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM5_m4",
+      "target": "MM2_m7",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM5_m4",
+      "target": "MM2_m8",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM5_m4",
+      "target": "MM7",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m4",
+      "target": "MM6",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m4",
+      "target": "MM1_m1",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m4",
+      "target": "MM1_m2",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m4",
+      "target": "MM1_m3",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m4",
+      "target": "MM1_m4",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m4",
+      "target": "MM1_m5",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m4",
+      "target": "MM1_m6",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m4",
+      "target": "MM1_m7",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM5_m4",
+      "target": "MM1_m8",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m1",
+      "target": "MM4_m2",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m1",
+      "target": "MM4_m3",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m1",
+      "target": "MM4_m4",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m1",
+      "target": "MM2_m1",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM4_m1",
+      "target": "MM2_m2",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM4_m1",
+      "target": "MM2_m3",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM4_m1",
+      "target": "MM2_m4",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM4_m1",
+      "target": "MM2_m5",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM4_m1",
+      "target": "MM2_m6",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM4_m1",
+      "target": "MM2_m7",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM4_m1",
+      "target": "MM2_m8",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM4_m1",
+      "target": "MM7",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m1",
+      "target": "MM6",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m1",
+      "target": "MM1_m1",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m1",
+      "target": "MM1_m2",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m1",
+      "target": "MM1_m3",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m1",
+      "target": "MM1_m4",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m1",
+      "target": "MM1_m5",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m1",
+      "target": "MM1_m6",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m1",
+      "target": "MM1_m7",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m1",
+      "target": "MM1_m8",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m2",
+      "target": "MM4_m3",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m2",
+      "target": "MM4_m4",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m2",
+      "target": "MM2_m1",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM4_m2",
+      "target": "MM2_m2",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM4_m2",
+      "target": "MM2_m3",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM4_m2",
+      "target": "MM2_m4",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM4_m2",
+      "target": "MM2_m5",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM4_m2",
+      "target": "MM2_m6",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM4_m2",
+      "target": "MM2_m7",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM4_m2",
+      "target": "MM2_m8",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM4_m2",
+      "target": "MM7",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m2",
+      "target": "MM6",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m2",
+      "target": "MM1_m1",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m2",
+      "target": "MM1_m2",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m2",
+      "target": "MM1_m3",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m2",
+      "target": "MM1_m4",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m2",
+      "target": "MM1_m5",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m2",
+      "target": "MM1_m6",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m2",
+      "target": "MM1_m7",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m2",
+      "target": "MM1_m8",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m3",
+      "target": "MM4_m4",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m3",
+      "target": "MM2_m1",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM4_m3",
+      "target": "MM2_m2",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM4_m3",
+      "target": "MM2_m3",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM4_m3",
+      "target": "MM2_m4",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM4_m3",
+      "target": "MM2_m5",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM4_m3",
+      "target": "MM2_m6",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM4_m3",
+      "target": "MM2_m7",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM4_m3",
+      "target": "MM2_m8",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM4_m3",
+      "target": "MM7",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m3",
+      "target": "MM6",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m3",
+      "target": "MM1_m1",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m3",
+      "target": "MM1_m2",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m3",
+      "target": "MM1_m3",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m3",
+      "target": "MM1_m4",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m3",
+      "target": "MM1_m5",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m3",
+      "target": "MM1_m6",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m3",
+      "target": "MM1_m7",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m3",
+      "target": "MM1_m8",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m4",
+      "target": "MM2_m1",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM4_m4",
+      "target": "MM2_m2",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM4_m4",
+      "target": "MM2_m3",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM4_m4",
+      "target": "MM2_m4",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM4_m4",
+      "target": "MM2_m5",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM4_m4",
+      "target": "MM2_m6",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM4_m4",
+      "target": "MM2_m7",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM4_m4",
+      "target": "MM2_m8",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM4_m4",
+      "target": "MM7",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m4",
+      "target": "MM6",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m4",
+      "target": "MM1_m1",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m4",
+      "target": "MM1_m2",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m4",
+      "target": "MM1_m3",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m4",
+      "target": "MM1_m4",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m4",
+      "target": "MM1_m5",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m4",
+      "target": "MM1_m6",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m4",
+      "target": "MM1_m7",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM4_m4",
+      "target": "MM1_m8",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM3_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM3_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM3_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM3_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM3_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM3_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM3_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM9_m8",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM9_m7",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM9_m6",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM9_m5",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM9_m4",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM9_m3",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM9_m2",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM9_m1",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM6",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM2_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM2_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM2_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM2_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM2_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM2_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM2_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM2_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM1_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM1_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM1_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM1_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM1_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM1_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM1_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM1_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM0_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM0_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM0_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM0_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM0_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM0_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM0_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM0_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM10_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM10_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM10_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m1",
+      "target": "MM10_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM3_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM3_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM3_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM3_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM3_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM3_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM9_m8",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM9_m7",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM9_m6",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM9_m5",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM9_m4",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM9_m3",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM9_m2",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM9_m1",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM6",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM2_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM2_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM2_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM2_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM2_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM2_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM2_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM2_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM1_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM1_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM1_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM1_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM1_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM1_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM1_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM1_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM0_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM0_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM0_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM0_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM0_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM0_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM0_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM0_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM10_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM10_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM10_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m2",
+      "target": "MM10_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM3_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM3_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM3_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM3_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM3_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM9_m8",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM9_m7",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM9_m6",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM9_m5",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM9_m4",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM9_m3",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM9_m2",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM9_m1",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM6",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM2_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM2_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM2_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM2_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM2_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM2_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM2_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM2_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM1_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM1_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM1_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM1_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM1_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM1_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM1_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM1_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM0_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM0_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM0_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM0_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM0_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM0_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM0_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM0_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM10_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM10_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM10_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m3",
+      "target": "MM10_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM3_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM3_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM3_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM3_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM9_m8",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM9_m7",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM9_m6",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM9_m5",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM9_m4",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM9_m3",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM9_m2",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM9_m1",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM6",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM2_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM2_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM2_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM2_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM2_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM2_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM2_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM2_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM1_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM1_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM1_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM1_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM1_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM1_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM1_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM1_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM0_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM0_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM0_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM0_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM0_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM0_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM0_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM0_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM10_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM10_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM10_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m4",
+      "target": "MM10_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM3_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM3_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM3_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM9_m8",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM9_m7",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM9_m6",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM9_m5",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM9_m4",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM9_m3",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM9_m2",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM9_m1",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM6",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM2_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM2_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM2_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM2_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM2_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM2_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM2_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM2_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM1_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM1_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM1_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM1_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM1_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM1_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM1_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM1_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM0_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM0_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM0_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM0_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM0_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM0_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM0_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM0_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM10_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM10_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM10_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m5",
+      "target": "MM10_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM3_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM3_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM9_m8",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM9_m7",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM9_m6",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM9_m5",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM9_m4",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM9_m3",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM9_m2",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM9_m1",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM6",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM2_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM2_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM2_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM2_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM2_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM2_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM2_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM2_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM1_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM1_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM1_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM1_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM1_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM1_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM1_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM1_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM0_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM0_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM0_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM0_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM0_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM0_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM0_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM0_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM10_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM10_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM10_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m6",
+      "target": "MM10_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m7",
+      "target": "MM3_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m7",
+      "target": "MM9_m8",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m7",
+      "target": "MM9_m7",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m7",
+      "target": "MM9_m6",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m7",
+      "target": "MM9_m5",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m7",
+      "target": "MM9_m4",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m7",
+      "target": "MM9_m3",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m7",
+      "target": "MM9_m2",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m7",
+      "target": "MM9_m1",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m7",
+      "target": "MM6",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m7",
+      "target": "MM2_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m7",
+      "target": "MM2_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m7",
+      "target": "MM2_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m7",
+      "target": "MM2_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m7",
+      "target": "MM2_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m7",
+      "target": "MM2_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m7",
+      "target": "MM2_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m7",
+      "target": "MM2_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m7",
+      "target": "MM1_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m7",
+      "target": "MM1_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m7",
+      "target": "MM1_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m7",
+      "target": "MM1_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m7",
+      "target": "MM1_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m7",
+      "target": "MM1_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m7",
+      "target": "MM1_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m7",
+      "target": "MM1_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m7",
+      "target": "MM0_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m7",
+      "target": "MM0_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m7",
+      "target": "MM0_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m7",
+      "target": "MM0_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m7",
+      "target": "MM0_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m7",
+      "target": "MM0_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m7",
+      "target": "MM0_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m7",
+      "target": "MM0_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m7",
+      "target": "MM10_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m7",
+      "target": "MM10_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m7",
+      "target": "MM10_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m7",
+      "target": "MM10_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m8",
+      "target": "MM9_m8",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m8",
+      "target": "MM9_m7",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m8",
+      "target": "MM9_m6",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m8",
+      "target": "MM9_m5",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m8",
+      "target": "MM9_m4",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m8",
+      "target": "MM9_m3",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m8",
+      "target": "MM9_m2",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m8",
+      "target": "MM9_m1",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m8",
+      "target": "MM6",
+      "net": "VY"
+    },
+    {
+      "source": "MM3_m8",
+      "target": "MM2_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m8",
+      "target": "MM2_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m8",
+      "target": "MM2_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m8",
+      "target": "MM2_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m8",
+      "target": "MM2_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m8",
+      "target": "MM2_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m8",
+      "target": "MM2_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m8",
+      "target": "MM2_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m8",
+      "target": "MM1_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m8",
+      "target": "MM1_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m8",
+      "target": "MM1_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m8",
+      "target": "MM1_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m8",
+      "target": "MM1_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m8",
+      "target": "MM1_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m8",
+      "target": "MM1_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m8",
+      "target": "MM1_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m8",
+      "target": "MM0_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m8",
+      "target": "MM0_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m8",
+      "target": "MM0_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m8",
+      "target": "MM0_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m8",
+      "target": "MM0_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m8",
+      "target": "MM0_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m8",
+      "target": "MM0_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m8",
+      "target": "MM0_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m8",
+      "target": "MM10_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m8",
+      "target": "MM10_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m8",
+      "target": "MM10_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM3_m8",
+      "target": "MM10_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m1",
+      "target": "MM2_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m1",
+      "target": "MM2_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m1",
+      "target": "MM2_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m1",
+      "target": "MM2_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m1",
+      "target": "MM2_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m1",
+      "target": "MM2_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m1",
+      "target": "MM2_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m1",
+      "target": "MM7",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM2_m1",
+      "target": "MM6",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM2_m1",
+      "target": "MM1_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m1",
+      "target": "MM1_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m1",
+      "target": "MM1_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m1",
+      "target": "MM1_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m1",
+      "target": "MM1_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m1",
+      "target": "MM1_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m1",
+      "target": "MM1_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m1",
+      "target": "MM1_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m1",
+      "target": "MM0_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m1",
+      "target": "MM0_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m1",
+      "target": "MM0_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m1",
+      "target": "MM0_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m1",
+      "target": "MM0_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m1",
+      "target": "MM0_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m1",
+      "target": "MM0_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m1",
+      "target": "MM0_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m1",
+      "target": "MM10_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m1",
+      "target": "MM10_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m1",
+      "target": "MM10_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m1",
+      "target": "MM10_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m2",
+      "target": "MM2_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m2",
+      "target": "MM2_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m2",
+      "target": "MM2_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m2",
+      "target": "MM2_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m2",
+      "target": "MM2_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m2",
+      "target": "MM2_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m2",
+      "target": "MM7",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM2_m2",
+      "target": "MM6",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM2_m2",
+      "target": "MM1_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m2",
+      "target": "MM1_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m2",
+      "target": "MM1_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m2",
+      "target": "MM1_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m2",
+      "target": "MM1_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m2",
+      "target": "MM1_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m2",
+      "target": "MM1_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m2",
+      "target": "MM1_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m2",
+      "target": "MM0_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m2",
+      "target": "MM0_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m2",
+      "target": "MM0_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m2",
+      "target": "MM0_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m2",
+      "target": "MM0_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m2",
+      "target": "MM0_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m2",
+      "target": "MM0_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m2",
+      "target": "MM0_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m2",
+      "target": "MM10_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m2",
+      "target": "MM10_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m2",
+      "target": "MM10_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m2",
+      "target": "MM10_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m3",
+      "target": "MM2_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m3",
+      "target": "MM2_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m3",
+      "target": "MM2_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m3",
+      "target": "MM2_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m3",
+      "target": "MM2_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m3",
+      "target": "MM7",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM2_m3",
+      "target": "MM6",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM2_m3",
+      "target": "MM1_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m3",
+      "target": "MM1_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m3",
+      "target": "MM1_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m3",
+      "target": "MM1_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m3",
+      "target": "MM1_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m3",
+      "target": "MM1_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m3",
+      "target": "MM1_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m3",
+      "target": "MM1_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m3",
+      "target": "MM0_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m3",
+      "target": "MM0_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m3",
+      "target": "MM0_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m3",
+      "target": "MM0_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m3",
+      "target": "MM0_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m3",
+      "target": "MM0_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m3",
+      "target": "MM0_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m3",
+      "target": "MM0_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m3",
+      "target": "MM10_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m3",
+      "target": "MM10_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m3",
+      "target": "MM10_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m3",
+      "target": "MM10_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m4",
+      "target": "MM2_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m4",
+      "target": "MM2_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m4",
+      "target": "MM2_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m4",
+      "target": "MM2_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m4",
+      "target": "MM7",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM2_m4",
+      "target": "MM6",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM2_m4",
+      "target": "MM1_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m4",
+      "target": "MM1_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m4",
+      "target": "MM1_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m4",
+      "target": "MM1_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m4",
+      "target": "MM1_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m4",
+      "target": "MM1_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m4",
+      "target": "MM1_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m4",
+      "target": "MM1_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m4",
+      "target": "MM0_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m4",
+      "target": "MM0_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m4",
+      "target": "MM0_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m4",
+      "target": "MM0_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m4",
+      "target": "MM0_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m4",
+      "target": "MM0_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m4",
+      "target": "MM0_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m4",
+      "target": "MM0_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m4",
+      "target": "MM10_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m4",
+      "target": "MM10_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m4",
+      "target": "MM10_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m4",
+      "target": "MM10_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m5",
+      "target": "MM2_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m5",
+      "target": "MM2_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m5",
+      "target": "MM2_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m5",
+      "target": "MM7",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM2_m5",
+      "target": "MM6",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM2_m5",
+      "target": "MM1_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m5",
+      "target": "MM1_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m5",
+      "target": "MM1_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m5",
+      "target": "MM1_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m5",
+      "target": "MM1_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m5",
+      "target": "MM1_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m5",
+      "target": "MM1_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m5",
+      "target": "MM1_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m5",
+      "target": "MM0_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m5",
+      "target": "MM0_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m5",
+      "target": "MM0_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m5",
+      "target": "MM0_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m5",
+      "target": "MM0_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m5",
+      "target": "MM0_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m5",
+      "target": "MM0_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m5",
+      "target": "MM0_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m5",
+      "target": "MM10_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m5",
+      "target": "MM10_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m5",
+      "target": "MM10_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m5",
+      "target": "MM10_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m6",
+      "target": "MM2_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m6",
+      "target": "MM2_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m6",
+      "target": "MM7",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM2_m6",
+      "target": "MM6",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM2_m6",
+      "target": "MM1_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m6",
+      "target": "MM1_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m6",
+      "target": "MM1_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m6",
+      "target": "MM1_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m6",
+      "target": "MM1_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m6",
+      "target": "MM1_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m6",
+      "target": "MM1_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m6",
+      "target": "MM1_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m6",
+      "target": "MM0_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m6",
+      "target": "MM0_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m6",
+      "target": "MM0_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m6",
+      "target": "MM0_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m6",
+      "target": "MM0_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m6",
+      "target": "MM0_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m6",
+      "target": "MM0_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m6",
+      "target": "MM0_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m6",
+      "target": "MM10_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m6",
+      "target": "MM10_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m6",
+      "target": "MM10_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m6",
+      "target": "MM10_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m7",
+      "target": "MM2_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m7",
+      "target": "MM7",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM2_m7",
+      "target": "MM6",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM2_m7",
+      "target": "MM1_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m7",
+      "target": "MM1_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m7",
+      "target": "MM1_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m7",
+      "target": "MM1_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m7",
+      "target": "MM1_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m7",
+      "target": "MM1_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m7",
+      "target": "MM1_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m7",
+      "target": "MM1_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m7",
+      "target": "MM0_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m7",
+      "target": "MM0_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m7",
+      "target": "MM0_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m7",
+      "target": "MM0_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m7",
+      "target": "MM0_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m7",
+      "target": "MM0_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m7",
+      "target": "MM0_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m7",
+      "target": "MM0_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m7",
+      "target": "MM10_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m7",
+      "target": "MM10_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m7",
+      "target": "MM10_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m7",
+      "target": "MM10_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m8",
+      "target": "MM7",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM2_m8",
+      "target": "MM6",
+      "net": "VOUTP"
+    },
+    {
+      "source": "MM2_m8",
+      "target": "MM1_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m8",
+      "target": "MM1_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m8",
+      "target": "MM1_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m8",
+      "target": "MM1_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m8",
+      "target": "MM1_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m8",
+      "target": "MM1_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m8",
+      "target": "MM1_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m8",
+      "target": "MM1_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m8",
+      "target": "MM0_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m8",
+      "target": "MM0_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m8",
+      "target": "MM0_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m8",
+      "target": "MM0_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m8",
+      "target": "MM0_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m8",
+      "target": "MM0_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m8",
+      "target": "MM0_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m8",
+      "target": "MM0_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m8",
+      "target": "MM10_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m8",
+      "target": "MM10_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m8",
+      "target": "MM10_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM2_m8",
+      "target": "MM10_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m1",
+      "target": "MM1_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m1",
+      "target": "MM1_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m1",
+      "target": "MM1_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m1",
+      "target": "MM1_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m1",
+      "target": "MM1_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m1",
+      "target": "MM1_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m1",
+      "target": "MM1_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m1",
+      "target": "MM7",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM1_m1",
+      "target": "MM6",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM1_m1",
+      "target": "MM0_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m1",
+      "target": "MM0_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m1",
+      "target": "MM0_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m1",
+      "target": "MM0_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m1",
+      "target": "MM0_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m1",
+      "target": "MM0_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m1",
+      "target": "MM0_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m1",
+      "target": "MM0_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m1",
+      "target": "MM10_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m1",
+      "target": "MM10_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m1",
+      "target": "MM10_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m1",
+      "target": "MM10_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m2",
+      "target": "MM1_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m2",
+      "target": "MM1_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m2",
+      "target": "MM1_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m2",
+      "target": "MM1_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m2",
+      "target": "MM1_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m2",
+      "target": "MM1_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m2",
+      "target": "MM7",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM1_m2",
+      "target": "MM6",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM1_m2",
+      "target": "MM0_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m2",
+      "target": "MM0_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m2",
+      "target": "MM0_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m2",
+      "target": "MM0_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m2",
+      "target": "MM0_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m2",
+      "target": "MM0_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m2",
+      "target": "MM0_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m2",
+      "target": "MM0_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m2",
+      "target": "MM10_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m2",
+      "target": "MM10_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m2",
+      "target": "MM10_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m2",
+      "target": "MM10_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m3",
+      "target": "MM1_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m3",
+      "target": "MM1_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m3",
+      "target": "MM1_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m3",
+      "target": "MM1_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m3",
+      "target": "MM1_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m3",
+      "target": "MM7",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM1_m3",
+      "target": "MM6",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM1_m3",
+      "target": "MM0_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m3",
+      "target": "MM0_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m3",
+      "target": "MM0_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m3",
+      "target": "MM0_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m3",
+      "target": "MM0_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m3",
+      "target": "MM0_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m3",
+      "target": "MM0_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m3",
+      "target": "MM0_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m3",
+      "target": "MM10_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m3",
+      "target": "MM10_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m3",
+      "target": "MM10_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m3",
+      "target": "MM10_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m4",
+      "target": "MM1_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m4",
+      "target": "MM1_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m4",
+      "target": "MM1_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m4",
+      "target": "MM1_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m4",
+      "target": "MM7",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM1_m4",
+      "target": "MM6",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM1_m4",
+      "target": "MM0_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m4",
+      "target": "MM0_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m4",
+      "target": "MM0_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m4",
+      "target": "MM0_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m4",
+      "target": "MM0_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m4",
+      "target": "MM0_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m4",
+      "target": "MM0_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m4",
+      "target": "MM0_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m4",
+      "target": "MM10_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m4",
+      "target": "MM10_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m4",
+      "target": "MM10_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m4",
+      "target": "MM10_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m5",
+      "target": "MM1_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m5",
+      "target": "MM1_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m5",
+      "target": "MM1_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m5",
+      "target": "MM7",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM1_m5",
+      "target": "MM6",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM1_m5",
+      "target": "MM0_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m5",
+      "target": "MM0_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m5",
+      "target": "MM0_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m5",
+      "target": "MM0_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m5",
+      "target": "MM0_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m5",
+      "target": "MM0_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m5",
+      "target": "MM0_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m5",
+      "target": "MM0_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m5",
+      "target": "MM10_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m5",
+      "target": "MM10_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m5",
+      "target": "MM10_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m5",
+      "target": "MM10_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m6",
+      "target": "MM1_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m6",
+      "target": "MM1_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m6",
+      "target": "MM7",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM1_m6",
+      "target": "MM6",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM1_m6",
+      "target": "MM0_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m6",
+      "target": "MM0_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m6",
+      "target": "MM0_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m6",
+      "target": "MM0_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m6",
+      "target": "MM0_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m6",
+      "target": "MM0_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m6",
+      "target": "MM0_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m6",
+      "target": "MM0_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m6",
+      "target": "MM10_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m6",
+      "target": "MM10_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m6",
+      "target": "MM10_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m6",
+      "target": "MM10_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m7",
+      "target": "MM1_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m7",
+      "target": "MM7",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM1_m7",
+      "target": "MM6",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM1_m7",
+      "target": "MM0_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m7",
+      "target": "MM0_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m7",
+      "target": "MM0_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m7",
+      "target": "MM0_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m7",
+      "target": "MM0_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m7",
+      "target": "MM0_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m7",
+      "target": "MM0_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m7",
+      "target": "MM0_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m7",
+      "target": "MM10_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m7",
+      "target": "MM10_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m7",
+      "target": "MM10_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m7",
+      "target": "MM10_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m8",
+      "target": "MM7",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM1_m8",
+      "target": "MM6",
+      "net": "VOUTN"
+    },
+    {
+      "source": "MM1_m8",
+      "target": "MM0_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m8",
+      "target": "MM0_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m8",
+      "target": "MM0_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m8",
+      "target": "MM0_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m8",
+      "target": "MM0_m5",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m8",
+      "target": "MM0_m6",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m8",
+      "target": "MM0_m7",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m8",
+      "target": "MM0_m8",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m8",
+      "target": "MM10_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m8",
+      "target": "MM10_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m8",
+      "target": "MM10_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM1_m8",
+      "target": "MM10_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM0_m1",
+      "target": "MM0_m2",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m1",
+      "target": "MM0_m3",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m1",
+      "target": "MM0_m4",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m1",
+      "target": "MM0_m5",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m1",
+      "target": "MM0_m6",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m1",
+      "target": "MM0_m7",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m1",
+      "target": "MM0_m8",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m1",
+      "target": "MM10_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM0_m1",
+      "target": "MM10_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM0_m1",
+      "target": "MM10_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM0_m1",
+      "target": "MM10_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM0_m1",
+      "target": "MM8_m8",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m1",
+      "target": "MM8_m7",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m1",
+      "target": "MM8_m6",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m1",
+      "target": "MM8_m5",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m1",
+      "target": "MM8_m4",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m1",
+      "target": "MM8_m3",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m1",
+      "target": "MM8_m2",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m1",
+      "target": "MM8_m1",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m1",
+      "target": "MM7",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m2",
+      "target": "MM0_m3",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m2",
+      "target": "MM0_m4",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m2",
+      "target": "MM0_m5",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m2",
+      "target": "MM0_m6",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m2",
+      "target": "MM0_m7",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m2",
+      "target": "MM0_m8",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m2",
+      "target": "MM10_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM0_m2",
+      "target": "MM10_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM0_m2",
+      "target": "MM10_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM0_m2",
+      "target": "MM10_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM0_m2",
+      "target": "MM8_m8",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m2",
+      "target": "MM8_m7",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m2",
+      "target": "MM8_m6",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m2",
+      "target": "MM8_m5",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m2",
+      "target": "MM8_m4",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m2",
+      "target": "MM8_m3",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m2",
+      "target": "MM8_m2",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m2",
+      "target": "MM8_m1",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m2",
+      "target": "MM7",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m3",
+      "target": "MM0_m4",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m3",
+      "target": "MM0_m5",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m3",
+      "target": "MM0_m6",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m3",
+      "target": "MM0_m7",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m3",
+      "target": "MM0_m8",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m3",
+      "target": "MM10_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM0_m3",
+      "target": "MM10_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM0_m3",
+      "target": "MM10_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM0_m3",
+      "target": "MM10_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM0_m3",
+      "target": "MM8_m8",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m3",
+      "target": "MM8_m7",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m3",
+      "target": "MM8_m6",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m3",
+      "target": "MM8_m5",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m3",
+      "target": "MM8_m4",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m3",
+      "target": "MM8_m3",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m3",
+      "target": "MM8_m2",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m3",
+      "target": "MM8_m1",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m3",
+      "target": "MM7",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m4",
+      "target": "MM0_m5",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m4",
+      "target": "MM0_m6",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m4",
+      "target": "MM0_m7",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m4",
+      "target": "MM0_m8",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m4",
+      "target": "MM10_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM0_m4",
+      "target": "MM10_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM0_m4",
+      "target": "MM10_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM0_m4",
+      "target": "MM10_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM0_m4",
+      "target": "MM8_m8",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m4",
+      "target": "MM8_m7",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m4",
+      "target": "MM8_m6",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m4",
+      "target": "MM8_m5",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m4",
+      "target": "MM8_m4",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m4",
+      "target": "MM8_m3",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m4",
+      "target": "MM8_m2",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m4",
+      "target": "MM8_m1",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m4",
+      "target": "MM7",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m5",
+      "target": "MM0_m6",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m5",
+      "target": "MM0_m7",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m5",
+      "target": "MM0_m8",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m5",
+      "target": "MM10_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM0_m5",
+      "target": "MM10_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM0_m5",
+      "target": "MM10_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM0_m5",
+      "target": "MM10_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM0_m5",
+      "target": "MM8_m8",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m5",
+      "target": "MM8_m7",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m5",
+      "target": "MM8_m6",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m5",
+      "target": "MM8_m5",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m5",
+      "target": "MM8_m4",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m5",
+      "target": "MM8_m3",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m5",
+      "target": "MM8_m2",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m5",
+      "target": "MM8_m1",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m5",
+      "target": "MM7",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m6",
+      "target": "MM0_m7",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m6",
+      "target": "MM0_m8",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m6",
+      "target": "MM10_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM0_m6",
+      "target": "MM10_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM0_m6",
+      "target": "MM10_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM0_m6",
+      "target": "MM10_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM0_m6",
+      "target": "MM8_m8",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m6",
+      "target": "MM8_m7",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m6",
+      "target": "MM8_m6",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m6",
+      "target": "MM8_m5",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m6",
+      "target": "MM8_m4",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m6",
+      "target": "MM8_m3",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m6",
+      "target": "MM8_m2",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m6",
+      "target": "MM8_m1",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m6",
+      "target": "MM7",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m7",
+      "target": "MM0_m8",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m7",
+      "target": "MM10_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM0_m7",
+      "target": "MM10_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM0_m7",
+      "target": "MM10_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM0_m7",
+      "target": "MM10_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM0_m7",
+      "target": "MM8_m8",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m7",
+      "target": "MM8_m7",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m7",
+      "target": "MM8_m6",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m7",
+      "target": "MM8_m5",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m7",
+      "target": "MM8_m4",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m7",
+      "target": "MM8_m3",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m7",
+      "target": "MM8_m2",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m7",
+      "target": "MM8_m1",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m7",
+      "target": "MM7",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m8",
+      "target": "MM10_m4",
+      "net": "CLK"
+    },
+    {
+      "source": "MM0_m8",
+      "target": "MM10_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM0_m8",
+      "target": "MM10_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM0_m8",
+      "target": "MM10_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM0_m8",
+      "target": "MM8_m8",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m8",
+      "target": "MM8_m7",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m8",
+      "target": "MM8_m6",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m8",
+      "target": "MM8_m5",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m8",
+      "target": "MM8_m4",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m8",
+      "target": "MM8_m3",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m8",
+      "target": "MM8_m2",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m8",
+      "target": "MM8_m1",
+      "net": "VX"
+    },
+    {
+      "source": "MM0_m8",
+      "target": "MM7",
+      "net": "VX"
+    },
+    {
+      "source": "MM9_m8",
+      "target": "MM9_m7",
+      "net": "VINN"
+    },
+    {
+      "source": "MM9_m8",
+      "target": "MM9_m6",
+      "net": "VINN"
+    },
+    {
+      "source": "MM9_m8",
+      "target": "MM9_m5",
+      "net": "VINN"
+    },
+    {
+      "source": "MM9_m8",
+      "target": "MM9_m4",
+      "net": "net2<3>"
+    },
+    {
+      "source": "MM9_m8",
+      "target": "MM9_m3",
+      "net": "VINN"
+    },
+    {
+      "source": "MM9_m8",
+      "target": "MM9_m2",
+      "net": "VINN"
+    },
+    {
+      "source": "MM9_m8",
+      "target": "MM9_m1",
+      "net": "VINN"
+    },
+    {
+      "source": "MM9_m8",
+      "target": "MM6",
+      "net": "VY"
+    },
+    {
+      "source": "MM9_m8",
+      "target": "MM8_m8",
+      "net": "net2<3>"
+    },
+    {
+      "source": "MM9_m8",
+      "target": "MM8_m4",
+      "net": "net2<3>"
+    },
+    {
+      "source": "MM9_m8",
+      "target": "MM10_m4",
+      "net": "net2<3>"
+    },
+    {
+      "source": "MM9_m7",
+      "target": "MM9_m6",
+      "net": "VINN"
+    },
+    {
+      "source": "MM9_m7",
+      "target": "MM9_m5",
+      "net": "VINN"
+    },
+    {
+      "source": "MM9_m7",
+      "target": "MM9_m4",
+      "net": "VINN"
+    },
+    {
+      "source": "MM9_m7",
+      "target": "MM9_m3",
+      "net": "net2<2>"
+    },
+    {
+      "source": "MM9_m7",
+      "target": "MM9_m2",
+      "net": "VINN"
+    },
+    {
+      "source": "MM9_m7",
+      "target": "MM9_m1",
+      "net": "VINN"
+    },
+    {
+      "source": "MM9_m7",
+      "target": "MM6",
+      "net": "VY"
+    },
+    {
+      "source": "MM9_m7",
+      "target": "MM8_m7",
+      "net": "net2<2>"
+    },
+    {
+      "source": "MM9_m7",
+      "target": "MM8_m3",
+      "net": "net2<2>"
+    },
+    {
+      "source": "MM9_m7",
+      "target": "MM10_m3",
+      "net": "net2<2>"
+    },
+    {
+      "source": "MM9_m6",
+      "target": "MM9_m5",
+      "net": "VINN"
+    },
+    {
+      "source": "MM9_m6",
+      "target": "MM9_m4",
+      "net": "VINN"
+    },
+    {
+      "source": "MM9_m6",
+      "target": "MM9_m3",
+      "net": "VINN"
+    },
+    {
+      "source": "MM9_m6",
+      "target": "MM9_m2",
+      "net": "net2<1>"
+    },
+    {
+      "source": "MM9_m6",
+      "target": "MM9_m1",
+      "net": "VINN"
+    },
+    {
+      "source": "MM9_m6",
+      "target": "MM6",
+      "net": "VY"
+    },
+    {
+      "source": "MM9_m6",
+      "target": "MM8_m6",
+      "net": "net2<1>"
+    },
+    {
+      "source": "MM9_m6",
+      "target": "MM8_m2",
+      "net": "net2<1>"
+    },
+    {
+      "source": "MM9_m6",
+      "target": "MM10_m2",
+      "net": "net2<1>"
+    },
+    {
+      "source": "MM9_m5",
+      "target": "MM9_m4",
+      "net": "VINN"
+    },
+    {
+      "source": "MM9_m5",
+      "target": "MM9_m3",
+      "net": "VINN"
+    },
+    {
+      "source": "MM9_m5",
+      "target": "MM9_m2",
+      "net": "VINN"
+    },
+    {
+      "source": "MM9_m5",
+      "target": "MM9_m1",
+      "net": "net2<0>"
+    },
+    {
+      "source": "MM9_m5",
+      "target": "MM6",
+      "net": "VY"
+    },
+    {
+      "source": "MM9_m5",
+      "target": "MM8_m5",
+      "net": "net2<0>"
+    },
+    {
+      "source": "MM9_m5",
+      "target": "MM8_m1",
+      "net": "net2<0>"
+    },
+    {
+      "source": "MM9_m5",
+      "target": "MM10_m1",
+      "net": "net2<0>"
+    },
+    {
+      "source": "MM9_m4",
+      "target": "MM9_m3",
+      "net": "VINN"
+    },
+    {
+      "source": "MM9_m4",
+      "target": "MM9_m2",
+      "net": "VINN"
+    },
+    {
+      "source": "MM9_m4",
+      "target": "MM9_m1",
+      "net": "VINN"
+    },
+    {
+      "source": "MM9_m4",
+      "target": "MM6",
+      "net": "VY"
+    },
+    {
+      "source": "MM9_m4",
+      "target": "MM8_m8",
+      "net": "net2<3>"
+    },
+    {
+      "source": "MM9_m4",
+      "target": "MM8_m4",
+      "net": "net2<3>"
+    },
+    {
+      "source": "MM9_m4",
+      "target": "MM10_m4",
+      "net": "net2<3>"
+    },
+    {
+      "source": "MM9_m3",
+      "target": "MM9_m2",
+      "net": "VINN"
+    },
+    {
+      "source": "MM9_m3",
+      "target": "MM9_m1",
+      "net": "VINN"
+    },
+    {
+      "source": "MM9_m3",
+      "target": "MM6",
+      "net": "VY"
+    },
+    {
+      "source": "MM9_m3",
+      "target": "MM8_m7",
+      "net": "net2<2>"
+    },
+    {
+      "source": "MM9_m3",
+      "target": "MM8_m3",
+      "net": "net2<2>"
+    },
+    {
+      "source": "MM9_m3",
+      "target": "MM10_m3",
+      "net": "net2<2>"
+    },
+    {
+      "source": "MM9_m2",
+      "target": "MM9_m1",
+      "net": "VINN"
+    },
+    {
+      "source": "MM9_m2",
+      "target": "MM6",
+      "net": "VY"
+    },
+    {
+      "source": "MM9_m2",
+      "target": "MM8_m6",
+      "net": "net2<1>"
+    },
+    {
+      "source": "MM9_m2",
+      "target": "MM8_m2",
+      "net": "net2<1>"
+    },
+    {
+      "source": "MM9_m2",
+      "target": "MM10_m2",
+      "net": "net2<1>"
+    },
+    {
+      "source": "MM9_m1",
+      "target": "MM6",
+      "net": "VY"
+    },
+    {
+      "source": "MM9_m1",
+      "target": "MM8_m5",
+      "net": "net2<0>"
+    },
+    {
+      "source": "MM9_m1",
+      "target": "MM8_m1",
+      "net": "net2<0>"
+    },
+    {
+      "source": "MM9_m1",
+      "target": "MM10_m1",
+      "net": "net2<0>"
+    },
+    {
+      "source": "MM8_m8",
+      "target": "MM8_m7",
+      "net": "VINP"
+    },
+    {
+      "source": "MM8_m8",
+      "target": "MM8_m6",
+      "net": "VINP"
+    },
+    {
+      "source": "MM8_m8",
+      "target": "MM8_m5",
+      "net": "VINP"
+    },
+    {
+      "source": "MM8_m8",
+      "target": "MM8_m4",
+      "net": "VINP"
+    },
+    {
+      "source": "MM8_m8",
+      "target": "MM8_m3",
+      "net": "VINP"
+    },
+    {
+      "source": "MM8_m8",
+      "target": "MM8_m2",
+      "net": "VINP"
+    },
+    {
+      "source": "MM8_m8",
+      "target": "MM8_m1",
+      "net": "VINP"
+    },
+    {
+      "source": "MM8_m8",
+      "target": "MM7",
+      "net": "VX"
+    },
+    {
+      "source": "MM8_m8",
+      "target": "MM10_m4",
+      "net": "net2<3>"
+    },
+    {
+      "source": "MM8_m7",
+      "target": "MM8_m6",
+      "net": "VINP"
+    },
+    {
+      "source": "MM8_m7",
+      "target": "MM8_m5",
+      "net": "VINP"
+    },
+    {
+      "source": "MM8_m7",
+      "target": "MM8_m4",
+      "net": "VINP"
+    },
+    {
+      "source": "MM8_m7",
+      "target": "MM8_m3",
+      "net": "VINP"
+    },
+    {
+      "source": "MM8_m7",
+      "target": "MM8_m2",
+      "net": "VINP"
+    },
+    {
+      "source": "MM8_m7",
+      "target": "MM8_m1",
+      "net": "VINP"
+    },
+    {
+      "source": "MM8_m7",
+      "target": "MM7",
+      "net": "VX"
+    },
+    {
+      "source": "MM8_m7",
+      "target": "MM10_m3",
+      "net": "net2<2>"
+    },
+    {
+      "source": "MM8_m6",
+      "target": "MM8_m5",
+      "net": "VINP"
+    },
+    {
+      "source": "MM8_m6",
+      "target": "MM8_m4",
+      "net": "VINP"
+    },
+    {
+      "source": "MM8_m6",
+      "target": "MM8_m3",
+      "net": "VINP"
+    },
+    {
+      "source": "MM8_m6",
+      "target": "MM8_m2",
+      "net": "VINP"
+    },
+    {
+      "source": "MM8_m6",
+      "target": "MM8_m1",
+      "net": "VINP"
+    },
+    {
+      "source": "MM8_m6",
+      "target": "MM7",
+      "net": "VX"
+    },
+    {
+      "source": "MM8_m6",
+      "target": "MM10_m2",
+      "net": "net2<1>"
+    },
+    {
+      "source": "MM8_m5",
+      "target": "MM8_m4",
+      "net": "VINP"
+    },
+    {
+      "source": "MM8_m5",
+      "target": "MM8_m3",
+      "net": "VINP"
+    },
+    {
+      "source": "MM8_m5",
+      "target": "MM8_m2",
+      "net": "VINP"
+    },
+    {
+      "source": "MM8_m5",
+      "target": "MM8_m1",
+      "net": "VINP"
+    },
+    {
+      "source": "MM8_m5",
+      "target": "MM7",
+      "net": "VX"
+    },
+    {
+      "source": "MM8_m5",
+      "target": "MM10_m1",
+      "net": "net2<0>"
+    },
+    {
+      "source": "MM8_m4",
+      "target": "MM8_m3",
+      "net": "VINP"
+    },
+    {
+      "source": "MM8_m4",
+      "target": "MM8_m2",
+      "net": "VINP"
+    },
+    {
+      "source": "MM8_m4",
+      "target": "MM8_m1",
+      "net": "VINP"
+    },
+    {
+      "source": "MM8_m4",
+      "target": "MM7",
+      "net": "VX"
+    },
+    {
+      "source": "MM8_m4",
+      "target": "MM10_m4",
+      "net": "net2<3>"
+    },
+    {
+      "source": "MM8_m3",
+      "target": "MM8_m2",
+      "net": "VINP"
+    },
+    {
+      "source": "MM8_m3",
+      "target": "MM8_m1",
+      "net": "VINP"
+    },
+    {
+      "source": "MM8_m3",
+      "target": "MM7",
+      "net": "VX"
+    },
+    {
+      "source": "MM8_m3",
+      "target": "MM10_m3",
+      "net": "net2<2>"
+    },
+    {
+      "source": "MM8_m2",
+      "target": "MM8_m1",
+      "net": "VINP"
+    },
+    {
+      "source": "MM8_m2",
+      "target": "MM7",
+      "net": "VX"
+    },
+    {
+      "source": "MM8_m2",
+      "target": "MM10_m2",
+      "net": "net2<1>"
+    },
+    {
+      "source": "MM8_m1",
+      "target": "MM7",
+      "net": "VX"
+    },
+    {
+      "source": "MM8_m1",
+      "target": "MM10_m1",
+      "net": "net2<0>"
+    },
+    {
+      "source": "MM10_m4",
+      "target": "MM10_m3",
+      "net": "CLK"
+    },
+    {
+      "source": "MM10_m4",
+      "target": "MM10_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM10_m4",
+      "target": "MM10_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM10_m3",
+      "target": "MM10_m2",
+      "net": "CLK"
+    },
+    {
+      "source": "MM10_m3",
+      "target": "MM10_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM10_m2",
+      "target": "MM10_m1",
+      "net": "CLK"
+    },
+    {
+      "source": "MM7",
+      "target": "MM6",
+      "net": "VOUTN"
+    }
+  ],
+  "terminal_nets": {
+    "MM5_m1": {
+      "D": "VOUTP",
+      "G": "VOUTN",
+      "S": "VDD"
+    },
+    "MM5_m2": {
+      "D": "VOUTP",
+      "G": "VOUTN",
+      "S": "VDD"
+    },
+    "MM5_m3": {
+      "D": "VOUTP",
+      "G": "VOUTN",
+      "S": "VDD"
+    },
+    "MM5_m4": {
+      "D": "VOUTP",
+      "G": "VOUTN",
+      "S": "VDD"
+    },
+    "MM4_m1": {
+      "D": "VOUTN",
+      "G": "VOUTP",
+      "S": "VDD"
+    },
+    "MM4_m2": {
+      "D": "VOUTN",
+      "G": "VOUTP",
+      "S": "VDD"
+    },
+    "MM4_m3": {
+      "D": "VOUTN",
+      "G": "VOUTP",
+      "S": "VDD"
+    },
+    "MM4_m4": {
+      "D": "VOUTN",
+      "G": "VOUTP",
+      "S": "VDD"
+    },
+    "MM3_m1": {
+      "D": "VY",
+      "G": "CLK",
+      "S": "VDD"
+    },
+    "MM3_m2": {
+      "D": "VY",
+      "G": "CLK",
+      "S": "VDD"
+    },
+    "MM3_m3": {
+      "D": "VY",
+      "G": "CLK",
+      "S": "VDD"
+    },
+    "MM3_m4": {
+      "D": "VY",
+      "G": "CLK",
+      "S": "VDD"
+    },
+    "MM3_m5": {
+      "D": "VY",
+      "G": "CLK",
+      "S": "VDD"
+    },
+    "MM3_m6": {
+      "D": "VY",
+      "G": "CLK",
+      "S": "VDD"
+    },
+    "MM3_m7": {
+      "D": "VY",
+      "G": "CLK",
+      "S": "VDD"
+    },
+    "MM3_m8": {
+      "D": "VY",
+      "G": "CLK",
+      "S": "VDD"
+    },
+    "MM2_m1": {
+      "D": "VOUTP",
+      "G": "CLK",
+      "S": "VDD"
+    },
+    "MM2_m2": {
+      "D": "VOUTP",
+      "G": "CLK",
+      "S": "VDD"
+    },
+    "MM2_m3": {
+      "D": "VOUTP",
+      "G": "CLK",
+      "S": "VDD"
+    },
+    "MM2_m4": {
+      "D": "VOUTP",
+      "G": "CLK",
+      "S": "VDD"
+    },
+    "MM2_m5": {
+      "D": "VOUTP",
+      "G": "CLK",
+      "S": "VDD"
+    },
+    "MM2_m6": {
+      "D": "VOUTP",
+      "G": "CLK",
+      "S": "VDD"
+    },
+    "MM2_m7": {
+      "D": "VOUTP",
+      "G": "CLK",
+      "S": "VDD"
+    },
+    "MM2_m8": {
+      "D": "VOUTP",
+      "G": "CLK",
+      "S": "VDD"
+    },
+    "MM1_m1": {
+      "D": "VOUTN",
+      "G": "CLK",
+      "S": "VDD"
+    },
+    "MM1_m2": {
+      "D": "VOUTN",
+      "G": "CLK",
+      "S": "VDD"
+    },
+    "MM1_m3": {
+      "D": "VOUTN",
+      "G": "CLK",
+      "S": "VDD"
+    },
+    "MM1_m4": {
+      "D": "VOUTN",
+      "G": "CLK",
+      "S": "VDD"
+    },
+    "MM1_m5": {
+      "D": "VOUTN",
+      "G": "CLK",
+      "S": "VDD"
+    },
+    "MM1_m6": {
+      "D": "VOUTN",
+      "G": "CLK",
+      "S": "VDD"
+    },
+    "MM1_m7": {
+      "D": "VOUTN",
+      "G": "CLK",
+      "S": "VDD"
+    },
+    "MM1_m8": {
+      "D": "VOUTN",
+      "G": "CLK",
+      "S": "VDD"
+    },
+    "MM0_m1": {
+      "D": "VX",
+      "G": "CLK",
+      "S": "VDD"
+    },
+    "MM0_m2": {
+      "D": "VX",
+      "G": "CLK",
+      "S": "VDD"
+    },
+    "MM0_m3": {
+      "D": "VX",
+      "G": "CLK",
+      "S": "VDD"
+    },
+    "MM0_m4": {
+      "D": "VX",
+      "G": "CLK",
+      "S": "VDD"
+    },
+    "MM0_m5": {
+      "D": "VX",
+      "G": "CLK",
+      "S": "VDD"
+    },
+    "MM0_m6": {
+      "D": "VX",
+      "G": "CLK",
+      "S": "VDD"
+    },
+    "MM0_m7": {
+      "D": "VX",
+      "G": "CLK",
+      "S": "VDD"
+    },
+    "MM0_m8": {
+      "D": "VX",
+      "G": "CLK",
+      "S": "VDD"
+    },
+    "MM9_m8": {
+      "D": "VY",
+      "G": "VINN",
+      "S": "net2<3>"
+    },
+    "MM9_m7": {
+      "D": "VY",
+      "G": "VINN",
+      "S": "net2<2>"
+    },
+    "MM9_m6": {
+      "D": "VY",
+      "G": "VINN",
+      "S": "net2<1>"
+    },
+    "MM9_m5": {
+      "D": "VY",
+      "G": "VINN",
+      "S": "net2<0>"
+    },
+    "MM9_m4": {
+      "D": "VY",
+      "G": "VINN",
+      "S": "net2<3>"
+    },
+    "MM9_m3": {
+      "D": "VY",
+      "G": "VINN",
+      "S": "net2<2>"
+    },
+    "MM9_m2": {
+      "D": "VY",
+      "G": "VINN",
+      "S": "net2<1>"
+    },
+    "MM9_m1": {
+      "D": "VY",
+      "G": "VINN",
+      "S": "net2<0>"
+    },
+    "MM8_m8": {
+      "D": "VX",
+      "G": "VINP",
+      "S": "net2<3>"
+    },
+    "MM8_m7": {
+      "D": "VX",
+      "G": "VINP",
+      "S": "net2<2>"
+    },
+    "MM8_m6": {
+      "D": "VX",
+      "G": "VINP",
+      "S": "net2<1>"
+    },
+    "MM8_m5": {
+      "D": "VX",
+      "G": "VINP",
+      "S": "net2<0>"
+    },
+    "MM8_m4": {
+      "D": "VX",
+      "G": "VINP",
+      "S": "net2<3>"
+    },
+    "MM8_m3": {
+      "D": "VX",
+      "G": "VINP",
+      "S": "net2<2>"
+    },
+    "MM8_m2": {
+      "D": "VX",
+      "G": "VINP",
+      "S": "net2<1>"
+    },
+    "MM8_m1": {
+      "D": "VX",
+      "G": "VINP",
+      "S": "net2<0>"
+    },
+    "MM10_m4": {
+      "D": "net2<3>",
+      "G": "CLK",
+      "S": "GND"
+    },
+    "MM10_m3": {
+      "D": "net2<2>",
+      "G": "CLK",
+      "S": "GND"
+    },
+    "MM10_m2": {
+      "D": "net2<1>",
+      "G": "CLK",
+      "S": "GND"
+    },
+    "MM10_m1": {
+      "D": "net2<0>",
+      "G": "CLK",
+      "S": "GND"
+    },
+    "MM7": {
+      "D": "VOUTN",
+      "G": "VOUTP",
+      "S": "VX"
+    },
+    "MM6": {
+      "D": "VOUTP",
+      "G": "VOUTN",
+      "S": "VY"
+    }
+  },
+  "abutment_candidates": [],
+  "no_abutment": true
+}

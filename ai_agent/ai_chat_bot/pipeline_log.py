@@ -24,16 +24,25 @@ _total_stages: int = 5
 
 
 def _safe_print(*args, **kwargs) -> None:
-    """Print that never raises on encoding errors (Windows charmap safety)."""
-    kwargs.setdefault("flush", True)
+    """Print that never raises on encoding errors and writes to a live log file."""
+    text = " ".join(str(a) for a in args)
+    
+    # Optional: if you still want it in stdout too, uncomment the print
+    # kwargs.setdefault("flush", True)
+    # try:
+    #     print(text, **kwargs)
+    # except UnicodeEncodeError:
+    #     safe = text.encode(sys.stdout.encoding or "utf-8", errors="replace").decode(
+    #         sys.stdout.encoding or "utf-8", errors="replace"
+    #     )
+    #     print(safe, **kwargs)
+        
     try:
-        print(*args, **kwargs)
-    except UnicodeEncodeError:
-        text = " ".join(str(a) for a in args)
-        safe = text.encode(sys.stdout.encoding or "utf-8", errors="replace").decode(
-            sys.stdout.encoding or "utf-8", errors="replace"
-        )
-        print(safe, **kwargs)
+        # Write to log file in the current working directory
+        with open("placement_live_output.log", "a", encoding="utf-8") as f:
+            f.write(text + "\n")
+    except Exception:
+        pass
 
 
 def steps_only() -> bool:
@@ -86,6 +95,12 @@ def pipeline_start(name: str, total_stages: int, config: dict | None = None) -> 
     _pipeline_name = name
     _total_stages = total_stages
 
+    try:
+        with open("placement_live_output.log", "w", encoding="utf-8") as f:
+            pass # clear the log file
+    except Exception:
+        pass
+
     cfg = config or {}
     model = cfg.get("model", "?")
     devices = cfg.get("devices", "?")
@@ -118,6 +133,7 @@ def pipeline_end(summary: dict | None = None) -> None:
     width = s.get("width", "?")
     height = s.get("height", "?")
     aspect = s.get("aspect", "?")
+    area = s.get("area", "?")
     hpwl = s.get("hpwl", "--")
     drc_status = s.get("drc_status", "?")
     pmos_nmos = s.get("pmos_nmos_sep", "?")
@@ -133,6 +149,7 @@ def pipeline_end(summary: dict | None = None) -> None:
     _safe_print(bar)
     if width != "?" and height != "?":
         _safe_print(f"  Layout Size  : {width}um x {height}um  (aspect {aspect})")
+        _safe_print(f"  Total Area   : {area}")
     if hpwl != "--":
         _safe_print(f"  HPWL         : {hpwl}um")
     _safe_print(f"  DRC Status   : {drc_status}")

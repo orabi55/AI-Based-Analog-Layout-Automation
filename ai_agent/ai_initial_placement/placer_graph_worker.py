@@ -36,14 +36,13 @@ class PlacerGraphWorker(QObject):
         except ImportError:
             self.thread_config = {"configurable": {"thread_id": str(uuid.uuid4())}}
 
-    @Slot(str, str, list, str, bool, bool, list)
+    @Slot(str, str, list, str, bool, list)
     def process_initial_placement_request(
         self,
         layout_context_json: str,
         user_message: str = "Optimize initial placement.",
         chat_history=None,
         selected_model: str = "Gemini",
-        run_sa: bool = False,
         no_abutment: bool = False,
         abutment_candidates: list = None,
     ):
@@ -82,7 +81,6 @@ class PlacerGraphWorker(QObject):
             "drc_retry_count": 0,
             "routing_pass_count": 0,
             # New fields — passed from UI
-            "run_sa": run_sa,
             "no_abutment": no_abutment,
             "abutment_candidates": abutment_candidates,
         }
@@ -95,11 +93,11 @@ class PlacerGraphWorker(QObject):
         except ImportError:
             self.thread_config = {"configurable": {"thread_id": str(uuid.uuid4())}}
 
-        # Console: short [IP] step lines only — see ai_agent/ai_chat_bot/pipeline_log.py
-        # Set PLACEMENT_DEBUG_FULL_LOG=1 before launch to print full prompts / LLM_FACTORY.
+        # Console: allow full debug prints when PLACEMENT_DEBUG_FULL_LOG is set
         if os.environ.get("PLACEMENT_DEBUG_FULL_LOG", "0").lower() not in (
             "1", "true", "yes",
         ):
+            # Default: quiet mode — only step lines, no full debug output
             os.environ["PLACEMENT_STEPS_ONLY"] = "1"
 
         # Suppress noisy SDK loggers during placement
@@ -121,7 +119,6 @@ class PlacerGraphWorker(QObject):
             "n_pmos": n_pmos,
             "n_nmos": n_nmos,
             "abutment": not no_abutment,
-            "sa": run_sa,
         })
 
         self._stream_graph(initial_state)
@@ -129,7 +126,11 @@ class PlacerGraphWorker(QObject):
     def _stream_graph(self, input_data):
         """Stream LangGraph updates and finalize on completion."""
         try:
-            from ai_agent.ai_initial_placement.placer_graph import app as placer_app
+            from ai_agent.ai_initial_placement.placer_graph import build_placer_graph
+
+            # Build a FRESH graph for each run to prevent state leaks (BUG-7)
+            placer_app, _ = build_placer_graph()
+            self._placer_app = placer_app  # store for _finalize_pipeline
 
             stage_index = 0
 
@@ -150,10 +151,9 @@ class PlacerGraphWorker(QObject):
 
     def _finalize_pipeline(self):
         """Build a summary and emit final placement payload."""
-        try:
-            from ai_agent.ai_initial_placement.placer_graph import app as placer_app
-        except ImportError:
-            self.error_occurred.emit("Could not import placer_graph app for finalization.")
+        placer_app = getattr(self, "_placer_app", None)
+        if placer_app is None:
+            self.error_occurred.emit("Could not access placer_graph app for finalization.")
             return
 
         final_state = placer_app.get_state(self.thread_config).values
@@ -184,12 +184,38 @@ class PlacerGraphWorker(QObject):
         n_violations = len(drc_flags)
         drc_status = "✓ Clean" if drc_pass else f"✗ {n_violations} violation(s)"
 
+        # Calculate bounding box for area metrics
+        min_x = min_y = float('inf')
+        max_x = max_y = float('-inf')
+        for node in placement_nodes:
+            geo = node.get("geometry", {})
+            try:
+                x = float(geo.get("x", 0))
+                y = float(geo.get("y", 0))
+                w = float(geo.get("width", 0))
+                h = float(geo.get("height", 0))
+                min_x = min(min_x, x)
+                min_y = min(min_y, y)
+                max_x = max(max_x, x + w)
+                max_y = max(max_y, y + h)
+            except (TypeError, ValueError):
+                continue
+        
+        width_um = max_x - min_x if max_x > min_x else 0.0
+        height_um = max_y - min_y if max_y > min_y else 0.0
+        area = width_um * height_um
+        aspect = f"{width_um/height_um:.2f}" if height_um > 0 else "?"
+
         # Print pipeline summary
         from ai_agent.ai_chat_bot.pipeline_log import pipeline_end
         pipeline_end({
             "drc_status": drc_status,
             "n_placed": len(placement_nodes),
             "pmos_nmos_sep": "✓ OK" if drc_pass else "Check editor",
+            "width": f"{width_um:.3f}",
+            "height": f"{height_um:.3f}",
+            "aspect": aspect,
+            "area": f"{area:.3f} um²"
         })
 
         summary = (
