@@ -1,1592 +1,2299 @@
 {
     "nodes": [
         {
-            "id": "MM5_m1",
-            "type": "pmos",
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
             "electrical": {
+                "array_index": null,
+                "finger_index": null,
                 "l": 1.4e-08,
+                "m": 1,
+                "multiplier_index": null,
                 "nf": 1,
                 "nfin": 7.0,
-                "w": 0,
-                "parent": "MM5",
-                "m": 4,
-                "multiplier_index": 1,
-                "finger_index": null,
-                "array_index": null
+                "parent": null,
+                "w": 0
             },
             "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
                 "x": 0.0,
-                "y": 0.292,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
+                "y": 0.0
             },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM5_m2",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM5",
-                "m": 4,
-                "multiplier_index": 2,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 0.434,
-                "y": 0.292,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM5_m3",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM5",
-                "m": 4,
-                "multiplier_index": 3,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 0.504,
-                "y": 0.292,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM5_m4",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM5",
-                "m": 4,
-                "multiplier_index": 4,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 0.714,
-                "y": 0.292,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": false
-            }
-        },
-        {
-            "id": "MM4_m1",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM4",
-                "m": 4,
-                "multiplier_index": 1,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 0.294,
-                "y": 0.292,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": false,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM4_m2",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM4",
-                "m": 4,
-                "multiplier_index": 2,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 0.364,
-                "y": 0.292,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM4_m3",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM4",
-                "m": 4,
-                "multiplier_index": 3,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 0.574,
-                "y": 0.292,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM4_m4",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM4",
-                "m": 4,
-                "multiplier_index": 4,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 0.644,
-                "y": 0.292,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM3_m1",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM3",
-                "m": 8,
-                "multiplier_index": 1,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 0.294,
-                "y": 2.336,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": false,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM3_m2",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM3",
-                "m": 8,
-                "multiplier_index": 2,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 0.364,
-                "y": 2.336,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM3_m3",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM3",
-                "m": 8,
-                "multiplier_index": 3,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 0.574,
-                "y": 2.336,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM3_m4",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM3",
-                "m": 8,
-                "multiplier_index": 4,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 0.644,
-                "y": 2.336,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM3_m5",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM3",
-                "m": 8,
-                "multiplier_index": 5,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 0.854,
-                "y": 2.336,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM3_m6",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM3",
-                "m": 8,
-                "multiplier_index": 6,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 0.924,
-                "y": 2.336,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM3_m7",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM3",
-                "m": 8,
-                "multiplier_index": 7,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 1.134,
-                "y": 2.336,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM3_m8",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM3",
-                "m": 8,
-                "multiplier_index": 8,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 1.204,
-                "y": 2.336,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": false
-            }
-        },
-        {
-            "id": "MM2_m1",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM2",
-                "m": 8,
-                "multiplier_index": 1,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 0.294,
-                "y": 1.314,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": false,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM2_m2",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM2",
-                "m": 8,
-                "multiplier_index": 2,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 0.364,
-                "y": 1.314,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM2_m3",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM2",
-                "m": 8,
-                "multiplier_index": 3,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 0.574,
-                "y": 1.314,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM2_m4",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM2",
-                "m": 8,
-                "multiplier_index": 4,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 0.644,
-                "y": 1.314,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": false
-            }
-        },
-        {
-            "id": "MM2_m5",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM2",
-                "m": 8,
-                "multiplier_index": 5,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 1.302,
-                "y": 1.314,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": false,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM2_m6",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM2",
-                "m": 8,
-                "multiplier_index": 6,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 1.372,
-                "y": 1.314,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM2_m7",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM2",
-                "m": 8,
-                "multiplier_index": 7,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 1.582,
-                "y": 1.314,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM2_m8",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM2",
-                "m": 8,
-                "multiplier_index": 8,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 1.652,
-                "y": 1.314,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": false
-            }
-        },
-        {
-            "id": "MM1_m1",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM1",
-                "m": 8,
-                "multiplier_index": 1,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 0.0,
-                "y": 1.314,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": false,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM1_m2",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM1",
-                "m": 8,
-                "multiplier_index": 2,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 0.434,
-                "y": 1.314,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM1_m3",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM1",
-                "m": 8,
-                "multiplier_index": 3,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 0.504,
-                "y": 1.314,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM1_m4",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM1",
-                "m": 8,
-                "multiplier_index": 4,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 0.938,
-                "y": 1.314,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM1_m5",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM1",
-                "m": 8,
-                "multiplier_index": 5,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 1.008,
-                "y": 1.314,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM1_m6",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM1",
-                "m": 8,
-                "multiplier_index": 6,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 1.442,
-                "y": 1.314,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM1_m7",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM1",
-                "m": 8,
-                "multiplier_index": 7,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 1.512,
-                "y": 1.314,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM1_m8",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM1",
-                "m": 8,
-                "multiplier_index": 8,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 1.946,
-                "y": 1.314,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": false
-            }
-        },
-        {
-            "id": "MM0_m1",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM0",
-                "m": 8,
-                "multiplier_index": 1,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 0.0,
-                "y": 2.336,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": false,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM0_m2",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM0",
-                "m": 8,
-                "multiplier_index": 2,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 0.434,
-                "y": 2.336,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM0_m3",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM0",
-                "m": 8,
-                "multiplier_index": 3,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 0.504,
-                "y": 2.336,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM0_m4",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM0",
-                "m": 8,
-                "multiplier_index": 4,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 0.714,
-                "y": 2.336,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM0_m5",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM0",
-                "m": 8,
-                "multiplier_index": 5,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 0.784,
-                "y": 2.336,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM0_m6",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM0",
-                "m": 8,
-                "multiplier_index": 6,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 0.994,
-                "y": 2.336,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM0_m7",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM0",
-                "m": 8,
-                "multiplier_index": 7,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 1.064,
-                "y": 2.336,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM0_m8",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM0",
-                "m": 8,
-                "multiplier_index": 8,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 1.498,
-                "y": 2.336,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": false
-            }
-        },
-        {
-            "id": "MM9_m8",
-            "type": "nmos",
-            "electrical": {
-                "l": 2.8000000000000003e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM9",
-                "m": 1,
-                "multiplier_index": 8,
-                "finger_index": null,
-                "array_index": 7
-            },
-            "geometry": {
-                "x": 3.444,
-                "y": -2.979,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM9_m7",
-            "type": "nmos",
-            "electrical": {
-                "l": 2.8000000000000003e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM9",
-                "m": 1,
-                "multiplier_index": 7,
-                "finger_index": null,
-                "array_index": 6
-            },
-            "geometry": {
-                "x": 3.374,
-                "y": -2.979,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": false,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM9_m6",
-            "type": "nmos",
-            "electrical": {
-                "l": 2.8000000000000003e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM9",
-                "m": 1,
-                "multiplier_index": 6,
-                "finger_index": null,
-                "array_index": 5
-            },
-            "geometry": {
-                "x": 2.716,
-                "y": -2.979,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM9_m5",
-            "type": "nmos",
-            "electrical": {
-                "l": 2.8000000000000003e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM9",
-                "m": 1,
-                "multiplier_index": 5,
-                "finger_index": null,
-                "array_index": 4
-            },
-            "geometry": {
-                "x": 2.646,
-                "y": -2.979,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": false,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM9_m4",
-            "type": "nmos",
-            "electrical": {
-                "l": 2.8000000000000003e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM9",
-                "m": 1,
-                "multiplier_index": 4,
-                "finger_index": null,
-                "array_index": 3
-            },
-            "geometry": {
-                "x": 3.738,
-                "y": -2.979,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            }
-        },
-        {
-            "id": "MM9_m3",
-            "type": "nmos",
-            "electrical": {
-                "l": 2.8000000000000003e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM9",
-                "m": 1,
-                "multiplier_index": 3,
-                "finger_index": null,
-                "array_index": 2
-            },
-            "geometry": {
-                "x": 3.08,
-                "y": -2.979,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            }
-        },
-        {
-            "id": "MM9_m2",
-            "type": "nmos",
-            "electrical": {
-                "l": 2.8000000000000003e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM9",
-                "m": 1,
-                "multiplier_index": 2,
-                "finger_index": null,
-                "array_index": 1
-            },
-            "geometry": {
-                "x": 2.058,
-                "y": -2.979,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            }
-        },
-        {
-            "id": "MM9_m1",
-            "type": "nmos",
-            "electrical": {
-                "l": 2.8000000000000003e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM9",
-                "m": 1,
-                "multiplier_index": 1,
-                "finger_index": null,
-                "array_index": 0
-            },
-            "geometry": {
-                "x": 2.352,
-                "y": -2.979,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            }
-        },
-        {
-            "id": "MM8_m8",
-            "type": "nmos",
-            "electrical": {
-                "l": 2.8000000000000003e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM8",
-                "m": 1,
-                "multiplier_index": 8,
-                "finger_index": null,
-                "array_index": 7
-            },
-            "geometry": {
-                "x": 1.176,
-                "y": -2.979,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            }
-        },
-        {
-            "id": "MM8_m7",
-            "type": "nmos",
-            "electrical": {
-                "l": 2.8000000000000003e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM8",
-                "m": 1,
-                "multiplier_index": 7,
-                "finger_index": null,
-                "array_index": 6
-            },
-            "geometry": {
-                "x": 1.764,
-                "y": -2.979,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            }
-        },
-        {
-            "id": "MM8_m6",
-            "type": "nmos",
-            "electrical": {
-                "l": 2.8000000000000003e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM8",
-                "m": 1,
-                "multiplier_index": 6,
-                "finger_index": null,
-                "array_index": 5
-            },
-            "geometry": {
-                "x": 2.786,
-                "y": -2.979,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": false
-            }
-        },
-        {
-            "id": "MM8_m5",
-            "type": "nmos",
-            "electrical": {
-                "l": 2.8000000000000003e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM8",
-                "m": 1,
-                "multiplier_index": 5,
-                "finger_index": null,
-                "array_index": 4
-            },
-            "geometry": {
-                "x": 0.0,
-                "y": -2.979,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": false,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM8_m4",
-            "type": "nmos",
-            "electrical": {
-                "l": 2.8000000000000003e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM8",
-                "m": 1,
-                "multiplier_index": 4,
-                "finger_index": null,
-                "array_index": 3
-            },
-            "geometry": {
-                "x": 1.47,
-                "y": -2.979,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": false
-            }
-        },
-        {
-            "id": "MM8_m3",
-            "type": "nmos",
-            "electrical": {
-                "l": 2.8000000000000003e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM8",
-                "m": 1,
-                "multiplier_index": 3,
-                "finger_index": null,
-                "array_index": 2
-            },
-            "geometry": {
-                "x": 0.882,
-                "y": -2.979,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": false,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM8_m2",
-            "type": "nmos",
-            "electrical": {
-                "l": 2.8000000000000003e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM8",
-                "m": 1,
-                "multiplier_index": 2,
-                "finger_index": null,
-                "array_index": 1
-            },
-            "geometry": {
-                "x": 0.294,
-                "y": -2.979,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM8_m1",
-            "type": "nmos",
-            "electrical": {
-                "l": 2.8000000000000003e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM8",
-                "m": 1,
-                "multiplier_index": 1,
-                "finger_index": null,
-                "array_index": 0
-            },
-            "geometry": {
-                "x": 0.588,
-                "y": -2.979,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": false,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM10_m4",
-            "type": "nmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM10",
-                "m": 1,
-                "multiplier_index": 4,
-                "finger_index": null,
-                "array_index": 3
-            },
-            "geometry": {
-                "x": 1.022,
-                "y": -1.957,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": false
-            }
-        },
-        {
-            "id": "MM10_m3",
-            "type": "nmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM10",
-                "m": 1,
-                "multiplier_index": 3,
-                "finger_index": null,
-                "array_index": 2
-            },
-            "geometry": {
-                "x": 0.952,
-                "y": -1.957,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": false,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM10_m2",
-            "type": "nmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM10",
-                "m": 1,
-                "multiplier_index": 2,
-                "finger_index": null,
-                "array_index": 1
-            },
-            "geometry": {
-                "x": 0.07,
-                "y": -1.957,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": false
-            }
-        },
-        {
-            "id": "MM10_m1",
-            "type": "nmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": "MM10",
-                "m": 1,
-                "multiplier_index": 1,
-                "finger_index": null,
-                "array_index": 0
-            },
-            "geometry": {
-                "x": 0.0,
-                "y": -1.957,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": false,
-                "abut_right": true
-            }
-        },
-        {
             "id": "MM7",
-            "type": "nmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": null,
-                "m": 1,
-                "multiplier_index": null,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 0.364,
-                "y": -1.957,
-                "width": 0.294,
-                "height": 0.8180000000000001,
-                "orientation": "R0"
-            },
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            }
+            "type": "nmos"
         },
         {
-            "id": "MM6",
-            "type": "nmos",
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
             "electrical": {
+                "array_index": null,
+                "finger_index": null,
                 "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 7.0,
-                "w": 0,
-                "parent": null,
                 "m": 1,
                 "multiplier_index": null,
-                "finger_index": null,
-                "array_index": null
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": null,
+                "w": 0
             },
             "geometry": {
-                "x": 0.658,
-                "y": -1.957,
-                "width": 0.294,
                 "height": 0.8180000000000001,
-                "orientation": "R0"
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 0.294,
+                "y": 0.0
             },
+            "id": "MM6",
+            "type": "nmos"
+        },
+        {
+            "_matched_block": "match_25c2ceff",
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "array_index": 0,
+                "finger_index": null,
+                "l": 2.8000000000000003e-08,
+                "m": 1,
+                "multiplier_index": 1,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM8",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 0.0,
+                "y": -0.859
+            },
+            "id": "MM8_m1",
+            "type": "nmos"
+        },
+        {
+            "_matched_block": "match_25c2ceff",
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "array_index": 0,
+                "finger_index": null,
+                "l": 2.8000000000000003e-08,
+                "m": 1,
+                "multiplier_index": 1,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM9",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 0.294,
+                "y": -0.859
+            },
+            "id": "MM9_m1",
+            "type": "nmos"
+        },
+        {
+            "_matched_block": "match_25c2ceff",
             "abutment": {
                 "abut_left": false,
                 "abut_right": true
-            }
+            },
+            "electrical": {
+                "array_index": 1,
+                "finger_index": null,
+                "l": 2.8000000000000003e-08,
+                "m": 1,
+                "multiplier_index": 2,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM9",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 0.882,
+                "y": -0.859
+            },
+            "id": "MM9_m2",
+            "type": "nmos"
+        },
+        {
+            "_matched_block": "match_25c2ceff",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": false
+            },
+            "electrical": {
+                "array_index": 1,
+                "finger_index": null,
+                "l": 2.8000000000000003e-08,
+                "m": 1,
+                "multiplier_index": 2,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM8",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 0.588,
+                "y": -0.859
+            },
+            "id": "MM8_m2",
+            "type": "nmos"
+        },
+        {
+            "_matched_block": "match_25c2ceff",
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "array_index": 2,
+                "finger_index": null,
+                "l": 2.8000000000000003e-08,
+                "m": 1,
+                "multiplier_index": 3,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM8",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 1.176,
+                "y": -0.859
+            },
+            "id": "MM8_m3",
+            "type": "nmos"
+        },
+        {
+            "_matched_block": "match_25c2ceff",
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "array_index": 2,
+                "finger_index": null,
+                "l": 2.8000000000000003e-08,
+                "m": 1,
+                "multiplier_index": 3,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM9",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 1.47,
+                "y": -0.859
+            },
+            "id": "MM9_m3",
+            "type": "nmos"
+        },
+        {
+            "_matched_block": "match_25c2ceff",
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": 3,
+                "finger_index": null,
+                "l": 2.8000000000000003e-08,
+                "m": 1,
+                "multiplier_index": 4,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM9",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 2.058,
+                "y": -0.859
+            },
+            "id": "MM9_m4",
+            "type": "nmos"
+        },
+        {
+            "_matched_block": "match_25c2ceff",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": false
+            },
+            "electrical": {
+                "array_index": 3,
+                "finger_index": null,
+                "l": 2.8000000000000003e-08,
+                "m": 1,
+                "multiplier_index": 4,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM8",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 1.764,
+                "y": -0.859
+            },
+            "id": "MM8_m4",
+            "type": "nmos"
+        },
+        {
+            "_matched_block": "match_25c2ceff",
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "array_index": 4,
+                "finger_index": null,
+                "l": 2.8000000000000003e-08,
+                "m": 1,
+                "multiplier_index": 5,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM8",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 2.646,
+                "y": -0.859
+            },
+            "id": "MM8_m5",
+            "type": "nmos"
+        },
+        {
+            "_matched_block": "match_25c2ceff",
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": 4,
+                "finger_index": null,
+                "l": 2.8000000000000003e-08,
+                "m": 1,
+                "multiplier_index": 5,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM9",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 2.352,
+                "y": -0.859
+            },
+            "id": "MM9_m5",
+            "type": "nmos"
+        },
+        {
+            "_matched_block": "match_25c2ceff",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": 5,
+                "finger_index": null,
+                "l": 2.8000000000000003e-08,
+                "m": 1,
+                "multiplier_index": 6,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM9",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 2.94,
+                "y": -0.859
+            },
+            "id": "MM9_m6",
+            "type": "nmos"
+        },
+        {
+            "_matched_block": "match_25c2ceff",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": false
+            },
+            "electrical": {
+                "array_index": 5,
+                "finger_index": null,
+                "l": 2.8000000000000003e-08,
+                "m": 1,
+                "multiplier_index": 6,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM8",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 3.234,
+                "y": -0.859
+            },
+            "id": "MM8_m6",
+            "type": "nmos"
+        },
+        {
+            "_matched_block": "match_25c2ceff",
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "array_index": 6,
+                "finger_index": null,
+                "l": 2.8000000000000003e-08,
+                "m": 1,
+                "multiplier_index": 7,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM8",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 3.822,
+                "y": -0.859
+            },
+            "id": "MM8_m7",
+            "type": "nmos"
+        },
+        {
+            "_matched_block": "match_25c2ceff",
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": 6,
+                "finger_index": null,
+                "l": 2.8000000000000003e-08,
+                "m": 1,
+                "multiplier_index": 7,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM9",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 3.528,
+                "y": -0.859
+            },
+            "id": "MM9_m7",
+            "type": "nmos"
+        },
+        {
+            "_matched_block": "match_25c2ceff",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": 7,
+                "finger_index": null,
+                "l": 2.8000000000000003e-08,
+                "m": 1,
+                "multiplier_index": 8,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM9",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 4.116,
+                "y": -0.859
+            },
+            "id": "MM9_m8",
+            "type": "nmos"
+        },
+        {
+            "_matched_block": "match_25c2ceff",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": false
+            },
+            "electrical": {
+                "array_index": 7,
+                "finger_index": null,
+                "l": 2.8000000000000003e-08,
+                "m": 1,
+                "multiplier_index": 8,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM8",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 4.41,
+                "y": -0.859
+            },
+            "id": "MM8_m8",
+            "type": "nmos"
+        },
+        {
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": 0,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 1,
+                "multiplier_index": 1,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM10",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 0.0,
+                "y": -1.718
+            },
+            "id": "MM10_m1",
+            "type": "nmos"
+        },
+        {
+            "abutment": {
+                "abut_left": true,
+                "abut_right": false
+            },
+            "electrical": {
+                "array_index": 1,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 1,
+                "multiplier_index": 2,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM10",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 0.728,
+                "y": -1.718
+            },
+            "id": "MM10_m2",
+            "type": "nmos"
+        },
+        {
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": 2,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 1,
+                "multiplier_index": 3,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM10",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 1.022,
+                "y": -1.718
+            },
+            "id": "MM10_m3",
+            "type": "nmos"
+        },
+        {
+            "abutment": {
+                "abut_left": true,
+                "abut_right": false
+            },
+            "electrical": {
+                "array_index": 3,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 1,
+                "multiplier_index": 4,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM10",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 1.316,
+                "y": -1.718
+            },
+            "id": "MM10_m4",
+            "type": "nmos"
+        },
+        {
+            "_matched_block": "match_9423b5fb",
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 8,
+                "multiplier_index": 1,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM0",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 0.0,
+                "y": 1.063
+            },
+            "id": "MM0_m1",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_9423b5fb",
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 8,
+                "multiplier_index": 1,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM3",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 0.294,
+                "y": 1.063
+            },
+            "id": "MM3_m1",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_9423b5fb",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 8,
+                "multiplier_index": 2,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM3",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 0.882,
+                "y": 1.063
+            },
+            "id": "MM3_m2",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_9423b5fb",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 8,
+                "multiplier_index": 2,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM0",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 0.588,
+                "y": 1.063
+            },
+            "id": "MM0_m2",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_9423b5fb",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 8,
+                "multiplier_index": 3,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM0",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 1.176,
+                "y": 1.063
+            },
+            "id": "MM0_m3",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_9423b5fb",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 8,
+                "multiplier_index": 3,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM3",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 1.47,
+                "y": 1.063
+            },
+            "id": "MM3_m3",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_9423b5fb",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 8,
+                "multiplier_index": 4,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM3",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 2.058,
+                "y": 1.063
+            },
+            "id": "MM3_m4",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_9423b5fb",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 8,
+                "multiplier_index": 4,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM0",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 1.764,
+                "y": 1.063
+            },
+            "id": "MM0_m4",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_9423b5fb",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 8,
+                "multiplier_index": 5,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM0",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 2.646,
+                "y": 1.063
+            },
+            "id": "MM0_m5",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_9423b5fb",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 8,
+                "multiplier_index": 5,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM3",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 2.352,
+                "y": 1.063
+            },
+            "id": "MM3_m5",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_9423b5fb",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 8,
+                "multiplier_index": 6,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM3",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 2.94,
+                "y": 1.063
+            },
+            "id": "MM3_m6",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_9423b5fb",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 8,
+                "multiplier_index": 6,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM0",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 3.234,
+                "y": 1.063
+            },
+            "id": "MM0_m6",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_9423b5fb",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 8,
+                "multiplier_index": 7,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM0",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 3.822,
+                "y": 1.063
+            },
+            "id": "MM0_m7",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_9423b5fb",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 8,
+                "multiplier_index": 7,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM3",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 3.528,
+                "y": 1.063
+            },
+            "id": "MM3_m7",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_9423b5fb",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": false
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 8,
+                "multiplier_index": 8,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM3",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 4.116,
+                "y": 1.063
+            },
+            "id": "MM3_m8",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_9423b5fb",
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 8,
+                "multiplier_index": 8,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM0",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 4.41,
+                "y": 1.063
+            },
+            "id": "MM0_m8",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_216231bf",
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 8,
+                "multiplier_index": 1,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM1",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 0.0,
+                "y": 1.922
+            },
+            "id": "MM1_m1",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_216231bf",
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 8,
+                "multiplier_index": 1,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM2",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 0.294,
+                "y": 1.922
+            },
+            "id": "MM2_m1",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_216231bf",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 8,
+                "multiplier_index": 2,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM2",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 0.882,
+                "y": 1.922
+            },
+            "id": "MM2_m2",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_216231bf",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 8,
+                "multiplier_index": 2,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM1",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 0.588,
+                "y": 1.922
+            },
+            "id": "MM1_m2",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_216231bf",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 8,
+                "multiplier_index": 3,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM1",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 1.176,
+                "y": 1.922
+            },
+            "id": "MM1_m3",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_216231bf",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 8,
+                "multiplier_index": 3,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM2",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 1.47,
+                "y": 1.922
+            },
+            "id": "MM2_m3",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_216231bf",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": false
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 8,
+                "multiplier_index": 4,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM2",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 2.058,
+                "y": 1.922
+            },
+            "id": "MM2_m4",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_216231bf",
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 8,
+                "multiplier_index": 4,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM1",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 1.764,
+                "y": 1.922
+            },
+            "id": "MM1_m4",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_216231bf",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": false
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 8,
+                "multiplier_index": 5,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM1",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 2.646,
+                "y": 1.922
+            },
+            "id": "MM1_m5",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_216231bf",
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 8,
+                "multiplier_index": 5,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM2",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 2.352,
+                "y": 1.922
+            },
+            "id": "MM2_m5",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_216231bf",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 8,
+                "multiplier_index": 6,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM2",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 2.94,
+                "y": 1.922
+            },
+            "id": "MM2_m6",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_216231bf",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 8,
+                "multiplier_index": 6,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM1",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 3.234,
+                "y": 1.922
+            },
+            "id": "MM1_m6",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_216231bf",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 8,
+                "multiplier_index": 7,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM1",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 3.822,
+                "y": 1.922
+            },
+            "id": "MM1_m7",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_216231bf",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 8,
+                "multiplier_index": 7,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM2",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 3.528,
+                "y": 1.922
+            },
+            "id": "MM2_m7",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_216231bf",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": false
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 8,
+                "multiplier_index": 8,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM2",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 4.116,
+                "y": 1.922
+            },
+            "id": "MM2_m8",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_216231bf",
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 8,
+                "multiplier_index": 8,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM1",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 4.41,
+                "y": 1.922
+            },
+            "id": "MM1_m8",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_340c6aaa",
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 4,
+                "multiplier_index": 1,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM4",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 0.0,
+                "y": 2.781
+            },
+            "id": "MM4_m1",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_340c6aaa",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 4,
+                "multiplier_index": 1,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM5",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 0.294,
+                "y": 2.781
+            },
+            "id": "MM5_m1",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_340c6aaa",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 4,
+                "multiplier_index": 2,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM5",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 0.882,
+                "y": 2.781
+            },
+            "id": "MM5_m2",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_340c6aaa",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 4,
+                "multiplier_index": 2,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM4",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 0.588,
+                "y": 2.781
+            },
+            "id": "MM4_m2",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_340c6aaa",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 4,
+                "multiplier_index": 3,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM4",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 1.47,
+                "y": 2.781
+            },
+            "id": "MM4_m3",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_340c6aaa",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 4,
+                "multiplier_index": 3,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM5",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 1.176,
+                "y": 2.781
+            },
+            "id": "MM5_m3",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_340c6aaa",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": false
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 4,
+                "multiplier_index": 4,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM5",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 1.764,
+                "y": 2.781
+            },
+            "id": "MM5_m4",
+            "type": "pmos"
+        },
+        {
+            "_matched_block": "match_340c6aaa",
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": null,
+                "l": 1.4e-08,
+                "m": 4,
+                "multiplier_index": 4,
+                "nf": 1,
+                "nfin": 7.0,
+                "parent": "MM4",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 2.058,
+                "y": 2.781
+            },
+            "id": "MM4_m4",
+            "type": "pmos"
+        },
+        {
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "nf": 1
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 1.61,
+                "y": -1.718
+            },
+            "id": "DUMMYN_R_1",
+            "is_dummy": true,
+            "type": "nmos"
+        },
+        {
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "nf": 1
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 1.904,
+                "y": -1.718
+            },
+            "id": "DUMMYN_R_2",
+            "is_dummy": true,
+            "type": "nmos"
+        },
+        {
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "nf": 1
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 2.198,
+                "y": -1.718
+            },
+            "id": "DUMMYN_R_3",
+            "is_dummy": true,
+            "type": "nmos"
+        },
+        {
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "nf": 1
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 2.492,
+                "y": -1.718
+            },
+            "id": "DUMMYN_R_4",
+            "is_dummy": true,
+            "type": "nmos"
+        },
+        {
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "nf": 1
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 2.786,
+                "y": -1.718
+            },
+            "id": "DUMMYN_R_5",
+            "is_dummy": true,
+            "type": "nmos"
+        },
+        {
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "nf": 1
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 3.08,
+                "y": -1.718
+            },
+            "id": "DUMMYN_R_6",
+            "is_dummy": true,
+            "type": "nmos"
+        },
+        {
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "nf": 1
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 3.374,
+                "y": -1.718
+            },
+            "id": "DUMMYN_R_7",
+            "is_dummy": true,
+            "type": "nmos"
+        },
+        {
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "nf": 1
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 3.668,
+                "y": -1.718
+            },
+            "id": "DUMMYN_R_8",
+            "is_dummy": true,
+            "type": "nmos"
+        },
+        {
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "nf": 1
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 3.962,
+                "y": -1.718
+            },
+            "id": "DUMMYN_R_9",
+            "is_dummy": true,
+            "type": "nmos"
+        },
+        {
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "nf": 1
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 4.256,
+                "y": -1.718
+            },
+            "id": "DUMMYN_R_10",
+            "is_dummy": true,
+            "type": "nmos"
+        },
+        {
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "nf": 1
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 4.55,
+                "y": -1.718
+            },
+            "id": "DUMMYN_R_11",
+            "is_dummy": true,
+            "type": "nmos"
+        },
+        {
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "nf": 1
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 0.588,
+                "y": 0.0
+            },
+            "id": "DUMMYN_R_12",
+            "is_dummy": true,
+            "type": "nmos"
+        },
+        {
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "nf": 1
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 0.882,
+                "y": 0.0
+            },
+            "id": "DUMMYN_R_13",
+            "is_dummy": true,
+            "type": "nmos"
+        },
+        {
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "nf": 1
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 1.176,
+                "y": 0.0
+            },
+            "id": "DUMMYN_R_14",
+            "is_dummy": true,
+            "type": "nmos"
+        },
+        {
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "nf": 1
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 1.47,
+                "y": 0.0
+            },
+            "id": "DUMMYN_R_15",
+            "is_dummy": true,
+            "type": "nmos"
+        },
+        {
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "nf": 1
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 1.764,
+                "y": 0.0
+            },
+            "id": "DUMMYN_R_16",
+            "is_dummy": true,
+            "type": "nmos"
+        },
+        {
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "nf": 1
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 2.058,
+                "y": 0.0
+            },
+            "id": "DUMMYN_R_17",
+            "is_dummy": true,
+            "type": "nmos"
+        },
+        {
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "nf": 1
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 2.352,
+                "y": 0.0
+            },
+            "id": "DUMMYN_R_18",
+            "is_dummy": true,
+            "type": "nmos"
+        },
+        {
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "nf": 1
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 2.646,
+                "y": 0.0
+            },
+            "id": "DUMMYN_R_19",
+            "is_dummy": true,
+            "type": "nmos"
+        },
+        {
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "nf": 1
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 2.94,
+                "y": 0.0
+            },
+            "id": "DUMMYN_R_20",
+            "is_dummy": true,
+            "type": "nmos"
+        },
+        {
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "nf": 1
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 3.234,
+                "y": 0.0
+            },
+            "id": "DUMMYN_R_21",
+            "is_dummy": true,
+            "type": "nmos"
+        },
+        {
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "nf": 1
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 3.528,
+                "y": 0.0
+            },
+            "id": "DUMMYN_R_22",
+            "is_dummy": true,
+            "type": "nmos"
+        },
+        {
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "nf": 1
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 3.822,
+                "y": 0.0
+            },
+            "id": "DUMMYN_R_23",
+            "is_dummy": true,
+            "type": "nmos"
+        },
+        {
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "nf": 1
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 4.116,
+                "y": 0.0
+            },
+            "id": "DUMMYN_R_24",
+            "is_dummy": true,
+            "type": "nmos"
+        },
+        {
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "nf": 1
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 4.41,
+                "y": 0.0
+            },
+            "id": "DUMMYN_R_25",
+            "is_dummy": true,
+            "type": "nmos"
+        },
+        {
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "nf": 1
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 2.352,
+                "y": 2.781
+            },
+            "id": "DUMMYP_R_26",
+            "is_dummy": true,
+            "type": "pmos"
+        },
+        {
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "nf": 1
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 2.646,
+                "y": 2.781
+            },
+            "id": "DUMMYP_R_27",
+            "is_dummy": true,
+            "type": "pmos"
+        },
+        {
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "nf": 1
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 2.94,
+                "y": 2.781
+            },
+            "id": "DUMMYP_R_28",
+            "is_dummy": true,
+            "type": "pmos"
+        },
+        {
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "nf": 1
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 3.234,
+                "y": 2.781
+            },
+            "id": "DUMMYP_R_29",
+            "is_dummy": true,
+            "type": "pmos"
+        },
+        {
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "nf": 1
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 3.528,
+                "y": 2.781
+            },
+            "id": "DUMMYP_R_30",
+            "is_dummy": true,
+            "type": "pmos"
+        },
+        {
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "nf": 1
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 3.822,
+                "y": 2.781
+            },
+            "id": "DUMMYP_R_31",
+            "is_dummy": true,
+            "type": "pmos"
+        },
+        {
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "nf": 1
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 4.116,
+                "y": 2.781
+            },
+            "id": "DUMMYP_R_32",
+            "is_dummy": true,
+            "type": "pmos"
+        },
+        {
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "electrical": {
+                "nf": 1
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 4.41,
+                "y": 2.781
+            },
+            "id": "DUMMYP_R_33",
+            "is_dummy": true,
+            "type": "pmos"
         }
     ],
     "edges": [

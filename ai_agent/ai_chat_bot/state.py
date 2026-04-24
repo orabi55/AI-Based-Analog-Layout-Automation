@@ -12,14 +12,17 @@ class LayoutState(TypedDict):
     constraint_text: str  
     edges: List[Dict]
     terminal_nets: Dict[str, Dict[str, Any]]
-    
+    abutment_candidates: List[Dict]    # abutment pairs extracted by topology analyst
+
     # Strategy
     Analysis_result: str
-    strategy_result: str 
-    
+    strategy_result: str
+    multirow_layout: Dict[str, Any]    # {nmos_rows, pmos_rows} produced by strategy LLM call
+
     # Placement
-    placement_nodes: List[Dict] 
+    placement_nodes: List[Dict]
     deterministic_snapshot: List[Dict]
+
     # DRC
     drc_flags: List[Dict]
     drc_pass: bool
@@ -31,7 +34,13 @@ class LayoutState(TypedDict):
     routing_result: Dict[str, Any]
     
     # Pending updates (Fixed: No longer an accumulator)
-    pending_cmds: List[Dict] 
+    pending_cmds: List[Dict]
     
     # Human Approval
     approved: bool
+
+    # SA Optimizer — opt-in via run_sa=True in initial state
+    run_sa: bool
+
+    # Matched blocks — protected from individual device moves by DRC/SA
+    matched_blocks: List[Dict]

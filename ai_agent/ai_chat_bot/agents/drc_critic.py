@@ -296,7 +296,7 @@ def run_drc_check(
     violation_texts: List[str] = []
     violation_set: Set[str] = set()
     structured: List[DRCViolation] = []
-    valid = [n for n in nodes if "geometry" in n]
+    valid = [n for n in nodes if "geometry" in n and not n.get("is_dummy", False)]
 
     # ── Dynamic row detection (set-based, handles multi-row layouts) ──────────
     pmos_ys: Set[float] = set()
@@ -665,6 +665,8 @@ def compute_prescriptive_fixes(
     if nodes:
         _tmp: Dict[float, set] = {}
         for n in nodes:
+            if n.get("is_dummy", False):
+                continue  # Dummies don't occupy real slots
             geo = n.get("geometry", {})
             ry  = round(float(geo.get("y", 0)), 4)
             rx  = round(float(geo.get("x", 0)), 4)

@@ -1483,31 +1483,12 @@ class LayoutEditorTab(QWidget):
 
             placed_nodes = []
             if isinstance(placed_nodes_payload, list) and placed_nodes_payload:
-                # Preferred path: use placement_nodes directly from graph final state.
-                for src_node in data.get("nodes", []):
-                    if not isinstance(src_node, dict):
-                        continue
-                    placed_nodes.append(copy.deepcopy(src_node))
-
-                placed_map = {
-                    n.get("id"): n
-                    for n in placed_nodes_payload
-                    if isinstance(n, dict) and n.get("id")
-                }
-                for node in placed_nodes:
-                    node_id = node.get("id")
-                    placed_node = placed_map.get(node_id)
-                    if not placed_node:
-                        continue
-                    geometry = placed_node.get("geometry")
-                    if geometry is None:
-                        geometry = {
-                            k: placed_node[k]
-                            for k in ("x", "y", "width", "height", "orientation")
-                            if k in placed_node
-                        }
-                    if isinstance(geometry, dict) and isinstance(node.get("geometry"), dict):
-                        node["geometry"].update(geometry)
+                # Use pipeline output directly as the authoritative node list.
+                # The pipeline (geometry engine + matching + dummy padding)
+                # expands parent devices into physical fingers with new IDs,
+                # so merging by ID against the original data would fail.
+                placed_nodes = [copy.deepcopy(n) for n in placed_nodes_payload
+                                if isinstance(n, dict)]
             else:
                 # Backward-compatible fallback: rebuild placement from move commands.
                 placement_cmds = final_payload.get("placement", []) if isinstance(final_payload, dict) else []
@@ -1549,16 +1530,16 @@ class LayoutEditorTab(QWidget):
                 json.dump(placed, f, indent=4)
 
             placed_nodes_list = placed.get("nodes", [])
-            if isinstance(placed_nodes_list, list):
-                placed_map = {n["id"]: n for n in placed_nodes_list if isinstance(n, dict) and "id" in n}
-                for node in data["nodes"]:
-                    if isinstance(node, dict) and node.get("id") in placed_map:
-                        placed_node = placed_map[node["id"]]
-                        geometry = placed_node.get("geometry")
-                        if geometry is None:
-                            geometry = {k: placed_node[k] for k in ("x", "y", "width", "height", "orientation") if k in placed_node}
-                        if geometry:
-                            node["geometry"].update(geometry)
+            if isinstance(placed_nodes_list, list) and placed_nodes_list:
+                # Replace data["nodes"] entirely with the pipeline output.
+                # The pipeline (geometry engine + matching + dummy padding)
+                # produces the authoritative set of physical nodes with
+                # correct finger-level IDs, coordinates, and dimensions.
+                # Merging by ID fails when IDs change (e.g. parent "MM0"
+                # expands to fingers "MM0_f1", "MM0_f2"), leaving stale
+                # parent nodes that render as overlapping red boxes.
+                data["nodes"] = [copy.deepcopy(n) for n in placed_nodes_list
+                                 if isinstance(n, dict)]
         finally:
             for p in (tmp_in_path, tmp_out_path):
                 try:

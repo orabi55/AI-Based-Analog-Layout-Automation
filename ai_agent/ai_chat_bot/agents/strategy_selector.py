@@ -90,6 +90,33 @@ Based on your circuit topology, here are the recommended improvement strategies:
 (Add a 4th and 5th strategy only if clearly useful and different)
 
 ------------------------------
+MATCHING GROUPS (MANDATORY — pass through from topology)
+------------------------------
+
+If the topology analysis identified match_groups (diff pairs, current mirrors),
+you MUST include them in your output JSON. You may also add new matching groups
+if your strategy calls for matching that the topology analyst missed.
+
+Include the match_groups in your JSON output block like this:
+
+```json
+{
+  "reasoning": "...",
+  "nmos_rows": [...],
+  "pmos_rows": [...],
+  "match_groups": [
+    {"devices": ["MM0", "MM1"], "technique": "COMMON_CENTROID_1D"},
+    {"devices": ["MM3", "MM4"], "technique": "INTERDIGITATION"}
+  ]
+}
+```
+
+Available matching techniques:
+  - "COMMON_CENTROID_1D" — diff pairs (centroid symmetry in 1 row)
+  - "COMMON_CENTROID_2D" — diff pairs (point symmetry across 2 rows)
+  - "INTERDIGITATION"    — current mirrors (ratio-proportional mixing)
+
+------------------------------
 FINAL CHECK (REQUIRED BEFORE OUTPUT)
 ------------------------------
 
@@ -98,6 +125,7 @@ FINAL CHECK (REQUIRED BEFORE OUTPUT)
 - No forbidden operations are mentioned
 - Strategies are specific to the given topology
 - All strategies can be applied together without conflict
+- match_groups from topology are carried forward in the JSON
 
 If any rule is violated, regenerate the answer.
 """
@@ -216,3 +244,227 @@ def parse_placement_mode(user_message: str, constraint_text: str = "") -> str:
 
     # Default: auto
     return "auto"
+
+
+# ---------------------------------------------------------------------------
+# Multi-row floorplan context builder
+# (ported + improved from multi_agent_placer._build_multirow_prompt)
+# ---------------------------------------------------------------------------
+
+import math
+import re as _re
+import json as _json
+
+# Physical layout constants (must match geometry_engine.py)
+_ROW_PITCH    = 0.668
+_STD_PITCH    = 0.294
+_MAX_ROW_DEVS = 16
+
+
+def _device_width_est(node: dict) -> float:
+    """Estimate device width from geometry or nf parameter."""
+    geo = node.get("geometry", {})
+    w = geo.get("width", 0)
+    if w and float(w) > 0:
+        return float(w)
+    nf = max(1, int(node.get("electrical", {}).get("nf", 1)))
+    return round(nf * _STD_PITCH, 6)
+
+
+def build_multirow_floorplan_context(
+    nodes: list,
+    edges: list,
+    constraint_text: str,
+    abutment_candidates: list = None,
+) -> str:
+    """
+    Build the comprehensive multi-row placement prompt for the Strategy/Placement LLM.
+
+    Asks the LLM to assign every device to a NAMED FUNCTIONAL ROW and order
+    it Left-to-Right. Coordinates are computed later by the geometry engine —
+    the LLM outputs ZERO floating-point numbers.
+
+    Parameters
+    ----------
+    nodes               : logical device nodes
+    edges               : edge list
+    constraint_text     : topology summary from Stage 1 (topology analyst)
+    abutment_candidates : abutment pair candidates
+
+    Returns
+    -------
+    str — the full prompt to inject into the strategy/placement LLM call.
+    """
+    pmos_ids = sorted(n["id"] for n in nodes if n.get("type") == "pmos")
+    nmos_ids = sorted(n["id"] for n in nodes if n.get("type") == "nmos")
+
+    # Electrical summary per device
+    elec_lines = []
+    for n in sorted(nodes, key=lambda x: x.get("id", "")):
+        e = n.get("electrical", {})
+        elec_lines.append(
+            f"  {n['id']:12s}  {n.get('type','?'):5s}  "
+            f"m={e.get('m',1)}  nf={e.get('nf',1)}  nfin={e.get('nfin',1)}"
+        )
+    elec_str = "\n".join(elec_lines)
+
+    # Net adjacency
+    _POWER = frozenset({"VDD", "VSS", "GND", "VCC", "AVDD", "AVSS"})
+    net_devs: dict = {}
+    for e in (edges or []):
+        net = e.get("net", "")
+        if net and net.upper() not in _POWER:
+            net_devs.setdefault(net, set()).add(e.get("source", ""))
+            net_devs.setdefault(net, set()).add(e.get("target", ""))
+    adjacency_lines = []
+    for net, devs in sorted(net_devs.items()):
+        adjacency_lines.append(f"  {net:<12} -> {', '.join(sorted(d for d in devs if d))}")
+    adjacency_str = "\n".join(adjacency_lines) if adjacency_lines else "  (no signal nets)"
+
+    # Abutment section
+    abut_section = ""
+    if abutment_candidates:
+        abut_lines = [
+            f"  - {c['dev_a']} <-> {c['dev_b']}  (net: {c.get('shared_net', '?')})"
+            for c in abutment_candidates
+        ]
+        abut_section = "\nABUTMENT REQUIREMENTS (these pairs MUST be adjacent):\n" + "\n".join(abut_lines) + "\n"
+
+    # Square aspect ratio guidance
+    n_total  = len(nmos_ids) + len(pmos_ids)
+    avg_w    = sum(_device_width_est(n) for n in nodes) / max(1, len(nodes))
+    devs_per_row   = max(4, int(math.sqrt(n_total * _ROW_PITCH / avg_w)))
+    devs_per_row   = min(devs_per_row, _MAX_ROW_DEVS)
+    target_n_rows  = max(1, math.ceil(len(nmos_ids) / devs_per_row))
+    target_p_rows  = max(1, math.ceil(len(pmos_ids) / devs_per_row))
+    target_n_per   = math.ceil(len(nmos_ids) / target_n_rows) if target_n_rows else 0
+    target_p_per   = math.ceil(len(pmos_ids) / target_p_rows) if target_p_rows else 0
+
+    square_guidance = (
+        f"SQUARE ASPECT RATIO TARGET (IMPORTANT):\n"
+        f"  Total devices = {n_total} ({len(nmos_ids)} NMOS + {len(pmos_ids)} PMOS)\n"
+        f"  Average device width ≈ {avg_w:.3f}µm, row pitch = {_ROW_PITCH}µm\n"
+        f"  For a near-square layout, aim for:\n"
+        f"    • ~{target_n_rows} NMOS row(s) with ~{target_n_per} devices each\n"
+        f"    • ~{target_p_rows} PMOS row(s) with ~{target_p_per} devices each\n"
+        f"  Maximum {_MAX_ROW_DEVS} devices per row (rows exceeding this will be auto-split).\n"
+    )
+
+    return f"""\
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MULTI-ROW FLOORPLAN ASSIGNMENT (required output)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+You must also output a JSON block (after your strategy text) that assigns
+every device to a named functional row. This JSON is consumed directly by
+the geometry engine — DO NOT include any x/y coordinates.
+
+CIRCUIT TOPOLOGY (read carefully):
+{constraint_text}
+
+ELECTRICAL PARAMETERS:
+{elec_str}
+
+NET CONNECTIVITY (place devices sharing a net ADJACENT):
+{adjacency_str}
+{abut_section}
+DEVICES TO PLACE:
+  NMOS ({len(nmos_ids)} total): {', '.join(nmos_ids)}
+  PMOS ({len(pmos_ids)} total): {', '.join(pmos_ids)}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PLACEMENT RULES (MANDATORY):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+RULE 1 — PMOS/NMOS SEPARATION (ABSOLUTE):
+  • nmos_rows contains ONLY NMOS device IDs.
+  • pmos_rows contains ONLY PMOS device IDs. NEVER mix.
+
+RULE 2 — COMPLETE COVERAGE:
+  • Every device ID appears EXACTLY ONCE across ALL rows.
+
+RULE 3 — FUNCTIONAL ROW GROUPING:
+  • Each row must contain one functional group (do NOT mix input pair + cascode).
+
+RULE 4 — WITHIN-ROW ORDERING for MATCHING:
+  • Diff pair (A,B): use A-B-B-A interdigitation.
+  • Current mirror (ref, copies): centroid ordering.
+  • Cascode devices: same slot order as the row below.
+  • Multi-finger devices (_f1,_f2,…): consecutive order.
+
+RULE 5 — ROUTING AWARENESS:
+  • Place devices sharing a SIGNAL net adjacent.
+  • Place cascode devices directly above their drive device.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+{square_guidance}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+OUTPUT FORMAT (append to your strategy text, valid JSON only):
+
+```json
+{{
+  "reasoning": "One sentence: circuit type + why you chose this row structure.",
+  "nmos_rows": [
+    {{"label": "FUNCTIONAL_LABEL", "devices": ["dev_id1", "dev_id2", ...]}},
+    ...
+  ],
+  "pmos_rows": [
+    {{"label": "FUNCTIONAL_LABEL", "devices": ["dev_id1", "dev_id2", ...]}},
+    ...
+  ]
+}}
+```
+
+CRITICAL CHECKS before outputting:
+  [ ] Every NMOS device ID appears exactly once in nmos_rows.
+  [ ] Every PMOS device ID appears exactly once in pmos_rows.
+  [ ] No PMOS ID is in nmos_rows. No NMOS ID is in pmos_rows.
+  [ ] No row has more than {_MAX_ROW_DEVS} devices.
+  [ ] The JSON is valid (no trailing commas, no comments).
+"""
+
+
+def parse_multirow_json(text: str) -> dict:
+    """
+    Extract the {nmos_rows, pmos_rows} JSON from an LLM response that may
+    contain free-form strategy text before the JSON block.
+
+    Returns an empty dict if no valid JSON with nmos_rows/pmos_rows is found.
+    """
+    if not text:
+        return {}
+
+    # Try a fenced code block first
+    fenced = _re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", text, _re.IGNORECASE)
+    if fenced:
+        try:
+            data = _json.loads(fenced.group(1))
+            if "nmos_rows" in data or "pmos_rows" in data:
+                return data
+        except Exception:
+            pass
+
+    # Try bare JSON object anywhere in the text
+    brace = text.find("{")
+    while brace != -1:
+        try:
+            # Find matching close brace via bracket counting
+            depth, end = 0, brace
+            for i, ch in enumerate(text[brace:]):
+                if ch == "{":
+                    depth += 1
+                elif ch == "}":
+                    depth -= 1
+                    if depth == 0:
+                        end = brace + i + 1
+                        break
+            candidate = text[brace:end]
+            data = _json.loads(candidate)
+            if "nmos_rows" in data or "pmos_rows" in data:
+                return data
+        except Exception:
+            pass
+        brace = text.find("{", brace + 1)
+
+    return {}

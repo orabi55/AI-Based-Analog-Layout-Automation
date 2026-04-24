@@ -50,7 +50,7 @@ Examples include:
 2) Assign EVERY device to exactly ONE PRIMARY group.
 
 - Each device must appear in EXACTLY ONE primary group.
-- A primary group represents the device’s MAIN functional role in the circuit.
+- A primary group represents the device's MAIN functional role in the circuit.
 - Devices that must be placed together (for matching/symmetry) should be in the same group.
 
 2.5) Placement Cohesion
@@ -95,6 +95,32 @@ Examples:
 - Multi-stage amplifier
 
 --------------------------------------------------
+DIFF PAIR & CURRENT MIRROR DETECTION (CRITICAL)
+--------------------------------------------------
+
+You MUST detect the following patterns and classify them precisely:
+
+DIFFERENTIAL PAIR detection rules:
+  - Two same-type transistors (both NMOS or both PMOS)
+  - Connected to the SAME gate net (input+, input-)  OR
+  - Connected to the same source net (tail current)
+  - Drains go to different signal nets (output+, output-)
+  - These devices MUST be marked as a DIFF_PAIR group
+  - Matching technique: COMMON_CENTROID_1D (for 1-row) or COMMON_CENTROID_2D (for 2-row)
+
+CURRENT MIRROR detection rules:
+  - Two or more same-type transistors sharing the SAME gate net
+  - One device has its gate tied to its drain (diode-connected = reference)
+  - The other device(s) copy the reference current
+  - These devices MUST be marked as a CURRENT_MIRROR group
+  - Matching technique: INTERDIGITATION
+
+CASCODE detection rules:
+  - Two same-type transistors stacked: drain of bottom -> source of top
+  - Gate of top is typically a bias voltage
+  - Mark as CASCODE group
+
+--------------------------------------------------
 CRITICAL RULES
 --------------------------------------------------
 
@@ -127,7 +153,7 @@ Secondary_Tags:
   - D1: [tag1, tag2, ...] (or NONE)
   - D2: [tag1, ...] (or NONE)
 Matching_Requirements:
-  - [e.g., D1 ↔ D2 must be matched]
+  - [e.g., D1 <-> D2 must be matched]
 Symmetry:
   - [e.g., D1 and D2 must be placed symmetrically]
 
@@ -146,6 +172,41 @@ Symmetry:
 (repeat until ALL devices are assigned)
 
 --------------------------------------------------
+MATCHING GROUPS JSON (MANDATORY — append after text output)
+--------------------------------------------------
+
+After your text output, you MUST append a JSON block specifying which device
+groups need deterministic matching. This JSON is consumed by the matching engine.
+
+Available techniques:
+  - "COMMON_CENTROID_1D"  — for diff pairs (centroid-matched in 1 row)
+  - "COMMON_CENTROID_2D"  — for diff pairs (centroid-matched across 2 rows)
+  - "INTERDIGITATION"     — for current mirrors (ratio-proportional interleaving)
+
+```json
+{
+  "match_groups": [
+    {
+      "devices": ["MM0", "MM1"],
+      "technique": "COMMON_CENTROID_1D",
+      "reason": "Differential pair — must be centroid-matched"
+    },
+    {
+      "devices": ["MM3", "MM4"],
+      "technique": "INTERDIGITATION",
+      "reason": "Current mirror — ratio-preserving interleaving"
+    }
+  ]
+}
+```
+
+Rules for match_groups:
+  - Use PARENT device names (MM0, not MM0_f1)
+  - Only include groups that genuinely need matching (diff pairs, mirrors)
+  - Do NOT include cascode or simple bias devices unless they form a mirror
+  - If no matching is needed, output: {"match_groups": []}
+
+--------------------------------------------------
 FINAL CHECK (MANDATORY)
 --------------------------------------------------
 
@@ -154,10 +215,10 @@ FINAL CHECK (MANDATORY)
 - Secondary tags do NOT violate primary grouping
 - Matching and symmetry are clearly identified
 - Output strictly follows the required format
+- match_groups JSON is present and valid
 
 If any rule is violated, regenerate the output.
 """
-
 
 
 def analyze_json(nodes: List[dict], terminal_nets: dict) -> str:
@@ -323,3 +384,92 @@ def analyze_json(nodes: List[dict], terminal_nets: dict) -> str:
 
     return "\n".join(lines)
 
+
+# ---------------------------------------------------------------------------
+# Abutment candidate extraction
+# ---------------------------------------------------------------------------
+
+_POWER_NETS = frozenset({"VDD", "VSS", "GND", "VCC", "AVDD", "AVSS"})
+
+
+def build_abutment_candidates(nodes: List[dict], terminal_nets: dict = None) -> List[dict]:
+    """
+    Extract abutment pair candidates from device flags and shared source nets.
+
+    An abutment pair is two adjacent devices that share a source/drain
+    diffusion. Identifying them early lets the geometry engine and SA
+    optimizer use the correct 0.070µm pitch (vs 0.294µm for standalone).
+
+    Sources of abutment info (in priority order):
+      1. Explicit ``node["abutment"]["abut_right/left"]`` flags set by the
+         layout extractor.
+      2. Shared source nets — two devices on the same source net that are
+         also the same type (both NMOS or both PMOS) are likely abutted.
+
+    Parameters
+    ----------
+    nodes         : list of device node dicts
+    terminal_nets : {device_id: {"D": net, "G": net, "S": net}}
+
+    Returns
+    -------
+    List of {"dev_a": str, "dev_b": str, "shared_net": str} dicts.
+    """
+    safe_tn = terminal_nets if isinstance(terminal_nets, dict) else {}
+    candidates: List[dict] = []
+    seen: set = set()
+
+    # ── Source 1: embedded abutment flags ─────────────────────────────
+    # Build a {y: [sorted_by_x nodes]} map so we can find adjacent pairs
+    rows: Dict[float, list] = defaultdict(list)
+    for n in nodes:
+        geo = n.get("geometry", {})
+        y   = round(float(geo.get("y", 0.0)), 3)
+        rows[y].append(n)
+
+    for y_val, row_nodes in rows.items():
+        sorted_row = sorted(row_nodes, key=lambda n: n.get("geometry", {}).get("x", 0.0))
+        for i in range(len(sorted_row) - 1):
+            n1 = sorted_row[i]
+            n2 = sorted_row[i + 1]
+            if (
+                n1.get("abutment", {}).get("abut_right")
+                and n2.get("abutment", {}).get("abut_left")
+            ):
+                key = (n1["id"], n2["id"])
+                if key not in seen:
+                    seen.add(key)
+                    candidates.append({
+                        "dev_a": n1["id"],
+                        "dev_b": n2["id"],
+                        "shared_net": "abutment_flag",
+                    })
+
+    # ── Source 2: shared source nets (same type devices) ──────────────
+    source_net_devs: Dict[str, List[dict]] = defaultdict(list)
+    for n in nodes:
+        nid  = n.get("id", "")
+        nets = safe_tn.get(nid) or {}
+        snet = str(nets.get("S", "")).strip().upper()
+        if snet and snet not in _POWER_NETS:
+            source_net_devs[snet].append(n)
+
+    for snet, devs in source_net_devs.items():
+        # Only consider pairs within same type
+        for i in range(len(devs)):
+            for j in range(i + 1, len(devs)):
+                a, b = devs[i], devs[j]
+                if a.get("type") != b.get("type"):
+                    continue
+                key = (a["id"], b["id"])
+                if key not in seen:
+                    seen.add(key)
+                    candidates.append({
+                        "dev_a": a["id"],
+                        "dev_b": b["id"],
+                        "shared_net": snet,
+                    })
+
+    if candidates:
+        print(f"[TopoAnalyst] Extracted {len(candidates)} abutment candidate(s)")
+    return candidates

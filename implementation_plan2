@@ -1,0 +1,119 @@
+# Matching Tool for AI Flow + Multi-Row Verification
+
+## Background
+
+The existing `universal_pattern_generator.py` + `matching_engine.py` are the deterministic matching functions. They implement:
+- **Common Centroid 1D** — `[seed] + [reversed(seed)]` with centroid audit
+- **Common Centroid 2D** — 2-row `[seed] / [reversed(seed)]` with point symmetry
+- **Interdigitation** — ratio-based interleaving (same algorithm as the placement specialist prompt)
+- **Custom** — user-defined `ABBA/BAAB` pattern strings
+
+Currently these only work with the GUI (`layout_tab.py`) and require Qt `device_items` for pixel coordinates. They are **NOT available** to the AI flow at all.
+
+## Problem 1: Matching is GUI-only, not available in the AI pipeline
+
+The AI flow (node_finger_expansion / placement_specialist) tries to teach the LLM to compute matching sequences via prompts. This is fragile — the LLM can produce invalid centroid positions, break symmetry, or cluster fingers.
+
+## Problem 2: Matched groups get destroyed by downstream agents
+
+Even if the LLM produces correct matching, the DRC critic or finger expansion can relocate devices individually, breaking the matched block.
+
+## Problem 3: Multi-row — need to verify it truly supports N rows
+
+The geometry engine `convert_multirow_to_geometry()` uses `nmos_rows[]` and `pmos_rows[]` arrays with dynamic lengths. Need to confirm edge cases (3+ rows each side, auto-split, etc.) are handled correctly.
+
+---
+
+## Proposed Changes
+
+---
+
+### 1. New headless matching adapter
+
+#### [NEW] [matching_adapter.py](file:///c:/Users/DELL%20G3/Desktop/GP/Automation/AI-Automation-New/ai_agent/ai_chat_bot/agents/matching_adapter.py)
+
+A headless (Qt-free) adapter that wraps `universal_pattern_generator.generate_placement_grid()` and converts its grid indices to physical micron coordinates using the geometry engine's `STD_PITCH` and `ROW_PITCH`.
+
+Public function: `apply_matching(nodes, device_ids, technique, pitch, row_pitch) -> (list[dict], MatchedBlock)`
+
+The `MatchedBlock` dataclass carries:
+- `block_id`: unique identifier for the matched group
+- `member_ids`: set of device IDs in the block
+- `anchor_x`, `anchor_y`: block's origin
+- `technique`: which matching was applied
+
+After matching, every member node gets tagged with `_matched_block: block_id`. This tag is the key to protecting matched groups from downstream destruction.
+
+---
+
+### 2. State — add `matched_blocks`
+
+#### [MODIFY] [state.py](file:///c:/Users/DELL%20G3/Desktop/GP/Automation/AI-Automation-New/ai_agent/ai_chat_bot/state.py)
+
+Add `matched_blocks: List[Dict]` to `LayoutState`.
+
+---
+
+### 3. Wire matching into `node_finger_expansion`
+
+#### [MODIFY] [nodes.py](file:///c:/Users/DELL%20G3/Desktop/GP/Automation/AI-Automation-New/ai_agent/ai_chat_bot/nodes.py) — `node_finger_expansion`
+
+After geometry engine placement and before validation:
+1. Read `strategy_result` to detect if the LLM requested matching for any device groups.
+2. For each requested match group → call `apply_matching()` deterministically.
+3. Overwrite the matched devices' coordinates with the deterministic result.
+4. Store the `MatchedBlock` list in state.
+5. Tag each matched node with `_matched_block`.
+
+---
+
+### 4. Protect matched blocks in DRC Critic
+
+#### [MODIFY] [nodes.py](file:///c:/Users/DELL%20G3/Desktop/GP/Automation/AI-Automation-New/ai_agent/ai_chat_bot/nodes.py) — `node_drc_critic`
+
+Before applying any DRC fix (prescriptive or LLM):
+- Check if the target device has `_matched_block` tag.
+- If yes → skip individual coordinate adjustment. Instead, move the **entire block as rigid body** (same delta to all members).
+
+> [!IMPORTANT]
+> This is the critical "block locking" mechanism. Without it, the DRC critic will break matching every time.
+
+---
+
+### 5. Protect matched blocks in SA Optimizer
+
+#### [MODIFY] [nodes.py](file:///c:/Users/DELL%20G3/Desktop/GP/Automation/AI-Automation-New/ai_agent/ai_chat_bot/nodes.py) — `node_sa_optimizer` + sa_optimizer.py
+
+Matched block member IDs should be added to `chain_member_ids` so SA never swaps them.
+
+---
+
+### 6. Multi-row verification
+
+#### No code change needed
+
+The current `convert_multirow_to_geometry()` already handles N rows:
+- `nmos_rows` and `pmos_rows` are arrays of arbitrary length
+- `_split_rows()` auto-splits rows exceeding `MAX_ROW_DEVS=16`
+- Y coordinates are computed as `i * row_pitch` per row index
+
+But I will add a smoke test with 4 NMOS rows + 3 PMOS rows to prove it works.
+
+---
+
+## Execution Order
+
+1. `matching_adapter.py` — new headless matching module
+2. `state.py` — add `matched_blocks`
+3. `nodes.py` — wire matching into finger expansion + protect in DRC + SA
+4. Multi-row smoke test — verify 4+3 rows work
+
+## Verification Plan
+
+### Automated
+- Unit test: `apply_matching()` with 2 devices × 4 fingers each, verify centroid equality
+- Unit test: 7-row multi-row placement (4 NMOS + 3 PMOS), verify all rows get unique Y values
+- Integration: confirm matched blocks survive DRC pass unchanged
+
+### Manual
+- Run full pipeline on a diff amp circuit and visually confirm interdigitation in the editor

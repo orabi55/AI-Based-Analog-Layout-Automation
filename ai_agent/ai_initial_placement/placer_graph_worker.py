@@ -75,7 +75,13 @@ class PlacerGraphWorker(QObject):
             "gap_px": layout_context.get("gap_px", 0.0),
             "drc_retry_count": 0,
             "routing_pass_count": 0,
+            # New fields — populated by graph nodes
+            "abutment_candidates": layout_context.get("abutment_candidates", []),
+            "multirow_layout": {},
+            "run_sa": layout_context.get("run_sa", False),
+            "matched_blocks": [],
         }
+
 
         try:
             from langchain_core.runnables import RunnableConfig
