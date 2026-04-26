@@ -13,11 +13,13 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
-    QScrollArea,
+    QGraphicsView,
+    QGraphicsScene,
+    QGraphicsPixmapItem,
     QSizePolicy,
 )
-from PySide6.QtCore import Qt, QSize, Signal
-from PySide6.QtGui import QPixmap, QColor
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QPixmap, QPainter, QWheelEvent
 
 # Add project root for imports
 _project_root = os.path.normpath(
@@ -25,6 +27,41 @@ _project_root = os.path.normpath(
 )
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
+
+
+class _ZoomableView(QGraphicsView):
+    """QGraphicsView subclass with mouse-wheel zoom and middle-button pan."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setRenderHints(
+            QPainter.RenderHint.Antialiasing
+            | QPainter.RenderHint.SmoothPixmapTransform
+        )
+        self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+        self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
+        self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
+        self.setBackgroundBrush(Qt.GlobalColor.black)
+        self.setStyleSheet(
+            "QGraphicsView { background-color: #0e1219; border: none; }"
+        )
+        self._zoom_factor = 1.0
+
+    def wheelEvent(self, event: QWheelEvent):
+        factor = 1.15
+        if event.angleDelta().y() > 0:
+            self.scale(factor, factor)
+            self._zoom_factor *= factor
+        else:
+            self.scale(1 / factor, 1 / factor)
+            self._zoom_factor /= factor
+
+    def fit_to_view(self):
+        """Fit the scene contents to the viewport."""
+        if self.scene() and not self.scene().items():
+            return
+        self.fitInView(self.scene().itemsBoundingRect(), Qt.AspectRatioMode.KeepAspectRatio)
+        self._zoom_factor = 1.0
 
 
 class KLayoutPanel(QWidget):
@@ -35,6 +72,7 @@ class KLayoutPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._oas_path = None
+        self._pixmap_item = None
         self._setup_ui()
 
     def _setup_ui(self):
@@ -60,6 +98,14 @@ class KLayoutPanel(QWidget):
         header_layout.addWidget(title)
         header_layout.addStretch()
 
+        # Fit button
+        self._btn_fit = QPushButton("Fit")
+        self._btn_fit.setFixedSize(50, 24)
+        self._btn_fit.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_fit.setStyleSheet(self._button_style())
+        self._btn_fit.clicked.connect(self.fit_to_view)
+        header_layout.addWidget(self._btn_fit)
+
         # Refresh button
         self._btn_refresh = QPushButton("Refresh")
         self._btn_refresh.setFixedSize(70, 24)
@@ -78,55 +124,21 @@ class KLayoutPanel(QWidget):
 
         layout.addWidget(header)
 
-        # ---------- Image area ----------
-        self._scroll = QScrollArea()
-        self._scroll.setWidgetResizable(True)
-        self._scroll.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAsNeeded
-        )
-        self._scroll.setVerticalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAsNeeded
-        )
-        self._scroll.setStyleSheet(
-            """
-            QScrollArea {
-                background-color: #0e1219;
-                border: none;
-            }
-            QScrollBar:vertical {
-                background: #12161f; width: 8px; border: none;
-            }
-            QScrollBar::handle:vertical {
-                background: #2d3548; border-radius: 4px; min-height: 30px;
-            }
-            QScrollBar:horizontal {
-                background: #12161f; height: 8px; border: none;
-            }
-            QScrollBar::handle:horizontal {
-                background: #2d3548; border-radius: 4px; min-width: 30px;
-            }
-            QScrollBar::add-line, QScrollBar::sub-line {
-                width: 0; height: 0;
-            }
-            """
-        )
-
-        self._image_label = QLabel()
-        self._image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._image_label.setStyleSheet("background-color: #0e1219; border: none;")
-        self._image_label.setSizePolicy(
+        # ---------- Zoomable image area ----------
+        self._gfx_scene = QGraphicsScene(self)
+        self._gfx_view = _ZoomableView(self)
+        self._gfx_view.setScene(self._gfx_scene)
+        self._gfx_view.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
 
-        # Placeholder text
-        self._image_label.setText("No layout rendered yet.\nUse Export to OAS, then Refresh.")
-        self._image_label.setStyleSheet(
-            "color: #556677; font-family: 'Segoe UI'; font-size: 10pt; "
-            "background-color: #0e1219; border: none; padding: 20px;"
+        # Placeholder text (shown via a simple text item)
+        self._placeholder = self._gfx_scene.addText(
+            "No layout rendered yet.\nUse Export to OAS, then Refresh."
         )
+        self._placeholder.setDefaultTextColor(Qt.GlobalColor.darkGray)
 
-        self._scroll.setWidget(self._image_label)
-        layout.addWidget(self._scroll)
+        layout.addWidget(self._gfx_view)
 
         # ---------- Status bar ----------
         self._status = QLabel("")
@@ -160,6 +172,8 @@ class KLayoutPanel(QWidget):
             }
         """
 
+    # ── Public API ──────────────────────────────────────────────
+
     def set_oas_path(self, oas_path):
         """Set the OAS file path to render."""
         self._oas_path = oas_path
@@ -168,54 +182,60 @@ class KLayoutPanel(QWidget):
         else:
             self._status.setText("")
 
+    def fit_to_view(self):
+        """Fit the KLayout preview image to the viewport."""
+        self._gfx_view.fit_to_view()
+
     def refresh_preview(self, oas_path=None):
         """Re-render the OAS file and update the preview image."""
         if oas_path:
             self._oas_path = oas_path
 
         if not self._oas_path or not os.path.isfile(self._oas_path):
-            self._image_label.setPixmap(QPixmap())
-            self._image_label.setText(
-                "No OAS file available.\n"
-                "Export to OAS first (File > Export to OAS)."
+            self._gfx_scene.clear()
+            self._pixmap_item = None
+            self._placeholder = self._gfx_scene.addText(
+                "No OAS file available.\nExport to OAS first (File > Export to OAS)."
             )
-            self._image_label.setStyleSheet(
-                "color: #556677; font-family: 'Segoe UI'; font-size: 10pt; "
-                "background-color: #0e1219; border: none; padding: 20px;"
-            )
+            self._placeholder.setDefaultTextColor(Qt.GlobalColor.darkGray)
             self._status.setText("No file")
             return
 
         try:
             from export.klayout_renderer import render_oas_to_pixmap
 
-            # Render at a reasonable resolution
-            panel_w = max(400, self._scroll.viewport().width())
-            panel_h = max(300, self._scroll.viewport().height())
+            # Render at a high resolution for quality zoom
+            panel_w = max(800, self._gfx_view.viewport().width() * 2)
+            panel_h = max(600, self._gfx_view.viewport().height() * 2)
             pixmap = render_oas_to_pixmap(
                 self._oas_path, panel_w, panel_h
             )
 
             if pixmap and not pixmap.isNull():
-                self._image_label.setPixmap(pixmap)
-                self._image_label.setText("")
-                self._image_label.setStyleSheet(
-                    "background-color: #0e1219; border: none;"
-                )
+                self._gfx_scene.clear()
+                self._placeholder = None
+                self._pixmap_item = QGraphicsPixmapItem(pixmap)
+                self._gfx_scene.addItem(self._pixmap_item)
+                self._gfx_scene.setSceneRect(self._pixmap_item.boundingRect())
                 self._status.setText(
                     f"File: {os.path.basename(self._oas_path)}  |  "
-                    f"{pixmap.width()}x{pixmap.height()} px"
+                    f"{pixmap.width()}×{pixmap.height()} px  |  Scroll to zoom"
                 )
+                # Auto-fit after loading
+                from PySide6.QtCore import QTimer
+                QTimer.singleShot(50, self.fit_to_view)
             else:
-                self._image_label.setText("Render failed.")
+                self._gfx_scene.clear()
+                self._pixmap_item = None
+                t = self._gfx_scene.addText("Render failed.")
+                t.setDefaultTextColor(Qt.GlobalColor.darkGray)
                 self._status.setText("Render error")
 
         except Exception as e:
-            self._image_label.setText(f"Error: {e}")
-            self._image_label.setStyleSheet(
-                "color: #aa4444; font-family: 'Segoe UI'; font-size: 9pt; "
-                "background-color: #0e1219; border: none; padding: 20px;"
-            )
+            self._gfx_scene.clear()
+            self._pixmap_item = None
+            t = self._gfx_scene.addText(f"Error: {e}")
+            t.setDefaultTextColor(Qt.GlobalColor.red)
             self._status.setText("Error")
             import traceback
             traceback.print_exc()

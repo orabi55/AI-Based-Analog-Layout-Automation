@@ -3,6 +3,8 @@ from PySide6.QtWidgets import (
     QGraphicsItem,
     QStyleOptionGraphicsItem,
     QStyle,
+    QMenu,
+    QColorDialog,
 )
 from PySide6.QtGui import QBrush, QPen, QColor, QFont, QPainter, QLinearGradient
 from PySide6.QtCore import Qt, QRectF, QObject, Signal, QPointF
@@ -54,34 +56,76 @@ class DeviceItem(QGraphicsRectItem):
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
 
-        # --- Color palette per device type ---
+        # --- Premium color palette per device type ---
         dtype = self.device_type
-        if str(name).upper().startswith("DUMMY"):
-            # Keep one consistent dummy color (pink) for both N/P.
-            self._source_color = QColor("#ffd6ea")
-            self._gate_color = QColor("#d14d94")
-            self._drain_color = QColor("#ffd6ea")
-            self._border = QColor("#b83b7c")
-            self._label_color = QColor("#8f2d61")
-            self._terminal_label_color = QColor("#fff1f8")
-        elif dtype == "nmos":
-            self._source_color = QColor("#d6eaf8")   # soft sky blue
-            self._gate_color = QColor("#1b4f72")      # deep navy blue
-            self._drain_color = QColor("#d6eaf8")     # soft sky blue
-            self._border = QColor("#1a5276")
-            self._label_color = QColor("#1a5276")
-            self._terminal_label_color = QColor("#eaf2f8")
-        else:
-            self._source_color = QColor("#fadbd8")    # soft rose
-            self._gate_color = QColor("#78281f")      # deep burgundy
-            self._drain_color = QColor("#fadbd8")     # soft rose
-            self._border = QColor("#7b241c")
-            self._label_color = QColor("#7b241c")
-            self._terminal_label_color = QColor("#f9ebea")
+        name_upper = str(name).upper()
+        self._is_dummy = (name_upper.startswith("DUMMY")
+                          or name_upper.startswith("FILLER_DUMMY")
+                          or name_upper.startswith("EDGE_DUMMY"))
+        self._apply_default_palette()
 
         # Transparent fill — we paint everything custom
         self.setBrush(QBrush(Qt.BrushStyle.NoBrush))
         self.setPen(QPen(Qt.PenStyle.NoPen))
+
+    def _apply_default_palette(self):
+        dtype = self.device_type
+        if self._is_dummy:
+            # Muted slate for dummies — visually distinct but unobtrusive
+            self._source_color = QColor("#dfe6e9")
+            self._gate_color   = QColor("#636e72")
+            self._drain_color  = QColor("#dfe6e9")
+            self._border       = QColor("#b2bec3")
+            self._label_color  = QColor("#636e72")
+            self._terminal_label_color = QColor("#f5f6fa")
+            self._gradient_top    = QColor("#b2bec3")
+            self._gradient_bottom = QColor("#636e72")
+            self._name_color      = QColor("#2d3436")
+        elif dtype == "nmos":
+            # Rich teal / cyan palette
+            self._source_color = QColor("#e0f7fa")
+            self._gate_color   = QColor("#00838f")
+            self._drain_color  = QColor("#b2ebf2")
+            self._border       = QColor("#006064")
+            self._label_color  = QColor("#004d40")
+            self._terminal_label_color = QColor("#e0f2f1")
+            self._gradient_top    = QColor("#26c6da")
+            self._gradient_bottom = QColor("#00695c")
+            self._name_color      = QColor("#ffffff")
+        else:
+            # Warm coral / rose palette for PMOS
+            self._source_color = QColor("#fce4ec")
+            self._gate_color   = QColor("#ad1457")
+            self._drain_color  = QColor("#f8bbd0")
+            self._border       = QColor("#880e4f")
+            self._label_color  = QColor("#880e4f")
+            self._terminal_label_color = QColor("#fce4ec")
+            self._gradient_top    = QColor("#f06292")
+            self._gradient_bottom = QColor("#880e4f")
+            self._name_color      = QColor("#ffffff")
+        self.update()
+
+    def get_logical_name(self):
+        display_name = self.device_name
+        if "_" in display_name and not self._is_dummy:
+            return display_name.split("_")[0]
+        return display_name
+
+    def set_custom_color(self, base_color: QColor):
+        self._source_color = base_color.lighter(130)
+        self._drain_color  = base_color.lighter(130)
+        self._gate_color   = base_color.darker(150)
+        self._border       = base_color.darker(200)
+        self._gradient_top = base_color.lighter(110)
+        self._gradient_bottom = base_color.darker(120)
+        self._label_color  = base_color.darker(300)
+        self._terminal_label_color = QColor("#ffffff")
+        self._name_color   = QColor("#ffffff")
+        self.update()
+
+    def reset_custom_color(self):
+        self._apply_default_palette()
+
 
     def set_snap_grid(self, grid_x, grid_y=None):
         """Enable snapping item movement to scene grid (separate X/Y pitch)."""
@@ -106,46 +150,23 @@ class DeviceItem(QGraphicsRectItem):
         self._hl_right = None
         self.update()
 
-    # ── Manual abutment control ──────────────────────────────────────
-    def toggle_abut_left(self):
-        """Toggle the left-edge manual abutment flag and redraw."""
-        self._manual_abut_left = not self._manual_abut_left
+    def set_abut_left(self, state):
+        self._manual_abut_left = bool(state)
         self.update()
 
-    def toggle_abut_right(self):
-        """Toggle the right-edge manual abutment flag and redraw."""
-        self._manual_abut_right = not self._manual_abut_right
+    def set_abut_right(self, state):
+        self._manual_abut_right = bool(state)
         self.update()
 
-    def set_abut_left(self, value: bool):
-        self._manual_abut_left = bool(value)
-        self.update()
-
-    def set_abut_right(self, value: bool):
-        self._manual_abut_right = bool(value)
-        self.update()
-
-    def get_abut_left(self) -> bool:
+    def abut_left(self):
         return self._manual_abut_left
 
-    def get_abut_right(self) -> bool:
+    def abut_right(self):
         return self._manual_abut_right
 
-    # Keep compat
-    def set_abutment(self, left: bool, right: bool):
-        self._manual_abut_left  = bool(left)
-        self._manual_abut_right = bool(right)
-        self.update()
-
-    # ── Match / Lock highlight ───────────────────────────────────────
-    def set_match_highlight(self, color: QColor):
-        """Set a persistent colour border to indicate this device is in a matched group."""
-        self._match_color = QColor(color) if color else None
-        self.update()
-
-    def clear_match_highlight(self):
-        """Remove the matched-group highlight."""
-        self._match_color = None
+    def set_match_color(self, color):
+        """Set matched-group highlight color (QColor or None)."""
+        self._match_color = color
         self.update()
 
     def is_match_locked(self) -> bool:
@@ -167,6 +188,28 @@ class DeviceItem(QGraphicsRectItem):
 
     def set_flip_h(self, state):
         self._flip_h = bool(state)
+        self.update()
+
+    def get_abut_left(self) -> bool:
+        return self._manual_abut_left
+
+    def get_abut_right(self) -> bool:
+        return self._manual_abut_right
+
+    def set_abut_left(self, state: bool):
+        self._manual_abut_left = bool(state)
+        self.update()
+
+    def set_abut_right(self, state: bool):
+        self._manual_abut_right = bool(state)
+        self.update()
+
+    def toggle_abut_left(self):
+        self._manual_abut_left = not self._manual_abut_left
+        self.update()
+
+    def toggle_abut_right(self):
+        self._manual_abut_right = not self._manual_abut_right
         self.update()
 
     def is_flip_v(self):
@@ -242,7 +285,7 @@ class DeviceItem(QGraphicsRectItem):
         super().mouseReleaseEvent(event)
 
     # --------------------------------------------------
-    # Painting — Multi-finger MOS layout
+    # Painting — Premium Multi-finger MOS layout
     # --------------------------------------------------
     def paint(self, painter: QPainter, option, widget=None):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -254,7 +297,7 @@ class DeviceItem(QGraphicsRectItem):
             painter.setBrush(QBrush(fill_color))
             border_width = 2.2 if not self.isSelected() else 2.8
             painter.setPen(QPen(outline_color, border_width, Qt.PenStyle.SolidLine))
-            painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 2, 2)
+            painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 4, 4)
 
             name_font_size = max(6, min(12, int(rect.width() * 0.085)))
             name_font = QFont("Segoe UI", name_font_size, QFont.Weight.Bold)
@@ -270,7 +313,7 @@ class DeviceItem(QGraphicsRectItem):
                 lock_pen = QPen(self._match_color, 2.4, Qt.PenStyle.SolidLine)
                 painter.setPen(lock_pen)
                 painter.setBrush(Qt.BrushStyle.NoBrush)
-                painter.drawRoundedRect(rect.adjusted(3, 3, -3, -3), 2, 2)
+                painter.drawRoundedRect(rect.adjusted(3, 3, -3, -3), 4, 4)
             return
 
         w    = rect.width()
@@ -279,19 +322,18 @@ class DeviceItem(QGraphicsRectItem):
         y0   = rect.y()
         cx   = x0 + w / 2.0
         cy   = y0 + h / 2.0
+        corner_r = min(4.0, w * 0.08, h * 0.08)
 
         num_fingers = self.nf
         num_sd      = num_fingers + 1   # S/D diffusion regions
 
         # --- Visual proportions ---
-        # Make gate fingers and S/D diffusion regions have the exact same visual width
         total_regions = num_fingers + num_sd
         part_w = w / total_regions
         gate_w = part_w
         sd_w   = part_w
 
         # S/D identity per column (before flip)
-        # Column 0,2,4... = Source;  1,3,5... = Drain
         def _is_source_col(col):
             return (col % 2 == 0) ^ self._flip_h
 
@@ -302,39 +344,81 @@ class DeviceItem(QGraphicsRectItem):
                        -1.0 if self._flip_v else 1.0)
         painter.translate(-cx, -cy)
 
+        # ── Background gradient fill for the entire device ──────────
+        bg_grad = QLinearGradient(x0, y0, x0, y0 + h)
+        bg_top = QColor(self._source_color)
+        bg_top.setAlpha(120)
+        bg_bot = QColor(self._drain_color)
+        bg_bot.setAlpha(80)
+        bg_grad.setColorAt(0.0, bg_top)
+        bg_grad.setColorAt(1.0, bg_bot)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(bg_grad))
+        painter.drawRoundedRect(rect.adjusted(0.5, 0.5, -0.5, -0.5), corner_r, corner_r)
+
+        # ── Draw S/D diffusion regions and gate fingers ──────────────
         painter.setPen(Qt.PenStyle.NoPen)
         cursor_x = x0
         for i in range(num_sd):
+            # S/D region with subtle vertical gradient
             color = self._source_color if _is_source_col(i) else self._drain_color
-            painter.setBrush(QBrush(color))
+            sd_grad = QLinearGradient(cursor_x, y0, cursor_x, y0 + h)
+            sd_grad.setColorAt(0.0, color.lighter(110))
+            sd_grad.setColorAt(1.0, color)
+            painter.setBrush(QBrush(sd_grad))
             painter.drawRect(QRectF(cursor_x, y0, sd_w, h))
             cursor_x += sd_w
 
             if i < num_fingers:
-                # Gate strip gradient
+                # Gate strip with rich gradient
                 gate_rect = QRectF(cursor_x, y0, gate_w, h)
                 grad = QLinearGradient(gate_rect.topLeft(), gate_rect.bottomLeft())
-                grad.setColorAt(0.0, self._gate_color.lighter(130))
-                grad.setColorAt(0.4, self._gate_color)
-                grad.setColorAt(1.0, self._gate_color.darker(130))
+                grad.setColorAt(0.0, self._gradient_top)
+                grad.setColorAt(0.5, self._gate_color)
+                grad.setColorAt(1.0, self._gradient_bottom)
                 painter.setBrush(QBrush(grad))
                 painter.drawRect(gate_rect)
                 cursor_x += gate_w
 
-        # Outer border
-        painter.setPen(QPen(self._border, 1.5))
+        # ── Rounded outer border with subtle shadow ──────────────────
+        # Shadow layer (offset down-right by 1px)
+        shadow_color = QColor(0, 0, 0, 40)
+        painter.setPen(QPen(shadow_color, 1.8))
         painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawRoundedRect(rect.adjusted(0.75, 0.75, -0.75, -0.75), 2, 2)
+        painter.drawRoundedRect(rect.adjusted(1.5, 1.5, 0.5, 0.5), corner_r, corner_r)
 
-        # Separator lines
-        sep_pen = QPen(self._border.darker(130), 0.8)
+        # Main border
+        border_w = 1.8 if not self.isSelected() else 2.5
+        painter.setPen(QPen(self._border, border_w))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRoundedRect(rect.adjusted(0.75, 0.75, -0.75, -0.75), corner_r, corner_r)
+
+        # ── Thin separator lines between S/D and gate columns ────────
+        sep_pen = QPen(QColor(self._border.red(), self._border.green(),
+                              self._border.blue(), 100), 0.6)
         painter.setPen(sep_pen)
         cursor_x = x0
+        inset = max(2, h * 0.04)
         for i in range(num_fingers):
             cursor_x += sd_w
-            painter.drawLine(QPointF(cursor_x, y0 + 2), QPointF(cursor_x, y0 + h - 2))
+            painter.drawLine(QPointF(cursor_x, y0 + inset),
+                             QPointF(cursor_x, y0 + h - inset))
             cursor_x += gate_w
-            painter.drawLine(QPointF(cursor_x, y0 + 2), QPointF(cursor_x, y0 + h - 2))
+            painter.drawLine(QPointF(cursor_x, y0 + inset),
+                             QPointF(cursor_x, y0 + h - inset))
+
+        # ── Dummy crosshatch overlay ─────────────────────────────────
+        if self._is_dummy:
+            hatch_color = QColor("#b2bec3")
+            hatch_color.setAlpha(50)
+            hatch_pen = QPen(hatch_color, 0.5)
+            painter.setPen(hatch_pen)
+            spacing = max(4, min(8, w * 0.15))
+            x_cursor = x0
+            while x_cursor < x0 + w:
+                painter.drawLine(QPointF(x_cursor, y0),
+                                 QPointF(x_cursor + h * 0.3, y0 + h))
+                x_cursor += spacing
 
         painter.restore()   # back to un-flipped for text
 
@@ -342,8 +426,6 @@ class DeviceItem(QGraphicsRectItem):
         # _hl_left / _hl_right are kept for internal state but no longer painted.
 
         # ── Manual abutment state (amber solid stripe) ────────────────────
-        # When the user manually sets leftAbut / rightAbut via right-click
-        # menu, draw a distinct solid amber stripe on that edge.
         if self._manual_abut_left or self._manual_abut_right:
             ABUT_COLOR = QColor("#f39c12")    # amber
             ABUT_FILL  = QColor("#f39c12")
@@ -358,7 +440,6 @@ class DeviceItem(QGraphicsRectItem):
                                     Qt.PenCapStyle.FlatCap))
                 painter.drawLine(QPointF(x0 + 1.5, y0 + 3),
                                  QPointF(x0 + 1.5, y0 + h - 3))
-                # Double-tick mark → indicates shared diffusion
                 mid = y0 + h * 0.4
                 painter.drawLine(QPointF(x0 + abut_w + 1, mid),
                                  QPointF(x0 + abut_w + 6, mid))
@@ -382,55 +463,104 @@ class DeviceItem(QGraphicsRectItem):
                                  QPointF(x0 + w - abut_w - 6, mid2))
 
         # ── Text labels (always readable, no flip) ──────────────────
-        # Font sizes scaled to available area
-        sd_font_size   = max(4, min(9,  int(min(sd_w * 0.45, h * 0.28))))
-        gate_font_size = max(4, min(9,  int(min(gate_w * 0.55, h * 0.28))))
-        name_font_size = max(5, min(11, int(w * 0.085)))
+        sd_font_size   = max(4, min(9,  int(min(sd_w * 0.40, h * 0.22))))
+        gate_font_size = max(4, min(9,  int(min(gate_w * 0.50, h * 0.22))))
+        name_font_size = max(6, min(13, int(w * 0.09)))
 
         # ── S / D labels on each diffusion column ───────────────────
-        sd_font = QFont("Segoe UI", sd_font_size, QFont.Weight.Bold)
+        sd_font = QFont("Segoe UI", sd_font_size, QFont.Weight.DemiBold)
         painter.setFont(sd_font)
 
         cursor_x = x0
         for i in range(num_sd):
             label = "S" if _is_source_col(i) else "D"
             col_rect = QRectF(cursor_x, y0, sd_w, h)
-            painter.setPen(self._label_color)
+            painter.setPen(QColor(self._label_color.red(), self._label_color.green(),
+                                  self._label_color.blue(), 180))
             painter.drawText(col_rect,
-                             Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom,
+                             Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
                              label)
             cursor_x += sd_w
             if i < num_fingers:
                 cursor_x += gate_w
 
         # ── G labels on each gate strip ─────────────────────────────
-        g_font = QFont("Segoe UI", gate_font_size, QFont.Weight.Bold)
+        g_font = QFont("Segoe UI", gate_font_size, QFont.Weight.DemiBold)
         painter.setFont(g_font)
         painter.setPen(self._terminal_label_color)
 
-        cursor_x = x0 + sd_w        # first gate starts after first S/D
+        cursor_x = x0 + sd_w
         for _ in range(num_fingers):
             gate_col_rect = QRectF(cursor_x, y0, gate_w, h)
             painter.drawText(gate_col_rect,
-                             Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom,
+                             Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
                              "G")
             cursor_x += gate_w + sd_w
 
-        # ── Device name centred in upper half ───────────────────────
+        # ── Device name — pill badge in upper portion ────────────────
+        # Compute display name (shorten FILLER_DUMMY_N_type to DUM_N)
+        display_name = self.device_name
+        if self._is_dummy:
+            parts = self.device_name.split("_")
+            # FILLER_DUMMY_3_nmos -> D3
+            for j, p in enumerate(parts):
+                if p.isdigit():
+                    display_name = f"D{p}"
+                    break
+            else:
+                display_name = "D"
+        else:
+            # Strip finger suffix (e.g. MM5_m1 -> MM5)
+            if "_" in display_name:
+                display_name = display_name.split("_")[0]
+
         name_font = QFont("Segoe UI", name_font_size, QFont.Weight.Bold)
         painter.setFont(name_font)
-        painter.setPen(QColor("#ffffff"))
-        name_rect = QRectF(x0 + 1, y0 + 1, w - 2, h * 0.52)
-        painter.drawText(name_rect,
+        fm = painter.fontMetrics()
+        text_w = fm.horizontalAdvance(display_name) + 8
+        text_h = fm.height() + 4
+        pill_w = min(text_w, w * 0.85)
+        pill_h = min(text_h, h * 0.32)
+        pill_x = x0 + (w - pill_w) / 2.0
+        pill_y = y0 + h * 0.08
+
+        # Semi-transparent pill background
+        pill_bg = QColor(0, 0, 0, 70) if not self._is_dummy else QColor(255, 255, 255, 70)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(pill_bg))
+        pill_r = min(pill_h / 2.0, 6)
+        painter.drawRoundedRect(QRectF(pill_x, pill_y, pill_w, pill_h), pill_r, pill_r)
+
+        # Name text
+        painter.setPen(self._name_color)
+        painter.drawText(QRectF(pill_x, pill_y, pill_w, pill_h),
                          Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
-                         self.device_name)
+                         display_name)
+
+        # ── Type badge (N / P) bottom of G column ────────────────────
+        type_label = "N" if self.device_type == "nmos" else "P"
+        if self._is_dummy:
+            type_label = "D"
+            
+        badge_h = h * 0.22
+        badge_font = QFont("Segoe UI", max(4, int(badge_h * 0.6)), QFont.Weight.Bold)
+        painter.setFont(badge_font)
+        
+        # We don't draw a background box for the type, just the text
+        # in the G column bottom to match the user request.
+        cursor_x = x0 + sd_w
+        for _ in range(num_fingers):
+            type_rect = QRectF(cursor_x, y0 + h - badge_h - 2, gate_w, badge_h)
+            painter.setPen(self._terminal_label_color)
+            painter.drawText(type_rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter, type_label)
+            cursor_x += gate_w + sd_w
 
         # ── Selection highlight ──────────────────────────────────────
         if self.isSelected():
-            sel_pen = QPen(QColor("#4a90d9"), 2.0, Qt.PenStyle.SolidLine)
+            sel_pen = QPen(QColor("#4fc3f7"), 2.5, Qt.PenStyle.SolidLine)
             painter.setPen(sel_pen)
-            painter.setBrush(QBrush(QColor(74, 144, 217, 35)))
-            painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 2, 2)
+            painter.setBrush(QBrush(QColor(79, 195, 247, 30)))
+            painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), corner_r, corner_r)
 
         # ── Matched-group (lock) highlight ───────────────────────────
         if self._match_color is not None:
@@ -439,16 +569,16 @@ class DeviceItem(QGraphicsRectItem):
             fill = QColor(self._match_color)
             fill.setAlpha(28)
             painter.setBrush(QBrush(fill))
-            painter.drawRoundedRect(rect.adjusted(0.5, 0.5, -0.5, -0.5), 3, 3)
+            painter.drawRoundedRect(rect.adjusted(0.5, 0.5, -0.5, -0.5), corner_r + 1, corner_r + 1)
             # Lock icon badge (top-right corner)
-            badge_size = max(8, min(14, int(w * 0.10)))
-            bx = x0 + w - badge_size - 2
+            lock_size = max(8, min(14, int(w * 0.10)))
+            bx = x0 + w - lock_size - 2
             by = y0 + 2
-            badge_font = QFont("Segoe UI", badge_size - 2, QFont.Weight.Bold)
-            painter.setFont(badge_font)
+            lock_font = QFont("Segoe UI", lock_size - 2, QFont.Weight.Bold)
+            painter.setFont(lock_font)
             painter.setPen(self._match_color)
-            painter.drawText(QRectF(bx, by, badge_size, badge_size),
-                             Qt.AlignmentFlag.AlignCenter, "🔒")
+            painter.drawText(QRectF(bx, by, lock_size, lock_size),
+                             Qt.AlignmentFlag.AlignCenter, "\U0001F512")
 
     def terminal_anchors(self):
         """Return scene positions for S, G, D terminal centers."""
@@ -465,18 +595,13 @@ class DeviceItem(QGraphicsRectItem):
         gate_w = total_gate_w / num_fingers
         sd_w = total_sd_w / num_sd
 
-        # We return the geometric centers. If there are multiple S/D/G,
-        # we return the center of the middle-most one for simplicity of routing lines.
-        # Visually:
         mid_y = y0 + h / 2
 
         if self._flip_h:
-            # Flipped: Leftmost is D, rightmost is S (if nf=1)
             left_is_s = False
         else:
             left_is_s = True
 
-        # Find all S centers and D centers
         s_centers = []
         d_centers = []
         g_centers = []
@@ -490,12 +615,11 @@ class DeviceItem(QGraphicsRectItem):
             else:
                 d_centers.append(QPointF(cx, mid_y))
             cursor_x += sd_w
-            
+
             if i < num_fingers:
                 g_centers.append(QPointF(cursor_x + gate_w / 2, mid_y))
                 cursor_x += gate_w
 
-        # Pick the most "central" one for the anchor
         s_anchor = s_centers[len(s_centers)//2] if s_centers else QPointF(x0, mid_y)
         d_anchor = d_centers[len(d_centers)//2] if d_centers else QPointF(x0+w, mid_y)
         g_anchor = g_centers[len(g_centers)//2] if g_centers else QPointF(x0+w/2, mid_y)

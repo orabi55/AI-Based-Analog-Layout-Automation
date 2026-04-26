@@ -455,6 +455,32 @@ def icon_abutment() -> QIcon:
     return icon
 
 
+def icon_colorize() -> QIcon:
+    if "colorize" in _CACHE:
+        return _CACHE["colorize"]
+    pm, p = _make_pixmap()
+    # A simple color palette / paint brush or color wheel
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    
+    # Let's draw 3 overlapping colored circles to represent "Colorize"
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QBrush(QColor(231, 76, 60, 200)))  # Red
+    p.drawEllipse(QRectF(8, 6, 12, 12))
+    p.setBrush(QBrush(QColor(46, 204, 113, 200))) # Green
+    p.drawEllipse(QRectF(14, 14, 12, 12))
+    p.setBrush(QBrush(QColor(52, 152, 219, 200))) # Blue
+    p.drawEllipse(QRectF(6, 14, 12, 12))
+    
+    # A small brush handle at the bottom
+    p.setPen(QPen(_FG, 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawLine(QPointF(16, 26), QPointF(24, 26))
+    
+    icon = _icon_from_painter(pm, p)
+    _CACHE["colorize"] = icon
+    return icon
+
+
 def icon_ai_placement() -> QIcon:
     if "ai_placement" in _CACHE:
         return _CACHE["ai_placement"]

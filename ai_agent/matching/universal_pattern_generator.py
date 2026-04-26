@@ -1,10 +1,18 @@
-import math
-import re
-from typing import List, Dict, Tuple, Optional
+"""
+Universal Pattern Generator
+===========================
+A generalized symmetry engine for generating placement grids for common-centroid, 
+interdigitated, and custom patterns.
 
-class SymmetryError(Exception):
-    """Raised when a placement cannot meet mathematical symmetry constraints."""
-    pass
+Functions:
+- generate_placement_grid: Generates a symmetric placement grid for devices.
+  - Inputs: devices_in (dict), technique (str), rows (int), custom_str (optional str)
+  - Outputs: list of dicts with grid coordinates.
+- _analytical_audit: Verifies mathematical symmetry constraints for a grid.
+- _handle_custom: Processes custom placement patterns from GUI strings.
+- _convert_grid_to_coords: Converts a 2D grid into a list of coordinate dictionaries.
+- parse_gui_string: Parses a GUI pattern string into a 2D grid of device IDs.
+"""
 
 def generate_placement_grid(
     devices_in: Dict[str, int], 

@@ -1,0 +1,863 @@
+{
+    "version": "2.0",
+    "device_types": {
+        "pmos": {
+            "y_row": 0.668,
+            "default_width": 0.294,
+            "default_height": 0.818
+        },
+        "nmos": {
+            "y_row": 0.0,
+            "default_width": 0.294,
+            "default_height": 0.668
+        },
+        "res": {
+            "y_row": 1.63,
+            "default_width": 0.294,
+            "default_height": 0.1
+        },
+        "cap": {
+            "y_row": 1.63,
+            "default_width": 0.294,
+            "default_height": 0.668
+        }
+    },
+    "devices": {
+        "XI158_MM11": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 5.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "Vn2",
+                "G": "EN3B",
+                "S": "DB"
+            },
+            "block": {
+                "instance": "XI158",
+                "subckt": "Transmission_Gate"
+            }
+        },
+        "XI158_MM12": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 5.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "Vn2",
+                "G": "EN3",
+                "S": "DB"
+            },
+            "block": {
+                "instance": "XI158",
+                "subckt": "Transmission_Gate"
+            }
+        },
+        "XI159_MM11": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 5.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "Vn2",
+                "G": "EN3",
+                "S": "DD"
+            },
+            "block": {
+                "instance": "XI159",
+                "subckt": "Transmission_Gate"
+            }
+        },
+        "XI159_MM12": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 5.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "Vn2",
+                "G": "EN3B",
+                "S": "DD"
+            },
+            "block": {
+                "instance": "XI159",
+                "subckt": "Transmission_Gate"
+            }
+        },
+        "XI154_MM11": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 5.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "Vp2",
+                "G": "EN3B",
+                "S": "D"
+            },
+            "block": {
+                "instance": "XI154",
+                "subckt": "Transmission_Gate"
+            }
+        },
+        "XI154_MM12": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 5.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "Vp2",
+                "G": "EN3",
+                "S": "D"
+            },
+            "block": {
+                "instance": "XI154",
+                "subckt": "Transmission_Gate"
+            }
+        },
+        "XI156_MM11": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 5.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "Vp2",
+                "G": "EN3",
+                "S": "DDB"
+            },
+            "block": {
+                "instance": "XI156",
+                "subckt": "Transmission_Gate"
+            }
+        },
+        "XI156_MM12": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 5.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "Vp2",
+                "G": "EN3B",
+                "S": "DDB"
+            },
+            "block": {
+                "instance": "XI156",
+                "subckt": "Transmission_Gate"
+            }
+        },
+        "XI160_MM11": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 5.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "Vn3",
+                "G": "EN6",
+                "S": "DD"
+            },
+            "block": {
+                "instance": "XI160",
+                "subckt": "Transmission_Gate"
+            }
+        },
+        "XI160_MM12": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 5.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "Vn3",
+                "G": "EN6B",
+                "S": "DD"
+            },
+            "block": {
+                "instance": "XI160",
+                "subckt": "Transmission_Gate"
+            }
+        },
+        "XI161_MM11": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 5.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "Vn3",
+                "G": "EN6B",
+                "S": "DB"
+            },
+            "block": {
+                "instance": "XI161",
+                "subckt": "Transmission_Gate"
+            }
+        },
+        "XI161_MM12": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 5.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "Vn3",
+                "G": "EN6",
+                "S": "DB"
+            },
+            "block": {
+                "instance": "XI161",
+                "subckt": "Transmission_Gate"
+            }
+        },
+        "XI162_MM11": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 5.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "Vp3",
+                "G": "EN6B",
+                "S": "D"
+            },
+            "block": {
+                "instance": "XI162",
+                "subckt": "Transmission_Gate"
+            }
+        },
+        "XI162_MM12": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 5.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "Vp3",
+                "G": "EN6",
+                "S": "D"
+            },
+            "block": {
+                "instance": "XI162",
+                "subckt": "Transmission_Gate"
+            }
+        },
+        "XI163_MM11": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 5.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "Vp3",
+                "G": "EN6",
+                "S": "DDB"
+            },
+            "block": {
+                "instance": "XI163",
+                "subckt": "Transmission_Gate"
+            }
+        },
+        "XI163_MM12": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 5.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "Vp3",
+                "G": "EN6B",
+                "S": "DDB"
+            },
+            "block": {
+                "instance": "XI163",
+                "subckt": "Transmission_Gate"
+            }
+        },
+        "MM181": {
+            "type": "nmos",
+            "m": 6,
+            "nf": 1,
+            "nfin": 5.0,
+            "l": 1e-07,
+            "terminal_nets": {
+                "D": "IB",
+                "G": "IB",
+                "S": "VSS"
+            }
+        },
+        "MMM3": {
+            "type": "nmos",
+            "m": 2,
+            "nf": 1,
+            "nfin": 5.0,
+            "l": 1.0000000000000001e-07,
+            "terminal_nets": {
+                "D": "net69",
+                "G": "IB",
+                "S": "VSS"
+            }
+        },
+        "MM40": {
+            "type": "nmos",
+            "m": 2,
+            "nf": 1,
+            "nfin": 5.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "TX_OUTP",
+                "G": "Vn3",
+                "S": "net69"
+            }
+        },
+        "MM37": {
+            "type": "nmos",
+            "m": 4,
+            "nf": 1,
+            "nfin": 5.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "TX_OUTP",
+                "G": "Vn2",
+                "S": "net64"
+            }
+        },
+        "MM39": {
+            "type": "nmos",
+            "m": 2,
+            "nf": 1,
+            "nfin": 5.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "TX_OUTN",
+                "G": "Vp3",
+                "S": "net69"
+            }
+        },
+        "MM36": {
+            "type": "nmos",
+            "m": 4,
+            "nf": 1,
+            "nfin": 5.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "TX_OUTN",
+                "G": "Vp2",
+                "S": "net64"
+            }
+        },
+        "MMM1": {
+            "type": "nmos",
+            "m": 18,
+            "nf": 1,
+            "nfin": 5.0,
+            "l": 1.0000000000000001e-07,
+            "terminal_nets": {
+                "D": "net12",
+                "G": "IB",
+                "S": "VSS"
+            }
+        },
+        "MMM2": {
+            "type": "nmos",
+            "m": 4,
+            "nf": 1,
+            "nfin": 5.0,
+            "l": 1.0000000000000001e-07,
+            "terminal_nets": {
+                "D": "net64",
+                "G": "IB",
+                "S": "VSS"
+            }
+        },
+        "MM94": {
+            "type": "nmos",
+            "m": 10,
+            "nf": 1,
+            "nfin": 5.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "TX_OUTP",
+                "G": "DB",
+                "S": "net12"
+            }
+        },
+        "MM2": {
+            "type": "nmos",
+            "m": 10,
+            "nf": 1,
+            "nfin": 5.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "TX_OUTN",
+                "G": "D",
+                "S": "net12"
+            }
+        },
+        "XI164_MM7": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 5.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "EN3B",
+                "G": "EN3",
+                "S": "VDD"
+            },
+            "block": {
+                "instance": "XI164",
+                "subckt": "Inverter"
+            }
+        },
+        "XI164_MM8": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 5.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "EN3B",
+                "G": "EN3",
+                "S": "VSS"
+            },
+            "block": {
+                "instance": "XI164",
+                "subckt": "Inverter"
+            }
+        },
+        "XI166_MM7": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 5.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "EN6B",
+                "G": "EN6",
+                "S": "VDD"
+            },
+            "block": {
+                "instance": "XI166",
+                "subckt": "Inverter"
+            }
+        },
+        "XI166_MM8": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 5.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "EN6B",
+                "G": "EN6",
+                "S": "VSS"
+            },
+            "block": {
+                "instance": "XI166",
+                "subckt": "Inverter"
+            }
+        },
+        "rR183": {
+            "type": "res",
+            "m": 1.0,
+            "nf": 1,
+            "nfin": 1,
+            "l": 3.72e-07,
+            "terminal_nets": {
+                "1": "VDD",
+                "2": "TX_OUTP"
+            }
+        },
+        "rR182": {
+            "type": "res",
+            "m": 1.0,
+            "nf": 1,
+            "nfin": 1,
+            "l": 3.72e-07,
+            "terminal_nets": {
+                "1": "VDD",
+                "2": "TX_OUTN"
+            }
+        }
+    },
+    "connectivity": {
+        "nets": {
+            "DB": [
+                "MM94_m1",
+                "MM94_m10",
+                "MM94_m2",
+                "MM94_m3",
+                "MM94_m4",
+                "MM94_m5",
+                "MM94_m6",
+                "MM94_m7",
+                "MM94_m8",
+                "MM94_m9",
+                "XI158_MM11",
+                "XI158_MM12",
+                "XI161_MM11",
+                "XI161_MM12"
+            ],
+            "Vn2": [
+                "MM37_m1",
+                "MM37_m2",
+                "MM37_m3",
+                "MM37_m4",
+                "XI158_MM11",
+                "XI158_MM12",
+                "XI159_MM11",
+                "XI159_MM12"
+            ],
+            "EN3B": [
+                "XI154_MM11",
+                "XI156_MM12",
+                "XI158_MM11",
+                "XI159_MM12",
+                "XI164_MM7",
+                "XI164_MM8"
+            ],
+            "EN3": [
+                "XI154_MM12",
+                "XI156_MM11",
+                "XI158_MM12",
+                "XI159_MM11",
+                "XI164_MM7",
+                "XI164_MM8"
+            ],
+            "DD": [
+                "XI159_MM11",
+                "XI159_MM12",
+                "XI160_MM11",
+                "XI160_MM12"
+            ],
+            "D": [
+                "MM2_m1",
+                "MM2_m10",
+                "MM2_m2",
+                "MM2_m3",
+                "MM2_m4",
+                "MM2_m5",
+                "MM2_m6",
+                "MM2_m7",
+                "MM2_m8",
+                "MM2_m9",
+                "XI154_MM11",
+                "XI154_MM12",
+                "XI162_MM11",
+                "XI162_MM12"
+            ],
+            "Vp2": [
+                "MM36_m1",
+                "MM36_m2",
+                "MM36_m3",
+                "MM36_m4",
+                "XI154_MM11",
+                "XI154_MM12",
+                "XI156_MM11",
+                "XI156_MM12"
+            ],
+            "DDB": [
+                "XI156_MM11",
+                "XI156_MM12",
+                "XI163_MM11",
+                "XI163_MM12"
+            ],
+            "EN6": [
+                "XI160_MM11",
+                "XI161_MM12",
+                "XI162_MM12",
+                "XI163_MM11",
+                "XI166_MM7",
+                "XI166_MM8"
+            ],
+            "Vn3": [
+                "MM40_m1",
+                "MM40_m2",
+                "XI160_MM11",
+                "XI160_MM12",
+                "XI161_MM11",
+                "XI161_MM12"
+            ],
+            "EN6B": [
+                "XI160_MM12",
+                "XI161_MM11",
+                "XI162_MM11",
+                "XI163_MM12",
+                "XI166_MM7",
+                "XI166_MM8"
+            ],
+            "Vp3": [
+                "MM39_m1",
+                "MM39_m2",
+                "XI162_MM11",
+                "XI162_MM12",
+                "XI163_MM11",
+                "XI163_MM12"
+            ],
+            "IB": [
+                "MM181_m1",
+                "MM181_m2",
+                "MM181_m3",
+                "MM181_m4",
+                "MM181_m5",
+                "MM181_m6",
+                "MMM1_m1",
+                "MMM1_m10",
+                "MMM1_m11",
+                "MMM1_m12",
+                "MMM1_m13",
+                "MMM1_m14",
+                "MMM1_m15",
+                "MMM1_m16",
+                "MMM1_m17",
+                "MMM1_m18",
+                "MMM1_m2",
+                "MMM1_m3",
+                "MMM1_m4",
+                "MMM1_m5",
+                "MMM1_m6",
+                "MMM1_m7",
+                "MMM1_m8",
+                "MMM1_m9",
+                "MMM2_m1",
+                "MMM2_m2",
+                "MMM2_m3",
+                "MMM2_m4",
+                "MMM3_m1",
+                "MMM3_m2"
+            ],
+            "net69": [
+                "MM39_m1",
+                "MM39_m2",
+                "MM40_m1",
+                "MM40_m2",
+                "MMM3_m1",
+                "MMM3_m2"
+            ],
+            "TX_OUTP": [
+                "MM37_m1",
+                "MM37_m2",
+                "MM37_m3",
+                "MM37_m4",
+                "MM40_m1",
+                "MM40_m2",
+                "MM94_m1",
+                "MM94_m10",
+                "MM94_m2",
+                "MM94_m3",
+                "MM94_m4",
+                "MM94_m5",
+                "MM94_m6",
+                "MM94_m7",
+                "MM94_m8",
+                "MM94_m9",
+                "rR183"
+            ],
+            "net64": [
+                "MM36_m1",
+                "MM36_m2",
+                "MM36_m3",
+                "MM36_m4",
+                "MM37_m1",
+                "MM37_m2",
+                "MM37_m3",
+                "MM37_m4",
+                "MMM2_m1",
+                "MMM2_m2",
+                "MMM2_m3",
+                "MMM2_m4"
+            ],
+            "TX_OUTN": [
+                "MM2_m1",
+                "MM2_m10",
+                "MM2_m2",
+                "MM2_m3",
+                "MM2_m4",
+                "MM2_m5",
+                "MM2_m6",
+                "MM2_m7",
+                "MM2_m8",
+                "MM2_m9",
+                "MM36_m1",
+                "MM36_m2",
+                "MM36_m3",
+                "MM36_m4",
+                "MM39_m1",
+                "MM39_m2",
+                "rR182"
+            ],
+            "net12": [
+                "MM2_m1",
+                "MM2_m10",
+                "MM2_m2",
+                "MM2_m3",
+                "MM2_m4",
+                "MM2_m5",
+                "MM2_m6",
+                "MM2_m7",
+                "MM2_m8",
+                "MM2_m9",
+                "MM94_m1",
+                "MM94_m10",
+                "MM94_m2",
+                "MM94_m3",
+                "MM94_m4",
+                "MM94_m5",
+                "MM94_m6",
+                "MM94_m7",
+                "MM94_m8",
+                "MM94_m9",
+                "MMM1_m1",
+                "MMM1_m10",
+                "MMM1_m11",
+                "MMM1_m12",
+                "MMM1_m13",
+                "MMM1_m14",
+                "MMM1_m15",
+                "MMM1_m16",
+                "MMM1_m17",
+                "MMM1_m18",
+                "MMM1_m2",
+                "MMM1_m3",
+                "MMM1_m4",
+                "MMM1_m5",
+                "MMM1_m6",
+                "MMM1_m7",
+                "MMM1_m8",
+                "MMM1_m9"
+            ]
+        }
+    },
+    "drc_rules": {
+        "fin_pitch": 0.014,
+        "row_pitch": 0.668,
+        "device_pitch": 0.294,
+        "abut_pitch": 0.07
+    },
+    "blocks": {
+        "XI158": {
+            "subckt": "Transmission_Gate",
+            "devices": [
+                "XI158_MM11_f1",
+                "XI158_MM11_f2",
+                "XI158_MM11_f3",
+                "XI158_MM11_f4",
+                "XI158_MM12_f1",
+                "XI158_MM12_f2",
+                "XI158_MM12_f3",
+                "XI158_MM12_f4"
+            ]
+        },
+        "XI159": {
+            "subckt": "Transmission_Gate",
+            "devices": [
+                "XI159_MM11_f1",
+                "XI159_MM11_f2",
+                "XI159_MM11_f3",
+                "XI159_MM11_f4",
+                "XI159_MM12_f1",
+                "XI159_MM12_f2",
+                "XI159_MM12_f3",
+                "XI159_MM12_f4"
+            ]
+        },
+        "XI154": {
+            "subckt": "Transmission_Gate",
+            "devices": [
+                "XI154_MM11_f1",
+                "XI154_MM11_f2",
+                "XI154_MM11_f3",
+                "XI154_MM11_f4",
+                "XI154_MM12_f1",
+                "XI154_MM12_f2",
+                "XI154_MM12_f3",
+                "XI154_MM12_f4"
+            ]
+        },
+        "XI156": {
+            "subckt": "Transmission_Gate",
+            "devices": [
+                "XI156_MM11_f1",
+                "XI156_MM11_f2",
+                "XI156_MM11_f3",
+                "XI156_MM11_f4",
+                "XI156_MM12_f1",
+                "XI156_MM12_f2",
+                "XI156_MM12_f3",
+                "XI156_MM12_f4"
+            ]
+        },
+        "XI160": {
+            "subckt": "Transmission_Gate",
+            "devices": [
+                "XI160_MM11_f1",
+                "XI160_MM11_f2",
+                "XI160_MM11_f3",
+                "XI160_MM11_f4",
+                "XI160_MM12_f1",
+                "XI160_MM12_f2",
+                "XI160_MM12_f3",
+                "XI160_MM12_f4"
+            ]
+        },
+        "XI161": {
+            "subckt": "Transmission_Gate",
+            "devices": [
+                "XI161_MM11_f1",
+                "XI161_MM11_f2",
+                "XI161_MM11_f3",
+                "XI161_MM11_f4",
+                "XI161_MM12_f1",
+                "XI161_MM12_f2",
+                "XI161_MM12_f3",
+                "XI161_MM12_f4"
+            ]
+        },
+        "XI162": {
+            "subckt": "Transmission_Gate",
+            "devices": [
+                "XI162_MM11_f1",
+                "XI162_MM11_f2",
+                "XI162_MM11_f3",
+                "XI162_MM11_f4",
+                "XI162_MM12_f1",
+                "XI162_MM12_f2",
+                "XI162_MM12_f3",
+                "XI162_MM12_f4"
+            ]
+        },
+        "XI163": {
+            "subckt": "Transmission_Gate",
+            "devices": [
+                "XI163_MM11_f1",
+                "XI163_MM11_f2",
+                "XI163_MM11_f3",
+                "XI163_MM11_f4",
+                "XI163_MM12_f1",
+                "XI163_MM12_f2",
+                "XI163_MM12_f3",
+                "XI163_MM12_f4"
+            ]
+        },
+        "XI164": {
+            "subckt": "Inverter",
+            "devices": [
+                "XI164_MM7",
+                "XI164_MM8"
+            ]
+        },
+        "XI166": {
+            "subckt": "Inverter",
+            "devices": [
+                "XI166_MM7",
+                "XI166_MM8"
+            ]
+        }
+    }
+}

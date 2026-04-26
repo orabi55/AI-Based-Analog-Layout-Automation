@@ -12,9 +12,17 @@ Keyword routing:
   All other queries use the standard single-agent LLMWorker path.
 """
 
+import os
 import re
 import json
 from datetime import datetime
+
+# Set default Vertex AI env vars so the chat works without opening
+# the AI Model Settings dialog first.
+if "VERTEX_PROJECT_ID" not in os.environ:
+    os.environ["VERTEX_PROJECT_ID"] = "project-03484c74-0ab0-4f9e-b48"
+if "VERTEX_LOCATION" not in os.environ:
+    os.environ["VERTEX_LOCATION"] = "global"
 
 from PySide6.QtWidgets import (
     QWidget,
@@ -24,12 +32,13 @@ from PySide6.QtWidgets import (
     QPushButton,
     QLabel,
     QFrame,
+    QComboBox,
 )
 from PySide6.QtCore import Qt, Signal, QTimer, QThread, Slot
 from PySide6.QtGui import QFont
 
-from ai_agent.ai_chat_bot.llm_worker import OrchestratorWorker, build_system_prompt
-from ai_agent.ai_chat_bot.cmd_utils import _extract_cmd_blocks
+from ai_agent.llm.workers import OrchestratorWorker, build_system_prompt
+from ai_agent.tools.cmd_parser import extract_cmd_blocks
 try:
     from .icons import icon_panel_toggle
 except ImportError:
@@ -128,7 +137,7 @@ class ChatPanel(QWidget):
         self._awaiting_visual_resume = False
 
         # Model preferences (synced from MainWindow)
-        self.selected_model = "Gemini"
+        self.selected_model = "VertexGemini"
         
 
         # --- Worker-Object Pattern: QThread + OrchestratorWorker ---
@@ -149,6 +158,8 @@ class ChatPanel(QWidget):
         # Human-in-the-loop pause signal
         self._llm_worker.topology_ready_for_review.connect(self._on_topology_review)
         self._llm_worker.visual_viewer_signal.connect(self._on_visual_viewer_signal)  # reuse same handler for viewer interrupts
+        # Intent classification → switch thinking animation
+        self._llm_worker.intent_classified.connect(self._on_intent_classified)
 
         # Start the worker thread's event loop
         self._worker_thread.start()
@@ -202,6 +213,48 @@ class ChatPanel(QWidget):
 
         header_layout.addStretch()
 
+        # Model selector dropdown
+        self._model_combo = QComboBox()
+        self._model_combo.addItems(["VertexGemini", "Gemini", "Alibaba", "VertexClaude"])
+        self._model_combo.setCurrentText(self.selected_model)
+        self._model_combo.setFixedHeight(26)
+        self._model_combo.setToolTip("Select AI model for chat")
+        self._model_combo.setStyleSheet("""
+            QComboBox {
+                background-color: #1a2536;
+                color: #b0c0d0;
+                border: 1px solid #2d3f54;
+                border-radius: 4px;
+                padding: 2px 8px;
+                font-size: 10px;
+                font-family: 'Segoe UI';
+                min-width: 100px;
+            }
+            QComboBox:hover {
+                border-color: #4a90d9;
+            }
+            QComboBox::drop-down {
+                border: none;
+                width: 18px;
+            }
+            QComboBox::down-arrow {
+                image: none;
+                border-left: 4px solid transparent;
+                border-right: 4px solid transparent;
+                border-top: 5px solid #6080a0;
+                margin-right: 5px;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #1a2536;
+                color: #b0c0d0;
+                border: 1px solid #2d3f54;
+                selection-background-color: #2a3a52;
+                selection-color: #e0e8f0;
+            }
+        """)
+        self._model_combo.currentTextChanged.connect(self._on_model_changed)
+        header_layout.addWidget(self._model_combo)
+
         # Clear chat button
         clear_btn = QPushButton("🗑️")
         clear_btn.setFixedSize(30, 30)
@@ -251,7 +304,8 @@ class ChatPanel(QWidget):
         self.chat_display = QTextEdit()
         self.chat_display.setReadOnly(True)
         self.chat_display.setTextInteractionFlags(
-            Qt.TextInteractionFlag.NoTextInteraction
+            Qt.TextInteractionFlag.TextSelectableByMouse
+            | Qt.TextInteractionFlag.TextSelectableByKeyboard
         )
         self.chat_display.setHorizontalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff
@@ -344,36 +398,40 @@ class ChatPanel(QWidget):
     # -----------------------------------------
     @staticmethod
     def _md_to_html(text):
-        """Convert basic markdown to HTML."""
+        """Convert basic markdown to HTML (dark-theme aware)."""
         text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
         # Code blocks
         text = re.sub(
             r'```(\w*)\n(.*?)```',
-            r'<pre style="background:#2d2d2d;color:#f8f8f2;padding:8px;'
-            r'border-radius:6px;font-size:12px;overflow-x:auto;">\2</pre>',
+            r'<pre style="background:#1a2030;color:#e0e8f0;padding:10px 12px;'
+            r'border-radius:8px;font-size:12px;font-family:Consolas,monospace;'
+            r'border:1px solid #2d3548;overflow-x:auto;margin:6px 0;">\2</pre>',
             text, flags=re.DOTALL,
         )
-        # Inline code
+        # Inline code (dark-theme)
         text = re.sub(
             r'`([^`]+)`',
-            r'<code style="background:#e8ecf0;padding:1px 5px;'
-            r'border-radius:3px;font-size:12px;">\1</code>',
+            r'<code style="background:#1e2a3a;color:#7cb7ff;padding:2px 6px;'
+            r'border-radius:4px;font-size:12px;font-family:Consolas,monospace;'
+            r'border:1px solid #2d3f54;">\1</code>',
             text,
         )
         # Bold
-        text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
+        text = re.sub(r'\*\*(.+?)\*\*', r'<b style="color:#e8f0ff;">\1</b>', text)
         # Italic
         text = re.sub(r'\*(.+?)\*', r'<i>\1</i>', text)
         # Bullet lists
         text = re.sub(
             r'(?m)^[\-\*]\s+(.+)$',
-            r'<div style="margin:2px 0 2px 12px;">• \1</div>',
+            r'<div style="margin:3px 0 3px 14px;padding-left:2px;">'
+            r'<span style="color:#4a90d9;">•</span> \1</div>',
             text,
         )
         # Numbered lists
         text = re.sub(
             r'(?m)^(\d+)\.\s+(.+)$',
-            r'<div style="margin:2px 0 2px 12px;">\1. \2</div>',
+            r'<div style="margin:3px 0 3px 14px;">'
+            r'<span style="color:#4a90d9;">\1.</span> \2</div>',
             text,
         )
         # Line breaks
@@ -385,14 +443,23 @@ class ChatPanel(QWidget):
     # -----------------------------------------
     def _show_welcome(self):
         welcome = (
-            "Welcome! I'm your layout assistant. Here's what I can do:<br><br>"
-            "<div style='margin-left:12px;'>"
-            "• <b>Swap devices</b> — \"Swap MM28 with MM25\"<br>"
-            "• <b>Move devices</b> — \"Move MM3 to x=0.5 y=0.3\"<br>"
-            "• <b>Analyze layout</b> — \"How many NMOS devices?\"<br>"
-            "• <b>Optimize</b> — \"Suggest a better placement\"<br>"
+            "<div style='margin-bottom:6px;'>"
+            "<b style='color:#7cb7ff;font-size:14px;'>Welcome to the AI Layout Assistant</b>"
+            "</div>"
+            "I can help you with your analog IC layout. Here are some things to try:<br><br>"
+            "<div style='margin-left:8px;'>"
+            "<div style='margin:4px 0;'><span style='color:#4a90d9;'>◆</span> "
+            "<b>Swap</b> — <i style='color:#8899aa;'>\"Swap MM28 with MM25\"</i></div>"
+            "<div style='margin:4px 0;'><span style='color:#4a90d9;'>◆</span> "
+            "<b>Move</b> — <i style='color:#8899aa;'>\"Move MM3 to x=0.5 y=0.3\"</i></div>"
+            "<div style='margin:4px 0;'><span style='color:#4a90d9;'>◆</span> "
+            "<b>Analyze</b> — <i style='color:#8899aa;'>\"How many NMOS devices?\"</i></div>"
+            "<div style='margin:4px 0;'><span style='color:#4a90d9;'>◆</span> "
+            "<b>Optimize</b> — <i style='color:#8899aa;'>\"Suggest a better placement\"</i></div>"
+            "<div style='margin:4px 0;'><span style='color:#4a90d9;'>◆</span> "
+            "<b>Add dummies</b> — <i style='color:#8899aa;'>\"Add 2 nmos dummies on left\"</i></div>"
             "</div><br>"
-            "<i>Tip: I remember our conversation, so feel free to ask follow-ups!</i>"
+            "<div style='color:#5a6d82;font-size:11px;'>💡 I remember our conversation — ask follow-ups anytime.</div>"
         )
         self._append_bubble("ai", welcome, is_html=True)
 
@@ -504,8 +571,11 @@ class ChatPanel(QWidget):
                 self._awaiting_visual_resume = False
                 return
 
-            # Layout loaded → always orchestrate (classifier handles routing)
-            self._is_orchestrated = True
+            # Layout loaded → use orchestrator with classifier routing.
+            # Set _is_orchestrated = False initially; only abstract intents
+            # trigger the pipeline stage animation. The classifier runs
+            # server-side and routes to chat/question/concrete/abstract.
+            self._is_orchestrated = False
             self._call_orchestrator(text)
         else:
             # No layout loaded → single-agent mode
@@ -518,6 +588,32 @@ class ChatPanel(QWidget):
         self.chat_display.clear()
         self._chat_history.clear()
         self._show_welcome()
+
+    def _on_model_changed(self, model_name: str):
+        """Handle model selection change from the dropdown."""
+        self.selected_model = model_name
+        print(f"[CHAT] Model changed to: {model_name}")
+
+    @Slot(str)
+    def _on_intent_classified(self, intent: str):
+        """Switch the thinking animation based on the classified intent.
+
+        For 'abstract' intents, activate the 4-stage pipeline animation.
+        For chat/question/concrete, keep the simple 'Thinking...' dots.
+        """
+        if intent == "abstract":
+            # Switch to pipeline stage animation
+            self._is_orchestrated = True
+            self._stop_thinking()
+            self._remove_last_message()
+            # Restart with pipeline stage labels
+            self._thinking_dots = 0
+            self._thinking_stage = 0
+            label = _ORCHESTRATOR_STAGES[0][1]
+            self._append_bubble("ai", label)
+            self._thinking_timer = QTimer(self)
+            self._thinking_timer.timeout.connect(self._animate_thinking)
+            self._thinking_timer.start(3800)
 
     # keep backward-compat for external callers (main.py uses this)
     def _append_message(self, sender, text, bg_color, text_color):
@@ -844,7 +940,7 @@ class ChatPanel(QWidget):
         display_text = re.sub(pattern, '', text, flags=re.DOTALL | re.IGNORECASE)
         
         # Use orchestrator's hardened parser to harvest robust command dicts
-        commands = _extract_cmd_blocks(text)
+        commands = extract_cmd_blocks(text)
         return display_text, commands
 
     def _on_llm_error(self, error_text):
@@ -853,9 +949,15 @@ class ChatPanel(QWidget):
         self._user_cmds_executed = False          # reset so next turn works
         self._awaiting_strategy_resume = False
         self._awaiting_visual_resume = False
-        err_msg = f"⚠️ Error: {error_text}"
-        self._chat_history.append({"role": "assistant", "content": err_msg})
-        self._append_bubble("ai", err_msg)
+        # Show errors in a distinct warning style
+        err_html = (
+            f'<div style="background:#2d1a1a;border:1px solid #5a2a2a;'
+            f'border-radius:8px;padding:8px 12px;margin:2px 0;">'
+            f'<span style="color:#ff6b6b;">⚠️ Error:</span> '
+            f'<span style="color:#d0a0a0;">{error_text}</span></div>'
+        )
+        self._chat_history.append({"role": "assistant", "content": f"Error: {error_text}"})
+        self._append_bubble("ai", err_html, is_html=True)
 
     @Slot(dict)
     def _on_visual_viewer_signal(self, payload):

@@ -1,22 +1,49 @@
 {
-  "permissions": {
-    "allow": [
-      "Bash(python *)",
-      "Bash(type *)",
-      "Bash(powershell *)",
-      "Bash(timeout *)",
-      "Bash(del *)",
-      "Bash(git add *)",
-      "Bash(git commit *)",
-      "Bash(git push *)",
-      "Bash(move *)",
-      "Bash(rmdir *)",
-      "Bash(ollama *)",
-      "Bash(git pull *)",
-      "Bash(git merge *)",
-      "Bash(git reset *)",
-      "Bash(git clean *)"
+  "$version": 3,
+  "security": {
+    "auth": {
+      "selectedType": "openai"
+    }
+  },
+  "env": {
+    "DASHSCOPE_API_KEY": "sk-567af8d3cf51494faa346579ba523add",
+    "TOGETHER_API_KEY": "tgp_v1_lirYTn8r6Hw39kROAGmOybiFIUJhf7LZrOn0atA-Ys0"
+  },
+  "modelProviders": {
+    "openai": [
+      {
+        "id": "qwen-max",
+        "name": "qwen-max (Alibaba)",
+        "baseUrl": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+        "envKey": "DASHSCOPE_API_KEY"
+      },
+      {
+        "id": "qwen3-max",
+        "name": "Qwen 3 Max (Alibaba)",
+        "baseUrl": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+        "envKey": "DASHSCOPE_API_KEY"
+      },
+      {
+        "id": "qwq-plus",
+        "name": "QwQ Thinking (Alibaba)",
+        "baseUrl": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+        "envKey": "DASHSCOPE_API_KEY"
+      },
+      {
+        "id": "Qwen/Qwen3-Coder-Next",
+        "name": "Qwen 3 Coder Next (Together)",
+        "baseUrl": "https://api.together.xyz/v1",
+        "envKey": "TOGETHER_API_KEY"
+      },
+      {
+        "id": "Qwen/Qwen2.5-Coder-32B-Instruct",
+        "name": "Qwen 2.5 Coder 32B (Together)",
+        "baseUrl": "https://api.together.xyz/v1",
+        "envKey": "TOGETHER_API_KEY"
+      }
     ]
   },
-  "$version": 3
+  "model": {
+    "name": "qwen-max"
+  }
 }

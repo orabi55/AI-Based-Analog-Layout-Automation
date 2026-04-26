@@ -113,6 +113,9 @@ class AIModelSelectionDialog(QDialog):
         lbl.setStyleSheet("font-weight: bold;")
         model_layout.addRow(lbl, self.model_combo)
         main_layout.addLayout(model_layout)
+        
+        # Default to VertexGemini (index 2)
+        self.model_combo.setCurrentIndex(2)
 
         # ── Stacked Widget for Model Settings ────────────────
         self.settings_stack = QStackedWidget()
@@ -167,7 +170,7 @@ class AIModelSelectionDialog(QDialog):
 
 
         self.check_abutment = QCheckBox("Enable Abutment (Diffusion Sharing)")
-        self.check_abutment.setChecked(True)
+        self.check_abutment.setChecked(False)
         self.check_abutment.setStyleSheet("color: #c8d0dc; font-size: 10pt; font-weight: normal; spacing: 10px;")
         options_layout.addWidget(self.check_abutment)
 
