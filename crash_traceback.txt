@@ -1,5 +1,5 @@
 Traceback (most recent call last):
-  File "D:\Senior 2\Layout_Project\Automation\new_main\AI-Based-Analog-Layout-Automation\symbolic_editor\dialogs\ai_model_dialog.py", line 243, in _on_model_changed
-    self.settings_stack.setCurrentIndex(index)
-    ^^^^^^^^^^^^^^^^^^^
-AttributeError: 'AIModelSelectionDialog' object has no attribute 'settings_stack'
+  File "D:\Senior 2\Layout_Project\Automation\new_main\AI-Based-Analog-Layout-Automation\symbolic_editor\editor_view.py", line 307, in set_net_labels_visible
+    item.set_net_labels(nets, self._color_seed)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: DeviceItem.set_net_labels() takes 2 positional arguments but 3 were given

@@ -30,6 +30,7 @@ class DeviceTreePanel(QWidget):
     block_selected = Signal(str)
     toggle_requested = Signal()
     net_view_toggled = Signal(bool)  # True when Nets tab is active
+    net_colorize_toggled = Signal(bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -134,6 +135,17 @@ class DeviceTreePanel(QWidget):
         tab_layout.addWidget(self.tab_groups)
 
         tab_layout.addStretch()
+
+        from PySide6.QtWidgets import QCheckBox
+        self.check_colorize_nets = QCheckBox("Colorize")
+        self.check_colorize_nets.setStyleSheet(
+            "QCheckBox { color: #808896; font-size: 9pt; margin-right: 4px; }"
+            "QCheckBox::indicator { width: 14px; height: 14px; }"
+        )
+        self.check_colorize_nets.setVisible(False)
+        self.check_colorize_nets.toggled.connect(self.net_colorize_toggled.emit)
+        tab_layout.addWidget(self.check_colorize_nets)
+
         layout.addWidget(tab_bar)
 
         self.tree = QTreeWidget()
@@ -198,6 +210,10 @@ class DeviceTreePanel(QWidget):
         self.tab_instances.setChecked(tab_name == "instances")
         self.tab_nets.setChecked(tab_name == "nets")
         self.tab_groups.setChecked(tab_name == "groups")
+        
+        # Show colorize option only in nets tab
+        self.check_colorize_nets.setVisible(tab_name == "nets")
+        
         self.load_devices(self._nodes, blocks=self._blocks)
         self.net_view_toggled.emit(tab_name == "nets")
 

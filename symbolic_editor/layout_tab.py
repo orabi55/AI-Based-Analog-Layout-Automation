@@ -233,6 +233,7 @@ class LayoutEditorTab(QWidget):
         # Panel toggles
         self.device_tree.toggle_requested.connect(self._toggle_device_tree)
         self.device_tree.net_view_toggled.connect(self.editor.set_net_labels_visible)
+        self.device_tree.net_colorize_toggled.connect(self.editor.set_net_colorize_enabled)
         self.chat_panel.toggle_requested.connect(self._toggle_chat_panel)
 
         # Loading overlay (per-tab)
