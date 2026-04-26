@@ -310,33 +310,6 @@ class MainWindow(QMainWindow):
         edit_menu.addAction("&Delete Selected", lambda: self._fwd("do_delete"), QKeySequence("Del"))
         edit_menu.addSeparator()
 
-        # Close Row Gap — embedded checkbox + spin
-        self._act_close_row_gap = QCheckBox(" Close Row Gap")
-        self._act_close_row_gap.setStyleSheet(
-            "QCheckBox { color: #c8d0dc; font-family: 'Segoe UI'; padding: 4px 8px; }"
-        )
-        self._row_gap_spin = QDoubleSpinBox()
-        self._row_gap_spin.setRange(0.0, 10.0)
-        self._row_gap_spin.setSingleStep(0.1)
-        self._row_gap_spin.setValue(0.0)
-        self._row_gap_spin.setSuffix(" µm")
-        self._row_gap_spin.setEnabled(False)
-        self._row_gap_spin.setFixedWidth(100)
-        self._row_gap_spin.setStyleSheet(
-            "QDoubleSpinBox { background: #1a1f2b; color: #c8d0dc; border: 1px solid #2d3548; "
-            "border-radius: 4px; padding: 2px 6px; }"
-        )
-        w_gap = QWidget()
-        h_gap = QHBoxLayout(w_gap)
-        h_gap.setContentsMargins(8, 2, 8, 2)
-        h_gap.addWidget(self._act_close_row_gap)
-        h_gap.addWidget(self._row_gap_spin)
-        wa_gap = QWidgetAction(self)
-        wa_gap.setDefaultWidget(w_gap)
-        edit_menu.addAction(wa_gap)
-        self._act_close_row_gap.toggled.connect(self._on_close_row_gap_toggled)
-        self._row_gap_spin.valueChanged.connect(self._on_row_gap_spin_changed)
-
         # ── View ─────────────────────────────────────────────────
         view_menu = mb.addMenu("&View")
         view_menu.addAction("Fit to View", lambda: self._fwd_editor("fit_to_view"))

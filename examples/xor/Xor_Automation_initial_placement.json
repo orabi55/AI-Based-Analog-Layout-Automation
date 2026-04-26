@@ -15,8 +15,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.47,
-                "y": -3.057,
+                "x": 0.0,
+                "y": 0.0,
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
@@ -38,7 +38,7 @@
             },
             "geometry": {
                 "x": 0.588,
-                "y": -3.057,
+                "y": 0.0,
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
@@ -59,8 +59,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 0.294,
-                "y": -3.057,
+                "x": 1.176,
+                "y": 0.0,
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
@@ -81,8 +81,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.176,
-                "y": -3.057,
+                "x": 1.764,
+                "y": 0.0,
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
@@ -103,8 +103,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 0.882,
-                "y": -3.057,
+                "x": 2.352,
+                "y": 0.0,
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
@@ -125,8 +125,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 0.0,
-                "y": -3.057,
+                "x": 2.94,
+                "y": 0.0,
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
@@ -147,8 +147,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.47,
-                "y": -2.389,
+                "x": 0.0,
+                "y": 0.8,
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
@@ -170,7 +170,7 @@
             },
             "geometry": {
                 "x": 0.588,
-                "y": -2.389,
+                "y": 0.8,
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
@@ -191,8 +191,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 0.294,
-                "y": -2.389,
+                "x": 1.176,
+                "y": 0.8,
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
@@ -213,8 +213,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.176,
-                "y": -2.389,
+                "x": 1.764,
+                "y": 0.8,
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
@@ -235,8 +235,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 0.882,
-                "y": -2.389,
+                "x": 2.352,
+                "y": 0.8,
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
@@ -257,12 +257,192 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 0.0,
-                "y": -2.389,
+                "x": 2.94,
+                "y": 0.8,
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
             }
+        },
+        {
+            "electrical": {
+                "l": 1.4e-08,
+                "multiplier": 1,
+                "nf_per_device": 1,
+                "nfin": 4.0
+            },
+            "geometry": {
+                "height": 0.6680000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 0.294,
+                "y": 0.0
+            },
+            "id": "FILLER_DUMMY_1_nmos",
+            "is_dummy": true,
+            "type": "nmos"
+        },
+        {
+            "electrical": {
+                "l": 1.4e-08,
+                "multiplier": 1,
+                "nf_per_device": 1,
+                "nfin": 4.0
+            },
+            "geometry": {
+                "height": 0.6680000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 0.882,
+                "y": 0.0
+            },
+            "id": "FILLER_DUMMY_2_nmos",
+            "is_dummy": true,
+            "type": "nmos"
+        },
+        {
+            "electrical": {
+                "l": 1.4e-08,
+                "multiplier": 1,
+                "nf_per_device": 1,
+                "nfin": 4.0
+            },
+            "geometry": {
+                "height": 0.6680000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 1.47,
+                "y": 0.0
+            },
+            "id": "FILLER_DUMMY_3_nmos",
+            "is_dummy": true,
+            "type": "nmos"
+        },
+        {
+            "electrical": {
+                "l": 1.4e-08,
+                "multiplier": 1,
+                "nf_per_device": 1,
+                "nfin": 4.0
+            },
+            "geometry": {
+                "height": 0.6680000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 2.058,
+                "y": 0.0
+            },
+            "id": "FILLER_DUMMY_4_nmos",
+            "is_dummy": true,
+            "type": "nmos"
+        },
+        {
+            "electrical": {
+                "l": 1.4e-08,
+                "multiplier": 1,
+                "nf_per_device": 1,
+                "nfin": 4.0
+            },
+            "geometry": {
+                "height": 0.6680000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 2.646,
+                "y": 0.0
+            },
+            "id": "FILLER_DUMMY_5_nmos",
+            "is_dummy": true,
+            "type": "nmos"
+        },
+        {
+            "electrical": {
+                "l": 1.4e-08,
+                "multiplier": 1,
+                "nf_per_device": 1,
+                "nfin": 4.0
+            },
+            "geometry": {
+                "height": 0.6680000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 0.294,
+                "y": 0.8
+            },
+            "id": "FILLER_DUMMY_6_pmos",
+            "is_dummy": true,
+            "type": "pmos"
+        },
+        {
+            "electrical": {
+                "l": 1.4e-08,
+                "multiplier": 1,
+                "nf_per_device": 1,
+                "nfin": 4.0
+            },
+            "geometry": {
+                "height": 0.6680000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 0.882,
+                "y": 0.8
+            },
+            "id": "FILLER_DUMMY_7_pmos",
+            "is_dummy": true,
+            "type": "pmos"
+        },
+        {
+            "electrical": {
+                "l": 1.4e-08,
+                "multiplier": 1,
+                "nf_per_device": 1,
+                "nfin": 4.0
+            },
+            "geometry": {
+                "height": 0.6680000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 1.47,
+                "y": 0.8
+            },
+            "id": "FILLER_DUMMY_8_pmos",
+            "is_dummy": true,
+            "type": "pmos"
+        },
+        {
+            "electrical": {
+                "l": 1.4e-08,
+                "multiplier": 1,
+                "nf_per_device": 1,
+                "nfin": 4.0
+            },
+            "geometry": {
+                "height": 0.6680000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 2.058,
+                "y": 0.8
+            },
+            "id": "FILLER_DUMMY_9_pmos",
+            "is_dummy": true,
+            "type": "pmos"
+        },
+        {
+            "electrical": {
+                "l": 1.4e-08,
+                "multiplier": 1,
+                "nf_per_device": 1,
+                "nfin": 4.0
+            },
+            "geometry": {
+                "height": 0.6680000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 2.646,
+                "y": 0.8
+            },
+            "id": "FILLER_DUMMY_10_pmos",
+            "is_dummy": true,
+            "type": "pmos"
         }
     ],
     "edges": [

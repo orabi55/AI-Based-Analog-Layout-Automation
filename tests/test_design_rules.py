@@ -13,7 +13,7 @@ if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
 from config.design_rules import (
-    PITCH_UM, ROW_PITCH, ROW_HEIGHT_UM, FINGER_PITCH,
+    PITCH_UM, ROW_PITCH, ROW_HEIGHT_UM, ROW_GAP_UM, FINGER_PITCH,
     PMOS_Y, NMOS_Y, PIXELS_PER_UM, BLOCK_GAP_UM, PASSIVE_ROW_GAP_UM,
 )
 
@@ -29,6 +29,9 @@ class TestDesignRules:
 
     def test_pmos_y_is_multiple_of_row_pitch(self):
         assert PMOS_Y % ROW_PITCH == pytest.approx(0.0)
+
+    def test_active_row_gap_is_non_negative(self):
+        assert ROW_GAP_UM >= 0.0
 
     def test_block_gap_is_two_pitches(self):
         assert BLOCK_GAP_UM == PITCH_UM * 2

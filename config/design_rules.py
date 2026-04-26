@@ -14,6 +14,7 @@ Usage:
 PITCH_UM       = 0.294    # µm — standard non-abutted device pitch (diffusion break)
 ROW_PITCH      = 0.668    # µm — standard row-to-row pitch
 ROW_HEIGHT_UM  = 0.668    # µm — height of one NMOS/PMOS row
+ROW_GAP_UM     = 0.000    # µm — no extra vertical gap between adjacent active rows
 FINGER_PITCH   = 0.070    # µm — abutted finger-to-finger pitch
 PMOS_Y         = 0.668    # µm — default initial PMOS row Y
 NMOS_Y         = 0.000    # µm — default initial NMOS row Y

@@ -461,6 +461,14 @@ def _load_all_skills() -> str:
     return "\n\n".join(blocks)
 
 
+def _is_dummy_node(node: dict) -> bool:
+    node_id = str(node.get("id", ""))
+    return bool(
+        node.get("is_dummy")
+        or node_id.startswith(("FILLER_DUMMY_", "DUMMY_matrix_", "EDGE_DUMMY"))
+    )
+
+
 def _compute_matching_and_rows(nodes, edges, terminal_nets, no_abutment=False):
     """Run the finger_grouper pipeline to get matching info and row assignments.
 
@@ -477,8 +485,10 @@ def _compute_matching_and_rows(nodes, edges, terminal_nets, no_abutment=False):
             build_finger_group_section,
         )
 
+        active_nodes = [n for n in nodes if not _is_dummy_node(n)]
+
         # Step 1: collapse fingers to groups
-        group_nodes, group_edges, finger_map = fg_group_fingers(nodes, edges or [])
+        group_nodes, group_edges, finger_map = fg_group_fingers(active_nodes, edges or [])
 
         # Step 2: build group-level terminal nets (needed for matching)
         grp_member_ids: dict = {}
@@ -577,8 +587,8 @@ def build_placement_context(
     group_nodes, finger_map, row_summary_str, matching_section_str, finger_group_str, merged_blocks = \
         _compute_matching_and_rows(nodes, edges, terminal_nets, no_abutment=no_abutment)
 
-    active_fingers = [n for n in nodes if not n.get("is_dummy")]
-    dummy_ids = [n["id"] for n in nodes if n.get("is_dummy")]
+    active_fingers = [n for n in nodes if not _is_dummy_node(n)]
+    dummy_ids = [n["id"] for n in nodes if _is_dummy_node(n)]
 
     lines.append(f"\nTOTAL FINGER INSTANCE COUNT : {len(active_fingers)}")
     lines.append(f"TOTAL LOGICAL DEVICE COUNT  : {len(group_nodes)}")
