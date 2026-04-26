@@ -101,6 +101,7 @@ class SymbolicEditor(QGraphicsView):
 
     device_clicked = Signal(str)
     dummy_toggle_requested = Signal()
+    drag_finished = Signal()
 
     def __init__(self):
         super().__init__()
@@ -693,7 +694,7 @@ class SymbolicEditor(QGraphicsView):
                     group_item.set_child_groups(child_groups)
 
                 # Wire up signals
-                group_item.signals.drag_finished.connect(self._on_hierarchy_drag_finished)
+                group_item.signals.drag_finished.connect(lambda g=group_item: self._on_hierarchy_drag_finished(g))
                 group_item.signals.descend_requested.connect(self._on_hierarchy_descend)
                 group_item.signals.ascend_requested.connect(self._on_hierarchy_ascend)
 
@@ -736,7 +737,7 @@ class SymbolicEditor(QGraphicsView):
                 )
                 
                 # Wire up signals
-                group_item.signals.drag_finished.connect(self._on_hierarchy_drag_finished)
+                group_item.signals.drag_finished.connect(lambda g=group_item: self._on_hierarchy_drag_finished(g))
                 group_item.signals.descend_requested.connect(self._on_hierarchy_descend)
                 group_item.signals.ascend_requested.connect(self._on_hierarchy_ascend)
                 
@@ -976,9 +977,9 @@ class SymbolicEditor(QGraphicsView):
     def _sync_hierarchy_to_nodes(self, group):
         """Update node data when a hierarchy group is moved."""
         try:
-            self._sync_node_positions()
+            self.drag_finished.emit()
         except Exception:
-            logging.warning("Failed to sync hierarchy to nodes", exc_info=True)
+            logging.warning("Failed to emit hierarchy drag_finished signal", exc_info=True)
 
     # NOTE: keyPressEvent is defined later in the class (line ~1351)
     # The actual keyPressEvent handles both Escape (ascend) and D (descend)

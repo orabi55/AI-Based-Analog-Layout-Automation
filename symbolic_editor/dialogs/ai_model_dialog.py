@@ -114,8 +114,6 @@ class AIModelSelectionDialog(QDialog):
         model_layout.addRow(lbl, self.model_combo)
         main_layout.addLayout(model_layout)
         
-        # Default to VertexGemini (index 2)
-        self.model_combo.setCurrentIndex(2)
 
         # ── Stacked Widget for Model Settings ────────────────
         self.settings_stack = QStackedWidget()
@@ -162,6 +160,9 @@ class AIModelSelectionDialog(QDialog):
         self.settings_stack.addWidget(self.vertex_claude_page)
 
         main_layout.addWidget(self.settings_stack)
+
+        # Default to VertexGemini (index 2)
+        self.model_combo.setCurrentIndex(2)
 
         # ── Placement Options ────────────────────────────────
         options_group = QGroupBox("Placement Options")
