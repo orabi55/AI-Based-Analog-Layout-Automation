@@ -267,12 +267,51 @@ class SymbolicEditor(QGraphicsView):
                 
             for item in self.device_items.values():
                 if hasattr(item, "get_logical_name"):
+                    # EXCLUDE dummies from colorization (keep default muted look)
+                    if getattr(item, "_is_dummy", False):
+                        continue
+                        
                     pid = item.get_logical_name()
                     if pid in parent_colors:
                         item.set_custom_color(parent_colors[pid])
         else:
             for item in self.device_items.values():
                 item.reset_custom_color()
+        self.viewport().update()
+
+    def set_net_labels_visible(self, visible: bool):
+        """Toggle net name labels on all device terminals.
+
+        When visible=True, each DeviceItem shows its D/G/S net names
+        from the stored _terminal_nets mapping.
+        """
+        self._net_labels_visible = bool(visible)
+        for dev_id, item in self.device_items.items():
+            if visible:
+                nets = self._terminal_nets.get(dev_id, {})
+                if hasattr(item, 'set_net_labels'):
+                    item.set_net_labels(nets)
+            else:
+                if hasattr(item, 'clear_net_labels'):
+                    item.clear_net_labels()
+
+        # Also toggle on hierarchy group items (symbolic view)
+        for group in self._hierarchy_groups:
+            if visible:
+                # Look up nets from the parent name or first child device
+                parent_name = group._parent_name
+                nets = self._terminal_nets.get(parent_name, {})
+                if not nets and group._device_items:
+                    # Try the first child device's name
+                    first_child = group._device_items[0]
+                    nets = self._terminal_nets.get(
+                        getattr(first_child, 'device_name', ''), {})
+                if hasattr(group, 'set_net_labels'):
+                    group.set_net_labels(nets)
+            else:
+                if hasattr(group, 'clear_net_labels'):
+                    group.clear_net_labels()
+
         self.viewport().update()
 
     def _snap_value(self, value):

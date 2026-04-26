@@ -72,6 +72,9 @@ class HierarchyGroupItem(QGraphicsRectItem):
         self._is_descended = False
         self._child_groups = []
         self._parent_group = None
+        # Net label overlay (toggled from Nets tab)
+        self._show_net_labels = False
+        self._net_names = {}       # {"D": "VDD", "G": "clk", "S": "VSS"}
 
         # Build a flat list of ALL descendant device items (recursive)
         self._all_descendant_devices = self._collect_all_descendant_devices()
@@ -87,6 +90,35 @@ class HierarchyGroupItem(QGraphicsRectItem):
         # CRITICAL: When created, hide all child devices (symbolic view)
         # They will only be visible when this group is descended
         self._update_child_visibility()
+
+    def set_net_labels(self, nets: dict):
+        """Enable net name labels. nets = {'D': 'VDD', 'G': 'clk', 'S': 'VSS'}."""
+        self._net_names = nets or {}
+        self._show_net_labels = bool(self._net_names)
+        self.update()
+
+    def clear_net_labels(self):
+        """Hide net name labels."""
+        self._show_net_labels = False
+        self._net_names = {}
+        self.update()
+
+    def _get_net_color(self, net_name):
+        """Return a consistent unique QColor for a given net name."""
+        if not net_name or net_name == "?":
+            return QColor("#8899aa")
+        
+        pnet = str(net_name).upper()
+        if pnet in ("VDD", "VCC", "AVDD", "DVDD"):
+            return QColor("#ffaa66")
+        if pnet in ("VSS", "GND", "AVSS", "DVSS"):
+            return QColor("#66aaff")
+            
+        import hashlib
+        h = int(hashlib.md5(net_name.encode()).hexdigest(), 16) % 360
+        c = QColor()
+        c.setHsl(h, 200, 180)
+        return c
 
     def _collect_all_descendant_devices(self):
         """Recursively collect all device items from child groups."""
@@ -209,27 +241,100 @@ class HierarchyGroupItem(QGraphicsRectItem):
         rect = self.rect()
         is_selected = self.isSelected()
 
-        # Simple empty rectangle with RED border
+        # Simple empty rectangle with RED border (cosmetic pen = constant px on screen)
         border_color = QColor(220, 60, 60, 255)  # Pure red
         border_width = 2.5
-        
+
         if is_selected:
             border_color = QColor(255, 100, 100, 255)  # Lighter red when selected
             border_width = 3.5
 
         # Empty fill (transparent inside)
         painter.setBrush(QBrush(Qt.BrushStyle.NoBrush))
-        
-        # Red border
+
+        # Red border — cosmetic so it stays constant pixel width on screen
         pen = QPen(border_color, border_width, Qt.PenStyle.SolidLine)
+        pen.setCosmetic(True)
         painter.setPen(pen)
         painter.drawRect(rect)
 
-        # Device name centered in the rectangle
-        painter.setPen(QPen(QColor("#ffffff")))
-        font_size = max(10, min(16, int(min(rect.width(), rect.height()) * 0.15)))
-        font = QFont("Segoe UI", font_size, QFont.Weight.Bold)
-        painter.setFont(font)
-        
-        # Draw name in center
-        painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, self._parent_name)
+        # ── Draw device name in screen coordinates so it fits inside ──
+        xform = painter.transform()
+        screen_rect = xform.mapRect(rect)
+        pad = 4
+        text_rect = screen_rect.adjusted(pad, pad, -pad, -pad)
+
+        if text_rect.width() > 4 and text_rect.height() > 4:
+            painter.save()
+            painter.resetTransform()
+
+            # Start with a reasonable font, shrink to fit
+            font_size = max(6, min(16, int(min(text_rect.width(), text_rect.height()) * 0.45)))
+            font = QFont("Segoe UI", font_size, QFont.Weight.Bold)
+            painter.setFont(font)
+            fm = painter.fontMetrics()
+            while font_size > 5 and (fm.horizontalAdvance(self._parent_name) > text_rect.width()
+                                     or fm.height() > text_rect.height()):
+                font_size -= 1
+                font = QFont("Segoe UI", font_size, QFont.Weight.Bold)
+                painter.setFont(font)
+                fm = painter.fontMetrics()
+
+            painter.setPen(QPen(QColor("#ffffff")))
+            painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, self._parent_name)
+
+            # ── Net labels centered and rotated (Scene-space, auto-scale) ─────────────
+            if self._show_net_labels and self._net_names:
+                # Collect labels
+                labels_data = []
+                for term in ("D", "G", "S"):
+                    net = self._net_names.get(term)
+                    if net:
+                        labels_data.append((f"{term}:{net}", net))
+                
+                if labels_data:
+                    # Target scene-space size
+                    fs = max(0.4, h * 0.12)
+                    net_font = QFont("Segoe UI", fs, QFont.Weight.ExtraBold)
+                    net_font.setStretch(120)
+                    painter.setFont(net_font)
+                    fm = painter.fontMetrics()
+                    
+                    # Shrink to fit the block width/height
+                    avail_thick = w / (len(labels_data) + 1)
+                    avail_len = h * 0.7
+                    while fs > 0.05 and (fm.height() > avail_thick or fm.horizontalAdvance(labels_data[0][0]) > avail_len):
+                        fs *= 0.9
+                        net_font.setPointSizeF(fs)
+                        painter.setFont(net_font)
+                        fm = painter.fontMetrics()
+
+                    center_pt = rect.center()
+                    total_labels_thick = fm.height() * len(labels_data)
+                    start_x = center_pt.x() - (total_labels_thick / 2)
+                    
+                    # Shift down slightly from parent name
+                    offset_y = h * 0.15
+                    
+                    for idx, (lbl, net_str) in enumerate(labels_data):
+                        painter.save()
+                        lx = start_x + idx * fm.height() + fm.height()/2
+                        ly = center_pt.y() + offset_y
+                        painter.translate(lx, ly)
+                        painter.rotate(-90)
+                        
+                        tw = fm.horizontalAdvance(lbl)
+                        th = fm.height()
+                        rect_lbl = QRectF(-tw/2, -th/2, tw, th)
+                        
+                        # Omni-glow
+                        glow_off = fs * 0.05
+                        painter.setPen(QColor(0, 0, 0, 200))
+                        for dx, dy in [(-glow_off,0), (glow_off,0), (0,-glow_off), (0,glow_off)]:
+                            painter.drawText(rect_lbl.translated(dx, dy), Qt.AlignmentFlag.AlignCenter, lbl)
+                        
+                        painter.setPen(self._get_net_color(net_str))
+                        painter.drawText(rect_lbl, Qt.AlignmentFlag.AlignCenter, lbl)
+                        painter.restore()
+
+            painter.restore()
