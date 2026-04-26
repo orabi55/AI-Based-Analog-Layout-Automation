@@ -216,6 +216,7 @@ class LayoutEditorTab(QWidget):
         self.device_tree.block_selected.connect(self._on_tree_block_selected)
         self.editor.device_clicked.connect(self.device_tree.highlight_device)
         self.editor.dummy_toggle_requested.connect(self._toggle_dummy_shortcut)
+        self.editor.drag_finished.connect(self._on_device_drag_end)
         self.editor.device_clicked.connect(self._on_canvas_device_clicked)
         self.editor.scene.selectionChanged.connect(self._on_editor_selection_changed)
 
@@ -1656,6 +1657,53 @@ class LayoutEditorTab(QWidget):
         with open(file_path, "w") as f:
             json.dump(output, f, indent=4)
         self.chat_panel._append_message("AI", f"Layout saved to {os.path.basename(file_path)}", "#e8f4fd", "#1a1a2e")
+
+    def do_export_tcl(self):
+        import os
+        default_path = "ai_placement.txt"
+        if self._current_file:
+            json_dir = os.path.dirname(os.path.abspath(self._current_file))
+            base = os.path.splitext(os.path.basename(self._current_file))[0]
+            
+            # Clean up the base name to get just the design name
+            design_name = base.replace("_initial_placement", "").replace("_placement", "")
+            file_name = f"{design_name}_ai_placement.txt"
+            
+            default_path = os.path.join(json_dir, file_name)
+            
+        file_path, _ = QFileDialog.getSaveFileName(self, "Export TCL Placement", default_path, "Text Files (*.txt);;All Files (*)")
+        if not file_path:
+            return
+            
+        import sys
+        # Ensure we can import from the eda package
+        proj_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if proj_root not in sys.path:
+            sys.path.insert(0, proj_root)
+            
+        try:
+            from eda.json_to_tcl import LayoutExporter
+            exporter = LayoutExporter(file_path)
+            
+            output = self._build_output_data()
+            for node in output.get("nodes", []):
+                name = node["id"]
+                x = node.get("geometry", {}).get("x", 0.0)
+                y = node.get("geometry", {}).get("y", 0.0)
+                orient = node.get("geometry", {}).get("orientation", "R0")
+                # Parameters are stored under 'electrical' in the standard schema
+                params = node.get("electrical", node.get("parameters", {}))
+                
+                exporter.add_instance(name, x, y, orient, params=params)
+                
+            success = exporter.export_for_tcl()
+            if success:
+                self.chat_panel._append_message("AI", f"TCL placement exported to {os.path.basename(file_path)}", "#e8f4fd", "#1a1a2e")
+            else:
+                self.chat_panel._append_message("AI", f"Failed to export TCL placement.", "#fde8e8", "#a00")
+        except Exception as e:
+            self.chat_panel._append_message("AI", f"Error exporting TCL placement: {str(e)}", "#fde8e8", "#a00")
+
 
     def do_export_oas(self):
         if not self._current_file:

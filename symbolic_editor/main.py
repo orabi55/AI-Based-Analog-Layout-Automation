@@ -10,6 +10,10 @@ When no tabs are open the WelcomeScreen is displayed.
 import sys
 import os
 import glob
+import warnings
+
+# Suppress annoying Pydantic v1 warnings triggered by LangChain in Python 3.14+
+warnings.filterwarnings("ignore", category=UserWarning, message=".*Pydantic V1 functionality isn't compatible with Python 3.14.*")
 
 # Ensure project root is on the path so sub-packages resolve
 _project_root = os.path.normpath(
@@ -266,6 +270,7 @@ class MainWindow(QMainWindow):
         file_menu.addAction("Save &As…", lambda: self._fwd("do_save_as"), QKeySequence("Ctrl+Shift+S"))
         file_menu.addAction("Export JSON…", lambda: self._fwd("do_export_json"))
         file_menu.addAction("Export to OAS…", lambda: self._fwd("do_export_oas"))
+        file_menu.addAction("Export TCL Placement.", lambda: self._fwd("do_export_tcl"))
         file_menu.addSeparator()
         file_menu.addAction("Close Tab", self._close_current_tab, QKeySequence("Ctrl+W"))
 

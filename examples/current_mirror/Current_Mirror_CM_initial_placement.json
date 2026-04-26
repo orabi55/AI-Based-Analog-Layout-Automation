@@ -15,7 +15,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.764,
+                "x": 2.058,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.668,
@@ -37,7 +37,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.058,
+                "x": 2.352,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.668,
@@ -59,7 +59,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.764,
+                "x": 2.058,
                 "y": 0.668,
                 "width": 0.294,
                 "height": 0.668,
@@ -81,7 +81,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.058,
+                "x": 2.352,
                 "y": 0.668,
                 "width": 0.294,
                 "height": 0.668,
@@ -103,7 +103,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.176,
+                "x": 1.47,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.668,
@@ -125,7 +125,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.47,
+                "x": 1.764,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.668,
@@ -147,7 +147,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.352,
+                "x": 2.646,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.668,
@@ -169,7 +169,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.646,
+                "x": 2.94,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.668,
@@ -191,7 +191,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.176,
+                "x": 1.47,
                 "y": 0.668,
                 "width": 0.294,
                 "height": 0.668,
@@ -213,7 +213,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.47,
+                "x": 1.764,
                 "y": 0.668,
                 "width": 0.294,
                 "height": 0.668,
@@ -235,7 +235,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.352,
+                "x": 2.646,
                 "y": 0.668,
                 "width": 0.294,
                 "height": 0.668,
@@ -257,7 +257,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.646,
+                "x": 2.94,
                 "y": 0.668,
                 "width": 0.294,
                 "height": 0.668,
@@ -279,7 +279,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 0.0,
+                "x": 0.294,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.668,
@@ -301,7 +301,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 0.294,
+                "x": 0.588,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.668,
@@ -323,7 +323,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 0.588,
+                "x": 0.882,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.668,
@@ -345,7 +345,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 0.882,
+                "x": 1.176,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.668,
@@ -367,7 +367,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.94,
+                "x": 3.234,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.668,
@@ -389,7 +389,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 3.234,
+                "x": 3.528,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.668,
@@ -411,7 +411,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 3.528,
+                "x": 3.822,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.668,
@@ -433,7 +433,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 3.822,
+                "x": 4.116,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.668,
@@ -455,7 +455,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 0.0,
+                "x": 0.294,
                 "y": 0.668,
                 "width": 0.294,
                 "height": 0.668,
@@ -477,7 +477,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 0.294,
+                "x": 0.588,
                 "y": 0.668,
                 "width": 0.294,
                 "height": 0.668,
@@ -499,7 +499,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 0.588,
+                "x": 0.882,
                 "y": 0.668,
                 "width": 0.294,
                 "height": 0.668,
@@ -521,7 +521,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 0.882,
+                "x": 1.176,
                 "y": 0.668,
                 "width": 0.294,
                 "height": 0.668,
@@ -543,7 +543,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.94,
+                "x": 3.234,
                 "y": 0.668,
                 "width": 0.294,
                 "height": 0.668,
@@ -565,7 +565,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 3.234,
+                "x": 3.528,
                 "y": 0.668,
                 "width": 0.294,
                 "height": 0.668,
@@ -587,7 +587,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 3.528,
+                "x": 3.822,
                 "y": 0.668,
                 "width": 0.294,
                 "height": 0.668,
@@ -609,7 +609,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 3.822,
+                "x": 4.116,
                 "y": 0.668,
                 "width": 0.294,
                 "height": 0.668,
@@ -631,7 +631,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.764,
+                "x": 2.058,
                 "y": 1.386,
                 "width": 0.294,
                 "height": 0.668,
@@ -653,7 +653,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.058,
+                "x": 2.352,
                 "y": 1.386,
                 "width": 0.294,
                 "height": 0.668,
@@ -675,7 +675,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.764,
+                "x": 2.058,
                 "y": 2.054,
                 "width": 0.294,
                 "height": 0.668,
@@ -697,7 +697,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.058,
+                "x": 2.352,
                 "y": 2.054,
                 "width": 0.294,
                 "height": 0.668,
@@ -719,7 +719,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.176,
+                "x": 1.47,
                 "y": 1.386,
                 "width": 0.294,
                 "height": 0.668,
@@ -741,7 +741,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.47,
+                "x": 1.764,
                 "y": 1.386,
                 "width": 0.294,
                 "height": 0.668,
@@ -763,7 +763,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.352,
+                "x": 2.646,
                 "y": 1.386,
                 "width": 0.294,
                 "height": 0.668,
@@ -785,7 +785,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.646,
+                "x": 2.94,
                 "y": 1.386,
                 "width": 0.294,
                 "height": 0.668,
@@ -807,7 +807,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.176,
+                "x": 1.47,
                 "y": 2.054,
                 "width": 0.294,
                 "height": 0.668,
@@ -829,7 +829,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.47,
+                "x": 1.764,
                 "y": 2.054,
                 "width": 0.294,
                 "height": 0.668,
@@ -851,7 +851,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.352,
+                "x": 2.646,
                 "y": 2.054,
                 "width": 0.294,
                 "height": 0.668,
@@ -873,7 +873,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.646,
+                "x": 2.94,
                 "y": 2.054,
                 "width": 0.294,
                 "height": 0.668,
@@ -895,7 +895,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 0.0,
+                "x": 0.294,
                 "y": 1.386,
                 "width": 0.294,
                 "height": 0.668,
@@ -917,7 +917,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 0.294,
+                "x": 0.588,
                 "y": 1.386,
                 "width": 0.294,
                 "height": 0.668,
@@ -939,7 +939,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 0.588,
+                "x": 0.882,
                 "y": 1.386,
                 "width": 0.294,
                 "height": 0.668,
@@ -961,7 +961,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 0.882,
+                "x": 1.176,
                 "y": 1.386,
                 "width": 0.294,
                 "height": 0.668,
@@ -983,7 +983,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.94,
+                "x": 3.234,
                 "y": 1.386,
                 "width": 0.294,
                 "height": 0.668,
@@ -1005,7 +1005,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 3.234,
+                "x": 3.528,
                 "y": 1.386,
                 "width": 0.294,
                 "height": 0.668,
@@ -1027,7 +1027,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 3.528,
+                "x": 3.822,
                 "y": 1.386,
                 "width": 0.294,
                 "height": 0.668,
@@ -1049,7 +1049,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 3.822,
+                "x": 4.116,
                 "y": 1.386,
                 "width": 0.294,
                 "height": 0.668,
@@ -1071,7 +1071,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 0.0,
+                "x": 0.294,
                 "y": 2.054,
                 "width": 0.294,
                 "height": 0.668,
@@ -1093,7 +1093,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 0.294,
+                "x": 0.588,
                 "y": 2.054,
                 "width": 0.294,
                 "height": 0.668,
@@ -1115,7 +1115,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 0.588,
+                "x": 0.882,
                 "y": 2.054,
                 "width": 0.294,
                 "height": 0.668,
@@ -1137,7 +1137,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 0.882,
+                "x": 1.176,
                 "y": 2.054,
                 "width": 0.294,
                 "height": 0.668,
@@ -1159,7 +1159,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.94,
+                "x": 3.234,
                 "y": 2.054,
                 "width": 0.294,
                 "height": 0.668,
@@ -1181,7 +1181,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 3.234,
+                "x": 3.528,
                 "y": 2.054,
                 "width": 0.294,
                 "height": 0.668,
@@ -1203,7 +1203,7 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 3.528,
+                "x": 3.822,
                 "y": 2.054,
                 "width": 0.294,
                 "height": 0.668,
@@ -1225,12 +1225,268 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 3.822,
+                "x": 4.116,
                 "y": 2.054,
                 "width": 0.294,
                 "height": 0.668,
                 "orientation": "R0"
             }
+        },
+        {
+            "_block_id": "MM2_MM1_and_1_more_centroid",
+            "_matched_block": true,
+            "_technique": "common_centroid_mirror",
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": 1,
+                "l": 1.4e-08,
+                "m": 1,
+                "multiplier_index": null,
+                "nf": 1,
+                "nfin": 2.0,
+                "parent": "MM2",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.668,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 0.0,
+                "y": 0.0
+            },
+            "id": "DUMMY_matrix_MM2_MM1_and_1_more_centroid_0",
+            "net_d": "NC",
+            "net_g": "NC",
+            "net_s": "NC",
+            "type": "nmos"
+        },
+        {
+            "_block_id": "MM2_MM1_and_1_more_centroid",
+            "_matched_block": true,
+            "_technique": "common_centroid_mirror",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": false
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": 1,
+                "l": 1.4e-08,
+                "m": 1,
+                "multiplier_index": null,
+                "nf": 1,
+                "nfin": 2.0,
+                "parent": "MM2",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.668,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 4.41,
+                "y": 0.0
+            },
+            "id": "DUMMY_matrix_MM2_MM1_and_1_more_centroid_1",
+            "net_d": "NC",
+            "net_g": "NC",
+            "net_s": "NC",
+            "type": "nmos"
+        },
+        {
+            "_block_id": "MM2_MM1_and_1_more_centroid",
+            "_matched_block": true,
+            "_technique": "common_centroid_mirror",
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": 1,
+                "l": 1.4e-08,
+                "m": 1,
+                "multiplier_index": null,
+                "nf": 1,
+                "nfin": 2.0,
+                "parent": "MM2",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.668,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 0.0,
+                "y": 0.668
+            },
+            "id": "DUMMY_matrix_MM2_MM1_and_1_more_centroid_2",
+            "net_d": "NC",
+            "net_g": "NC",
+            "net_s": "NC",
+            "type": "nmos"
+        },
+        {
+            "_block_id": "MM2_MM1_and_1_more_centroid",
+            "_matched_block": true,
+            "_technique": "common_centroid_mirror",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": false
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": 1,
+                "l": 1.4e-08,
+                "m": 1,
+                "multiplier_index": null,
+                "nf": 1,
+                "nfin": 2.0,
+                "parent": "MM2",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.668,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 4.41,
+                "y": 0.668
+            },
+            "id": "DUMMY_matrix_MM2_MM1_and_1_more_centroid_3",
+            "net_d": "NC",
+            "net_g": "NC",
+            "net_s": "NC",
+            "type": "nmos"
+        },
+        {
+            "_block_id": "MM5_MM4_and_1_more_centroid",
+            "_matched_block": true,
+            "_technique": "common_centroid_mirror",
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": 1,
+                "l": 1.4e-08,
+                "m": 1,
+                "multiplier_index": null,
+                "nf": 1,
+                "nfin": 2.0,
+                "parent": "MM5",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.668,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 0.0,
+                "y": 1.386
+            },
+            "id": "DUMMY_matrix_MM5_MM4_and_1_more_centroid_0",
+            "net_d": "NC",
+            "net_g": "NC",
+            "net_s": "NC",
+            "type": "pmos"
+        },
+        {
+            "_block_id": "MM5_MM4_and_1_more_centroid",
+            "_matched_block": true,
+            "_technique": "common_centroid_mirror",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": false
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": 1,
+                "l": 1.4e-08,
+                "m": 1,
+                "multiplier_index": null,
+                "nf": 1,
+                "nfin": 2.0,
+                "parent": "MM5",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.668,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 4.41,
+                "y": 1.386
+            },
+            "id": "DUMMY_matrix_MM5_MM4_and_1_more_centroid_1",
+            "net_d": "NC",
+            "net_g": "NC",
+            "net_s": "NC",
+            "type": "pmos"
+        },
+        {
+            "_block_id": "MM5_MM4_and_1_more_centroid",
+            "_matched_block": true,
+            "_technique": "common_centroid_mirror",
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": 1,
+                "l": 1.4e-08,
+                "m": 1,
+                "multiplier_index": null,
+                "nf": 1,
+                "nfin": 2.0,
+                "parent": "MM5",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.668,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 0.0,
+                "y": 2.054
+            },
+            "id": "DUMMY_matrix_MM5_MM4_and_1_more_centroid_2",
+            "net_d": "NC",
+            "net_g": "NC",
+            "net_s": "NC",
+            "type": "pmos"
+        },
+        {
+            "_block_id": "MM5_MM4_and_1_more_centroid",
+            "_matched_block": true,
+            "_technique": "common_centroid_mirror",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": false
+            },
+            "electrical": {
+                "array_index": null,
+                "finger_index": 1,
+                "l": 1.4e-08,
+                "m": 1,
+                "multiplier_index": null,
+                "nf": 1,
+                "nfin": 2.0,
+                "parent": "MM5",
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.668,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 4.41,
+                "y": 2.054
+            },
+            "id": "DUMMY_matrix_MM5_MM4_and_1_more_centroid_3",
+            "net_d": "NC",
+            "net_g": "NC",
+            "net_s": "NC",
+            "type": "pmos"
         }
     ],
     "edges": [
