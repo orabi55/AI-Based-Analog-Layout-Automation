@@ -75,6 +75,7 @@ class HierarchyGroupItem(QGraphicsRectItem):
         # Net label overlay (toggled from Nets tab)
         self._show_net_labels = False
         self._net_names = {}       # {"D": "VDD", "G": "clk", "S": "VSS"}
+        self._net_color_seed = 0
 
         # Build a flat list of ALL descendant device items (recursive)
         self._all_descendant_devices = self._collect_all_descendant_devices()
@@ -91,10 +92,11 @@ class HierarchyGroupItem(QGraphicsRectItem):
         # They will only be visible when this group is descended
         self._update_child_visibility()
 
-    def set_net_labels(self, nets: dict):
-        """Enable net name labels. nets = {'D': 'VDD', 'G': 'clk', 'S': 'VSS'}."""
-        self._net_names = nets or {}
-        self._show_net_labels = bool(self._net_names)
+    def set_net_labels(self, net_names: dict, seed: int = 0):
+        """Enable and store net names for D, G, S terminals."""
+        self._show_net_labels = True
+        self._net_names = net_names
+        self._net_color_seed = seed
         self.update()
 
     def clear_net_labels(self):
@@ -104,16 +106,18 @@ class HierarchyGroupItem(QGraphicsRectItem):
         self.update()
 
     def _get_net_color(self, net_name):
-        """Return a consistent unique QColor for a given net name."""
+        """Consistent unique color for nets (shared logic with DeviceItem)."""
         if not net_name or net_name == "?":
-            return QColor("#8899aa")
+            return QColor("#808896")
         
+        # Power/Ground specific colors
         pnet = str(net_name).upper()
         if pnet in ("VDD", "VCC", "AVDD", "DVDD"):
             return QColor("#ffaa66")
         if pnet in ("VSS", "GND", "AVSS", "DVSS"):
             return QColor("#66aaff")
             
+        input_str = f"{net_name}_{self._net_color_seed}"
         import hashlib
         h = int(hashlib.md5(net_name.encode()).hexdigest(), 16) % 360
         c = QColor()
@@ -239,6 +243,8 @@ class HierarchyGroupItem(QGraphicsRectItem):
 
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         rect = self.rect()
+        w = rect.width()
+        h = rect.height()
         is_selected = self.isSelected()
 
         # Simple empty rectangle with RED border (cosmetic pen = constant px on screen)

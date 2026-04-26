@@ -46,6 +46,8 @@ class DeviceItem(QGraphicsRectItem):
         # Net label overlay (toggled from Nets tab)
         self._show_net_labels = False
         self._net_names = {}       # {"D": "VDD", "G": "clk", "S": "VSS"}
+        self._colorize_nets = False
+        self._net_color_seed = 0
 
         # ── Hierarchical group movement ──
         # These are set by the editor when loading a layout.
@@ -176,10 +178,11 @@ class DeviceItem(QGraphicsRectItem):
         """Return True if this device is visually marked as part of a matched group."""
         return self._match_color is not None
 
-    def set_net_labels(self, nets: dict):
+    def set_net_labels(self, nets: dict, seed: int = 0):
         """Enable net name labels on terminals.  nets = {'D': 'VDD', 'G': 'clk', 'S': 'VSS'}."""
         self._net_names = nets or {}
         self._show_net_labels = bool(self._net_names)
+        self._net_color_seed = seed
         self.update()
 
     def clear_net_labels(self):
@@ -188,10 +191,21 @@ class DeviceItem(QGraphicsRectItem):
         self._net_names = {}
         self.update()
 
+    def set_net_colorize_enabled(self, enabled: bool, seed: int = 0):
+        """Toggle coloring terminals by net name with an optional randomization seed."""
+        self._colorize_nets = bool(enabled)
+        self._net_color_seed = seed
+        self.update()
+
     def _get_net_color(self, net_name):
         """Return a consistent unique QColor for a given net name."""
         if not net_name or net_name == "?":
-            return QColor("#8899aa")
+            return QColor("#808896")
+            
+        # Incorporate seed for "new configuration" request
+        input_str = f"{net_name}_{self._net_color_seed}"
+        import hashlib
+        h = int(hashlib.md5(input_str.encode()).hexdigest(), 16) % 360
         
         # Power nets get specific semantic colors
         pnet = str(net_name).upper()
@@ -201,8 +215,6 @@ class DeviceItem(QGraphicsRectItem):
             return QColor("#66aaff") # Blue
         
         # Signal nets get hashed colors
-        import hashlib
-        h = int(hashlib.md5(net_name.encode()).hexdigest(), 16) % 360
         c = QColor()
         c.setHsl(h, 200, 180) # High saturation, medium brightness for dark mode
         return c
@@ -420,17 +432,21 @@ class DeviceItem(QGraphicsRectItem):
                         painter.translate(lx, ly)
                         painter.rotate(-90)
                         
-                        tw = fm.horizontalAdvance(lbl)
-                        th = fm.height()
-                        rect_lbl = QRectF(-tw/2, -th/2, tw, th)
+                        # Use a taller rect to ensure perfect vertical centering within the column thick
+                        rect_lbl = QRectF(-avail_len/2, -avail_thick/2, avail_len, avail_thick)
                         
-                        # Omni-glow (scene units)
+                        # ── Stronger Omni-directional Glow ──
                         glow_off = fs * 0.05
                         painter.setPen(QColor(0, 0, 0, 200))
                         for dx, dy in [(-glow_off,0), (glow_off,0), (0,-glow_off), (0,glow_off)]:
                             painter.drawText(rect_lbl.translated(dx, dy), Qt.AlignmentFlag.AlignCenter, lbl)
                         
-                        painter.setPen(self._get_net_color(net_str))
+                        # Main text
+                        if self._colorize_nets and not self._is_dummy:
+                            painter.setPen(QColor(255, 255, 255))
+                        else:
+                            painter.setPen(self._get_net_color(net_str))
+                            
                         painter.drawText(rect_lbl, Qt.AlignmentFlag.AlignCenter, lbl)
                         painter.restore()
 
@@ -480,24 +496,116 @@ class DeviceItem(QGraphicsRectItem):
         painter.setPen(Qt.PenStyle.NoPen)
         cursor_x = x0
         for i in range(num_sd):
-            # S/D region with subtle vertical gradient
-            color = self._source_color if _is_source_col(i) else self._drain_color
+            term = "S" if _is_source_col(i) else "D"
+            net = self._net_names.get(term)
+            
+            # Use net color if colorize_nets is on and it's not a dummy
+            if self._colorize_nets and net and not self._is_dummy:
+                color = self._get_net_color(net)
+            else:
+                color = self._source_color if term == "S" else self._drain_color
+                
             sd_grad = QLinearGradient(cursor_x, y0, cursor_x, y0 + h)
             sd_grad.setColorAt(0.0, color.lighter(110))
             sd_grad.setColorAt(1.0, color)
             painter.setBrush(QBrush(sd_grad))
-            painter.drawRect(QRectF(cursor_x, y0, sd_w, h))
+            draw_rect = QRectF(cursor_x, y0, sd_w, h).adjusted(0.5, 0.5, -0.5, -0.5)
+            painter.drawRect(draw_rect)
+            
+            # --- Net Label (Detailed) ---
+            if self._show_net_labels and self._net_names:
+                net = self._net_names.get(term)
+                if net:
+                    # Use the center of the actual drawn rectangle for perfect alignment
+                    col_center = draw_rect.center()
+                    
+                    # Dynamic font size
+                    fs = max(0.2, sd_w * 0.5)
+                    net_font = QFont("Segoe UI", fs, QFont.Weight.ExtraBold)
+                    net_font.setStretch(120)
+                    painter.save()
+                    painter.setFont(net_font)
+                    fm = painter.fontMetrics()
+                    while fs > 0.05 and (fm.horizontalAdvance(net) > h * 0.8 or fm.height() > sd_w * 0.9):
+                        fs *= 0.9
+                        net_font.setPointSizeF(fs)
+                        painter.setFont(net_font)
+                        fm = painter.fontMetrics()
+
+                    painter.translate(col_center)
+                    painter.rotate(-90)
+                    
+                    # Full column rect for alignment
+                    rect_lbl = QRectF(-h*0.45, -sd_w/2, h*0.9, sd_w)
+                    
+                    glow_off = fs * 0.05
+                    painter.setPen(QColor(0, 0, 0, 200))
+                    for dx, dy in [(-glow_off,0), (glow_off,0), (0,-glow_off), (0,glow_off)]:
+                        painter.drawText(rect_lbl.translated(dx, dy), Qt.AlignmentFlag.AlignCenter, net)
+                    
+                    if self._colorize_nets and not self._is_dummy:
+                        painter.setPen(QColor(255, 255, 255))
+                    else:
+                        painter.setPen(self._get_net_color(net))
+                    painter.drawText(rect_lbl, Qt.AlignmentFlag.AlignCenter, net)
+                    painter.restore()
+
             cursor_x += sd_w
 
             if i < num_fingers:
-                # Gate strip with rich gradient
+                # Gate strip
+                g_net = self._net_names.get("G")
+                if self._colorize_nets and g_net and not self._is_dummy:
+                    g_color = self._get_net_color(g_net)
+                    g_top = g_color.lighter(120)
+                    g_bot = g_color.darker(110)
+                else:
+                    g_color = self._gate_color
+                    g_top = self._gradient_top
+                    g_bot = self._gradient_bottom
+                
                 gate_rect = QRectF(cursor_x, y0, gate_w, h)
                 grad = QLinearGradient(gate_rect.topLeft(), gate_rect.bottomLeft())
-                grad.setColorAt(0.0, self._gradient_top)
-                grad.setColorAt(0.5, self._gate_color)
-                grad.setColorAt(1.0, self._gradient_bottom)
+                grad.setColorAt(0.0, g_top)
+                grad.setColorAt(0.5, g_color)
+                grad.setColorAt(1.0, g_bot)
                 painter.setBrush(QBrush(grad))
-                painter.drawRect(gate_rect)
+                draw_gate_rect = gate_rect.adjusted(0.5, 0.5, -0.5, -0.5)
+                painter.drawRect(draw_gate_rect)
+                
+                # --- Gate Net Label ---
+                if self._show_net_labels and self._net_names:
+                    g_net = self._net_names.get("G")
+                    if g_net:
+                        gate_center = draw_gate_rect.center()
+                        fs = max(0.2, gate_w * 0.7)
+                        net_font = QFont("Segoe UI", fs, QFont.Weight.ExtraBold)
+                        net_font.setStretch(120)
+                        painter.save()
+                        painter.setFont(net_font)
+                        fm = painter.fontMetrics()
+                        while fs > 0.05 and (fm.horizontalAdvance(g_net) > h * 0.8 or fm.height() > gate_w * 0.9):
+                            fs *= 0.9
+                            net_font.setPointSizeF(fs)
+                            painter.setFont(net_font)
+                            fm = painter.fontMetrics()
+
+                        painter.translate(gate_center)
+                        painter.rotate(-90)
+                        rect_lbl = QRectF(-h*0.45, -gate_w/2, h*0.9, gate_w)
+                        
+                        glow_off = fs * 0.05
+                        painter.setPen(QColor(0, 0, 0, 200))
+                        for dx, dy in [(-glow_off,0), (glow_off,0), (0,-glow_off), (0,glow_off)]:
+                            painter.drawText(rect_lbl.translated(dx, dy), Qt.AlignmentFlag.AlignCenter, g_net)
+
+                        if self._colorize_nets and not self._is_dummy:
+                            painter.setPen(QColor(255, 255, 255))
+                        else:
+                            painter.setPen(self._get_net_color(g_net))
+                        painter.drawText(rect_lbl, Qt.AlignmentFlag.AlignCenter, g_net)
+                        painter.restore()
+
                 cursor_x += gate_w
 
         # ── Rounded outer border with subtle shadow ──────────────────
@@ -539,48 +647,6 @@ class DeviceItem(QGraphicsRectItem):
                 painter.drawLine(QPointF(x_cursor, y0),
                                  QPointF(x_cursor + h * 0.3, y0 + h))
                 x_cursor += spacing
-
-        painter.restore()   # back to un-flipped for text
-
-        # Abutment candidate highlights (visual annotation removed).
-        # _hl_left / _hl_right are kept for internal state but no longer painted.
-
-        # ── Manual abutment state (amber solid stripe) ────────────────────
-        if self._manual_abut_left or self._manual_abut_right:
-            ABUT_COLOR = QColor("#f39c12")    # amber
-            ABUT_FILL  = QColor("#f39c12")
-            ABUT_FILL.setAlpha(50)
-            abut_w = max(3.5, sd_w * 0.20)
-
-            if self._manual_abut_left:
-                painter.setBrush(QBrush(ABUT_FILL))
-                painter.setPen(Qt.PenStyle.NoPen)
-                painter.drawRect(QRectF(x0, y0, abut_w, h))
-                painter.setPen(QPen(ABUT_COLOR, 3.0, Qt.PenStyle.SolidLine,
-                                    Qt.PenCapStyle.FlatCap))
-                painter.drawLine(QPointF(x0 + 1.5, y0 + 3),
-                                 QPointF(x0 + 1.5, y0 + h - 3))
-                mid = y0 + h * 0.4
-                painter.drawLine(QPointF(x0 + abut_w + 1, mid),
-                                 QPointF(x0 + abut_w + 6, mid))
-                mid2 = y0 + h * 0.6
-                painter.drawLine(QPointF(x0 + abut_w + 1, mid2),
-                                 QPointF(x0 + abut_w + 6, mid2))
-
-            if self._manual_abut_right:
-                painter.setBrush(QBrush(ABUT_FILL))
-                painter.setPen(Qt.PenStyle.NoPen)
-                painter.drawRect(QRectF(x0 + w - abut_w, y0, abut_w, h))
-                painter.setPen(QPen(ABUT_COLOR, 3.0, Qt.PenStyle.SolidLine,
-                                    Qt.PenCapStyle.FlatCap))
-                painter.drawLine(QPointF(x0 + w - 1.5, y0 + 3),
-                                 QPointF(x0 + w - 1.5, y0 + h - 3))
-                mid = y0 + h * 0.4
-                painter.drawLine(QPointF(x0 + w - abut_w - 1, mid),
-                                 QPointF(x0 + w - abut_w - 6, mid))
-                mid2 = y0 + h * 0.6
-                painter.drawLine(QPointF(x0 + w - abut_w - 1, mid2),
-                                 QPointF(x0 + w - abut_w - 6, mid2))
 
         # ── Text labels (always readable, no flip) ──────────────────
         sd_font_size   = max(4, min(9,  int(min(sd_w * 0.40, h * 0.22))))
@@ -683,79 +749,44 @@ class DeviceItem(QGraphicsRectItem):
             painter.drawText(type_rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter, type_label)
             cursor_x += gate_w + sd_w
 
-        # ── Net labels on terminals (Detailed mode, Scene-space, auto-scale) ──
-        if self._show_net_labels and self._net_names:
-            # S/D Net labels
-            cursor_x_local = x0
-            for i in range(num_sd):
-                term = "S" if _is_source_col(i) else "D"
-                net = self._net_names.get(term, "")
-                if net:
-                    # Dynamic font size to fit column
-                    fs = max(0.2, sd_w * 0.5)
-                    net_font = QFont("Segoe UI", fs, QFont.Weight.ExtraBold)
-                    net_font.setStretch(120)
-                    painter.setFont(net_font)
-                    fm = painter.fontMetrics()
-                    # Shrink to fit height (h) since rotated
-                    while fs > 0.05 and (fm.horizontalAdvance(net) > h * 0.8 or fm.height() > sd_w * 0.9):
-                        fs *= 0.9
-                        net_font.setPointSizeF(fs)
-                        painter.setFont(net_font)
-                        fm = painter.fontMetrics()
+        painter.restore() # ── End of flipped device body (Balanced) ──────────
 
-                    painter.save()
-                    painter.translate(cursor_x_local + sd_w / 2, y0 + h / 2)
-                    painter.rotate(-90)
-                    tw = fm.horizontalAdvance(net)
-                    th = fm.height()
-                    rect_lbl = QRectF(-tw/2, -th/2, tw, th)
-                    
-                    glow_off = fs * 0.05
-                    painter.setPen(QColor(0, 0, 0, 200))
-                    for dx, dy in [(-glow_off,0), (glow_off,0), (0,-glow_off), (0,glow_off)]:
-                        painter.drawText(rect_lbl.translated(dx, dy), Qt.AlignmentFlag.AlignCenter, net)
-                    
-                    painter.setPen(self._get_net_color(net))
-                    painter.drawText(rect_lbl, Qt.AlignmentFlag.AlignCenter, net)
-                    painter.restore()
-                cursor_x_local += sd_w
-                if i < num_fingers:
-                    cursor_x_local += gate_w
+        # ── Manual abutment state (amber solid stripe) ────────────────────
+        if self._manual_abut_left or self._manual_abut_right:
+            ABUT_COLOR = QColor("#f39c12")    # amber
+            ABUT_FILL  = QColor("#f39c12")
+            ABUT_FILL.setAlpha(50)
+            abut_w = max(3.5, sd_w * 0.20)
 
-            # G Net labels
-            g_net = self._net_names.get("G", "")
-            if g_net:
-                cursor_x_local = x0 + sd_w
-                for _ in range(num_fingers):
-                    fs = max(0.2, gate_w * 0.7)
-                    net_font = QFont("Segoe UI", fs, QFont.Weight.ExtraBold)
-                    net_font.setStretch(120)
-                    painter.setFont(net_font)
-                    fm = painter.fontMetrics()
-                    while fs > 0.05 and (fm.horizontalAdvance(g_net) > h * 0.8 or fm.height() > gate_w * 0.9):
-                        fs *= 0.9
-                        net_font.setPointSizeF(fs)
-                        painter.setFont(net_font)
-                        fm = painter.fontMetrics()
+            if self._manual_abut_left:
+                painter.setBrush(QBrush(ABUT_FILL))
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.drawRect(QRectF(x0, y0, abut_w, h))
+                painter.setPen(QPen(ABUT_COLOR, 3.0, Qt.PenStyle.SolidLine,
+                                    Qt.PenCapStyle.FlatCap))
+                painter.drawLine(QPointF(x0 + 1.5, y0 + 3),
+                                 QPointF(x0 + 1.5, y0 + h - 3))
+                mid = y0 + h * 0.4
+                painter.drawLine(QPointF(x0 + abut_w + 1, mid),
+                                 QPointF(x0 + abut_w + 6, mid))
+                mid2 = y0 + h * 0.6
+                painter.drawLine(QPointF(x0 + abut_w + 1, mid2),
+                                 QPointF(x0 + abut_w + 6, mid2))
 
-                    painter.save()
-                    painter.translate(cursor_x_local + gate_w / 2, y0 + h / 2)
-                    painter.rotate(-90)
-                    tw = fm.horizontalAdvance(g_net)
-                    th = fm.height()
-                    rect_lbl = QRectF(-tw/2, -th/2, tw, th)
-                    
-                    glow_off = fs * 0.05
-                    painter.setPen(QColor(0, 0, 0, 200))
-                    for dx, dy in [(-glow_off,0), (glow_off,0), (0,-glow_off), (0,glow_off)]:
-                        painter.drawText(rect_lbl.translated(dx, dy), Qt.AlignmentFlag.AlignCenter, g_net)
-
-                    painter.setPen(self._get_net_color(g_net))
-                    painter.drawText(rect_lbl, Qt.AlignmentFlag.AlignCenter, g_net)
-                    painter.restore()
-                    cursor_x_local += gate_w + sd_w
-
+            if self._manual_abut_right:
+                painter.setBrush(QBrush(ABUT_FILL))
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.drawRect(QRectF(x0 + w - abut_w, y0, abut_w, h))
+                painter.setPen(QPen(ABUT_COLOR, 3.0, Qt.PenStyle.SolidLine,
+                                    Qt.PenCapStyle.FlatCap))
+                painter.drawLine(QPointF(x0 + w - 1.5, y0 + 3),
+                                 QPointF(x0 + w - 1.5, y0 + h - 3))
+                mid = y0 + h * 0.4
+                painter.drawLine(QPointF(x0 + w - abut_w - 1, mid),
+                                 QPointF(x0 + w - abut_w - 6, mid))
+                mid2 = y0 + h * 0.6
+                painter.drawLine(QPointF(x0 + w - abut_w - 1, mid2),
+                                 QPointF(x0 + w - abut_w - 6, mid2))
 
         # ── Selection highlight ──────────────────────────────────────
         if self.isSelected():

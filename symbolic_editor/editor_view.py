@@ -139,6 +139,8 @@ class SymbolicEditor(QGraphicsView):
         self._conn_map = {}       # device_id -> [(other_id, net_name), ...]
         self._conn_lines = []     # active QGraphicsPathItem items
         self._terminal_nets = {}  # {dev_id: {'D': net, 'G': net, 'S': net}}
+        self._color_seed = 0
+        self._net_labels_visible = False
 
         # Net color palette
         self._net_colors = {
@@ -245,38 +247,50 @@ class SymbolicEditor(QGraphicsView):
             item.setSelected(True)
 
     def set_colorize_mode(self, enabled: bool):
+        """Enable parent-based colorization for all devices."""
         self._colorize_mode = bool(enabled)
-        if self._colorize_mode:
-            import hashlib
-            from PySide6.QtGui import QColor
+        if enabled:
+            # Increment seed for "new configuration" on each toggle
+            self._color_seed += 1
             
-            parents = set()
+            # Group devices by their parent block name
+            parent_groups = {}
             for item in self.device_items.values():
-                if hasattr(item, "get_logical_name"):
-                    parents.add(item.get_logical_name())
-            
+                pid = item.get_logical_name()
+                parent_groups.setdefault(pid, []).append(item)
+                
+            # Assign a random color to each parent group based on seed
+            import hashlib
             parent_colors = {}
-            # Generate a distinct color palette
-            for p in parents:
-                # Hash the parent name to get a consistent hue angle (0-359)
-                h = int(hashlib.md5(p.encode()).hexdigest(), 16) % 360
+            for pid in parent_groups:
+                # Deterministic but seed-dependent hash
+                h_str = f"{pid}_{self._color_seed}"
+                h = int(hashlib.md5(h_str.encode()).hexdigest(), 16) % 360
                 c = QColor()
-                # Use a saturated, bright color (H, S, L) mapping to Qt's (0-359, 0-255, 0-255)
-                c.setHsl(h, 220, 160)
-                parent_colors[p] = c
+                c.setHsl(h, 180, 160)
+                parent_colors[pid] = c
                 
             for item in self.device_items.values():
-                if hasattr(item, "get_logical_name"):
-                    # EXCLUDE dummies from colorization (keep default muted look)
-                    if getattr(item, "_is_dummy", False):
-                        continue
-                        
-                    pid = item.get_logical_name()
-                    if pid in parent_colors:
-                        item.set_custom_color(parent_colors[pid])
+                # EXCLUDE dummies from colorization (keep default muted look)
+                if getattr(item, "_is_dummy", False):
+                    continue
+                    
+                pid = item.get_logical_name()
+                if pid in parent_colors:
+                    item.set_custom_color(parent_colors[pid])
         else:
             for item in self.device_items.values():
                 item.reset_custom_color()
+        self.viewport().update()
+
+    def set_net_colorize_enabled(self, enabled: bool):
+        """Toggle net-based coloring across all devices."""
+        if enabled:
+            self._color_seed += 1
+            
+        for item in self.device_items.values():
+            if hasattr(item, "set_net_colorize_enabled"):
+                item.set_net_colorize_enabled(enabled, self._color_seed)
         self.viewport().update()
 
     def set_net_labels_visible(self, visible: bool):
@@ -290,7 +304,7 @@ class SymbolicEditor(QGraphicsView):
             if visible:
                 nets = self._terminal_nets.get(dev_id, {})
                 if hasattr(item, 'set_net_labels'):
-                    item.set_net_labels(nets)
+                    item.set_net_labels(nets, self._color_seed)
             else:
                 if hasattr(item, 'clear_net_labels'):
                     item.clear_net_labels()
@@ -307,7 +321,7 @@ class SymbolicEditor(QGraphicsView):
                     nets = self._terminal_nets.get(
                         getattr(first_child, 'device_name', ''), {})
                 if hasattr(group, 'set_net_labels'):
-                    group.set_net_labels(nets)
+                    group.set_net_labels(nets, self._color_seed)
             else:
                 if hasattr(group, 'clear_net_labels'):
                     group.clear_net_labels()
