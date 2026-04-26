@@ -36,6 +36,14 @@ from ai_agent.utils.logging import (
 )
 
 
+def _is_dummy_node(node: dict) -> bool:
+    node_id = str(node.get("id", ""))
+    return bool(
+        node.get("is_dummy")
+        or node_id.startswith(("FILLER_DUMMY_", "DUMMY_matrix_", "EDGE_DUMMY"))
+    )
+
+
 def node_drc_critic(state):
     t0 = time.time()
     retry_num = state.get("drc_retry_count", 0)
@@ -90,7 +98,8 @@ def node_drc_critic(state):
     log_section("Step 5b: LLM-based DRC fixes")
     prior_cmds_text = "\n".join(f"[CMD]{json.dumps(c)}[/CMD]" for c in pending_cmds[-10:])
     violation_text = format_drc_violations_for_llm(drc_result, prior_cmds_text)
-    logical_nodes = aggregate_to_logical_devices(nodes)
+    active_nodes_for_context = [n for n in nodes if not _is_dummy_node(n)]
+    logical_nodes = aggregate_to_logical_devices(active_nodes_for_context)
     current_placement_context = build_placement_context(
         logical_nodes, constraint_text, terminal_nets=terminal_nets, edges=edges,
     )

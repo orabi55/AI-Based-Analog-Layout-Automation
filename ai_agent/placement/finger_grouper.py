@@ -122,7 +122,8 @@ from ai_agent.utils.logging import vprint
 # Constants — sourced from centralized design rules config
 # ---------------------------------------------------------------------------
 from config.design_rules import (
-    PMOS_Y, NMOS_Y, ROW_PITCH, FINGER_PITCH, PITCH_UM as STD_PITCH,
+    PMOS_Y, NMOS_Y, ROW_PITCH, ROW_HEIGHT_UM, ROW_GAP_UM,
+    FINGER_PITCH, PITCH_UM as STD_PITCH,
 )
 
 # Regex: split "MM9<3>_f4" -> ("MM9", "3", "4")  (legacy array-bus)
@@ -137,6 +138,35 @@ _PLAIN_FINGER_RE = re.compile(r'^(.+?)_f(\d+)$')
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+def _node_height_um(node: dict, fallback: float = ROW_HEIGHT_UM) -> float:
+    """Return the physical device height from geometry, with a PDK-safe fallback."""
+    try:
+        height = float(node.get("geometry", {}).get("height", 0.0))
+    except (TypeError, ValueError):
+        height = 0.0
+    return height if height > 0 else fallback
+
+
+def _row_step_um(row_or_nodes: List[dict]) -> float:
+    """Origin-to-origin spacing needed after a row of devices.
+
+    Uses the tallest device's height + ROW_GAP_UM.  When ROW_GAP_UM is
+    0 the rows touch edge-to-edge with no gap.
+    """
+    if not row_or_nodes:
+        return ROW_HEIGHT_UM
+    row_height = max(_node_height_um(n) for n in row_or_nodes)
+    return row_height + ROW_GAP_UM
+
+
+def _is_dummy_node(node: dict) -> bool:
+    """Return True for generated or explicit filler/dummy devices."""
+    node_id = str(node.get("id", ""))
+    return bool(
+        node.get("is_dummy")
+        or node_id.startswith(("FILLER_DUMMY_", "DUMMY_matrix_", "EDGE_DUMMY"))
+    )
 
 def _parse_id(node_id: str) -> Tuple[str, int | None, int | None]:
     """
@@ -225,6 +255,8 @@ def aggregate_to_logical_devices(nodes: list, edges: list = None) -> list:
     # --- 1. Bucket every finger node under its logical transistor key --------
     buckets: Dict[str, List[dict]] = defaultdict(list)
     for n in nodes:
+        if _is_dummy_node(n):
+            continue
         key = _transistor_key(n["id"])
         buckets[key].append(n)
 
@@ -1564,16 +1596,8 @@ def pre_assign_rows(
         for i, row in enumerate(pmos_rows):
             pmos_rows[i] = _symmetry_order(row, matching_info, group_terminal_nets)
 
-    def _compute_height(g: dict) -> float:
-        nfin = g.get("electrical", {}).get("nfin", 2)
-        h1 = 0.55 + nfin * 0.05
-        h2 = g.get("geometry", {}).get("height", 0.0)
-        return max(h1, h2, 0.5) + 0.05
-
     def _row_height(row: list) -> float:
-        if not row:
-            return ROW_PITCH
-        return max(_compute_height(g) for g in row)
+        return _row_step_um(row)
 
     # Build group_id -> Y map
     y_map: Dict[str, float] = {}
@@ -1582,18 +1606,16 @@ def pre_assign_rows(
     nmos_row_ys = []
     for row_idx, row in enumerate(nmos_rows):
         nmos_row_ys.append(current_y)
-        row_h = _row_height(row)
         for g in row:
             y_map[g["id"]] = current_y
-        current_y += row_h
+        current_y += _row_height(row)
 
     pmos_row_ys = []
     for row_idx, row in enumerate(pmos_rows):
         pmos_row_ys.append(current_y)
-        row_h = _row_height(row)
         for g in row:
             y_map[g["id"]] = current_y
-        current_y += row_h
+        current_y += _row_height(row)
 
     passive_y = current_y
     for g in passive_groups:
@@ -1706,19 +1728,16 @@ def expand_to_fingers(
         grp_geom = placed.get(grp_id, {}).get("geometry", {})
         raw_y = grp_geom.get("y", NMOS_Y)
         dev_type = members[0].get("type", "nmos")
-        rep_elec = members[0].get("electrical", {})
+        member_height = max((_node_height_um(m) for m in members), default=ROW_HEIGHT_UM)
+        llm_height = _node_height_um({"geometry": grp_geom}, fallback=0.0)
 
-        # Compute height from nfin (number of fins in the vertical direction)
-        # FinFET device height scales linearly with nfin.
-        # Conservative estimate: base=0.55 um, fin_pitch=0.05 um
-        # This accounts for the actual OAS PCell height which is often larger
-        # than the nominal geometric bounding box.
-        nfin = rep_elec.get("nfin", 2)
-        computed_height = 0.55 + nfin * 0.05
-        # Also check the LLM-provided height — use the larger of the two
-        llm_height = grp_geom.get("height", 0.0)
-        # Add a safety margin of 0.05 um to prevent any edge overlap
-        group_heights[grp_id] = max(computed_height, llm_height, 0.5) + 0.05
+        # Use actual geometry height — do NOT clamp to ROW_HEIGHT_UM.
+        # The old max(height, ROW_HEIGHT_UM) inflated 0.568 → 0.668 which made
+        # expand_to_fingers think NMOS extended further than pre_assign_rows
+        # planned, re-introducing the gap we eliminated.
+        computed_height = member_height
+        llm_height = max(llm_height, 0.0)
+        group_heights[grp_id] = max(computed_height, llm_height) if llm_height > 0 else computed_height
 
         group_types[grp_id] = dev_type
         # DON'T re-snap — trust the Y from the geometry engine which already
@@ -1730,24 +1749,28 @@ def expand_to_fingers(
     nmos_top_edges = []
     for grp_id, y in group_ys.items():
         if group_types.get(grp_id) == "nmos":
-            h = group_heights.get(grp_id, 0.668)
+            h = group_heights.get(grp_id, ROW_HEIGHT_UM)
             # The top edge of the NMOS bounding box is y + height
             nmos_top_edges.append(y + h)
 
     max_nmos_top = max(nmos_top_edges) if nmos_top_edges else 0.0
 
-    # PMOS bottom edge must be at or above max NMOS top edge
-    min_pmos_y = max_nmos_top
+    # PMOS bottom edge must be at or above max NMOS top edge plus the configured
+    # active-row gap.
+    # PMOS bottom edge must be at or above max NMOS top edge (+ ROW_GAP_UM).
+    # With ROW_GAP_UM = 0, rows touch without any gap.
+    min_pmos_y = max_nmos_top + ROW_GAP_UM
 
     # Also ensure NMOS and PMOS are on different row grid levels
     # (prevents same-row overlap even with height check)
     nmos_ys_used = {y for grp_id, y in group_ys.items()
                     if group_types.get(grp_id) == "nmos"}
     max_nmos_y = max(nmos_ys_used) if nmos_ys_used else 0.0
-    # PMOS must be on a row strictly above the highest NMOS row
-    min_pmos_row = max_nmos_y + ROW_PITCH
-    # Take the larger of the two constraints
-    min_pmos_y = max(min_pmos_y, min_pmos_row)
+    # PMOS must be strictly above the highest NMOS top edge.
+    # Instead of adding a full ROW_PITCH from the NMOS *origin* (which
+    # creates an artificial gap), we use the bounding-box constraint
+    # already computed above (max_nmos_top + ROW_GAP_UM).
+    min_pmos_y = max(min_pmos_y, max_nmos_top + ROW_GAP_UM)
 
     # Find the current lowest PMOS row
     pmos_ys = [y for grp_id, y in group_ys.items() if group_types.get(grp_id) == "pmos"]
@@ -1806,7 +1829,7 @@ def expand_to_fingers(
                     dev_fingers[base] = []
                 dev_fingers[base].append(m)
                 
-            MATRIX_ROW_PITCH = 0.668
+            MATRIX_ROW_PITCH = _row_step_um(members)
             rep_node = members[0]
             dummy_idx = 0
             
@@ -1816,6 +1839,7 @@ def expand_to_fingers(
                     if base == "dummy" or base not in dev_fingers or len(dev_fingers[base]) == 0:
                         node = copy.deepcopy(rep_node)
                         node["id"] = f"DUMMY_matrix_{grp_id}_{dummy_idx}"
+                        node["is_dummy"] = True
                         dummy_idx += 1
                         node["net_d"] = "NC"
                         node["net_g"] = "NC"
@@ -1938,7 +1962,7 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
         return nodes
 
     # STRIP existing dummies so we don't group them into giant blocks and duplicate them
-    active_nodes = [n for n in nodes if not n.get("is_dummy", False)]
+    active_nodes = [n for n in nodes if not _is_dummy_node(n)]
     
     pitch_abut = STD_PITCH if no_abutment else FINGER_PITCH  # 0.294 or 0.070
     pitch_std  = STD_PITCH     # 0.294
