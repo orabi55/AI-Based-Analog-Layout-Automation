@@ -29,6 +29,7 @@ class DeviceTreePanel(QWidget):
     connection_selected = Signal(str, str, str)
     block_selected = Signal(str)
     toggle_requested = Signal()
+    net_view_toggled = Signal(bool)  # True when Nets tab is active
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -198,6 +199,7 @@ class DeviceTreePanel(QWidget):
         self.tab_nets.setChecked(tab_name == "nets")
         self.tab_groups.setChecked(tab_name == "groups")
         self.load_devices(self._nodes, blocks=self._blocks)
+        self.net_view_toggled.emit(tab_name == "nets")
 
     def set_edges(self, edges):
         self._edges = edges or []
