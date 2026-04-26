@@ -1,8 +1,17 @@
-import re
-from typing import List, Dict, Optional
-from ai_agent.matching.universal_pattern_generator import generate_placement_grid
+"""
+Matching Engine (Extended)
+==========================
+Handles the mapping of logical device IDs to physical coordinates based on 
+specified matching techniques and placement patterns, utilizing the 
+Universal Pattern Generator.
 
-class MatchingEngine:
+Functions:
+- generate_placement (in MatchingEngine): Generates physical placements for a list of devices.
+  - Inputs: device_ids (list), technique (str), custom_str (optional str)
+  - Outputs: list of dictionaries with ID, x, and y.
+- _get_parent: Extracts the parent device ID from a finger/instance ID.
+- _sort_key: Provides a numeric sort key for device IDs.
+"""
     def __init__(self, device_items: Dict):
         """
         device_items: Dictionary mapping ID to device item objects 

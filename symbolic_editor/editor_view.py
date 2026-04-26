@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
     QGraphicsItem,
     QGraphicsSimpleTextItem,
     QMenu,
+    QColorDialog,
 )
 from PySide6.QtCore import Qt, Signal, QPointF
 from PySide6.QtGui import QPainter, QPen, QPainterPath, QColor, QBrush, QAction, QKeySequence
@@ -169,6 +170,8 @@ class SymbolicEditor(QGraphicsView):
         # When True, skip compaction in set_terminal_nets
         self._skip_compaction = False
 
+        self._colorize_mode = False
+
         # Virtual grid extents (shown as empty slots when > actual device count)
         self._virtual_row_count = 0
         self._virtual_col_count = 0
@@ -239,6 +242,37 @@ class SymbolicEditor(QGraphicsView):
     def select_all_devices(self):
         for item in self.device_items.values():
             item.setSelected(True)
+
+    def set_colorize_mode(self, enabled: bool):
+        self._colorize_mode = bool(enabled)
+        if self._colorize_mode:
+            import hashlib
+            from PySide6.QtGui import QColor
+            
+            parents = set()
+            for item in self.device_items.values():
+                if hasattr(item, "get_logical_name"):
+                    parents.add(item.get_logical_name())
+            
+            parent_colors = {}
+            # Generate a distinct color palette
+            for p in parents:
+                # Hash the parent name to get a consistent hue angle (0-359)
+                h = int(hashlib.md5(p.encode()).hexdigest(), 16) % 360
+                c = QColor()
+                # Use a saturated, bright color (H, S, L) mapping to Qt's (0-359, 0-255, 0-255)
+                c.setHsl(h, 220, 160)
+                parent_colors[p] = c
+                
+            for item in self.device_items.values():
+                if hasattr(item, "get_logical_name"):
+                    pid = item.get_logical_name()
+                    if pid in parent_colors:
+                        item.set_custom_color(parent_colors[pid])
+        else:
+            for item in self.device_items.values():
+                item.reset_custom_color()
+        self.viewport().update()
 
     def _snap_value(self, value):
         return round(value / self._snap_grid) * self._snap_grid
@@ -922,13 +956,22 @@ class SymbolicEditor(QGraphicsView):
             logging.debug("Failed to descend into nearest hierarchy", exc_info=True)
 
     def ascend_all_hierarchy(self):
-        """Ascend from all descended hierarchy groups."""
+        """Ascend from all descended hierarchy groups (Symbolic View)."""
         try:
             for group in self._hierarchy_groups:
                 if group._is_descended:
                     group.ascend()
         except Exception:
             logging.warning("Failed to ascend all hierarchies", exc_info=True)
+
+    def descend_all_hierarchy(self):
+        """Descend into all hierarchy groups (Transistor Level View)."""
+        try:
+            for group in self._hierarchy_groups:
+                if not group._is_descended:
+                    group.descend()
+        except Exception:
+            logging.warning("Failed to descend all hierarchies", exc_info=True)
 
     def _sync_hierarchy_to_nodes(self, group):
         """Update node data when a hierarchy group is moved."""
@@ -1634,7 +1677,7 @@ class SymbolicEditor(QGraphicsView):
                         return
             except Exception:
                 logging.debug("Escape key hierarchy ascend failed", exc_info=True)
-        elif event.key() == Qt.Key.Key_D and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+        elif event.key() == Qt.Key.Key_D and bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier):
             # Ctrl+D - descend into hierarchy
             try:
                 self.descend_nearest_hierarchy()
@@ -2081,6 +2124,21 @@ class SymbolicEditor(QGraphicsView):
         act_clear = QAction("Clear Both", self)
         menu.addAction(act_clear)
 
+        menu.addSeparator()
+        
+        act_change_color = QAction("Change Color...", self)
+        menu.addAction(act_change_color)
+        
+        act_reset_color = QAction("Reset Color", self)
+        menu.addAction(act_reset_color)
+        
+        menu.addSeparator()
+        
+        act_lock = QAction("Lock Position", self)
+        if not (target_item.flags() & QGraphicsItem.GraphicsItemFlag.ItemIsMovable):
+            act_lock.setText("Unlock Position")
+        menu.addAction(act_lock)
+
         chosen = menu.exec(event.globalPos())
 
         if chosen == act_left:
@@ -2090,6 +2148,26 @@ class SymbolicEditor(QGraphicsView):
         elif chosen == act_clear:
             target_item.set_abut_left(False)
             target_item.set_abut_right(False)
+        elif chosen == act_change_color:
+            color = QColorDialog.getColor(target_item._source_color)
+            if color.isValid():
+                target_item.set_custom_color(color)
+                # Apply to all fingers of the same logical device
+                for item in self.scene.items():
+                    if hasattr(item, 'get_logical_name') and item.get_logical_name() == target_item.get_logical_name():
+                        item.set_custom_color(color)
+        elif chosen == act_reset_color:
+            target_item.reset_custom_color()
+            for item in self.scene.items():
+                if hasattr(item, 'get_logical_name') and item.get_logical_name() == target_item.get_logical_name():
+                    item.reset_custom_color()
+        elif chosen == act_lock:
+            movable = bool(target_item.flags() & QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
+            new_movable = not movable
+            target_item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, new_movable)
+            for item in self.scene.items():
+                if hasattr(item, 'get_logical_name') and item.get_logical_name() == target_item.get_logical_name():
+                    item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, new_movable)
 
     # -------------------------------------------------
     # Export helper — abutment state for OAS writer

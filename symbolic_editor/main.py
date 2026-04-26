@@ -74,6 +74,7 @@ from icons import (
     icon_export_file,
     icon_abutment,
     icon_ai_placement,
+    icon_colorize,
 )
 from widgets.welcome_screen import WelcomeScreen
 
@@ -225,9 +226,11 @@ class MainWindow(QMainWindow):
         tab = self.current_tab()
         dummy_checked = bool(getattr(tab, "_dummy_mode", False)) if tab else False
         abut_checked = bool(getattr(tab, "_abutment_mode", False)) if tab else False
+        colorize_checked = bool(getattr(tab, "_colorize_mode", False)) if tab else False
         for action, checked in (
             (self._act_add_dummy, dummy_checked),
             (self._act_abutment, abut_checked),
+            (self._act_colorize, colorize_checked),
         ):
             blocked = action.blockSignals(True)
             action.setChecked(checked)
@@ -496,6 +499,12 @@ class MainWindow(QMainWindow):
         self._act_abutment.toggled.connect(self._on_toggle_abutment)
         tb.addAction(self._act_abutment)
 
+        self._act_colorize = QAction(icon_colorize(), "Colorize Parent Groups", self)
+        self._act_colorize.setCheckable(True)
+        self._act_colorize.setToolTip("Assign unique colors per parent device")
+        self._act_colorize.toggled.connect(self._on_toggle_colorize)
+        tb.addAction(self._act_colorize)
+
         self._tb_act_ai = QAction(icon_ai_placement(), "Run AI Placement", self)
         self._tb_act_ai.setToolTip("Run AI placement (Ctrl+P)")
         self._tb_act_ai.triggered.connect(lambda: self._fwd("do_ai_placement"))
@@ -661,6 +670,11 @@ class MainWindow(QMainWindow):
         if tab:
             tab.set_abutment_mode(checked)
 
+    def _on_toggle_colorize(self, checked):
+        tab = self.current_tab()
+        if tab:
+            tab.set_colorize_mode(checked)
+
     def _on_row_spin_changed(self, value):
         if self._ignore_grid_spin:
             return
@@ -756,6 +770,15 @@ class MainWindow(QMainWindow):
 # =====================================================================
 #  Main Entry Point
 # =====================================================================
+import traceback
+
+def global_exception_handler(exctype, value, tb):
+    with open("crash_traceback.txt", "w") as f:
+        traceback.print_exception(exctype, value, tb, file=f)
+    sys.__excepthook__(exctype, value, tb)
+
+sys.excepthook = global_exception_handler
+
 if __name__ == "__main__":
     app = QApplication(sys.argv)
 

@@ -1,6 +1,9 @@
-# ai_agent package
-# Note: LLMWorker / OrchestratorWorker require Qt (PySide6).
-# Import them directly:  from ai_agent.ai_chat_bot.llm_worker import LLMWorker, OrchestratorWorker
-# Non-Qt helpers are always safe to import:
-#   from ai_agent.ai_chat_bot.orchestrator import Orchestrator
-#   from ai_agent.ai_chat_bot.tools import tool_run_drc, tool_score_net_crossings
+"""
+AI Agent Package
+================
+Root package for the AI-based layout automation agent. 
+Provides a modular structure for agents, graph nodes, tools, and utilities.
+
+Functions:
+- None (Initializes the ai_agent package)
+"""
