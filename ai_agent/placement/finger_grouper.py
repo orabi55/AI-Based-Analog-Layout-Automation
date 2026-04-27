@@ -168,6 +168,54 @@ def _is_dummy_node(node: dict) -> bool:
         or node_id.startswith(("FILLER_DUMMY_", "DUMMY_matrix_", "EDGE_DUMMY"))
     )
 
+
+def _is_regenerated_filler_dummy(node: dict) -> bool:
+    """Return True for non-structural fillers that can be regenerated safely."""
+    return str(node.get("id", "")).startswith("FILLER_DUMMY_")
+
+
+def legalize_vertical_rows(nodes: List[dict], row_gap: float | None = None) -> List[dict]:
+    """Restack physical rows so their bounding boxes cannot overlap vertically.
+
+    Earlier deterministic stages may mix fixed row pitches with real device
+    heights.  This pass keeps each row's relative order and x placement, but
+    shifts whole rows upward when the previous row's actual height would
+    otherwise collide with it.
+    """
+    if not nodes:
+        return nodes
+
+    gap = ROW_GAP_UM if row_gap is None else float(row_gap)
+    touch_epsilon = 0.000001
+    rows: Dict[Tuple[float, str], List[dict]] = defaultdict(list)
+    for node in nodes:
+        geo = node.get("geometry", {})
+        if not isinstance(geo, dict):
+            continue
+        try:
+            y = round(float(geo.get("y", 0.0)), 6)
+        except (TypeError, ValueError):
+            continue
+        dev_type = str(node.get("type", "")).strip().lower()
+        rows[(y, dev_type)].append(node)
+
+    type_order = {"nmos": 0, "res": 1, "cap": 1, "pmos": 2}
+    cursor = None
+    for (row_y, dev_type), row_nodes in sorted(
+        rows.items(),
+        key=lambda item: (item[0][0], type_order.get(item[0][1], 1), item[0][1]),
+    ):
+        if not row_nodes:
+            continue
+        row_height = max(_node_height_um(n) for n in row_nodes)
+        new_y = row_y if cursor is None else max(row_y, cursor)
+        if abs(new_y - row_y) > 1e-9:
+            for node in row_nodes:
+                node.setdefault("geometry", {})["y"] = round(new_y, 6)
+        cursor = round(new_y + row_height + gap + touch_epsilon, 6)
+
+    return nodes
+
 def _parse_id(node_id: str) -> Tuple[str, int | None, int | None]:
     """
     Parse a node id into (parent_name, multiplier_index, finger_index).
@@ -1875,6 +1923,15 @@ def expand_to_fingers(
 
         for finger_idx, orig_node in enumerate(members):
             node = copy.deepcopy(orig_node)
+            if node.get("is_dummy"):
+                raw_id = str(node.get("id", "DUMMY"))
+                if raw_id == "EDGE_DUMMY_L":
+                    dummy_label = "EDGE_DUMMY_L"
+                elif raw_id == "EDGE_DUMMY_R":
+                    dummy_label = "EDGE_DUMMY_R"
+                else:
+                    dummy_label = "MATCH_DUMMY"
+                node["id"] = f"{dummy_label}_{grp_id}_{finger_idx}"
             # Place each sibling at consecutive positions with the group's pitch
             # This ensures abutment for all hierarchy leaves within the group
             fx = round(origin_x + finger_idx * pitch, 6)
@@ -1915,6 +1972,7 @@ def expand_to_fingers(
     # --- Pass 4: resolve inter-group overlaps per row ----------------------
     vprint(f"[expand_to_fingers] Before overlap resolution: {len(expanded)} devices expanded")
     expanded = _resolve_row_overlaps(expanded, no_abutment)
+    expanded = legalize_vertical_rows(expanded)
     vprint(f"[expand_to_fingers] After overlap resolution: returning {len(expanded)} devices")
 
     # POST-EXPANSION VALIDATION: Check for duplicate positions
@@ -1961,8 +2019,9 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
     if not nodes:
         return nodes
 
-    # STRIP existing dummies so we don't group them into giant blocks and duplicate them
-    active_nodes = [n for n in nodes if not _is_dummy_node(n)]
+    # Strip only regenerated density fillers.  Structural edge/matrix dummies
+    # are part of matched/current-mirror blocks and must survive legalization.
+    active_nodes = [n for n in nodes if not _is_regenerated_filler_dummy(n)]
     
     pitch_abut = STD_PITCH if no_abutment else FINGER_PITCH  # 0.294 or 0.070
     pitch_std  = STD_PITCH     # 0.294
