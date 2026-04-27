@@ -117,7 +117,7 @@ class MainWindow(QMainWindow):
         self._create_menu_bar()
         self._create_file_toolbar()
         self._create_toolbar()
-        self._create_status_bar()
+        self._status_bar = None
 
         # ── Open initial file if given ───────────────────────────
         if initial_file and os.path.isfile(initial_file):
@@ -152,6 +152,7 @@ class MainWindow(QMainWindow):
 
         # Initial sync
         self._sync_undo_redo(tab.can_undo(), tab.can_redo())
+        tab._update_grid_counts()
         self._sync_selection(tab.selection_count())
         self._sync_mode_toggles()
         return tab
@@ -171,6 +172,7 @@ class MainWindow(QMainWindow):
         if tab is None:
             return
         self._sync_undo_redo(tab.can_undo(), tab.can_redo())
+        tab._update_grid_counts()
         self._sync_selection(tab.selection_count())
         self._sync_mode_toggles()
         tab.editor.setFocus(Qt.FocusReason.OtherFocusReason)
@@ -216,7 +218,7 @@ class MainWindow(QMainWindow):
             self._tb_act_redo.setEnabled(can_redo)
 
     def _sync_selection(self, count):
-        self._sel_label.setText(f"  Sel: {count}  ")
+        self._sel_label.setText(f"Sel {count}")
 
     def _sync_grid(self, rows, cols, min_rows, min_cols):
         self._ignore_grid_spin = True
@@ -403,14 +405,16 @@ class MainWindow(QMainWindow):
         tb.setAllowedAreas(Qt.ToolBarArea.LeftToolBarArea)
         tb.setOrientation(Qt.Orientation.Vertical)
         tb.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
-        tb.setIconSize(QSize(18, 18))
+        tb.setIconSize(QSize(16, 16))
         tb.setStyleSheet(
-            "QToolBar { background-color: #10151d; border-right: 1px solid #2d3548; spacing: 4px; padding: 6px 5px; }"
-            "QToolButton { background: transparent; border: 1px solid transparent; border-radius: 8px; "
-            "padding: 5px; color: #c8d0dc; min-width: 28px; min-height: 28px; }"
+            "QToolBar { background-color: #10151d; border-right: 1px solid #2d3548; spacing: 2px; padding: 4px 4px; }"
+            "QToolBar::separator { background-color: #2d3548; height: 1px; margin: 3px 4px; }"
+            "QToolButton { background: transparent; border: 1px solid transparent; border-radius: 6px; "
+            "padding: 3px; color: #c8d0dc; min-width: 24px; min-height: 24px; }"
             "QToolButton:hover { background-color: #1e2a3a; border-color: #3d5066; }"
             "QToolButton:pressed { background-color: #2d3f54; }"
             "QToolButton:checked { background-color: #243a53; border-color: #4a90d9; }"
+            "QLabel { color: #8899aa; font-family: 'Segoe UI'; font-size: 8pt; font-weight: 600; }"
         )
         self._toolbar = tb
         self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, tb)
@@ -499,6 +503,47 @@ class MainWindow(QMainWindow):
         self._tb_act_delete.setToolTip("Delete selected devices (Delete)")
         self._tb_act_delete.triggered.connect(lambda: self._fwd("do_delete"))
         tb.addAction(self._tb_act_delete)
+        tb.addSeparator()
+
+        spin_style = (
+            "QSpinBox { background: #1a1f2b; color: #e0e8f0; border: 1px solid #2d3548; "
+            "border-radius: 4px; padding: 1px 2px; min-width: 42px; max-width: 42px; min-height: 20px; }"
+            "QSpinBox:focus { border-color: #4a90d9; }"
+            "QSpinBox::up-button, QSpinBox::down-button { width: 10px; }"
+        )
+
+        lbl_r = QLabel("Rows")
+        lbl_r.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl_r.setToolTip("Visible row count")
+        tb.addWidget(lbl_r)
+        self._row_spin = QSpinBox()
+        self._row_spin.setRange(1, 20)
+        self._row_spin.setValue(2)
+        self._row_spin.setToolTip("Visible row count")
+        self._row_spin.setStyleSheet(spin_style)
+        self._row_spin.valueChanged.connect(self._on_row_spin_changed)
+        tb.addWidget(self._row_spin)
+
+        lbl_c = QLabel("Cols")
+        lbl_c.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl_c.setToolTip("Visible column count")
+        tb.addWidget(lbl_c)
+        self._col_spin = QSpinBox()
+        self._col_spin.setRange(1, 50)
+        self._col_spin.setValue(4)
+        self._col_spin.setToolTip("Visible column count")
+        self._col_spin.setStyleSheet(spin_style)
+        self._col_spin.valueChanged.connect(self._on_col_spin_changed)
+        tb.addWidget(self._col_spin)
+
+        self._sel_label = QLabel("Sel 0")
+        self._sel_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._sel_label.setToolTip("Selected device count")
+        self._sel_label.setStyleSheet(
+            "color: #9aa7b7; background: #161c28; border: 1px solid #2d3548; "
+            "border-radius: 4px; padding: 2px 3px; min-width: 42px; max-width: 42px;"
+        )
+        tb.addWidget(self._sel_label)
         return
 
         tb.addAction("⬅", lambda: self._fwd("do_undo")).setToolTip("Undo (Ctrl+Z)")
@@ -564,6 +609,7 @@ class MainWindow(QMainWindow):
 
     def _create_status_bar(self):
         sb = QStatusBar(self)
+        self._status_bar = sb
         sb.setSizeGripEnabled(False)
         sb.setStyleSheet(
             "QStatusBar { background-color: #10151d; border-top: 1px solid #2d3548; color: #9aa7b7; }"
@@ -604,7 +650,8 @@ class MainWindow(QMainWindow):
         self.menuBar().setVisible(visible)
         self._file_toolbar.setVisible(visible)
         self._toolbar.setVisible(visible)
-        self.statusBar().setVisible(visible)
+        if getattr(self, "_status_bar", None) is not None:
+            self._status_bar.setVisible(False)
 
     # =================================================================
     #  Forward helpers (delegate to active tab)

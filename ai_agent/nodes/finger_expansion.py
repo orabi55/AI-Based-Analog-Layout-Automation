@@ -12,7 +12,11 @@ Functions:
 
 import copy
 import time
-from ai_agent.placement.finger_grouper import expand_logical_to_fingers, _resolve_row_overlaps
+from ai_agent.placement.finger_grouper import (
+    expand_logical_to_fingers,
+    _resolve_row_overlaps,
+    legalize_vertical_rows,
+)
 from ai_agent.placement.validators import validate_finger_integrity
 from ai_agent.tools.overlap_resolver import resolve_overlaps
 from ai_agent.nodes._shared import vprint, ip_step
@@ -51,6 +55,7 @@ def node_finger_expansion(state):
         log_detail(f"Resolved {len(moved_ids)} overlapping device(s)")
     else:
         log_detail("No overlaps detected")
+    physical_nodes = legalize_vertical_rows(physical_nodes)
 
     # Integrity check
     log_section("Finger integrity validation")

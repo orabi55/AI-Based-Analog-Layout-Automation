@@ -18,7 +18,7 @@ from ai_agent.agents.placement_specialist import (
     create_placement_specialist_agent,
 )
 from ai_agent.knowledge.skill_injector import SkillMiddleware
-from ai_agent.placement.finger_grouper import aggregate_to_logical_devices
+from ai_agent.placement.finger_grouper import aggregate_to_logical_devices, legalize_vertical_rows
 from ai_agent.tools.cmd_parser import extract_cmd_blocks, apply_cmds_to_nodes
 from ai_agent.tools.overlap_resolver import resolve_overlaps
 from ai_agent.nodes._shared import (
@@ -205,6 +205,7 @@ def node_placement_specialist(state):
         log_detail(f"Fixed overlaps for {len(moved_ids)} device(s)")
     else:
         log_detail("No overlaps detected after expansion")
+    working_nodes = legalize_vertical_rows(working_nodes)
 
     # ── Step 3f: Validate device conservation ────────────────────────────
     log_section("Step 3f: Device conservation check")

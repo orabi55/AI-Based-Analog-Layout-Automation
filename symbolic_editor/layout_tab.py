@@ -1038,7 +1038,9 @@ class LayoutEditorTab(QWidget):
         if template:
             electrical = copy.deepcopy(template.get("electrical", electrical))
         x = candidate["x"] / self.editor.scale_factor
-        y = candidate["y"] / self.editor.scale_factor
+        # Candidate coordinates come from QGraphicsScene, where y is inverted
+        # relative to layout geometry.
+        y = -candidate["y"] / self.editor.scale_factor
         width = candidate["width"] / self.editor.scale_factor
         height = candidate["height"] / self.editor.scale_factor
         return {
@@ -1049,30 +1051,66 @@ class LayoutEditorTab(QWidget):
             "geometry": {"x": x, "y": y, "width": width, "height": height, "orientation": "R0"},
         }
 
-    def _add_dummy_device(self, candidate):
-        self._sync_node_positions(); self._push_undo()
+    def _dummy_row_step(self, dev_type):
+        """Return the next same-type dummy row step in scene coordinates."""
+        return -self.editor._row_pitch if dev_type == "pmos" else self.editor._row_pitch
+
+    def _dummy_col_capacity(self):
+        """Only enforce column capacity after the user explicitly expands cols."""
+        return int(self._cols_virtual_min) if self._cols_virtual_min > 0 else None
+
+    def _row_type_count(self, row_y, dev_type):
+        return sum(
+            1 for it in self.editor.device_items.values()
+            if self.editor._snap_row(it.pos().y()) == row_y
+            and getattr(it, "device_type", None) == dev_type
+        )
+
+    def _row_edge_target_x(self, row_y, width, side, dev_type=None):
+        row_items = [
+            it for it in self.editor.device_items.values()
+            if self.editor._snap_row(it.pos().y()) == row_y
+            and (dev_type is None or getattr(it, "device_type", None) == dev_type)
+        ]
+        if not row_items:
+            return 0.0
+        if side == "right":
+            return self.editor._snap_value(max(it.pos().x() + it.rect().width() for it in row_items))
+        return self.editor._snap_value(min(it.pos().x() for it in row_items) - width)
+
+    def _legalize_dummy_candidate(self, candidate, side=None):
         candidate = dict(candidate)
-        candidate["type"] = str(candidate.get("type", "")).strip().lower()
+        dev_type = str(candidate.get("type", "")).strip().lower()
+        candidate["type"] = dev_type
         candidate["y"] = self.editor._snap_row(candidate["y"])
         candidate["x"] = self.editor._snap_value(candidate["x"])
-        col_capacity = max(1, self._cols_virtual_min or 1)
-        dev_type = candidate.get("type")
 
-        def row_type_count(row_y):
-            return sum(
-                1 for it in self.editor.device_items.values()
-                if self.editor._snap_row(it.pos().y()) == row_y
-                and getattr(it, "device_type", None) == dev_type
+        col_capacity = self._dummy_col_capacity()
+        if col_capacity is not None:
+            for _ in range(max(len(self.editor.device_items) + 1, 1)):
+                if self._row_type_count(candidate["y"], dev_type) < col_capacity:
+                    break
+                candidate["y"] = self.editor._snap_row(candidate["y"] + self._dummy_row_step(dev_type))
+                candidate["x"] = self._row_edge_target_x(
+                    candidate["y"], candidate["width"], side or "right", dev_type
+                )
+
+        if side in {"left", "right"}:
+            candidate["x"] = self._row_edge_target_x(
+                candidate["y"], candidate["width"], side, dev_type
             )
 
-        while row_type_count(candidate["y"]) > col_capacity:
-            candidate["y"] += self.editor._row_pitch
-            candidate["x"] = 0.0
-
         candidate["x"] = self.editor.find_nearest_free_x(
-            row_y=candidate["y"], width=candidate["width"],
-            target_x=candidate["x"], exclude_id=None,
+            row_y=candidate["y"],
+            width=candidate["width"],
+            target_x=candidate["x"],
+            exclude_id=None,
         )
+        return candidate
+
+    def _add_dummy_device(self, candidate):
+        self._sync_node_positions(); self._push_undo()
+        candidate = self._legalize_dummy_candidate(candidate)
         dummy = self._build_dummy_node(candidate)
         self.nodes.append(dummy)
         self._original_data["nodes"] = self.nodes
@@ -1252,6 +1290,37 @@ class LayoutEditorTab(QWidget):
     #  Static pipelines (unchanged)
     # =================================================================
     @staticmethod
+    def _resolve_deterministic_node_overlaps(nodes, min_gap=0.0):
+        """Legalize deterministic fallback rows without changing row assignment."""
+        rows = {}
+        for node in nodes or []:
+            geo = node.get("geometry")
+            if not isinstance(geo, dict):
+                continue
+            key = (
+                round(float(geo.get("y", 0.0)), 6),
+                str(node.get("type", "")).strip().lower(),
+            )
+            rows.setdefault(key, []).append(node)
+
+        for row_nodes in rows.values():
+            row_nodes.sort(
+                key=lambda n: (
+                    float(n.get("geometry", {}).get("x", 0.0)),
+                    str(n.get("id", "")),
+                )
+            )
+            cursor = None
+            for node in row_nodes:
+                geo = node["geometry"]
+                x = float(geo.get("x", 0.0))
+                width = max(float(geo.get("width", 0.0)), 0.0)
+                if cursor is not None and x < cursor - 1e-6:
+                    x = round(cursor, 6)
+                    geo["x"] = x
+                cursor = max(cursor if cursor is not None else x, x + width + min_gap)
+
+    @staticmethod
     def _run_parser_pipeline(sp_path, oas_path="", abutment_enabled=True):
         from parser.netlist_reader import read_netlist_with_blocks
         from parser.circuit_graph import build_circuit_graph
@@ -1411,6 +1480,7 @@ class LayoutEditorTab(QWidget):
                     n["geometry"]["x"] = x_cursor; n["geometry"]["y"] = nmos_y; x_cursor += w
                 else:
                     n["geometry"]["x"] = passive_x_cursor; n["geometry"]["y"] = passive_y; passive_x_cursor += w + PITCH_UM
+            LayoutEditorTab._resolve_deterministic_node_overlaps(nodes)
         if device_mapping:
             max_x = max(
                 (n["geometry"]["x"] + n["geometry"]["width"]
@@ -2008,15 +2078,13 @@ class LayoutEditorTab(QWidget):
                     if row_y is None:
                         row_y = 0
                     side = str(cmd.get("side", "left")).strip().lower()
-                    row_items = [it for it in self.editor.device_items.values() if self.editor._snap_row(it.pos().y()) == row_y]
-                    if side == "right" and row_items:
-                        target_x = self.editor._snap_value(max(it.pos().x() + it.rect().width() for it in row_items))
-                    elif row_items:
-                        target_x = self.editor._snap_value(min(it.pos().x() for it in row_items) - w)
-                    else:
-                        target_x = 0
-                    free_x = self.editor.find_nearest_free_x(row_y=row_y, width=w, target_x=target_x, exclude_id=None)
-                    candidate = {"type": dev_type, "x": free_x, "y": row_y, "width": w, "height": h}
+                    if side not in {"left", "right"}:
+                        side = "left"
+                    target_x = self._row_edge_target_x(row_y, w, side, dev_type)
+                    candidate = self._legalize_dummy_candidate(
+                        {"type": dev_type, "x": target_x, "y": row_y, "width": w, "height": h},
+                        side=side,
+                    )
                     dummy = self._build_dummy_node(candidate)
                     self.nodes.append(dummy)
                     self._original_data["nodes"] = self.nodes

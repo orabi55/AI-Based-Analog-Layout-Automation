@@ -12,7 +12,7 @@ Functions:
 
 import json
 import time
-from ai_agent.placement.finger_grouper import aggregate_to_logical_devices
+from ai_agent.placement.finger_grouper import aggregate_to_logical_devices, legalize_vertical_rows
 from ai_agent.agents.placement_specialist import build_placement_context
 from ai_agent.agents.drc_critic import (
     DRC_CRITIC_PROMPT, run_drc_check, format_drc_violations_for_llm, compute_prescriptive_fixes,
@@ -189,6 +189,7 @@ def node_drc_critic(state):
         log_detail("No residual overlaps found")
 
     fixed_nodes = enforce_reflection_symmetry(fixed_nodes)
+    fixed_nodes = legalize_vertical_rows(fixed_nodes)
 
     # ── Step 5g: Final DRC re-check ────────────────────────────────────
     log_section("Step 5g: Final DRC re-check")
