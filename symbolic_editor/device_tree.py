@@ -63,7 +63,7 @@ class DeviceTreePanel(QWidget):
         header_layout.addStretch()
 
         toggle_btn = QPushButton()
-        toggle_btn.setIcon(icon_panel_toggle())
+        toggle_btn.setText("<")
         toggle_btn.setFixedSize(26, 26)
         toggle_btn.setToolTip("Hide panel")
         toggle_btn.setStyleSheet(
@@ -72,9 +72,14 @@ class DeviceTreePanel(QWidget):
                 background: transparent;
                 border: none;
                 border-radius: 4px;
+                color: #9aa4b2;
+                font-family: 'Segoe UI';
+                font-size: 14px;
+                font-weight: 700;
             }
             QPushButton:hover {
                 background-color: rgba(255,255,255,0.12);
+                color: #ffffff;
             }
             QPushButton:pressed {
                 background-color: rgba(255,255,255,0.20);
