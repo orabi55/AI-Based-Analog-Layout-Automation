@@ -60,7 +60,7 @@
             },
             "geometry": {
                 "x": 0.0,
-                "y": 0.668,
+                "y": 0.668001,
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
@@ -82,7 +82,7 @@
             },
             "geometry": {
                 "x": 0.588,
-                "y": 0.668,
+                "y": 0.668001,
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
@@ -118,7 +118,7 @@
                 "orientation": "R0",
                 "width": 0.294,
                 "x": 0.294,
-                "y": 0.668
+                "y": 0.668001
             },
             "id": "FILLER_DUMMY_2_pmos",
             "is_dummy": true,

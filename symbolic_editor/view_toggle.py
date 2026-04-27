@@ -19,7 +19,7 @@ class SegmentedToggle(QWidget):
         ("both", "Both"),
     )
 
-    def __init__(self, parent=None, accent="#4a90d9", variant="panel"):
+    def __init__(self, parent=None, accent="#5aa9e6", variant="panel"):
         super().__init__(parent)
         self._accent = accent
         self._variant = variant
@@ -32,15 +32,15 @@ class SegmentedToggle(QWidget):
             self.setStyleSheet(
                 f"""
                 SegmentedToggle {{
-                    background-color: #171d28;
-                    border: 1px solid #2d3548;
-                    border-radius: 9px;
+                    background-color: #1a1d23;
+                    border: 1px solid #303642;
+                    border-radius: 6px;
                 }}
                 QPushButton {{
                     background-color: transparent;
                     border: none;
-                    border-radius: 7px;
-                    color: #8fa1b5;
+                    border-radius: 4px;
+                    color: #9aa4b2;
                     padding: 3px 11px;
                     font-family: 'Segoe UI';
                     font-size: 8.5pt;
@@ -48,11 +48,11 @@ class SegmentedToggle(QWidget):
                     min-height: 18px;
                 }}
                 QPushButton:hover {{
-                    background-color: #232d3c;
-                    color: #dde6ef;
+                    background-color: #252a33;
+                    color: #e3e8f0;
                 }}
                 QPushButton:checked {{
-                    background-color: #2a374a;
+                    background-color: #2b3b4d;
                     color: #ffffff;
                     border: 1px solid {self._accent};
                 }}
@@ -63,15 +63,15 @@ class SegmentedToggle(QWidget):
             self.setStyleSheet(
                 f"""
                 SegmentedToggle {{
-                    background-color: #171d28;
-                    border: 1px solid #2b3647;
-                    border-radius: 14px;
+                    background-color: #1a1d23;
+                    border: 1px solid #303642;
+                    border-radius: 10px;
                 }}
                 QPushButton {{
                     background-color: transparent;
                     border: none;
-                    border-radius: 12px;
-                    color: #92a3b6;
+                    border-radius: 7px;
+                    color: #9aa4b2;
                     padding: 5px 14px;
                     font-family: 'Segoe UI';
                     font-size: 9pt;
@@ -79,8 +79,8 @@ class SegmentedToggle(QWidget):
                     min-height: 24px;
                 }}
                 QPushButton:hover {{
-                    background-color: rgba(255, 255, 255, 0.05);
-                    color: #dde6ef;
+                    background-color: #252a33;
+                    color: #e3e8f0;
                 }}
                 QPushButton:checked {{
                     background-color: {self._accent};

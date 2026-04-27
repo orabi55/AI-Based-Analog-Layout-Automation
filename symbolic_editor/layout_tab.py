@@ -161,7 +161,6 @@ class LayoutEditorTab(QWidget):
         workspace_layout = QVBoxLayout(self._workspace_shell)
         workspace_layout.setContentsMargins(0, 0, 0, 0)
         workspace_layout.setSpacing(0)
-        workspace_layout.addWidget(workspace_header)
         workspace_layout.addWidget(self._workspace_splitter, 1)
 
         self._splitter = QSplitter(Qt.Orientation.Horizontal)

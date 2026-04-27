@@ -48,6 +48,7 @@ class DeviceItem(QGraphicsRectItem):
         self._net_names = {}       # {"D": "VDD", "G": "clk", "S": "VSS"}
         self._colorize_nets = False
         self._net_color_seed = 0
+        self._highlighted_net = None
 
         # ── Hierarchical group movement ──
         # These are set by the editor when loading a layout.
@@ -196,6 +197,48 @@ class DeviceItem(QGraphicsRectItem):
         self._colorize_nets = bool(enabled)
         self._net_color_seed = seed
         self.update()
+
+    def set_highlighted_net(self, net_name):
+        """Highlight terminal labels matching net_name and dim the rest."""
+        self._highlighted_net = str(net_name) if net_name else None
+        self.update()
+
+    def clear_highlighted_net(self):
+        self._highlighted_net = None
+        self.update()
+
+    def _net_focus_state(self, net_name):
+        if not self._highlighted_net or not net_name:
+            return "normal"
+        return "focus" if str(net_name) == self._highlighted_net else "dim"
+
+    def _net_display_color(self, net_name, fallback=None):
+        state = self._net_focus_state(net_name)
+        if state == "focus":
+            return QColor("#111827")
+        if self._colorize_nets and not self._is_dummy:
+            color = QColor("#ffffff")
+        else:
+            color = QColor(fallback or self._get_net_color(net_name))
+        if state == "dim":
+            color.setAlpha(70)
+        return color
+
+    def _draw_net_focus_frame(self, painter, rect, net_name, radius=2.0):
+        state = self._net_focus_state(net_name)
+        if state == "focus":
+            fill = QColor("#facc15")
+            fill.setAlpha(175)
+            painter.setBrush(QBrush(fill))
+            painter.setPen(QPen(QColor("#f59e0b"), 2.4))
+            painter.drawRoundedRect(rect.adjusted(1.0, 1.0, -1.0, -1.0), radius, radius)
+            return
+        if state == "dim":
+            veil = QColor("#0b0f16")
+            veil.setAlpha(105)
+            painter.setBrush(QBrush(veil))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawRect(rect)
 
     def _get_net_color(self, net_name):
         """Return a consistent unique QColor for a given net name."""
@@ -434,18 +477,20 @@ class DeviceItem(QGraphicsRectItem):
                         
                         # Use a taller rect to ensure perfect vertical centering within the column thick
                         rect_lbl = QRectF(-avail_len/2, -avail_thick/2, avail_len, avail_thick)
+                        self._draw_net_focus_frame(
+                            painter, rect_lbl, net_str,
+                            radius=max(1.0, avail_thick * 0.18),
+                        )
                         
                         # ── Stronger Omni-directional Glow ──
                         glow_off = fs * 0.05
-                        painter.setPen(QColor(0, 0, 0, 200))
+                        glow_alpha = 90 if self._net_focus_state(net_str) == "dim" else 200
+                        painter.setPen(QColor(0, 0, 0, glow_alpha))
                         for dx, dy in [(-glow_off,0), (glow_off,0), (0,-glow_off), (0,glow_off)]:
                             painter.drawText(rect_lbl.translated(dx, dy), Qt.AlignmentFlag.AlignCenter, lbl)
                         
                         # Main text
-                        if self._colorize_nets and not self._is_dummy:
-                            painter.setPen(QColor(255, 255, 255))
-                        else:
-                            painter.setPen(self._get_net_color(net_str))
+                        painter.setPen(self._net_display_color(net_str))
                             
                         painter.drawText(rect_lbl, Qt.AlignmentFlag.AlignCenter, lbl)
                         painter.restore()
@@ -504,6 +549,11 @@ class DeviceItem(QGraphicsRectItem):
                 color = self._get_net_color(net)
             else:
                 color = self._source_color if term == "S" else self._drain_color
+            if self._net_focus_state(net) == "focus":
+                color = QColor("#facc15")
+            elif self._net_focus_state(net) == "dim":
+                color = QColor(color)
+                color.setAlpha(80)
                 
             sd_grad = QLinearGradient(cursor_x, y0, cursor_x, y0 + h)
             sd_grad.setColorAt(0.0, color.lighter(110))
@@ -511,6 +561,7 @@ class DeviceItem(QGraphicsRectItem):
             painter.setBrush(QBrush(sd_grad))
             draw_rect = QRectF(cursor_x, y0, sd_w, h).adjusted(0.5, 0.5, -0.5, -0.5)
             painter.drawRect(draw_rect)
+            self._draw_net_focus_frame(painter, draw_rect, net, radius=1.5)
             
             # --- Net Label (Detailed) ---
             if self._show_net_labels and self._net_names:
@@ -543,10 +594,7 @@ class DeviceItem(QGraphicsRectItem):
                     for dx, dy in [(-glow_off,0), (glow_off,0), (0,-glow_off), (0,glow_off)]:
                         painter.drawText(rect_lbl.translated(dx, dy), Qt.AlignmentFlag.AlignCenter, net)
                     
-                    if self._colorize_nets and not self._is_dummy:
-                        painter.setPen(QColor(255, 255, 255))
-                    else:
-                        painter.setPen(self._get_net_color(net))
+                    painter.setPen(self._net_display_color(net))
                     painter.drawText(rect_lbl, Qt.AlignmentFlag.AlignCenter, net)
                     painter.restore()
 
@@ -563,6 +611,17 @@ class DeviceItem(QGraphicsRectItem):
                     g_color = self._gate_color
                     g_top = self._gradient_top
                     g_bot = self._gradient_bottom
+                if self._net_focus_state(g_net) == "focus":
+                    g_color = QColor("#facc15")
+                    g_top = QColor("#fde68a")
+                    g_bot = QColor("#f59e0b")
+                elif self._net_focus_state(g_net) == "dim":
+                    g_color = QColor(g_color)
+                    g_top = QColor(g_top)
+                    g_bot = QColor(g_bot)
+                    g_color.setAlpha(80)
+                    g_top.setAlpha(80)
+                    g_bot.setAlpha(80)
                 
                 gate_rect = QRectF(cursor_x, y0, gate_w, h)
                 grad = QLinearGradient(gate_rect.topLeft(), gate_rect.bottomLeft())
@@ -572,6 +631,7 @@ class DeviceItem(QGraphicsRectItem):
                 painter.setBrush(QBrush(grad))
                 draw_gate_rect = gate_rect.adjusted(0.5, 0.5, -0.5, -0.5)
                 painter.drawRect(draw_gate_rect)
+                self._draw_net_focus_frame(painter, draw_gate_rect, g_net, radius=1.5)
                 
                 # --- Gate Net Label ---
                 if self._show_net_labels and self._net_names:
@@ -599,10 +659,7 @@ class DeviceItem(QGraphicsRectItem):
                         for dx, dy in [(-glow_off,0), (glow_off,0), (0,-glow_off), (0,glow_off)]:
                             painter.drawText(rect_lbl.translated(dx, dy), Qt.AlignmentFlag.AlignCenter, g_net)
 
-                        if self._colorize_nets and not self._is_dummy:
-                            painter.setPen(QColor(255, 255, 255))
-                        else:
-                            painter.setPen(self._get_net_color(g_net))
+                        painter.setPen(self._net_display_color(g_net))
                         painter.drawText(rect_lbl, Qt.AlignmentFlag.AlignCenter, g_net)
                         painter.restore()
 

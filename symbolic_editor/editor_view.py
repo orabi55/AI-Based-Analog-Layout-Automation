@@ -293,6 +293,33 @@ class SymbolicEditor(QGraphicsView):
                 item.set_net_colorize_enabled(enabled, self._color_seed)
         self.viewport().update()
 
+    def _terminal_nets_for_device(self, dev_id):
+        """Return terminal nets for exact, hierarchical, or finger-expanded ids."""
+        if not dev_id:
+            return {}
+        if dev_id in self._terminal_nets:
+            return self._terminal_nets.get(dev_id, {})
+
+        text = str(dev_id)
+        normalized = (
+            text.replace("/", "_")
+            .replace("\\", "_")
+            .replace(".", "_")
+            .replace(":", "_")
+        )
+        tokens = [tok for tok in normalized.split("_") if tok]
+        for key, nets in sorted(
+            self._terminal_nets.items(),
+            key=lambda item: len(str(item[0])),
+            reverse=True,
+        ):
+            key_text = str(key)
+            if key_text in tokens:
+                return nets
+            if normalized.endswith(f"_{key_text}") or f"_{key_text}_" in normalized:
+                return nets
+        return {}
+
     def set_net_labels_visible(self, visible: bool):
         """Toggle net name labels on all device terminals.
 
@@ -300,9 +327,11 @@ class SymbolicEditor(QGraphicsView):
         from the stored _terminal_nets mapping.
         """
         self._net_labels_visible = bool(visible)
+        if not visible:
+            self.clear_highlighted_net()
         for dev_id, item in self.device_items.items():
             if visible:
-                nets = self._terminal_nets.get(dev_id, {})
+                nets = self._terminal_nets_for_device(dev_id)
                 if hasattr(item, 'set_net_labels'):
                     item.set_net_labels(nets, self._color_seed)
             else:
@@ -314,18 +343,60 @@ class SymbolicEditor(QGraphicsView):
             if visible:
                 # Look up nets from the parent name or first child device
                 parent_name = group._parent_name
-                nets = self._terminal_nets.get(parent_name, {})
+                nets = self._terminal_nets_for_device(parent_name)
                 if not nets and group._device_items:
                     # Try the first child device's name
                     first_child = group._device_items[0]
-                    nets = self._terminal_nets.get(
-                        getattr(first_child, 'device_name', ''), {})
+                    nets = self._terminal_nets_for_device(
+                        getattr(first_child, 'device_name', ''))
                 if hasattr(group, 'set_net_labels'):
                     group.set_net_labels(nets, self._color_seed)
             else:
                 if hasattr(group, 'clear_net_labels'):
                     group.clear_net_labels()
 
+        self.viewport().update()
+
+    def set_highlighted_net(self, net_name: str | None):
+        """Focus a net by highlighting matching terminal labels, not wires."""
+        net_name = str(net_name).strip() if net_name else ""
+        if not net_name or net_name == "?":
+            self.clear_highlighted_net()
+            return
+
+        self._highlighted_net = net_name
+        self._net_labels_visible = True
+
+        for dev_id, item in self.device_items.items():
+            nets = self._terminal_nets_for_device(dev_id)
+            if hasattr(item, "set_net_labels"):
+                item.set_net_labels(nets, self._color_seed)
+            if hasattr(item, "set_highlighted_net"):
+                item.set_highlighted_net(net_name)
+
+        for group in self._hierarchy_groups:
+            parent_name = group._parent_name
+            nets = self._terminal_nets_for_device(parent_name)
+            if not nets and group._device_items:
+                first_child = group._device_items[0]
+                nets = self._terminal_nets_for_device(
+                    getattr(first_child, "device_name", "")
+                )
+            if hasattr(group, "set_net_labels"):
+                group.set_net_labels(nets, self._color_seed)
+            if hasattr(group, "set_highlighted_net"):
+                group.set_highlighted_net(net_name)
+
+        self.viewport().update()
+
+    def clear_highlighted_net(self):
+        self._highlighted_net = None
+        for item in self.device_items.values():
+            if hasattr(item, "clear_highlighted_net"):
+                item.clear_highlighted_net()
+        for group in self._hierarchy_groups:
+            if hasattr(group, "clear_highlighted_net"):
+                group.clear_highlighted_net()
         self.viewport().update()
 
     def _snap_value(self, value):
@@ -1448,7 +1519,7 @@ class SymbolicEditor(QGraphicsView):
 
     def _get_terminal_for_net(self, dev_id, net_name):
         """Return which terminal ('S','G','D') of dev_id connects to net_name."""
-        term_map = self._terminal_nets.get(dev_id, {})
+        term_map = self._terminal_nets_for_device(dev_id)
         for term, net in term_map.items():
             if net == net_name:
                 return term
@@ -1462,17 +1533,96 @@ class SymbolicEditor(QGraphicsView):
             self._net_colors[net_name] = palette[idx]
         return self._net_colors[net_name]
 
+    def _anchor_for_net(self, dev_id, item, net_name):
+        """Resolve a robust terminal anchor for a net/device pair."""
+        try:
+            anchors = item.terminal_anchors()
+        except (AttributeError, RuntimeError):
+            return None
+        if not anchors:
+            return None
+        term = self._get_terminal_for_net(dev_id, net_name)
+        return (
+            anchors.get(term)
+            or anchors.get("G")
+            or anchors.get("D")
+            or anchors.get("S")
+            or next(iter(anchors.values()))
+        )
+
+    @staticmethod
+    def _connection_path(p1, p2, index=0, offset_factor=0.25):
+        path = QPainterPath()
+        path.moveTo(p1)
+        dx = p2.x() - p1.x()
+        dy = p2.y() - p1.y()
+        offset = max(abs(dx), abs(dy)) * offset_factor
+        sign = 1.0 if index % 2 == 0 else -1.0
+        if abs(dx) > abs(dy):
+            ctrl1 = QPointF(p1.x() + dx * 0.33, p1.y() + sign * offset)
+            ctrl2 = QPointF(p1.x() + dx * 0.66, p2.y() + sign * offset)
+        else:
+            ctrl1 = QPointF(p1.x() + sign * offset, p1.y() + dy * 0.33)
+            ctrl2 = QPointF(p2.x() + sign * offset, p1.y() + dy * 0.66)
+        path.cubicTo(ctrl1, ctrl2, p2)
+        return path
+
+    def _iter_drawable_edges(self):
+        """Yield unique drawable edge tuples: (source, target, net)."""
+        drawn = set()
+        for edge in self._edges or []:
+            src = edge.get("source")
+            tgt = edge.get("target")
+            net = edge.get("net", "")
+            if not src or not tgt or not net:
+                continue
+            if src not in self.device_items or tgt not in self.device_items:
+                continue
+            edge_sig = (net, *tuple(sorted((str(src), str(tgt)))))
+            if edge_sig in drawn:
+                continue
+            drawn.add(edge_sig)
+            yield src, tgt, net
+
+    def _add_connection_line(self, src, tgt, net_name, index, color, width,
+                             style=Qt.PenStyle.SolidLine, alpha=255, z=10):
+        src_item = self.device_items.get(src)
+        tgt_item = self.device_items.get(tgt)
+        if not src_item or not tgt_item:
+            return False
+        p1 = self._anchor_for_net(src, src_item, net_name)
+        p2 = self._anchor_for_net(tgt, tgt_item, net_name)
+        if p1 is None or p2 is None:
+            return False
+
+        path_item = QGraphicsPathItem(self._connection_path(p1, p2, index))
+        line_color = QColor(color)
+        line_color.setAlpha(alpha)
+        pen = QPen(line_color, width, style)
+        pen.setCosmetic(True)
+        path_item.setPen(pen)
+        path_item.setZValue(z)
+        path_item.setFlag(QGraphicsPathItem.GraphicsItemFlag.ItemIsSelectable, False)
+        self.scene.addItem(path_item)
+        self._conn_lines.append(path_item)
+        return True
+
     def _clear_connections(self):
         """Remove all connection lines and labels from the scene."""
         if self._conn_lines:
             self.scene.blockSignals(True)
             for item in self._conn_lines:
-                self.scene.removeItem(item)
+                try:
+                    if item.scene() is self.scene:
+                        self.scene.removeItem(item)
+                except RuntimeError:
+                    pass
             self._conn_lines.clear()
             self.scene.blockSignals(False)
 
     def _show_connections(self, dev_id):
         """Draw curved lines from dev_id terminals to connected device terminals."""
+        self.clear_highlighted_net()
         self._clear_connections()
         connections = self._conn_map.get(dev_id, [])
         if not connections:
@@ -1482,153 +1632,31 @@ class SymbolicEditor(QGraphicsView):
         if not src_item:
             return
 
-        src_anchors = src_item.terminal_anchors()
-
         self.scene.blockSignals(True)
-        for i, (other_id, net_name) in enumerate(connections):
-            tgt_item = self.device_items.get(other_id)
-            if not tgt_item:
-                continue
-
-            tgt_anchors = tgt_item.terminal_anchors()
-            color = self._get_net_color(net_name)
-
-            # Look up correct terminals from SPICE data
-            src_term = self._get_terminal_for_net(dev_id, net_name)
-            tgt_term = self._get_terminal_for_net(other_id, net_name)
-            p1 = src_anchors[src_term]
-            p2 = tgt_anchors[tgt_term]
-
-            # Build a curved bezier path
-            path = QPainterPath()
-            path.moveTo(p1)
-            dx = p2.x() - p1.x()
-            dy = p2.y() - p1.y()
-            offset = max(abs(dx), abs(dy)) * 0.3
-            sign = 1.0 if i % 2 == 0 else -1.0
-            if abs(dx) > abs(dy):
-                ctrl1 = QPointF(p1.x() + dx * 0.33, p1.y() + sign * offset)
-                ctrl2 = QPointF(p1.x() + dx * 0.66, p2.y() + sign * offset)
-            else:
-                ctrl1 = QPointF(p1.x() + sign * offset, p1.y() + dy * 0.33)
-                ctrl2 = QPointF(p2.x() + sign * offset, p1.y() + dy * 0.66)
-            path.cubicTo(ctrl1, ctrl2, p2)
-
-            path_item = QGraphicsPathItem(path)
-            pen = QPen(color, 0.5, Qt.PenStyle.DashLine)
-            path_item.setPen(pen)
-            path_item.setZValue(10)
-            path_item.setFlag(QGraphicsPathItem.GraphicsItemFlag.ItemIsSelectable, False)
-            self.scene.addItem(path_item)
-            self._conn_lines.append(path_item)
-        self.scene.blockSignals(False)
+        try:
+            for i, (other_id, net_name) in enumerate(connections):
+                if other_id not in self.device_items:
+                    continue
+                color = self._get_net_color(net_name)
+                self._add_connection_line(
+                    dev_id, other_id, net_name, i,
+                    color, 1.4,
+                    style=Qt.PenStyle.DashLine,
+                    alpha=210,
+                    z=10,
+                )
+        finally:
+            self.scene.blockSignals(False)
 
     def _show_net_connections(self, dev_id, net_name):
-        """Highlight only connections for a specific net from a device."""
+        """Highlight a selected net while keeping other nets dimmed for context."""
         self._clear_connections()
-        connections = [(oid, n) for oid, n in self._conn_map.get(dev_id, [])
-                       if n == net_name]
-        if not connections:
-            return
-
-        src_item = self.device_items.get(dev_id)
-        if not src_item:
-            return
-
-        src_anchors = src_item.terminal_anchors()
-        src_term = self._get_terminal_for_net(dev_id, net_name)
-        color = self._get_net_color(net_name)
-
-        self.scene.blockSignals(True)
-        for i, (other_id, _) in enumerate(connections):
-            tgt_item = self.device_items.get(other_id)
-            if not tgt_item:
-                continue
-
-            tgt_anchors = tgt_item.terminal_anchors()
-            tgt_term = self._get_terminal_for_net(other_id, net_name)
-            p1 = src_anchors[src_term]
-            p2 = tgt_anchors[tgt_term]
-
-            path = QPainterPath()
-            path.moveTo(p1)
-            dx = p2.x() - p1.x()
-            dy = p2.y() - p1.y()
-            offset = max(abs(dx), abs(dy)) * 0.25
-            sign = 1.0 if i % 2 == 0 else -1.0
-            if abs(dx) > abs(dy):
-                ctrl1 = QPointF(p1.x() + dx * 0.33, p1.y() + sign * offset)
-                ctrl2 = QPointF(p1.x() + dx * 0.66, p2.y() + sign * offset)
-            else:
-                ctrl1 = QPointF(p1.x() + sign * offset, p1.y() + dy * 0.33)
-                ctrl2 = QPointF(p2.x() + sign * offset, p1.y() + dy * 0.66)
-            path.cubicTo(ctrl1, ctrl2, p2)
-
-            path_item = QGraphicsPathItem(path)
-            pen = QPen(color, 0.5, Qt.PenStyle.DashLine)
-            path_item.setPen(pen)
-            path_item.setZValue(10)
-            self.scene.addItem(path_item)
-            self._conn_lines.append(path_item)
-        self.scene.blockSignals(False)
+        self.set_highlighted_net(net_name)
 
     def highlight_net_by_name(self, net_name, color):
-        """Highlight all connections for a specific net across the layout using a custom color."""
-        if not getattr(self, "_edges", None):
-            return
-
-        self.scene.blockSignals(True)
-        drawn = set()
-        for i, edge in enumerate(self._edges):
-            if edge.get("net") == net_name:
-                src = edge.get("source")
-                tgt = edge.get("target")
-                if not src or not tgt:
-                    continue
-                
-                # Avoid drawing the exact same undirected edge twice if it exists
-                edge_sig = tuple(sorted([src, tgt]))
-                if edge_sig in drawn:
-                    continue
-                drawn.add(edge_sig)
-
-                src_item = self.device_items.get(src)
-                tgt_item = self.device_items.get(tgt)
-                if not src_item or not tgt_item:
-                    continue
-
-                src_anchors = src_item.terminal_anchors()
-                tgt_anchors = tgt_item.terminal_anchors()
-                
-                src_term = self._get_terminal_for_net(src, net_name)
-                tgt_term = self._get_terminal_for_net(tgt, net_name)
-                
-                p1 = src_anchors[src_term]
-                p2 = tgt_anchors[tgt_term]
-
-                path = QPainterPath()
-                path.moveTo(p1)
-                dx = p2.x() - p1.x()
-                dy = p2.y() - p1.y()
-                offset = max(abs(dx), abs(dy)) * 0.25
-                sign = 1.0 if i % 2 == 0 else -1.0
-                if abs(dx) > abs(dy):
-                    ctrl1 = QPointF(p1.x() + dx * 0.33, p1.y() + sign * offset)
-                    ctrl2 = QPointF(p1.x() + dx * 0.66, p2.y() + sign * offset)
-                else:
-                    ctrl1 = QPointF(p1.x() + sign * offset, p1.y() + dy * 0.33)
-                    ctrl2 = QPointF(p2.x() + sign * offset, p1.y() + dy * 0.66)
-                path.cubicTo(ctrl1, ctrl2, p2)
-
-                path_item = QGraphicsPathItem(path)
-                # use solid thicker line for highlight
-                pen = QPen(QColor(color), 1.5, Qt.PenStyle.SolidLine)
-                path_item.setPen(pen)
-                path_item.setZValue(15)
-                path_item.setFlag(QGraphicsPathItem.GraphicsItemFlag.ItemIsSelectable, False)
-                self.scene.addItem(path_item)
-                self._conn_lines.append(path_item)
-        self.scene.blockSignals(False)
+        """Highlight a net's terminal labels across the layout."""
+        self._clear_connections()
+        self.set_highlighted_net(net_name)
 
 
     def _on_selection_changed(self):
