@@ -1,5 +1,11 @@
 Traceback (most recent call last):
-  File "D:\Senior 2\Layout_Project\Automation\new_main\AI-Based-Analog-Layout-Automation\symbolic_editor\editor_view.py", line 307, in set_net_labels_visible
-    item.set_net_labels(nets, self._color_seed)
-    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
-TypeError: DeviceItem.set_net_labels() takes 2 positional arguments but 3 were given
+  File "c:\Users\DELL G3\Desktop\GP\NEW\AI-Based-Analog-Layout-Automation\symbolic_editor\main.py", line 925, in _on_toggle_ruler
+    tab.set_ruler_mode(checked)
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "c:\Users\DELL G3\Desktop\GP\NEW\AI-Based-Analog-Layout-Automation\symbolic_editor\layout_tab.py", line 998, in set_ruler_mode
+    self.editor.set_ruler_mode(enabled)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "c:\Users\DELL G3\Desktop\GP\NEW\AI-Based-Analog-Layout-Automation\symbolic_editor\editor_view.py", line 241, in set_ruler_mode
+    self.scene.removeItem(self._ruler_line)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+RuntimeError: Internal C++ object (PySide6.QtWidgets.QGraphicsLineItem) already deleted.
