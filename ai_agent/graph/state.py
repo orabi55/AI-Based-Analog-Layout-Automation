@@ -60,3 +60,6 @@ class LayoutState(TypedDict):
     # --- Pipeline config (from UI) ---
     no_abutment: bool
     abutment_candidates: List[Dict]
+
+    # --- Symmetry enforcement ---
+    placement_mode: str   # "auto" | "two_half"

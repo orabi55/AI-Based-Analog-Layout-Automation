@@ -12,6 +12,11 @@ Functions:
 - _get_parent: Extracts the parent device ID from a finger/instance ID.
 - _sort_key: Provides a numeric sort key for device IDs.
 """
+import re
+from typing import Dict, List, Optional
+from ai_agent.matching.universal_pattern_generator import generate_placement_grid
+
+class MatchingEngine:
     def __init__(self, device_items: Dict):
         """
         device_items: Dictionary mapping ID to device item objects 

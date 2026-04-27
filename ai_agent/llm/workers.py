@@ -348,7 +348,7 @@ class OrchestratorWorker(LLMWorker):
                     "Analysis_result": "",
                     "edges":           [],
                     "terminal_nets":   layout_context.get("terminal_nets", {}),
-                    "placement_nodes": layout_context.get("nodes", []),
+                    "placement_nodes": [],           # always start fresh
                     "deterministic_snapshot": [],
                     "drc_flags":       [],
                     "drc_pass":        False,
