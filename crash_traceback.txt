@@ -1,11 +1,5 @@
 Traceback (most recent call last):
-  File "c:\Users\DELL G3\Desktop\GP\NEW\AI-Based-Analog-Layout-Automation\symbolic_editor\main.py", line 925, in _on_toggle_ruler
-    tab.set_ruler_mode(checked)
-    ~~~~~~~~~~~~~~~~~~^^^^^^^^^
-  File "c:\Users\DELL G3\Desktop\GP\NEW\AI-Based-Analog-Layout-Automation\symbolic_editor\layout_tab.py", line 998, in set_ruler_mode
-    self.editor.set_ruler_mode(enabled)
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
-  File "c:\Users\DELL G3\Desktop\GP\NEW\AI-Based-Analog-Layout-Automation\symbolic_editor\editor_view.py", line 241, in set_ruler_mode
-    self.scene.removeItem(self._ruler_line)
-    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
-RuntimeError: Internal C++ object (PySide6.QtWidgets.QGraphicsLineItem) already deleted.
+  File "c:\Users\DELL G3\Desktop\GP\NEW\AI-Based-Analog-Layout-Automation\symbolic_editor\widgets\welcome_screen.py", line 232, in _tick
+    def _tick(self):
+    
+KeyboardInterrupt

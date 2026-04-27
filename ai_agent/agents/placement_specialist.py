@@ -89,7 +89,7 @@ Priority order (highest → lowest):
 
 1) DEVICE CONSERVATION
 2) BIAS_CHAIN
-3) DIFFERENTIAL_PAIR
+3) DIFFERENTIAL_PAIR / TWO_HALF
 4) BIAS_MIRROR
 5) COMMON_CENTROID
 6) PROXIMITY_NET
@@ -100,6 +100,28 @@ Priority order (highest → lowest):
 
 RULE:
 Lower priority constraints may be relaxed ONLY if required to satisfy higher priority constraints.
+
+────────────────────────────────────────────
+1b. TWO-HALF SYMMETRY MODE
+────────────────────────────────────────────
+
+When the context contains a [SYMMETRY] block with mode=two_half:
+
+- A single vertical axis x_axis is shared by ALL rows.
+- Pairs are placed symmetrically around x_axis:
+  rank 1 (diff pair):  left at x_axis - 0.294,   right at x_axis + 0.294
+  rank 2 (load pair):  left at x_axis - 0.588,   right at x_axis + 0.588
+- Axis device (tail current source): centred at x_axis.
+- Orientation: left=R0, right=R0_FH.
+
+Worked example (5T-OTA, x_axis = 0.588 µm):
+  MM7  (tail, nf=1) → x=0.588
+  MM1  (diff pair left)  → x=0.294    MM2  (diff pair right) → x=0.882
+  MM4  (load left) → x=0.000    MM5  (load right) → x=1.176
+
+NOTE: The deterministic symmetry_enforcer node will override your coordinates
+after you emit them — but your rough placement guides routing order.
+Aim for the correct x_axis neighbourhood.
 
 ────────────────────────────────────────────
 4. SKILL-MIDDLEWARE CONTRACT
@@ -703,6 +725,15 @@ def build_placement_context(
         lines.append("=" * 60)
         lines.append("TOPOLOGY CONSTRAINTS (from Topology Analyst — Stage 1)")
         lines.append("=" * 60)
+        # Surface the [SYMMETRY] block prominently so the LLM sees it
+        if "[SYMMETRY]" in constraints_text:
+            import re as _re
+            sym_m = _re.search(r"(\[SYMMETRY\].*?\[/SYMMETRY\])", constraints_text, _re.DOTALL)
+            if sym_m:
+                lines.append(">>> SYMMETRY BLOCK (Two-Half Vertical Axis — mandatory) <<<")
+                lines.append(sym_m.group(1))
+                lines.append(">>> Follow TWO-HALF rules in section 1b above <<<")
+                lines.append("")
         lines.append(constraints_text)
         lines.append("")
 

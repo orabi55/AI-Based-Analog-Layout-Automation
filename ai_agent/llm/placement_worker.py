@@ -89,7 +89,7 @@ class PlacementWorker(QObject):
             "Analysis_result": "",
             "edges": layout_context.get("edges", []) if isinstance(layout_context.get("edges"), list) else [],
             "terminal_nets": layout_context.get("terminal_nets", {}),
-            "placement_nodes": layout_context.get("nodes", []),
+            "placement_nodes": [],          # always start fresh — node_placement_specialist populates this
             "deterministic_snapshot": [],
             "drc_flags": [],
             "drc_pass": False,
@@ -101,6 +101,7 @@ class PlacementWorker(QObject):
             "routing_pass_count": 0,
             "no_abutment": no_abutment,
             "abutment_candidates": abutment_candidates,
+            "placement_mode": "auto",   # symmetry_enforcer may upgrade to "two_half"
         }
 
         try:

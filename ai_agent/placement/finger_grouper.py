@@ -489,6 +489,9 @@ def _enrich_matching_info(
     Detects:
       - Differential pairs (VINP/VINN gated, same type)
       - Cross-coupled latches (D_A == G_B AND D_B == G_A, same type)
+      - CLK-symmetric pairs: two same-type same-size devices whose gate is CLK
+        and whose drain nets are the two sides of a symmetric latch/output
+        (e.g. MM1/MM2 precharge PMOS in a comparator with D=VOUTN/VOUTP)
       - Load pairs (same-type devices whose drains connect to the diff pair
         output nets — typically PMOS active loads in a comparator)
       - Tail sources (devices sharing a non-power S/D net with the diff pair)
@@ -532,6 +535,58 @@ def _enrich_matching_info(
                     tb.get("D") and tb.get("D") == ta.get("G")):
                 cross_pairs.append((ga, gb))
     matching_info["cross_coupled"] = cross_pairs
+
+    # --- CLK-symmetric pairs: same-type, same-size, gate=CLK, symmetric drains
+    # In a dynamic comparator: MM1 (D=VOUTN, G=CLK, S=VDD) and
+    # MM2 (D=VOUTP, G=CLK, S=VDD) are precharge devices that must be
+    # placed symmetrically (ABBA) around the vertical axis.
+    # Detection: two same-type, same-signature devices share the CLK gate
+    # AND their drain nets form a symmetric pair (each drain of one appears
+    # as the gate of the other in any cross-coupled pair).
+    clk_sym_pairs: List[Tuple[str, str]] = []
+    cross_drain_nets: set = set()
+    for ga, gb in cross_pairs:
+        ta = group_terminal_nets.get(ga, {})
+        tb = group_terminal_nets.get(gb, {})
+        if ta.get("D"):
+            cross_drain_nets.add(ta["D"])
+        if tb.get("D"):
+            cross_drain_nets.add(tb["D"])
+
+    # Group CLK-gated devices by (type, electrical_signature)
+    clk_by_sig: Dict[tuple, List[str]] = defaultdict(list)
+    for gid, t in group_terminal_nets.items():
+        g = t.get("G", "")
+        if g.upper() == "CLK":
+            node = grp_lookup.get(gid, {})
+            sig = (_electrical_signature(node), node.get("type", ""))
+            clk_by_sig[sig].append(gid)
+
+    for sig, members in clk_by_sig.items():
+        if len(members) < 2:
+            continue
+        # Only pair CLK devices whose drains BOTH feed the cross-coupled latch outputs
+        for i, ma in enumerate(members):
+            for mb in members[i + 1:]:
+                ta = group_terminal_nets.get(ma, {})
+                tb = group_terminal_nets.get(mb, {})
+                d_a = ta.get("D", "")
+                d_b = tb.get("D", "")
+                # Both drains must go to the cross-coupled latch's output nets
+                # AND must be different nets (left/right side of axis)
+                if (d_a in cross_drain_nets and d_b in cross_drain_nets
+                        and d_a != d_b):
+                    clk_sym_pairs.append((ma, mb))
+
+    # Remove duplicates with cross_pairs (avoid double-counting)
+    cross_set = {frozenset(p) for p in cross_pairs}
+    clk_sym_pairs = [p for p in clk_sym_pairs if frozenset(p) not in cross_set]
+    matching_info["clk_sym_pairs"] = clk_sym_pairs
+
+    # Extend diff_pairs with CLK-symmetric pairs so _symmetry_order treats
+    # them as axis-centered symmetric structures (same ordering priority)
+    # Keep the original diff_pairs and add clk_sym_pairs to the extended list
+    matching_info["diff_pairs"] = diff_pairs + clk_sym_pairs
 
     # --- Load pairs: same-type devices whose drains connect to diff outputs
     # In a comparator, the PMOS loads have drains on VOUTP/VOUTN which are
@@ -840,12 +895,31 @@ def build_finger_group_section(finger_map: dict, group_nodes: list) -> str:
             else:
                 nf   = elec.get("nf_per_device", 1)
                 m    = elec.get("multiplier", 1)
-                lines.append(
-                    f"  {grp_id:<12}  nf={nf}  m={m}  "
-                    f"total_fingers={tot}  "
-                    f"footprint={w:.3f} um  "
-                    f"(place fingers at X, X+0.070, X+0.140, ...)"
-                )
+                partner = gn.get("_matching_partner")
+                if partner:
+                    # Single-finger unmerged symmetry pair
+                    lines.append(
+                        f"  {grp_id:<30}  [FREE SYMMETRIC DEVICE]"
+                    )
+                    lines.append(
+                        f"    Symmetric partner: {partner}  (topology: {gn.get('_technique','matched')})"
+                    )
+                    lines.append(
+                        f"    total_fingers={tot}  footprint={w:.3f} um"
+                    )
+                    lines.append(
+                        f"    ** Place symmetrically: one on each SIDE of the center axis. **"
+                    )
+                    lines.append(
+                        f"    ** May share a row with adjacent unmatched devices (e.g. tail switch). **"
+                    )
+                else:
+                    lines.append(
+                        f"  {grp_id:<12}  nf={nf}  m={m}  "
+                        f"total_fingers={tot}  "
+                        f"footprint={w:.3f} um  "
+                        f"(place fingers at X, X+0.070, X+0.140, ...)"
+                    )
 
     lines.append(
         "LLM TASK: Assign an origin X and use the pre-assigned Y from the "
@@ -1228,6 +1302,33 @@ def merge_matched_groups(
         if not fingers_a or not fingers_b:
             continue
 
+        # ── Single-finger guard ─────────────────────────────────────────────
+        # Interdigitation is only meaningful when each device has ≥ 2 fingers.
+        # A 1-finger device (nf=1, m=1) cannot be interdigitated — the only
+        # matching benefit for single-finger pairs is symmetric PLACEMENT
+        # (left/right of the symmetry axis), which the deterministic axis-
+        # centering already guarantees without merging.
+        #
+        # Keeping them UNMERGED lets the AI/row assigner pack them beside
+        # other devices in the same tier (e.g., MM6 and MM7 beside MM10),
+        # improving area utilization by eliminating a dedicated dummy-padded
+        # row for a 2-finger block.
+        nf_a = len(fingers_a)
+        nf_b = len(fingers_b)
+        if nf_a == 1 and nf_b == 1:
+            # Mark both original group nodes as topological partners.
+            # These nodes live in grp_lookup (original list), NOT in new_group_nodes
+            # (which only holds fully merged blocks). Write directly to grp_lookup.
+            grp_lookup[grp_a_id]["_matching_partner"] = grp_b_id
+            grp_lookup[grp_a_id]["_technique"]        = technique
+            grp_lookup[grp_b_id]["_matching_partner"] = grp_a_id
+            grp_lookup[grp_b_id]["_technique"]        = technique
+            vprint(
+                f"[merge_matched] SKIP {grp_a_id}+{grp_b_id}: single-finger pair "
+                f"({technique}) — no interdigitation possible, keeping as free devices"
+            )
+            continue   # leave both groups unmerged
+
         # Generate interleaved pattern based on technique
         if technique == "ABBA_diff_pair":
             interleaved = interdigitate_fingers(fingers_a, fingers_b, pattern="ABBA", edge_dummies=True)
@@ -1298,6 +1399,15 @@ def merge_matched_groups(
             "_block_pitch":   block_pitch,
             "_members":       [grp_a_id, grp_b_id],
             "_technique":     technique,
+            # 2D fold eligibility: ABBA diff pairs with equal, even finger counts
+            # can be folded into 2 rows to halve layout width and reduce dummies.
+            # The actual 1D vs 2D decision is made later by _choose_fold_config.
+            "_can_fold":      technique in ("ABBA_diff_pair", "ABAB_load_pair")
+                              and len(fingers_a) == len(fingers_b)
+                              and len(fingers_a) >= 4
+                              and len(fingers_a) % 2 == 0,
+            "_fingers_a":     fingers_a,   # kept for 2D matrix generation
+            "_fingers_b":     fingers_b,
         }
 
         if "block" in grp_a:
@@ -1490,8 +1600,12 @@ def _symmetry_order(
     tail_right = []
     for t in tail_ids:
         if t not in used:
-            # Put half tails on each side
-            if len(tail_left) <= len(tail_right):
+            # If this row has NO diff pair (it's a pure latch+tail row),
+            # treat the tail as a center device so _assign_row_x anchors it
+            # on the symmetry axis (odd-finger tail sources are axis devices).
+            if not near_left and not near_right:
+                center_ids.append(t)   # goes right of cross-coupled at axis
+            elif len(tail_left) <= len(tail_right):
                 tail_left.append(t)
             else:
                 tail_right.append(t)
@@ -1517,6 +1631,191 @@ def _symmetry_order(
             result.append(g)
 
     return result
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Dynamic 1D vs 2D fold decision
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _choose_fold_config(
+    all_groups: List[dict],
+    pitch: float = STD_PITCH,
+    target_aspect: float = 1.3,
+    aspect_lambda: float = 50.0,
+) -> List[dict]:
+    """
+    Decide, for each ABBA matched block, whether to keep it as a 1D row or
+    fold it into a 2D matrix across 2 physical rows.
+
+    **Decision is layout-global and ASPECT-RATIO-AWARE** — it jointly minimises:
+      1. Total dummy/filler cells across all rows (utilization objective)
+      2. Deviation of the layout aspect ratio from ``target_aspect``
+         (shape objective — prevents folding from creating tall portrait layouts)
+
+    Cost function for each candidate fold mask:
+        cost = dummy_count + λ × |layout_w / layout_h - target_aspect|
+
+    Where:
+        layout_w = max(group_widths in mask)
+        layout_h = Σ (n_rows × row_pitch) for all groups in mask
+        λ = ``aspect_lambda`` (weight for aspect-ratio term)
+
+    This dual objective correctly handles mixed circuits:
+    - A block that is already near the target width → NOT folded (folding adds rows
+      without reducing width → worse aspect ratio)
+    - A block that is much wider than other rows → folded (reduces width, few extra rows)
+    - Result: some blocks stay 1D, others become 2D — per-circuit, per-block decision.
+
+    Parameters
+    ----------
+    all_groups : list
+        All group-level nodes (merged + unmerged), WITH ``geometry.width`` set.
+    pitch : float
+        STD_PITCH used for width/dummy calculation.
+    target_aspect : float
+        Target width/height ratio (default 1.3 = slightly wider than tall).
+        Analog layouts are typically 1.0–2.0. Set to 1.0 for perfectly square.
+    aspect_lambda : float
+        Weight for aspect ratio deviation vs dummy count.
+        Higher = more aggressive aspect ratio enforcement.
+        Lower = more dummy-reduction focused.
+
+    Returns
+    -------
+    list
+        Modified ``all_groups`` with ``_n_rows`` set on each group.
+    """
+    import copy as _copy
+    import math as _math
+
+    ROW_PITCH_UM = ROW_HEIGHT_UM   # height of one physical row (incl. guard rings)
+
+    # ── Helpers ─────────────────────────────────────────────────────────────
+    def _group_width(g: dict) -> float:
+        return g.get("geometry", {}).get("width", 0.0)
+
+    def _group_rows(g: dict) -> int:
+        return g.get("_n_rows", 1)
+
+    def _score(groups: List[dict]) -> float:
+        """Compute the combined dummy + aspect-ratio cost for a configuration."""
+        if not groups:
+            return 0.0
+        layout_w = max(_group_width(g) for g in groups)
+        layout_h = sum(_group_rows(g) * ROW_PITCH_UM for g in groups)
+        if layout_h == 0 or layout_w == 0:
+            return 0.0
+        # Dummy count
+        dummy = sum(
+            max(0.0, (layout_w - _group_width(g)) / pitch) * _group_rows(g)
+            for g in groups
+        )
+        # Aspect ratio deviation (width/height should equal target)
+        actual_aspect = layout_w / layout_h
+        aspect_dev = abs(actual_aspect - target_aspect)
+        return dummy + aspect_lambda * aspect_dev
+
+    # ── Initialise ───────────────────────────────────────────────────────────
+    groups = [_copy.copy(g) for g in all_groups]
+    for g in groups:
+        if "_n_rows" not in g:
+            g["_n_rows"] = 1
+
+    # ── Compute folded widths for each candidate ─────────────────────────────
+    fold_map: dict = {}   # group_id -> folded_width
+    for g in groups:
+        if not g.get("_can_fold", False):
+            continue
+        current_w  = _group_width(g)
+        total_cols = _math.ceil(current_w / pitch)
+        folded_cols = _math.ceil(total_cols / 2)
+        real_per_row = folded_cols - 2
+        if real_per_row < 2:
+            continue   # too narrow after fold — ABBA pattern would break
+        fold_map[g["id"]] = round(folded_cols * pitch, 6)
+
+    if not fold_map:
+        return groups   # no foldable blocks → no decision needed
+
+    # ── Exhaustive search over all 2^N subsets ───────────────────────────────
+    # For N ≤ 8 candidates (covers all realistic analog circuits), 2^8=256
+    # combinations are checked instantly.
+    candidates = [g for g in groups if g["id"] in fold_map]
+    n_cand     = len(candidates)
+    cand_idx   = {g["id"]: i for i, g in enumerate(candidates)}
+
+    baseline_score = _score(groups)
+    best_score     = baseline_score
+    best_mask      = 0   # 0 = no fold (baseline)
+
+    for mask in range(1, 1 << n_cand):
+        sim = []
+        for g in groups:
+            bit = cand_idx.get(g["id"])
+            if bit is not None and (mask >> bit) & 1:
+                g_sim = _copy.copy(g)
+                g_sim["_n_rows"]  = 2
+                g_sim["geometry"] = _copy.copy(g["geometry"])
+                g_sim["geometry"]["width"] = fold_map[g["id"]]
+                sim.append(g_sim)
+            else:
+                sim.append(g)
+
+        s = _score(sim)
+        if s < best_score - 1e-6:
+            best_score = s
+            best_mask  = mask
+
+    # ── Diagnostics ──────────────────────────────────────────────────────────
+    # Compute what layout_w and layout_h will be under the chosen mask
+    _sim_final = []
+    for g in groups:
+        bit = cand_idx.get(g["id"])
+        if bit is not None and (best_mask >> bit) & 1:
+            g_sim = _copy.copy(g)
+            g_sim["_n_rows"]  = 2
+            g_sim["geometry"] = _copy.copy(g["geometry"])
+            g_sim["geometry"]["width"] = fold_map[g["id"]]
+            _sim_final.append(g_sim)
+        else:
+            _sim_final.append(g)
+
+    _lw = max(_group_width(g) for g in _sim_final) if _sim_final else 0
+    _lh = sum(_group_rows(g) * ROW_PITCH_UM for g in _sim_final) if _sim_final else 0
+    _asp = _lw / _lh if _lh > 0 else 0
+
+    vprint(
+        f"[fold_config] baseline_score={baseline_score:.2f} -> best_score={best_score:.2f} "
+        f"| mask={bin(best_mask)} "
+        f"| predicted W={_lw:.3f}um H={_lh:.3f}um aspect={_asp:.2f} (target={target_aspect})"
+    )
+
+    # ── Apply the winning configuration ─────────────────────────────────────
+    if best_mask == 0:
+        vprint("[fold_config] No fold improves the combined score — keeping all 1D")
+        return groups
+
+    baseline_dummy = sum(
+        max(0.0, (max(_group_width(g) for g in groups) - _group_width(g)) / pitch)
+        * _group_rows(g)
+        for g in groups
+    )
+
+    for gid, idx in cand_idx.items():
+        if (best_mask >> idx) & 1:
+            g = next(gg for gg in groups if gg["id"] == gid)
+            old_w = _group_width(g)
+            new_w = fold_map[gid]
+            g["_n_rows"]            = 2
+            g["geometry"]           = _copy.copy(g["geometry"])
+            g["geometry"]["width"]  = new_w
+            g["_folded_cols"]       = _math.ceil(old_w / pitch) // 2 + 1
+            g["_fold_real_per_row"] = g["_folded_cols"] - 2
+            vprint(f"[fold_config] Fold {gid}: 1D {old_w:.3f}um -> 2D {new_w:.3f}um x2rows")
+
+    return groups
+
+
 
 
 def pre_assign_rows(
@@ -1553,6 +1852,31 @@ def pre_assign_rows(
         - `row_summary_str` (str): Text table injected into the LLM prompt.
     """
     import copy as _copy
+
+    # ── Step 0: Dynamic 1D vs 2D fold decision ────────────────────────────
+    # _choose_fold_config evaluates the entire layout (all group widths)
+    # and decides which ABBA blocks benefit from being folded into 2 rows.
+    # This is NOT a hard-coded threshold — it computes the fold that
+    # minimises total dummy/filler cells across all rows.
+    group_nodes = _choose_fold_config(group_nodes, pitch=STD_PITCH)
+    # For groups that were folded (_n_rows=2), generate the 2D matrix now
+    # so expand_to_fingers uses the matrix path automatically.
+    from ai_agent.placement.centroid_generator import generate_2d_abba_matrix
+    for g in group_nodes:
+        if g.get("_n_rows", 1) >= 2 and g.get("_can_fold") and "_matrix_data" not in g:
+            fa = g.pop("_fingers_a", [])
+            fb = g.pop("_fingers_b", [])
+            if fa and fb:
+                g["_matrix_data"] = generate_2d_abba_matrix(fa, fb, n_rows=2)
+                vprint(
+                    f"[pre_assign_rows] 2D matrix for {g['id']}: "
+                    f"{g['_matrix_data']['rows']}×{g['_matrix_data']['cols']} "
+                    f"(width={g['geometry']['width']:.3f}µm)"
+                )
+        else:
+            # Not folded — discard the stored finger lists (no longer needed)
+            g.pop("_fingers_a", None)
+            g.pop("_fingers_b", None)
 
     pmos_groups    = [n for n in group_nodes if n.get("type") == "pmos"]
     nmos_groups    = [n for n in group_nodes if n.get("type") == "nmos"]
@@ -1633,9 +1957,124 @@ def pre_assign_rows(
                 widths.append(w)
         return rows
 
-    nmos_rows    = _bin_pack(nmos_groups,    nmos_max)
-    pmos_rows    = _bin_pack(pmos_groups,    pmos_max)
-    num_nmos     = len(nmos_rows)
+    # ── Topology-aware NMOS row split ──────────────────────────────────────
+    # Diff-pair ABBA blocks (e.g. MM8+MM9) MUST be in their own row so the
+    # symmetry enforcer can center the interdigitated block perfectly.
+    # Latch (cross-coupled) + tail devices go to a separate row above the
+    # diff pair row.  This split is DETERMINISTIC — it does not rely on the
+    # LLM placing things symmetrically.
+    #
+    # Detection: a group is a "diff pair block" if its _technique is
+    # "ABBA_diff_pair".  For PMOS, "ABBA_diff_pair" precharge blocks also
+    # get their own row to keep the precharge pair symmetric.
+    def _is_diff_pair_block(g: dict) -> bool:
+        return g.get("_technique", "") == "ABBA_diff_pair"
+
+    nmos_diff_pair = [g for g in nmos_groups if _is_diff_pair_block(g)]
+    nmos_other     = [g for g in nmos_groups if not _is_diff_pair_block(g)]
+
+    pmos_diff_pair = [g for g in pmos_groups if _is_diff_pair_block(g)]
+    pmos_other     = [g for g in pmos_groups if not _is_diff_pair_block(g)]
+
+    if nmos_diff_pair:
+        # Three-tier NMOS row split for dynamic comparators:
+        #   Row 0 (bottom): ABBA diff-pair block(s) — input pair, centered
+        #   Row 1 (middle): cross-coupled latch block(s) — centered
+        #   Row 2 (top):    tail/switch device(s) — centered
+        #
+        # This gives 3 cleanly symmetric NMOS rows instead of mixing
+        # latch+tail in one row, which causes MM10 to appear asymmetrically.
+        def _is_cross_coupled(g: dict) -> bool:
+            return g.get("_technique", "") in ("symmetric_cross_coupled", "common_centroid_mirror")
+
+        def _is_tail(g: dict, matching_info: dict) -> bool:
+            """True if this group is a tail/axis device (in tail_sources list)."""
+            tail_ids = matching_info.get("tail_sources", []) if matching_info else []
+            # Also check by _technique absence (not a matched block but an axis device)
+            return g["id"] in tail_ids
+
+        def _is_single_finger_unmerged(g: dict) -> bool:
+            """True for single-finger cross-coupled devices skipped during merge.
+
+            Detected by finger count + technique alone — does NOT require
+            _matching_partner flag (as a safety measure since _technique is now
+            reliably set by the skip guard directly on grp_lookup).
+            """
+            # Must be cross-coupled topology
+            if not _is_cross_coupled(g):
+                return False
+            # Must NOT be a merged block
+            if g.get("_matched_block", False):
+                return False
+            # Check total finger count from electrical dict (always set by group_fingers)
+            total = g.get("electrical", {}).get("total_fingers", 1)
+            return total <= 1
+
+        # Split cross-coupled groups:
+        #   - Multi-finger merged latch blocks → their own row (common centroid needed)
+        #   - Single-finger unmerged partners → join the tail row beside MM10
+        nmos_latch_real   = [g for g in nmos_other
+                             if _is_cross_coupled(g) and not _is_single_finger_unmerged(g)]
+        nmos_latch_singlef = [g for g in nmos_other
+                              if _is_cross_coupled(g) and _is_single_finger_unmerged(g)]
+        nmos_tail  = [g for g in nmos_other if _is_tail(g, matching_info)]
+        nmos_misc  = [g for g in nmos_other
+                      if not _is_cross_coupled(g) and not _is_tail(g, matching_info)]
+
+        # Single-finger latch devices join the tail row for better packing.
+        # Target row order: [MM7 | MM10 | MM6]
+        #   — one cross-coupled device on each side of the tail device.
+        # Build the tail row manually for symmetric ordering:
+        nmos_tail_row_candidates = nmos_tail + nmos_misc + nmos_latch_singlef
+
+        nmos_rows_diff  = _bin_pack(nmos_diff_pair, nmos_max)
+        nmos_rows_latch = _bin_pack(nmos_latch_real, nmos_max) if nmos_latch_real else []
+
+        if nmos_tail_row_candidates:
+            # Use bin-pack first, then reorder each row for symmetric flanking:
+            # If this row contains both tail devices and single-finger cross-coupled
+            # partners, reorder to [left_partner ... | center_tail | ... right_partner].
+            nmos_rows_tail = _bin_pack(nmos_tail_row_candidates, nmos_max)
+            for row_idx, row in enumerate(nmos_rows_tail):
+                _tail_devs     = [g for g in row if _is_tail(g, matching_info) or
+                                  (not _is_cross_coupled(g) and not _is_tail(g, matching_info))]
+                _singlef_devs  = [g for g in row if _is_single_finger_unmerged(g)]
+                if _singlef_devs and _tail_devs:
+                    # Symmetric: put half of single-finger devices on each side of tail
+                    mid   = len(_singlef_devs) // 2
+                    left  = _singlef_devs[:mid] or []
+                    right = _singlef_devs[mid:] or []
+                    nmos_rows_tail[row_idx] = left + _tail_devs + right
+                    vprint(
+                        f"[pre_assign_rows] Tail row {row_idx} reordered: "
+                        f"[{' '.join(g['id'] for g in left)}] | "
+                        f"[{' '.join(g['id'] for g in _tail_devs)}] | "
+                        f"[{' '.join(g['id'] for g in right)}]"
+                    )
+        else:
+            nmos_rows_tail = []
+
+        # Order bottom-to-top: diff pair | latch | tail+single-finger-latch
+        nmos_rows = nmos_rows_diff + nmos_rows_latch + nmos_rows_tail
+        vprint(f"[pre_assign_rows] NMOS 3-tier split: "
+               f"diff={len(nmos_diff_pair)} latch={len(nmos_latch_real)} "
+               f"tail={len(nmos_tail+nmos_misc)} "
+               f"(+{len(nmos_latch_singlef)} single-finger latch device(s) moved to tail row)")
+    else:
+        nmos_rows = _bin_pack(nmos_groups, nmos_max)
+
+    if pmos_diff_pair:
+        pmos_rows_diff  = _bin_pack(pmos_diff_pair, pmos_max)
+        pmos_rows_other = _bin_pack(pmos_other, pmos_max) if pmos_other else []
+        # PMOS order: latch/load rows first (bottom of PMOS), precharge pair above
+        pmos_rows = pmos_rows_other + pmos_rows_diff
+        vprint(f"[pre_assign_rows] PMOS split: "
+               f"{len(pmos_diff_pair)} diff-pair block(s) in {len(pmos_rows_diff)} row(s) + "
+               f"{len(pmos_other)} other block(s) in {len(pmos_rows_other)} row(s)")
+    else:
+        pmos_rows = _bin_pack(pmos_groups, pmos_max)
+
+    num_nmos = len(nmos_rows)
 
     # --- Symmetry-aware reordering within each row -----------------------
     if matching_info and group_terminal_nets:
@@ -1647,34 +2086,119 @@ def pre_assign_rows(
     def _row_height(row: list) -> float:
         return _row_step_um(row)
 
-    # Build group_id -> Y map
+    # ── Build group_id → (Y, X) maps ─────────────────────────────────────
+    # Y: deterministic stacking (NMOS bottom, PMOS top)
+    # X: deterministic centering — each row is centered on a shared x_axis
+    #    so the layout is symmetric WITHOUT depending on the LLM.
     y_map: Dict[str, float] = {}
+    x_map: Dict[str, float] = {}
     current_y = 0.0
-    
+
+    all_rows = []  # for X centering calculation
+
     nmos_row_ys = []
     for row_idx, row in enumerate(nmos_rows):
         nmos_row_ys.append(current_y)
         for g in row:
             y_map[g["id"]] = current_y
-        current_y += _row_height(row)
+        all_rows.append(row)
+        # 2D blocks consume n_rows Y slots
+        max_n_rows = max((g.get("_n_rows", 1) for g in row), default=1)
+        current_y += _row_height(row) * max_n_rows
 
     pmos_row_ys = []
     for row_idx, row in enumerate(pmos_rows):
         pmos_row_ys.append(current_y)
         for g in row:
             y_map[g["id"]] = current_y
-        current_y += _row_height(row)
+        all_rows.append(row)
+        # 2D blocks consume n_rows Y slots
+        max_n_rows = max((g.get("_n_rows", 1) for g in row), default=1)
+        current_y += _row_height(row) * max_n_rows
 
     passive_y = current_y
     for g in passive_groups:
         y_map[g["id"]] = passive_y
 
-    # Clone nodes and update geometry.y
+    # --- Deterministic X centering ----------------------------------------
+    # Compute the layout width as the widest row total footprint
+    def _row_total_w(row: list) -> float:
+        if not row:
+            return 0.0
+        total = sum(g.get("geometry", {}).get("width", 0.0) for g in row)
+        total += STD_PITCH * max(0, len(row) - 1)
+        return total
+
+    layout_width = max((_row_total_w(r) for r in all_rows), default=0.0)
+    layout_width = max(layout_width, STD_PITCH)   # safety floor
+    x_axis = layout_width / 2.0
+
+    def _assign_row_x(row: list) -> None:
+        """
+        Assign x_map positions for groups in a single row.
+
+        Strategy:
+        - If the row contains exactly one group: center it on x_axis.
+        - If the row has a 'cross-coupled' or ABBA block at position idx:
+            anchor that block's centre on x_axis; place remaining groups
+            to the left (then right) of it symmetrically.
+        - Otherwise: center the full row cluster on x_axis.
+        """
+        if not row:
+            return
+
+        # Identify the "axis anchor": prefer a cross-coupled/ABBA merged block
+        anchor_idx = None
+        for i, g in enumerate(row):
+            tech = g.get("_technique", "")
+            if tech in ("symmetric_cross_coupled", "ABBA_diff_pair", "common_centroid_mirror"):
+                anchor_idx = i
+                break
+
+        if anchor_idx is None or len(row) == 1:
+            # No special anchor: just center the whole row cluster
+            row_w = _row_total_w(row)
+            start_x = round(x_axis - row_w / 2.0, 6)
+            cursor_x = start_x
+            for g in row:
+                w = g.get("geometry", {}).get("width", 0.0)
+                x_map[g["id"]] = cursor_x
+                cursor_x = round(cursor_x + w + STD_PITCH, 6)
+            return
+
+        # Anchor the special block at x_axis
+        anchor = row[anchor_idx]
+        anchor_w = anchor.get("geometry", {}).get("width", 0.0)
+        anchor_x = round(x_axis - anchor_w / 2.0, 6)
+        x_map[anchor["id"]] = anchor_x
+
+        # Place groups to the LEFT of anchor (reverse order)
+        cursor_left = anchor_x - STD_PITCH
+        for g in reversed(row[:anchor_idx]):
+            w = g.get("geometry", {}).get("width", 0.0)
+            x_map[g["id"]] = round(cursor_left - w, 6)
+            cursor_left = round(cursor_left - w - STD_PITCH, 6)
+
+        # Place groups to the RIGHT of anchor
+        cursor_right = round(anchor_x + anchor_w + STD_PITCH, 6)
+        for g in row[anchor_idx + 1:]:
+            w = g.get("geometry", {}).get("width", 0.0)
+            x_map[g["id"]] = cursor_right
+            cursor_right = round(cursor_right + w + STD_PITCH, 6)
+
+    for row in all_rows:
+        _assign_row_x(row)
+
+    vprint(f"[pre_assign_rows] layout_width={layout_width:.4f} um → x_axis={x_axis:.4f} um")
+
+    # Clone nodes and update geometry.y AND geometry.x
     updated: List[dict] = []
     for n in group_nodes:
         nc = _copy.deepcopy(n)
         if nc["id"] in y_map:
             nc["geometry"]["y"] = y_map[nc["id"]]
+        if nc["id"] in x_map:
+            nc["geometry"]["x"] = x_map[nc["id"]]
         updated.append(nc)
 
     # Build human-readable summary for the LLM prompt
@@ -1683,13 +2207,15 @@ def pre_assign_rows(
         y = nmos_row_ys[row_idx]
         ids    = ", ".join(g["id"] for g in row)
         widths = " + ".join(f"{g['geometry']['width']:.3f}" for g in row)
-        lines.append(f"   NMOS Row {row_idx}  y={y:.3f} um : {ids}  (footprints: {widths} um)")
+        xs     = " | ".join(f"{x_map.get(g['id'],0):.3f}" for g in row)
+        lines.append(f"   NMOS Row {row_idx}  y={y:.3f} um : {ids}  (widths: {widths} um, x_start: {xs})")
 
     for row_idx, row in enumerate(pmos_rows):
         y = pmos_row_ys[row_idx]
         ids    = ", ".join(g["id"] for g in row)
         widths = " + ".join(f"{g['geometry']['width']:.3f}" for g in row)
-        lines.append(f"   PMOS Row {row_idx}  y={y:.3f} um : {ids}  (footprints: {widths} um)")
+        xs     = " | ".join(f"{x_map.get(g['id'],0):.3f}" for g in row)
+        lines.append(f"   PMOS Row {row_idx}  y={y:.3f} um : {ids}  (widths: {widths} um, x_start: {xs})")
 
     if passive_groups:
         ids = ", ".join(g["id"] for g in passive_groups)
