@@ -84,6 +84,7 @@ from icons import (
     icon_abutment,
     icon_ai_placement,
     icon_colorize,
+    icon_schematic,
 )
 from widgets.welcome_screen import WelcomeScreen
 
@@ -503,6 +504,7 @@ class MainWindow(QMainWindow):
         view_menu.addAction("Reset Zoom", lambda: self._fwd_editor("zoom_reset"))
         view_menu.addSeparator()
         view_menu.addAction("Toggle Device Tree", lambda: self._fwd("_toggle_device_tree"))
+        view_menu.addAction("Toggle Schematic Assistant", lambda: self._fwd("_toggle_schematic_panel"))
         view_menu.addAction("Toggle Chat Panel", lambda: self._fwd("_toggle_chat_panel"))
         view_menu.addAction("Toggle KLayout Preview", lambda: self._fwd("_toggle_klayout_panel"))
         view_menu.addSeparator()
@@ -627,6 +629,12 @@ class MainWindow(QMainWindow):
         self._tb_act_redo.setEnabled(False)
         self._tb_act_redo.triggered.connect(lambda: self._fwd("do_redo"))
         tb.addAction(self._tb_act_redo)
+        tb.addSeparator()
+
+        self._tb_act_schematic = QAction(icon_schematic(), "Toggle Schematic Assistant", self)
+        self._tb_act_schematic.setToolTip("Toggle Schematic Assistant")
+        self._tb_act_schematic.triggered.connect(lambda: self._fwd("_toggle_schematic_panel"))
+        tb.addAction(self._tb_act_schematic)
         tb.addSeparator()
 
         self._tb_act_fit = QAction(icon_fit_view(), "Fit View", self)

@@ -49,6 +49,7 @@ except ImportError:
     from editor_view import SymbolicEditor
     from klayout_panel import KLayoutPanel
     from properties_panel import PropertiesPanel
+    from schematic_view import SchematicPanel
     from view_toggle import SegmentedToggle
     from widgets.generic_worker import GenericWorker
     from widgets.loading_overlay import LoadingOverlay
@@ -104,14 +105,20 @@ class LayoutEditorTab(QWidget):
         self.device_tree = DeviceTreePanel()
         self.properties_panel = PropertiesPanel()
         self.editor = SymbolicEditor()
+        self.schematic_panel = SchematicPanel(self)
         self.chat_panel = ChatPanel()
         self.klayout_panel = KLayoutPanel()
         self._workspace_toggle = SegmentedToggle()
         self._workspace_toggle.mode_changed.connect(self.set_workspace_mode)
 
+        # ── Hook up schematic signals ──────────────────────────────
+        self.schematic_panel.highlight_device.connect(self.editor.highlight_device)
+        self.schematic_panel.highlight_net.connect(self.editor.highlight_net_by_name)
+
         # ── Right-side vertical splitter ───────────────────────────
         self._left_splitter = QSplitter(Qt.Orientation.Vertical)
         self._left_splitter.addWidget(self.device_tree)
+        self._left_splitter.addWidget(self.schematic_panel)
         self._left_splitter.addWidget(self.properties_panel)
         self._left_splitter.setStretchFactor(0, 1)
         self._left_splitter.setStretchFactor(1, 1)
@@ -314,6 +321,10 @@ class LayoutEditorTab(QWidget):
             sizes = self._splitter.sizes()
             sizes[0] = self._sidebar_default_width
             self._splitter.setSizes(sizes)
+
+    def _toggle_schematic_panel(self):
+        if hasattr(self, 'schematic_panel'):
+            self.schematic_panel.setVisible(not self.schematic_panel.isVisible())
 
     def _toggle_chat_panel(self):
         if self.chat_panel.isVisible():
@@ -580,6 +591,9 @@ class LayoutEditorTab(QWidget):
         self.editor.set_edges(edges)
         self.editor.set_terminal_nets(self._terminal_nets)
         self.editor.set_blocks(blocks)
+        # ── Feed schematic panel with the same data ─────────────────
+        self.schematic_panel.set_editor(self.editor)
+        self.schematic_panel.load(self.nodes, self._terminal_nets)
         self.chat_panel.set_layout_context(
             self.nodes, self._original_data.get("edges"), self._terminal_nets,
         )

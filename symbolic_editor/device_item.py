@@ -49,6 +49,7 @@ class DeviceItem(QGraphicsRectItem):
         self._colorize_nets = False
         self._net_color_seed = 0
         self._highlighted_net = None
+        self._is_dimmed = False
 
         # ── Hierarchical group movement ──
         # These are set by the editor when loading a layout.
@@ -197,6 +198,12 @@ class DeviceItem(QGraphicsRectItem):
         self._colorize_nets = bool(enabled)
         self._net_color_seed = seed
         self.update()
+
+    def set_dimmed(self, dimmed: bool):
+        """Decrease opacity to focus on other highlighted items."""
+        if self._is_dimmed != dimmed:
+            self._is_dimmed = bool(dimmed)
+            self.update()
 
     def set_highlighted_net(self, net_name):
         """Highlight terminal labels matching net_name and dim the rest."""
@@ -377,6 +384,11 @@ class DeviceItem(QGraphicsRectItem):
     # Painting — Premium Multi-finger MOS layout
     # --------------------------------------------------
     def paint(self, painter: QPainter, option, widget=None):
+        if self._is_dimmed:
+            painter.setOpacity(0.15)
+        else:
+            painter.setOpacity(1.0)
+            
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         rect = self.rect()
@@ -673,10 +685,25 @@ class DeviceItem(QGraphicsRectItem):
         painter.drawRoundedRect(rect.adjusted(1.5, 1.5, 0.5, 0.5), corner_r, corner_r)
 
         # Main border
-        border_w = 1.8 if not self.isSelected() else 2.5
-        painter.setPen(QPen(self._border, border_w))
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawRoundedRect(rect.adjusted(0.75, 0.75, -0.75, -0.75), corner_r, corner_r)
+        if self.isSelected():
+            # Glowing yellow highlight + semi-transparent overlay for maximum "pop"
+            painter.save()
+            ovl_color = QColor("#ffff00")
+            ovl_color.setAlpha(40) # 15% opacity yellow fill
+            painter.setBrush(QBrush(ovl_color))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawRoundedRect(rect.adjusted(1.0, 1.0, -1.0, -1.0), corner_r, corner_r)
+
+            hl_pen = QPen(QColor("#ffff00"), 4.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+            hl_pen.setCosmetic(True)
+            painter.setPen(hl_pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRoundedRect(rect.adjusted(1.0, 1.0, -1.0, -1.0), corner_r, corner_r)
+            painter.restore()
+        else:
+            painter.setPen(QPen(self._border, 1.8))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRoundedRect(rect.adjusted(0.75, 0.75, -0.75, -0.75), corner_r, corner_r)
 
         # ── Thin separator lines between S/D and gate columns ────────
         sep_pen = QPen(QColor(self._border.red(), self._border.green(),

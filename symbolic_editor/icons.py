@@ -57,6 +57,28 @@ def icon_undo() -> QIcon:
     return icon
 
 
+def icon_schematic() -> QIcon:
+    if "schematic" in _CACHE:
+        return _CACHE["schematic"]
+    pm, p = _make_pixmap()
+    pen = QPen(_ACCENT, 2.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+    p.setPen(pen)
+    
+    # Draw a stylized transistor/schematic symbol
+    p.drawLine(QPointF(6, 16), QPointF(26, 16)) # GND/Wire
+    p.drawLine(QPointF(16, 6), QPointF(16, 16)) # Vertical body
+    p.drawLine(QPointF(10, 6), QPointF(22, 6))  # Gate
+    p.drawLine(QPointF(16, 16), QPointF(12, 24)) # Source
+    p.drawLine(QPointF(16, 16), QPointF(20, 24)) # Drain
+    
+    # Add a glowing accent
+    p.setPen(QPen(_ORANGE, 2.0))
+    p.drawEllipse(QRectF(14.5, 14.5, 3, 3))
+    
+    icon = _icon_from_painter(pm, p)
+    _CACHE["schematic"] = icon
+    return icon
+
 def icon_redo() -> QIcon:
     if "redo" in _CACHE:
         return _CACHE["redo"]
