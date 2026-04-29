@@ -1,66 +1,81 @@
 """
 Intent Classifier Agent
 =======================
-Classifies user intent into categories like 'concrete', 'abstract', 'question', 
-or 'chat' to route requests to the appropriate agent.
+Classifies user intent into concrete graph node targets used by the chat workflow.
 
 Functions:
-- classify_intent: Determines user intent using regex fast-paths or an LLM call.
-  - Inputs: user_message (str), selected_model (str)
-  - Outputs: intent string ('concrete', 'abstract', 'question', or 'chat').
+- classify_intent: Determines intent using regex fast-paths or an LLM call.
+    - Inputs: user_message (str), selected_model (str)
+    - Outputs: node function name.
 """
 
 import re
 from ai_agent.llm.factory import get_langchain_llm
 
 # ── Regex fast-path patterns (zero LLM cost) ─────────────────────
-_CHAT_RE = re.compile(
-    r"^(hi|hello|hey|thanks|thank you|bye|good\s*(morning|evening|night)|"
-    r"how\s+are\s+you|what\s+can\s+you\s+do|help|ok|okay|great|sure|cool)[\s!?.]*$",
+_TOPOLOGY_RE = re.compile(
+    r"\b(topolog(?:y|ical)|netlist|circuit|schematic|device\s+count|"
+    r"what\s+is\s+mm\d+|explain\s+.*topology|how\s+many\s+(pmos|nmos)|"
+    r"which\s+net|connected\s+to|net\s+connects?)\b",
     re.IGNORECASE,
 )
 
-_CONCRETE_RE = re.compile(
+_STRATEGY_RE = re.compile(
+    r"\b(strategy|floorplan|floorplanning|placement\s+improv|optimi[sz]e"
+    r"|symmetr(?:y|ic)|matching|centroid|interdigitat(?:e|ion)|cluster|"
+    r"arrange|layout\s+plan)\b",
+    re.IGNORECASE,
+)
+
+_PLACEMENT_RE = re.compile(
     r"\b(swap|move|flip|add\s+dummy|add\s+dummies|delete|remove|set\s+orientation"
     r"|fix\s+abutment|abut|re-abut|reabut"
     r"|fix\s+finger|fix\s+placement|rearrange|align|pack\s+finger"
-    r"|place\s+adjacent|group\s+together)\b",
+    r"|place\s+adjacent|group\s+together|row\s+assignment|abutt(?:e|ed|ing))\b",
+    re.IGNORECASE,
+)
+
+_DRC_RE = re.compile(
+    r"\b(drc|design\s+rule|spacing|overlap|violation|clean\s+up|shorts?|"
+    r"opens?|check\s+rules|rule\s+check)\b",
+    re.IGNORECASE,
+)
+
+_ROUTING_RE = re.compile(
+    r"\b(route|routing|wire\s+length|wirelength|crossing|crossings|crossed|"
+    r"parasitic|connectivity|connectors?|path\s+length)\b",
     re.IGNORECASE,
 )
 
 # ── LLM Classifier prompt ────────────────────────────────────────
 CLASSIFIER_PROMPT = """\
 You are an intent classifier for an analog IC layout editor.
-Classify the user's message into exactly ONE of these categories:
+Classify the user's message into exactly ONE of these intent targets:
 
-  CONCRETE  - A direct device operation that maps to a specific command:
-              swap, move, flip, add dummy, delete, set orientation.
-              Examples: 'swap MM3 and MM5', 'move MM8 to the left',
-              'flip MM12 horizontally', 'add a dummy on the right'.
+    topology_analyst     - topology extraction, circuit understanding,
+                           netlist analysis, or general circuit questions.
 
-  ABSTRACT  - A high-level design goal that requires topology analysis:
-              improve, optimize, enhance, reduce, fix, better, CMRR,
-              matching, symmetry, routing, parasitics, DRC, placement.
-              Examples: 'improve the matching', 'optimize placement',
-              'reduce routing crossings', 'fix DRC violations',
-              'enhance symmetry of differential pair'.
+    strategy_selector    - high-level floorplanning strategy requests,
+                           placement improvement, symmetry, matching,
+                           and layout constraint brainstorming.
 
-  QUESTION  - An informational query. No layout changes needed.
-              Examples: 'what is MM3?', 'which net connects M6 and M7?',
-              'explain current mirror topology', 'how many PMOS devices?'.
+    placement_specialist - direct placement / movement / ordering /
+                           abutment / interdigitation / row assignment.
 
-  CHAT      - Casual conversation, greetings, thanks, or small talk.
-              No layout analysis or changes needed.
-              Examples: 'hi', 'hello', 'thanks', 'how are you',
-              'good morning', 'bye', 'what can you do?', 'help'.
+    drc_critic           - DRC violations, spacing, overlap, clean-up,
+                           or fix-and-verify layout requests.
 
-Reply with ONLY one word: CONCRETE, ABSTRACT, QUESTION, or CHAT.
+    routing_previewer    - routing, wire-length, crossings, connectivity,
+                           or parasitic-routing analysis.
+
+Choose the single best target for the user's request.
+Reply with ONLY the target name.
 Do not explain. Do not add punctuation.
 """
 
 
 def classify_intent(user_message: str, selected_model: str) -> str:
-    """Classify user intent as 'concrete', 'abstract', 'question', or 'chat'.
+    """Classify user intent and return the matching node function name.
 
     Uses a regex fast-path for trivial cases (greetings, obvious
     commands) and falls back to a lightweight LLM call only when
@@ -71,19 +86,31 @@ def classify_intent(user_message: str, selected_model: str) -> str:
         selected_model: which LLM backend to use.
 
     Returns:
-        'concrete' | 'abstract' | 'question' | 'chat'
-        Falls back to 'abstract' on any error so the pipeline always runs.
+        Node function name.
     """
     stripped = user_message.strip()
 
     # ── Fast-path: regex (no LLM cost) ──────────────────────────
-    if _CHAT_RE.match(stripped):
-        print(f"[CLASSIFIER] regex -> CHAT: '{stripped[:60]}'")
-        return "chat"
+    if _TOPOLOGY_RE.search(stripped):
+        print(f"[CLASSIFIER] regex -> TOPOLOGY: '{stripped[:60]}'")
+        return "topology_analyst"
 
-    if _CONCRETE_RE.search(stripped):
-        print(f"[CLASSIFIER] regex -> CONCRETE: '{stripped[:60]}'")
-        return "concrete"
+    normalized = stripped.lower()
+    if _STRATEGY_RE.search(stripped):
+        print(f"[CLASSIFIER] regex -> STRATEGY: '{stripped[:60]}'")
+        return "strategy_selector"
+
+    if _PLACEMENT_RE.search(stripped):
+        print(f"[CLASSIFIER] regex -> PLACEMENT: '{stripped[:60]}'")
+        return "placement_specialist"
+
+    if _DRC_RE.search(stripped):
+        print(f"[CLASSIFIER] heuristic -> DRC: '{stripped[:60]}'")
+        return "drc_critic"
+
+    if _ROUTING_RE.search(stripped):
+        print(f"[CLASSIFIER] heuristic -> ROUTING: '{stripped[:60]}'")
+        return "routing_previewer"
 
     # ── Slow-path: ask the LLM ──────────────────────────────────
     msgs = [
@@ -96,11 +123,18 @@ def classify_intent(user_message: str, selected_model: str) -> str:
         print(f"[CLASSIFIER] Requesting Intent Classification from {selected_model}...")
         result = llm.invoke(msgs)
         if not result:
-            return "abstract"
-        label = result.content.strip().upper().split()[0].rstrip(".,;:")
-        if label in ("CONCRETE", "ABSTRACT", "QUESTION", "CHAT"):
+            return "topology_analyst"
+        label = result.content.strip().lower().split()[0].rstrip(".,;:")
+        node_labels = {
+            "topology_analyst": "topology_analyst",
+            "strategy_selector": "strategy_selector",
+            "placement_specialist": "placement_specialist",
+            "drc_critic": "drc_critic",
+            "routing_previewer": "routing_previewer",
+        }
+        if label in node_labels:
             print(f"[CLASSIFIER] LLM -> {label}: '{stripped[:60]}'")
-            return label.lower()
+            return node_labels[label]
     except Exception as exc:
-        print(f"[CLASSIFIER] Failed: {exc} — defaulting to abstract")
-    return "abstract"
+        print(f"[CLASSIFIER] Failed: {exc} — defaulting to topology analyst")
+    return "topology_analyst"

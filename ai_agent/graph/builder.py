@@ -13,8 +13,10 @@ Functions:
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
 
+from ai_agent.agents.classifier import classify_intent
 from ai_agent.graph.state import LayoutState
 from ai_agent.graph.edges import route_after_drc, route_after_human, route_by_mode
+from ai_agent.utils.logging import vprint
 from ai_agent.nodes import (
     node_topology_analyst,
     node_strategy_selector,
@@ -25,6 +27,54 @@ from ai_agent.nodes import (
     node_human_viewer,
     node_save_to_rag,
 )
+
+
+def _route_after_router(state: LayoutState):
+    """Route the chat workflow to the selected analysis node."""
+    target = str(state.get("router_target", "topology_analyst"))
+    if target in {
+        "topology_analyst",
+        "strategy_selector",
+        "placement_specialist",
+        "drc_critic",
+        "routing_previewer",
+    }:
+        return target
+    return "topology_analyst"
+
+
+def _node_router(state: LayoutState):
+    """Classify user intent and store the downstream routing target."""
+    user_message = str(state.get("user_message", ""))
+    selected_model = str(state.get("selected_model", "Gemini"))
+    target = classify_intent(user_message, selected_model)
+    intent = target
+
+    preview = user_message.replace("\n", " ").strip()
+    if len(preview) > 120:
+        preview = preview[:117] + "..."
+    vprint(
+        "[ROUTER] intent={} | target={} | model={} | msg={!r}".format(
+            intent,
+            target,
+            selected_model,
+            preview,
+        )
+    )
+
+    if target not in {
+        "topology_analyst",
+        "strategy_selector",
+        "placement_specialist",
+        "drc_critic",
+        "routing_previewer",
+    }:
+        target = "topology_analyst"
+
+    return {
+        "intent": intent,
+        "router_target": target,
+    }
 
 
 def build_layout_graph(mode: str = "initial"):
@@ -78,5 +128,41 @@ def build_layout_graph(mode: str = "initial"):
     return builder.compile(checkpointer=memory), memory
 
 
+def build_chat_graph():
+    """Build the chat-bot LangGraph with intent-based routing."""
+    memory = MemorySaver()
+    builder = StateGraph(LayoutState)
+
+    builder.add_node("router", _node_router)
+    builder.add_node("topology_analyst", node_topology_analyst)
+    builder.add_node("strategy_selector", node_strategy_selector)
+    builder.add_node("placement_specialist", node_placement_specialist)
+    builder.add_node("drc_critic", node_drc_critic)
+    builder.add_node("routing_previewer", node_routing_previewer)
+    builder.add_node("human_viewer", node_human_viewer)
+
+    builder.add_edge(START, "router")
+    builder.add_conditional_edges(
+        "router",
+        _route_after_router,
+        {
+            "topology_analyst": "topology_analyst",
+            "strategy_selector": "strategy_selector",
+            "placement_specialist": "placement_specialist",
+            "drc_critic": "drc_critic",
+            "routing_previewer": "routing_previewer",
+        },
+    )
+    builder.add_edge("topology_analyst", "human_viewer")
+    builder.add_edge("strategy_selector", "human_viewer")
+    builder.add_edge("placement_specialist", "human_viewer")
+    builder.add_edge("drc_critic", "human_viewer")
+    builder.add_edge("routing_previewer", "human_viewer")
+    builder.add_edge("human_viewer", END)
+
+    return builder.compile(checkpointer=memory), memory
+
+
 # Backward compatibility: module-level app for legacy imports
 app, _memory = build_layout_graph()
+chat_app, _chat_memory = build_chat_graph()

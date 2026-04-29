@@ -29,6 +29,7 @@ Functions:
 """
 
 import json
+import copy
 import os
 import uuid
 from typing import cast
@@ -38,6 +39,8 @@ from PySide6.QtCore import QObject, Signal, Slot
 
 class PlacementWorker(QObject):
     """Run the initial-placement LangGraph and stream updates to the UI."""
+
+    _last_initial_state = None
 
     response_ready = Signal(str)
     error_occurred = Signal(str)
@@ -84,6 +87,8 @@ class PlacementWorker(QObject):
             "nodes": layout_context.get("nodes", []),
             "sp_file_path": layout_context.get("sp_file_path", ""),
             "selected_model": selected_model,
+            "intent": "",
+            "router_target": "",
             "pending_cmds": [],
             "constraint_text": "",
             "Analysis_result": "",
@@ -91,6 +96,7 @@ class PlacementWorker(QObject):
             "terminal_nets": layout_context.get("terminal_nets", {}),
             "placement_nodes": layout_context.get("nodes", []),
             "deterministic_snapshot": [],
+            "original_placement_cmds": [],
             "drc_flags": [],
             "drc_pass": False,
             "approved": False,
@@ -167,6 +173,12 @@ class PlacementWorker(QObject):
             return
 
         final_state = placer_app.get_state(self.thread_config).values
+        try:
+            snapshot = copy.deepcopy(final_state)
+        except Exception:
+            snapshot = dict(final_state) if isinstance(final_state, dict) else None
+        self._last_initial_state = snapshot
+        PlacementWorker._last_initial_state = snapshot
         placement_nodes = final_state.get("placement_nodes", [])
         final_cmds = []
         for node in placement_nodes:
@@ -238,3 +250,17 @@ class PlacementWorker(QObject):
             "routing": final_state.get("routing_result", {}),
         })
         self.response_ready.emit(summary)
+
+
+def get_last_initial_state():
+    """Return the most recent initial-placement graph state snapshot, if any."""
+    return PlacementWorker._last_initial_state
+
+
+def set_last_initial_state(state_snapshot) -> None:
+    """Update the cached initial-placement graph state snapshot."""
+    try:
+        snapshot = copy.deepcopy(state_snapshot)
+    except Exception:
+        snapshot = dict(state_snapshot) if isinstance(state_snapshot, dict) else None
+    PlacementWorker._last_initial_state = snapshot

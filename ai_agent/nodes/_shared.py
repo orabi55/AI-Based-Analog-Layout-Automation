@@ -197,7 +197,17 @@ def _invoke_with_retry(messages, selected_model: str, task_weight: str, stage_ta
     for attempt in range(max_retries + 1):
         try:
             llm = get_langchain_llm(selected_model, task_weight=task_weight)
-            return llm.invoke(messages)
+            try:
+                prompt_text = json.dumps(messages, indent=2, ensure_ascii=False, default=str)
+            except Exception:
+                prompt_text = str(messages)
+            vprint(f"[{stage_tag}] Prompt:\n{prompt_text}")
+
+            response = llm.invoke(messages)
+            response_payload = getattr(response, "content", response)
+            response_text = _content_to_text(response_payload) or str(response_payload)
+            vprint(f"[{stage_tag}] Response:\n{response_text}")
+            return response
         except Exception as exc:
             msg = str(exc).lower()
             is_timeout = "timed out" in msg or "timeout" in msg or "read operation timed out" in msg

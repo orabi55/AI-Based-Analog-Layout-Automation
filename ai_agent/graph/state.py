@@ -54,6 +54,10 @@ class LayoutState(TypedDict):
     # --- Pending updates ---
     pending_cmds: List[Dict]
 
+    # --- Chat router metadata ---
+    intent: str
+    router_target: str
+
     # --- Human Approval ---
     approved: bool
 
