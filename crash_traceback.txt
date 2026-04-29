@@ -1,11 +1,14 @@
 Traceback (most recent call last):
-  File "c:\Users\DELL G3\Desktop\GP\NEW\AI-Based-Analog-Layout-Automation\symbolic_editor\main.py", line 925, in _on_toggle_ruler
-    tab.set_ruler_mode(checked)
-    ~~~~~~~~~~~~~~~~~~^^^^^^^^^
-  File "c:\Users\DELL G3\Desktop\GP\NEW\AI-Based-Analog-Layout-Automation\symbolic_editor\layout_tab.py", line 998, in set_ruler_mode
-    self.editor.set_ruler_mode(enabled)
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
-  File "c:\Users\DELL G3\Desktop\GP\NEW\AI-Based-Analog-Layout-Automation\symbolic_editor\editor_view.py", line 241, in set_ruler_mode
-    self.scene.removeItem(self._ruler_line)
-    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
-RuntimeError: Internal C++ object (PySide6.QtWidgets.QGraphicsLineItem) already deleted.
+  File "C:\Users\youss\University\GP\Automation Phase\Code\AI-Based-Analog-Layout-Automation\symbolic_editor\editor_view.py", line 1705, in _on_selection_changed
+    self._show_connections(dev_id)
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "C:\Users\youss\University\GP\Automation Phase\Code\AI-Based-Analog-Layout-Automation\symbolic_editor\editor_view.py", line 1625, in _show_connections
+    self.clear_highlighted_net()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\youss\University\GP\Automation Phase\Code\AI-Based-Analog-Layout-Automation\symbolic_editor\editor_view.py", line 399, in clear_highlighted_net
+    group.clear_highlighted_net()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\youss\University\GP\Automation Phase\Code\AI-Based-Analog-Layout-Automation\symbolic_editor\hierarchy_group_item.py", line 115, in clear_highlighted_net
+    self.update()
+    ~~~~~~~~~~~^^
+RuntimeError: Internal C++ object (HierarchyGroupItem) already deleted.

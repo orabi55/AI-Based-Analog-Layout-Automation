@@ -32,9 +32,9 @@ Analyze the circuit netlist (devices and connections) and extract precise, struc
 
 Your output must be strict, unambiguous, and directly usable.
 
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 1. OBJECTIVES
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 
 1) Identify fundamental circuit topologies:
 
@@ -57,29 +57,29 @@ Placement Cohesion Rule:
 - Each primary group must correspond to a physically placeable layout block
 - Groups should map to real structural units (diff pair, mirror, load, etc.)
 
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 2. SECONDARY TAGS (OPTIONAL)
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 
 Devices may have zero or more secondary tags.
 
 Controlled SKILL_HINT vocabulary only:
 
-- SKILL_HINT:bias_chain        ΓåÆ vertical current dependency chain
-- SKILL_HINT:common_centroid   ΓåÆ gradient-canceling centroid requirement
-- SKILL_HINT:bias_mirror       ΓåÆ mirrored current mirror structure
-- SKILL_HINT:differential_pair ΓåÆ half of a differential pair
-- SKILL_HINT:interdigitate     ΓåÆ ratio-matching via interdigitation
-- SKILL_HINT:proximity_net     ΓåÆ high-connectivity locality requirement
+- SKILL_HINT:bias_chain        → vertical current dependency chain
+- SKILL_HINT:common_centroid   → gradient-canceling centroid requirement
+- SKILL_HINT:bias_mirror       → mirrored current mirror structure
+- SKILL_HINT:differential_pair → half of a differential pair
+- SKILL_HINT:interdigitate     → ratio-matching via interdigitation
+- SKILL_HINT:proximity_net     → high-connectivity locality requirement
 
 Rules:
 - Tags do NOT affect grouping
 - Multiple tags allowed per device
 - Only controlled vocabulary allowed
 
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 3. DEVICE ROLE CLASSIFICATION
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 
 For each device, specify:
 
@@ -90,15 +90,15 @@ For each device, specify:
   NMOS or PMOS (must be exact)
 
 - nf:
-  integer ΓëÑ 1
+  integer ≥ 1
 
 Rules:
 - nf must be read from input netlist
-- If missing ΓåÆ nf = 1 and mark as (assumed)
+- If missing → nf = 1 and mark as (assumed)
 
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 4. MATCHING & SYMMETRY RULES
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 
 You must explicitly define:
 
@@ -110,9 +110,9 @@ Critical rule:
 - Matching and symmetry must be defined WITHIN groups
 - Do NOT define primary matching relationships across groups unless unavoidable
 
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 5. CIRCUIT FUNCTION IDENTIFICATION
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 
 Identify overall circuit type:
 
@@ -123,9 +123,9 @@ Examples:
 - Logic gate
 - Multi-stage amplifier
 
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 6. CRITICAL RULES
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 
 - Use EXACT device names (no renaming)
 - Each device must appear in exactly ONE primary group
@@ -135,31 +135,31 @@ Examples:
 - Secondary tags must only use SKILL_HINT vocabulary
 - Devices may have multiple secondary tags
 
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 7. CURRENT_FLOW_GRAPH RULES
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 
 - Must be derived from:
   current mirrors, cascodes, tail sources
 
 - Format:
-  A ΓåÆ B means A provides bias current to B
+  A → B means A provides bias current to B
 
 - Must use exact device names
 
 - Graph must be acyclic
 
 If cycle detected:
-ΓåÆ report topology error
+→ report topology error
 
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 8. NETLIST_GRAPH RULES
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 
 Undirected weighted connectivity:
 
 Format:
-- A ΓÇö B : net_name : HIGH|MEDIUM|LOW
+- A — B : net_name : HIGH|MEDIUM|LOW
 
 Weight rules:
 - Differential nets = HIGH
@@ -167,11 +167,11 @@ Weight rules:
 - Supply/ground = LOW
 
 If no meaningful connections:
-ΓåÆ write NONE
+→ write NONE
 
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 9. OUTPUT FORMAT (STRICT)
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 
 CIRCUIT_TYPE:
 [one-line circuit function]
@@ -200,33 +200,33 @@ PAIR_MAPPING: (ONLY if Differential Pair, else NONE)
 
 (repeat for all groups)
 
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 CURRENT_FLOW_GRAPH:
-- A ΓåÆ B
-- C ΓåÆ D
+- A → B
+- C → D
 or NONE
 
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 NETLIST_GRAPH:
-- A ΓÇö B : net : HIGH|MEDIUM|LOW
+- A — B : net : HIGH|MEDIUM|LOW
 or NONE
 
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 10. FINAL VALIDATION (MANDATORY)
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 
 Before output ensure:
 
-Γ£ô Every device assigned exactly once
-Γ£ô No duplicate group membership
-Γ£ô All roles include Type + nf
-Γ£ô Matching and symmetry clearly defined
-Γ£ô Output follows strict format
-Γ£ô Graphs are valid and acyclic
-Γ£ô No missing devices
+✓ Every device assigned exactly once
+✓ No duplicate group membership
+✓ All roles include Type + nf
+✓ Matching and symmetry clearly defined
+✓ Output follows strict format
+✓ Graphs are valid and acyclic
+✓ No missing devices
 
 If any rule is violated:
-ΓåÆ regenerate output
+→ regenerate output
 """
 
 

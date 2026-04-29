@@ -75,27 +75,39 @@ class MultiAgentOrchestrator:
         intent = classify_intent(user_message, selected_model)
         print(f"[ORCHESTRATOR] Intent: {intent}")
 
-        if intent == "chat":
+        if intent == "topology_analyst":
             return self._handle_chat(
                 user_message, layout_context, chat_history,
                 run_llm_fn, selected_model
             )
 
-        elif intent == "question":
+        elif intent == "routing_previewer":
             return self._handle_question(
                 user_message, layout_context, chat_history,
                 run_llm_fn, selected_model
             )
 
-        elif intent == "concrete":
+        elif intent == "placement_specialist":
             return self._handle_concrete(
                 user_message, layout_context,
                 run_llm_fn, selected_model
             )
 
-        else:  # abstract
+        elif intent == "strategy_selector":
             return self._handle_abstract(
                 user_message, layout_context,
+                run_llm_fn, selected_model
+            )
+
+        elif intent == "drc_critic":
+            return self._handle_abstract(
+                user_message, layout_context,
+                run_llm_fn, selected_model
+            )
+
+        else:
+            return self._handle_question(
+                user_message, layout_context, chat_history,
                 run_llm_fn, selected_model
             )
 
