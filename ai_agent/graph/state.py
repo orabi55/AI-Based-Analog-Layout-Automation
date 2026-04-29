@@ -63,3 +63,6 @@ class LayoutState(TypedDict):
 
     # --- Symmetry enforcement ---
     placement_mode: str   # "auto" | "two_half"
+
+    # --- Quality benchmark ---
+    placement_quality: Dict[str, Any]  # output of score_placement()

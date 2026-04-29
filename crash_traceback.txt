@@ -1,8 +1,5 @@
 Traceback (most recent call last):
-  File "c:\Users\DELL G3\Desktop\GP\NEW\AI-Based-Analog-Layout-Automation\symbolic_editor\main.py", line 388, in _on_load_example
-    tab = self._new_tab()
-  File "c:\Users\DELL G3\Desktop\GP\NEW\AI-Based-Analog-Layout-Automation\symbolic_editor\main.py", line 298, in _new_tab
-    tab = LayoutEditorTab(placement_file, parent=self._tab_widget)
-  File "c:\Users\DELL G3\Desktop\GP\NEW\AI-Based-Analog-Layout-Automation\symbolic_editor\layout_tab.py", line 108, in __init__
-    self.schematic_panel = SchematicPanel(self)
-                           ~~~~~~~~~~~~~~^^^^^^
+  File "c:\Users\DELL G3\Desktop\GP\NEW\AI-Based-Analog-Layout-Automation\symbolic_editor\widgets\welcome_screen.py", line 28, in paintEvent
+    def paintEvent(self, event):
+    
+KeyboardInterrupt
