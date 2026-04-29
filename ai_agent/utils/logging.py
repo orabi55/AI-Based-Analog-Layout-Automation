@@ -212,15 +212,16 @@ def pipeline_end(summary: dict | None = None) -> None:
     _pipeline_start = None
 
     s = summary or {}
-    width = s.get("width", "?")
-    height = s.get("height", "?")
-    aspect = s.get("aspect", "?")
-    area = s.get("area", "?")
-    utilization = s.get("utilization", "?")
-    hpwl = s.get("hpwl", "--")
-    drc_status = s.get("drc_status", "?")
+    width       = s.get("width",        "?")
+    height      = s.get("height",       "?")
+    aspect      = s.get("aspect",       "?")
+    area        = s.get("area",         "?")
+    utilization = s.get("utilization",  "?")
+    hpwl        = s.get("hpwl",         "--")
+    drc_status  = s.get("drc_status",   "?")
     pmos_nmos_sep = s.get("pmos_nmos_sep", "?")
-    n_placed = s.get("n_placed", "?")
+    n_placed    = s.get("n_placed",     "?")
+    quality     = s.get("quality",      {})   # placement quality report dict
 
     mins = int(elapsed // 60)
     secs = int(elapsed % 60)
@@ -241,6 +242,55 @@ def pipeline_end(summary: dict | None = None) -> None:
     _safe_print(f"  Devices      : {n_placed} placed")
     _safe_print(f"  Time Total   : {mins}m {secs}s")
     _safe_print(bar)
+
+    # -- Placement Quality Benchmark (printed after utilization) -------------
+    if quality and isinstance(quality, dict):
+        composite   = quality.get("composite_score",       0.0)
+        y_score     = quality.get("layout_y_score",        0.0)
+        x_score     = quality.get("matching_x_score",      0.0)
+        id_score    = quality.get("interdigitation_score")   # may be None
+        cc_score    = quality.get("centroid_score")          # may be None
+        drc_q_score = quality.get("drc_score",             0.0)
+        n_pairs     = quality.get("matched_pairs_count",   0)
+
+        def _bar(score: float, width: int = 20) -> str:
+            filled = int(round(score * width))
+            return "#" * filled + "-" * (width - filled)
+
+        def _grade(score: float) -> str:
+            if score >= 0.95: return "A+"
+            if score >= 0.90: return "A"
+            if score >= 0.80: return "B"
+            if score >= 0.70: return "C"
+            if score >= 0.50: return "D"
+            return "F"
+
+        def _row(label, val):
+            if val is None:
+                return f"  {label:<24}  {'N/A':>6}   {'(not applicable)':<22}"
+            return (
+                f"  {label:<24}  {val:>6.1%}   {_bar(val):<22}  {_grade(val)}"
+            )
+
+        qbar = "=" * 64
+        _safe_print()
+        _safe_print(qbar)
+        _safe_print("  MATCHING & SYMMETRY QUALITY BENCHMARK")
+        _safe_print(qbar)
+        _safe_print(f"  Matched pairs : {n_pairs}")
+        _safe_print(f"  {'Metric':<24}  {'Score':>6}   {'Progress':<22}  Grade")
+        _safe_print(f"  {'-'*24}  {'-'*6}   {'-'*22}  -----")
+        _safe_print(_row("Layout Y Symmetry",   y_score))
+        _safe_print(_row("X Mirror Symmetry",   x_score))
+        _safe_print(_row("Interdigitation",      id_score))
+        _safe_print(_row("Common Centroid (2D)", cc_score))
+        _safe_print(_row("DRC Clean",           drc_q_score))
+        _safe_print(f"  {'-'*24}  {'-'*6}   {'-'*22}  -----")
+        _safe_print(
+            f"  {'COMPOSITE':<24}  {composite:>6.1%}   {_bar(composite):<22}  {_grade(composite)}"
+        )
+        _safe_print(qbar)
+
     _safe_print()
 
 

@@ -39,6 +39,7 @@ from ai_agent.utils.logging import (
 )
 from ai_agent.tools.inventory import validate_device_count
 from ai_agent.placement.symmetry import enforce_reflection_symmetry
+from ai_agent.placement.quality_metrics import score_placement
 
 _PLACEMENT_SKILL_MIDDLEWARE = SkillMiddleware()
 _PLACEMENT_SPECIALIST_AGENT = create_placement_specialist_agent(
@@ -221,13 +222,47 @@ def node_placement_specialist(state):
     # ── Final position summary ───────────────────────────────────────────
     log_device_positions(working_nodes, "Final Placement Positions")
 
+    # ── Step 3g: Quality benchmark ───────────────────────────────────────
+    log_section("Step 3g: Placement Quality Benchmark")
+    try:
+        quality_report = score_placement(
+            working_nodes,
+            matching_info=merged if merged else None,
+            finger_map=finger_map if finger_map else None,
+            verbose=True,
+        )
+        log_detail(quality_report["summary"])
+        if "details" in quality_report:
+            for metric, detail_text in quality_report["details"].items():
+                if detail_text:
+                    log_detail(f"[{metric}]\n{detail_text}")
+        composite = quality_report["composite_score"]
+
+        def _fmt(v):
+            return f"{v:.1%}" if v is not None else "N/A"
+
+        log_detail(
+            f"Quality: Y={_fmt(quality_report.get('layout_y_score'))}  "
+            f"X={_fmt(quality_report.get('matching_x_score'))}  "
+            f"Interdig={_fmt(quality_report.get('interdigitation_score'))}  "
+            f"Centroid={_fmt(quality_report.get('centroid_score'))}  "
+            f"DRC={_fmt(quality_report.get('drc_score'))}  "
+            f"-> COMPOSITE={composite:.1%}"
+        )
+    except Exception as _q_exc:
+        log_detail(f"WARNING: quality benchmark failed: {_q_exc}")
+        quality_report = {}
+        composite = 0.0
+
     elapsed = time.time() - t0
     cons = 'ok' if conservation['pass'] else 'FAILED'
-    ip_step("3/5 Placement Specialist", f"{len(stage2_cmds)} cmd(s), {elapsed:.1f}s, conservation={cons}")
+    q_str = f", quality={composite:.1%}" if quality_report else ""
+    ip_step("3/5 Placement Specialist", f"{len(stage2_cmds)} cmd(s), {elapsed:.1f}s, conservation={cons}{q_str}")
 
     return {
         "placement_nodes": working_nodes,
         "pending_cmds": state.get("pending_cmds", []) + stage2_cmds,
         "original_placement_cmds": state.get("pending_cmds", []) + stage2_cmds,
         "chat_history": updated_chat_history,
+        "placement_quality": quality_report,
     }
