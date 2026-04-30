@@ -1,0 +1,126 @@
+{
+    "version": "2.0",
+    "device_types": {
+        "pmos": {
+            "y_row": 0.668,
+            "default_width": 0.294,
+            "default_height": 0.818
+        },
+        "nmos": {
+            "y_row": 0.0,
+            "default_width": 0.294,
+            "default_height": 0.668
+        },
+        "res": {
+            "y_row": 1.63,
+            "default_width": 0.294,
+            "default_height": 0.1
+        },
+        "cap": {
+            "y_row": 1.63,
+            "default_width": 0.294,
+            "default_height": 0.668
+        }
+    },
+    "devices": {
+        "MM2": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 2.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "A",
+                "G": "C",
+                "S": "gnd"
+            }
+        },
+        "MM1": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 2.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "B",
+                "G": "C",
+                "S": "gnd"
+            }
+        },
+        "MM0": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 2.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "C",
+                "G": "C",
+                "S": "gnd"
+            }
+        },
+        "MM5": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 2.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "Z",
+                "G": "X",
+                "S": "VDD"
+            }
+        },
+        "MM4": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 2.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "Y",
+                "G": "X",
+                "S": "VDD"
+            }
+        },
+        "MM3": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 2.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "X",
+                "G": "X",
+                "S": "VDD"
+            }
+        }
+    },
+    "connectivity": {
+        "nets": {
+            "C": [
+                "MM0",
+                "MM1",
+                "MM2"
+            ],
+            "B": [
+                "MM1"
+            ],
+            "X": [
+                "MM3",
+                "MM4",
+                "MM5"
+            ],
+            "Y": [
+                "MM4"
+            ]
+        }
+    },
+    "drc_rules": {
+        "fin_pitch": 0.014,
+        "row_pitch": 0.668,
+        "device_pitch": 0.294,
+        "abut_pitch": 0.07
+    },
+    "blocks": {}
+}

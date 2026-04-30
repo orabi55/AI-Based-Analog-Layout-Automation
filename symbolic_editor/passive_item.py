@@ -1,0 +1,444 @@
+"""
+passive_item.py — Visual items for passive components (resistors and capacitors).
+
+ResistorItem: amber/gold tones with zig-zag body, parameter annotation.
+CapacitorItem: teal/cyan tones with parallel-plate symbol, value annotation.
+
+Both share the same drag/snap/select/orientation interface as DeviceItem.
+"""
+
+from PySide6.QtWidgets import QGraphicsRectItem, QGraphicsItem
+from PySide6.QtGui import (
+    QBrush, QPen, QColor, QFont, QPainter,
+    QLinearGradient, QPainterPath,
+)
+from PySide6.QtCore import Qt, QRectF, QObject, Signal, QPointF
+import math
+
+
+class DeviceSignals(QObject):
+    """Helper QObject so passive items can emit signals."""
+    drag_started = Signal()
+    drag_finished = Signal()
+
+
+class _PassiveBase(QGraphicsRectItem):
+    """Shared base class for ResistorItem and CapacitorItem."""
+
+    def __init__(self, name, dev_type, x, y, width, height):
+        super().__init__(0, 0, width, height)
+        self.setPos(x, y)
+        self.device_name  = name
+        self.device_type  = dev_type
+        self.value        = None
+        self.nf           = 1
+        self.signals      = DeviceSignals()
+
+        self._drag_active    = False
+        self._drag_start_pos = QPointF()
+        self._snap_grid_x    = None
+        self._snap_grid_y    = None
+        self._flip_h         = False
+        self._flip_v         = False
+
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
+        self.setBrush(QBrush(Qt.BrushStyle.NoBrush))
+        self.setPen(QPen(Qt.PenStyle.NoPen))
+
+        # Color state
+        self._custom_color = None
+        self._init_colors()
+
+    def _init_colors(self):
+        """Set up standard colors from class constants."""
+        # To be overridden by subclasses
+        self._source_color = QColor("#4a90d9") # Default fallback
+
+    def set_custom_color(self, color: QColor):
+        """Override all visual components with a derived palette from color."""
+        self._custom_color = color
+        self.update()
+
+    def reset_custom_color(self):
+        """Restore standard class colors."""
+        self._custom_color = None
+        self.update()
+
+    # ── Grid snapping ────────────────────────────────────────────────
+    def set_snap_grid(self, grid_x, grid_y=None):
+        self._snap_grid_x = float(grid_x) if grid_x else None
+        self._snap_grid_y = float(grid_y) if grid_y else self._snap_grid_x
+
+    def itemChange(self, change, value):
+        if (change == QGraphicsItem.GraphicsItemChange.ItemPositionChange
+                and self._snap_grid_x and self._snap_grid_y):
+            x = round(value.x() / self._snap_grid_x) * self._snap_grid_x
+            y = round(value.y() / self._snap_grid_y) * self._snap_grid_y
+            return QPointF(x, y)
+        return super().itemChange(change, value)
+
+    # ── Drag tracking ─────────────────────────────────────────────────
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_start_pos = self.pos()
+            self._drag_active    = False
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        super().mouseMoveEvent(event)
+        if not self._drag_active and self.pos() != self._drag_start_pos:
+            self._drag_active = True
+            self.signals.drag_started.emit()
+
+    def mouseReleaseEvent(self, event):
+        if self._drag_active:
+            self._drag_active = False
+            self.signals.drag_finished.emit()
+        super().mouseReleaseEvent(event)
+
+    # ── Orientation stubs (required by editor) ────────────────────────
+    def flip_horizontal(self):
+        self._flip_h = not self._flip_h
+        self.update()
+
+    def flip_vertical(self):
+        self._flip_v = not self._flip_v
+        self.update()
+
+    def is_flip_h(self): return self._flip_h
+    def is_flip_v(self): return self._flip_v
+    def set_flip_h(self, s): self._flip_h = bool(s); self.update()
+    def set_flip_v(self, s): self._flip_v = bool(s); self.update()
+
+    def orientation_string(self):
+        base = "R0"
+        if self._flip_h and self._flip_v: return f"{base}_FH_FV"
+        if self._flip_h:                  return f"{base}_FH"
+        if self._flip_v:                  return f"{base}_FV"
+        return base
+
+    # ── Terminal anchors (pin 1 = left, pin 2 = right) ────────────────
+    def terminal_anchors(self):
+        rect  = self.rect()
+        mid_y = rect.y() + rect.height() / 2
+        p1 = self.mapToScene(QPointF(rect.x(),                   mid_y))
+        p2 = self.mapToScene(QPointF(rect.x() + rect.width(),    mid_y))
+        # Alias so routing code that expects S/G/D still works
+        return {"1": p1, "2": p2, "S": p1, "G": p1, "D": p2}
+
+    # ── Shared helpers ────────────────────────────────────────────────
+    def _draw_selection(self, painter, rect, color="#4a90d9"):
+        if self.isSelected():
+            c = QColor(color)
+            painter.setPen(QPen(c, 2.0))
+            c.setAlpha(35)
+            painter.setBrush(QBrush(c))
+            painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 3, 3)
+
+    def _format_si(self, value, unit):
+        """Format a value with SI prefix, e.g. 3.68e-16 → '368.aF'."""
+        if value <= 0:
+            return ""
+        for prefix, scale in [("f", 1e-15), ("p", 1e-12), ("n", 1e-9),
+                               ("u", 1e-6),  ("m", 1e-3),  ("",  1e0),
+                               ("k", 1e3),   ("M", 1e6)]:
+            if value < scale * 1000:
+                v = value / scale
+                if v >= 10:
+                    return f"{v:.1f}{prefix}{unit}"
+                return f"{v:.2f}{prefix}{unit}"
+        return f"{value:.2e}{unit}"
+
+    def set_value(self, val):
+        old_val = self.value
+        try:
+            self.value = float(val) if val is not None else None
+        except (ValueError, TypeError):
+            self.value = None
+        
+        print(f"DEBUG: _PassiveBase.set_value on {getattr(self, 'device_name', '?')} - Old: {old_val}, New: {self.value}")
+        
+        # ── Dynamic Width Scaling ─────────────────────────────────────
+        # User Constraint: 
+        # - Resistors: Stop growing at 100 Ohm (Growth Ceiling)
+        # - Capacitors: Stop decreasing at 1 pF (Growth Floor)
+        if self.value is not None:
+            from config.design_rules import (
+                PIXELS_PER_UM, 
+                PASSIVE_WIDTH_UM, 
+                PASSIVE_CAP_WIDTH_UM
+            )
+            
+            if self.device_type == "res":
+                floor = 100.0
+                ceiling = 100000.0
+                val_for_scale = max(floor, min(self.value, ceiling))
+                # Logarithmic scaling: Map 100 to 1.0x and 100k to 3.0x
+                log_min = math.log10(floor)
+                log_max = math.log10(ceiling)
+                log_val = math.log10(val_for_scale)
+                scale = 1.0 + 2.0 * ((log_val - log_min) / (log_max - log_min))
+                base_w = PASSIVE_WIDTH_UM
+            else:
+                floor = 1.0e-12 # 1pF
+                ceiling = 1.0e-6 # 1uF
+                val_for_scale = max(floor, min(self.value, ceiling))
+                # Logarithmic scaling: Map 1pF to 1.0x and 1uF to 3.0x
+                log_min = math.log10(floor)
+                log_max = math.log10(ceiling)
+                log_val = math.log10(val_for_scale)
+                scale = 1.0 + 2.0 * ((log_val - log_min) / (log_max - log_min))
+                base_w = PASSIVE_CAP_WIDTH_UM
+            
+            # Absolute clamp
+            scale = max(1.0, min(3.0, scale))
+            
+            new_w_um = base_w * scale
+            new_w_pix = new_w_um * PIXELS_PER_UM
+            
+            r = self.rect()
+            if abs(new_w_pix - r.width()) > 0.1:
+                self.prepareGeometryChange()
+                r.setWidth(new_w_pix)
+                self.setRect(r)
+                if self.device_type == "res":
+                    print(f"DEBUG: Resistor {getattr(self,'device_name','?')} size capped at 100 Ohm (width {new_w_um:.2f}um)")
+                else:
+                    print(f"DEBUG: Capacitor {getattr(self,'device_name','?')} floor set at 1pF (width {new_w_um:.2f}um)")
+
+        self.update()
+
+
+# =============================================================================
+class ResistorItem(_PassiveBase):
+    """Visual symbol for a resistor — amber body with zig-zag pattern."""
+
+    _BG_TOP    = QColor("#fff8e1")   # warm cream top
+    _BG_BOT    = QColor("#ffe082")   # amber yellow bottom
+    _ZZ_COLOR  = QColor("#e65100")   # deep burnt orange zig-zag
+    _BORDER    = QColor("#bf360c")   # dark red-orange border
+    _LEAD      = QColor("#795548")   # brown lead lines
+    _LABEL_CLR = QColor("#4e2500")   # name text
+    _PIN_CLR   = QColor("#e65100")   # pin label color
+
+    def __init__(self, name, x, y, width, height):
+        super().__init__(name, "res", x, y, width, height)
+
+    def _init_colors(self):
+        self._source_color = self._BG_BOT
+
+    def paint(self, painter: QPainter, option, widget=None):
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        rect  = self.rect()
+        w, h  = rect.width(), rect.height()
+        x0, y0 = rect.x(), rect.y()
+        mid_y = y0 + h * 0.5
+
+        # ── Color Palette ────────────────────────────────────────────
+        if self._custom_color:
+            bg_top = self._custom_color.lighter(130)
+            bg_bot = self._custom_color
+            border = self._custom_color.darker(150)
+            zz_clr = self._custom_color.darker(120)
+        else:
+            bg_top = self._BG_TOP
+            bg_bot = self._BG_BOT
+            border = self._BORDER
+            zz_clr = self._ZZ_COLOR
+
+        # ── Background gradient ──────────────────────────────────────
+        grad = QLinearGradient(x0, y0, x0, y0 + h)
+        grad.setColorAt(0.0, bg_top)
+        grad.setColorAt(1.0, bg_bot)
+        painter.setBrush(QBrush(grad))
+        painter.setPen(QPen(border, 1.5))
+        painter.drawRoundedRect(rect.adjusted(0.75, 0.75, -0.75, -0.75), 4, 4)
+
+        # ── Lead wires from edges to body ────────────────────────────
+        lead_w = w * 0.08
+        body_x0 = x0 + lead_w
+        body_x1 = x0 + w - lead_w
+        body_w  = body_x1 - body_x0
+
+        lead_pen = QPen(self._LEAD, max(1.2, h * 0.06),
+                        Qt.PenStyle.SolidLine,
+                        Qt.PenCapStyle.RoundCap)
+        painter.setPen(lead_pen)
+        painter.drawLine(QPointF(x0, mid_y), QPointF(body_x0, mid_y))
+        painter.drawLine(QPointF(body_x1, mid_y), QPointF(x0 + w, mid_y))
+
+        # ── Zig-zag (resistor body) ───────────────────────────────────
+        n_teeth = max(3, int(body_w / (h * 0.35)))
+        tooth_w  = body_w / n_teeth
+        zz_amp   = h * 0.28
+
+        zz_pen = QPen(zz_clr, max(1.5, h * 0.07),
+                      Qt.PenStyle.SolidLine,
+                      Qt.PenCapStyle.RoundCap,
+                      Qt.PenJoinStyle.RoundJoin)
+        painter.setPen(zz_pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+
+        path = QPainterPath()
+        path.moveTo(body_x0, mid_y)
+        for i in range(n_teeth):
+            lx = body_x0 + i * tooth_w
+            rx = lx + tooth_w
+            peak_y = mid_y - zz_amp if i % 2 == 0 else mid_y + zz_amp
+            path.lineTo(lx + tooth_w * 0.5, peak_y)
+            path.lineTo(rx, mid_y)
+        painter.drawPath(path)
+
+        # ── Terminal dots ─────────────────────────────────────────────
+        dot_r = max(2.0, h * 0.09)
+        painter.setBrush(QBrush(border))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(QPointF(x0 + dot_r, mid_y), dot_r, dot_r)
+        painter.drawEllipse(QPointF(x0 + w - dot_r, mid_y), dot_r, dot_r)
+
+        # ── Pin labels (1 left, 2 right) ─────────────────────────────
+        pin_fs = max(4, min(8, int(h * 0.22)))
+        painter.setFont(QFont("Segoe UI", pin_fs, QFont.Weight.Bold))
+        painter.setPen(self._PIN_CLR)
+        pin_w = lead_w * 3
+        painter.drawText(QRectF(x0, y0, pin_w, h * 0.55),
+                         Qt.AlignmentFlag.AlignCenter, "1")
+        painter.drawText(QRectF(x0 + w - pin_w, y0, pin_w, h * 0.55),
+                         Qt.AlignmentFlag.AlignCenter, "2")
+
+        # ── Device name ───────────────────────────────────────────────
+        name_fs = max(5, min(10, int(w * 0.10)))
+        painter.setFont(QFont("Segoe UI", name_fs, QFont.Weight.Bold))
+        painter.setPen(self._LABEL_CLR)
+        name_rect = QRectF(x0 + lead_w, y0 + 1, body_w, h * 0.45)
+        painter.drawText(name_rect,
+                         Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
+                         self.device_name)
+        
+        # ── Electrical Value ──────────────────────────────────────────
+        if self.value is not None:
+            val_str = self._format_si(self.value, "Ω")
+            val_fs = max(6, min(12, int(w * 0.12)))
+            painter.setFont(QFont("Segoe UI", val_fs, QFont.Weight.DemiBold))
+            painter.setPen(self._LABEL_CLR)
+            val_rect = QRectF(x0 + lead_w, y0 + h * 0.55, body_w, h * 0.45)
+            painter.drawText(val_rect,
+                             Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom,
+                             val_str)
+
+        # ── Selection ─────────────────────────────────────────────────
+        self._draw_selection(painter, rect, "#f39c12")
+
+
+# =============================================================================
+class CapacitorItem(_PassiveBase):
+    """Visual symbol for a capacitor — teal body with parallel-plate symbol."""
+
+    _BG_TOP   = QColor("#e0f7fa")   # light cyan top
+    _BG_BOT   = QColor("#80deea")   # teal bottom
+    _PLATE    = QColor("#00695c")   # dark teal plate bars
+    _BORDER   = QColor("#004d40")   # deep teal border
+    _LEAD     = QColor("#00796b")   # teal lead lines
+    _LABEL_CLR= QColor("#00251a")   # name text (very dark teal)
+    _PIN_CLR  = QColor("#00695c")   # pin label color
+
+    def __init__(self, name, x, y, width, height):
+        super().__init__(name, "cap", x, y, width, height)
+
+    def _init_colors(self):
+        self._source_color = self._BG_BOT
+
+    def paint(self, painter: QPainter, option, widget=None):
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        rect  = self.rect()
+        w, h  = rect.width(), rect.height()
+        x0, y0 = rect.x(), rect.y()
+        mid_y = y0 + h * 0.5
+
+        # ── Color Palette ────────────────────────────────────────────
+        if self._custom_color:
+            bg_top = self._custom_color.lighter(135)
+            bg_bot = self._custom_color
+            border = self._custom_color.darker(150)
+            plate  = self._custom_color.darker(120)
+        else:
+            bg_top = self._BG_TOP
+            bg_bot = self._BG_BOT
+            border = self._BORDER
+            plate  = self._PLATE
+
+        # ── Background gradient ──────────────────────────────────────
+        grad = QLinearGradient(x0, y0, x0, y0 + h)
+        grad.setColorAt(0.0, bg_top)
+        grad.setColorAt(1.0, bg_bot)
+        painter.setBrush(QBrush(grad))
+        painter.setPen(QPen(border, 1.5))
+        painter.drawRoundedRect(rect.adjusted(0.75, 0.75, -0.75, -0.75), 4, 4)
+
+        # ── Plate geometry ────────────────────────────────────────────
+        cx     = x0 + w * 0.5
+        gap    = max(4.0, w * 0.07)
+        ph     = h * 0.65
+        py0    = y0 + (h - ph) * 0.5
+        lead_w = w * 0.28
+
+        # Lead wires
+        lead_pen = QPen(plate, max(1.2, h * 0.05),
+                        Qt.PenStyle.SolidLine,
+                        Qt.PenCapStyle.RoundCap)
+        painter.setPen(lead_pen)
+        painter.drawLine(QPointF(x0, mid_y), QPointF(cx - gap / 2, mid_y))
+        painter.drawLine(QPointF(cx + gap / 2, mid_y), QPointF(x0 + w, mid_y))
+
+        # Plates (thick vertical bars)
+        plate_pen = QPen(plate, max(3.0, w * 0.07),
+                         Qt.PenStyle.SolidLine,
+                         Qt.PenCapStyle.FlatCap)
+        painter.setPen(plate_pen)
+        painter.drawLine(QPointF(cx - gap / 2, py0),
+                         QPointF(cx - gap / 2, py0 + ph))
+        painter.drawLine(QPointF(cx + gap / 2, py0),
+                         QPointF(cx + gap / 2, py0 + ph))
+
+        # ── Terminal dots ─────────────────────────────────────────────
+        dot_r = max(2.0, h * 0.08)
+        painter.setBrush(QBrush(border))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(QPointF(x0 + dot_r, mid_y), dot_r, dot_r)
+        painter.drawEllipse(QPointF(x0 + w - dot_r, mid_y), dot_r, dot_r)
+
+        # ── Pin labels (+ left, − right) ──────────────────────────────
+        pin_fs = max(4, min(9, int(h * 0.26)))
+        painter.setFont(QFont("Segoe UI", pin_fs, QFont.Weight.Bold))
+        painter.setPen(self._PIN_CLR)
+        pin_area_w = lead_w * 0.9
+        # "+" on left plate side, "−" on right
+        painter.drawText(QRectF(x0, y0, pin_area_w, h * 0.55),
+                         Qt.AlignmentFlag.AlignCenter, "+")
+        painter.drawText(QRectF(x0 + w - pin_area_w, y0, pin_area_w, h * 0.55),
+                         Qt.AlignmentFlag.AlignCenter, "−")
+
+        # ── Device name ───────────────────────────────────────────────
+        name_fs = max(5, min(10, int(w * 0.10)))
+        painter.setFont(QFont("Segoe UI", name_fs, QFont.Weight.Bold))
+        painter.setPen(self._LABEL_CLR)
+        name_rect = QRectF(x0 + lead_w, y0 + 1, w - 2 * lead_w, h * 0.45)
+        painter.drawText(name_rect,
+                         Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
+                         self.device_name)
+
+        # ── Electrical Value ──────────────────────────────────────────
+        if self.value is not None:
+            val_str = self._format_si(self.value, "F")
+            val_fs = max(6, min(12, int(w * 0.12)))
+            painter.setFont(QFont("Segoe UI", val_fs, QFont.Weight.DemiBold))
+            painter.setPen(self._LABEL_CLR)
+            val_rect = QRectF(x0 + lead_w, y0 + h * 0.55, w - 2*lead_w, h * 0.45)
+            painter.drawText(val_rect,
+                             Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom,
+                             val_str)
+
+        # ── Selection ─────────────────────────────────────────────────
+        self._draw_selection(painter, rect, "#1abc9c")

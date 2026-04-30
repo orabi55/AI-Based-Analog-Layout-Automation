@@ -1,0 +1,17 @@
+Traceback (most recent call last):
+  File "e:\Nour\AI-Based-Analog-Layout-Automation-new_main\symbolic_editor\layout_tab.py", line 1230, in <lambda>
+    self._import_worker.finished.connect(lambda data: self._on_import_completed(data, sp_path))
+                                                      ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "e:\Nour\AI-Based-Analog-Layout-Automation-new_main\symbolic_editor\layout_tab.py", line 1267, in _on_import_completed
+    self._load_from_data_dict(data, out_path, False)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "e:\Nour\AI-Based-Analog-Layout-Automation-new_main\symbolic_editor\layout_tab.py", line 1791, in _load_from_data_dict
+    self._refresh_panels(compact=compact)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "e:\Nour\AI-Based-Analog-Layout-Automation-new_main\symbolic_editor\layout_tab.py", line 583, in _refresh_panels
+    self.editor.load_placement(self.nodes, compact=compact)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "e:\Nour\AI-Based-Analog-Layout-Automation-new_main\symbolic_editor\editor_view.py", line 582, in load_placement
+    width_um = geom.get("width", def_w)
+                                 ^^^^^
+NameError: name 'def_w' is not defined
