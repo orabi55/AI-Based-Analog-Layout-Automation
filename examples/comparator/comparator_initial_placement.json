@@ -7865,5 +7865,6 @@
         }
     },
     "abutment_candidates": [],
-    "no_abutment": true
+    "no_abutment": true,
+    "placement_goals": null
 }

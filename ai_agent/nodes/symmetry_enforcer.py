@@ -290,12 +290,23 @@ def node_symmetry_enforcer(state: dict) -> dict:
     LangGraph node 3.5: deterministic matched + symmetric placement enforcer.
 
     Fires after finger_expansion (stage 3d) and before routing_previewer.
-    Passes through silently if no [SYMMETRY] block is found in constraint_text.
+    Passes through silently if no [SYMMETRY] block is found in constraint_text,
+    OR if the user set symmetry_priority = "Low" in placement_goals.
     """
     t0 = time.time()
     vprint("\n" + "-" * 60, flush=True)
     vprint("  STAGE 3.5: SYMMETRY ENFORCER", flush=True)
     vprint("-" * 60, flush=True)
+
+    # ── Respect placement_goals: skip when symmetry priority is Low ──────
+    goals = state.get("placement_goals")      # None = panel was not opened
+    if goals is not None:
+        sym_priority = goals.get("symmetry_priority", "Medium")
+        if sym_priority == "Low":
+            vprint("[SYMM] symmetry_priority=Low (user goal) -- passing through")
+            ip_step("3.5/5 Symmetry Enforcer", "skip (symmetry_priority=Low)")
+            return {}
+    # else: goals is None (panel was closed) → run normally
 
     constraint_text = state.get("constraint_text", "")
     placement_mode = state.get("placement_mode", "auto")

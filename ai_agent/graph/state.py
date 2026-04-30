@@ -66,3 +66,6 @@ class LayoutState(TypedDict):
 
     # --- Quality benchmark ---
     placement_quality: Dict[str, Any]  # output of score_placement()
+
+    # --- Placement goals (user-specified priorities) ---
+    placement_goals: Dict[str, Any]    # area/matching/symmetry + max_area_um2

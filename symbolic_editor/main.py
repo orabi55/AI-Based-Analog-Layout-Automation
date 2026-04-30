@@ -696,7 +696,16 @@ class MainWindow(QMainWindow):
         self._tb_act_ai.setToolTip("Run AI placement (Ctrl+P)")
         self._tb_act_ai.triggered.connect(lambda: self._fwd("do_ai_placement"))
         tb.addAction(self._tb_act_ai)
+
+        self._tb_act_compare = QAction("↔ Before/After", self)
+        self._tb_act_compare.setToolTip(
+            "Toggle between layout before and after symmetry enhancement"
+        )
+        self._tb_act_compare.setEnabled(False)
+        self._tb_act_compare.triggered.connect(lambda: self._fwd("_toggle_before_after"))
+        tb.addAction(self._tb_act_compare)
         tb.addSeparator()
+
 
         self._ignore_grid_spin = False
         self._tb_act_select_all = QAction(icon_select_all(), "Select All", self)

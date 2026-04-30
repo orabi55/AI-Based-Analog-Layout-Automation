@@ -491,11 +491,27 @@ def _is_dummy_node(node: dict) -> bool:
     )
 
 
-def _compute_matching_and_rows(nodes, edges, terminal_nets, no_abutment=False):
+def _compute_matching_and_rows(
+    nodes, edges, terminal_nets,
+    no_abutment=False,
+    matching_priority="High",
+    area_priority="Medium",
+):
     """Run the finger_grouper pipeline to get matching info and row assignments.
 
+    Matching tiers (diff pairs + current mirrors are ALWAYS applied):
+      Low    → diff pairs + current mirrors only (minimum correct circuit behavior)
+      Medium → Low + cross-coupled pairs
+      High   → All tiers including load pairs (default)
+
+    Area priority controls max_row_width dynamically from actual device footprints:
+      High   → target 1 row per type  (compact, few rows)
+      Medium → target 2 rows per type (default)
+      Low    → target 3 rows per type (spread out)
+
     Returns:
-        (group_nodes, finger_map, row_summary_str, matching_section_str)
+        (group_nodes, finger_map, row_summary_str, matching_section_str,
+         finger_group_str, merged_blocks)
     """
     try:
         from ai_agent.placement.finger_grouper import (
@@ -505,6 +521,7 @@ def _compute_matching_and_rows(nodes, edges, terminal_nets, no_abutment=False):
             merge_matched_groups,
             pre_assign_rows,
             build_finger_group_section,
+            STD_PITCH,
         )
 
         active_nodes = [n for n in nodes if not _is_dummy_node(n)]
@@ -517,7 +534,6 @@ def _compute_matching_and_rows(nodes, edges, terminal_nets, no_abutment=False):
         for gid, members in finger_map.items():
             grp_member_ids[gid] = [m.get("id", "") for m in members]
 
-        # Aggregate terminal nets at group level
         _POWER = {"VDD", "VSS", "GND", "VCC", "AVDD", "AVSS", ""}
         group_terminal_nets: dict = {}
         for gid, member_ids in grp_member_ids.items():
@@ -530,7 +546,6 @@ def _compute_matching_and_rows(nodes, edges, terminal_nets, no_abutment=False):
                     d_nets.append(tn["D"])
                 if tn.get("S", "") and tn["S"].upper() not in _POWER:
                     s_nets.append(tn["S"])
-            # Most common net for each terminal
             def _most_common(lst):
                 if not lst: return ""
                 from collections import Counter
@@ -541,42 +556,165 @@ def _compute_matching_and_rows(nodes, edges, terminal_nets, no_abutment=False):
                 "S": _most_common(s_nets),
             }
 
-        # Step 3: detect matching
+        # Step 3: detect matching (structural — electrical signatures only)
         matching_info = detect_matching_groups(group_nodes, group_edges)
 
-        # Step 4: merge matched pairs (ABBA interdigitation)
+        # Step 3.5: enrich matching_info with net-based topology detection
+        # (_enrich_matching_info fills diff_pairs, cross_coupled, clk_sym_pairs, load_pairs
+        #  by analysing group_terminal_nets. Without this call those lists stay empty.)
+        try:
+            from ai_agent.placement.finger_grouper import _enrich_matching_info
+            _enrich_matching_info(matching_info, group_terminal_nets, group_nodes)
+        except Exception:
+            pass
+
+        # Step 4: merge matched pairs.
+        # Tier definitions:
+        #   Low    → true input diff pairs (VINP/VINN) + current mirrors only
+        #            (cross-coupled, CLK-sym precharge, and load pairs are skipped)
+        #   Medium → Low + CLK-symmetric precharge pairs + cross-coupled + load pairs
+        #   High   → all transistors the engine can match (full auto, no filtering)
+        filtered_info = dict(matching_info)
+        skip_cm = False
+        if matching_priority == "Low":
+            filtered_info["cross_coupled"] = []
+            filtered_info["load_pairs"]    = []
+            filtered_info["diff_pairs"]    = list(matching_info.get("diff_pairs", []))
+            # clk_sym_pairs NOT added → only VINP/VINN + current mirrors
+        elif matching_priority == "Medium":
+            clk_sym = matching_info.get("clk_sym_pairs", [])
+            filtered_info["diff_pairs"] = list(matching_info.get("diff_pairs", [])) + clk_sym
+        else:  # High
+            clk_sym = matching_info.get("clk_sym_pairs", [])
+            filtered_info["diff_pairs"] = list(matching_info.get("diff_pairs", [])) + clk_sym
+
         group_nodes, group_edges, finger_map, merged_blocks = merge_matched_groups(
             group_nodes, group_edges, finger_map,
-            matching_info, group_terminal_nets, terminal_nets or {},
-            no_abutment=no_abutment
+            filtered_info, group_terminal_nets, terminal_nets or {},
+            no_abutment=no_abutment,
+            skip_current_mirrors=skip_cm,
+            already_enriched=True,   # _enrich_matching_info already called above
         )
 
         # Step 4.5: Update group_terminal_nets for merged blocks
-        # This ensures row assignment and matching strings see the aggregate connectivity
         for gn in group_nodes:
             if gn.get("_matched_block") and "terminal_nets" in gn:
                 group_terminal_nets[gn["id"]] = gn["terminal_nets"]
 
-        # Step 5: pre-assign rows (deterministic bin-packing)
+        # Step 5: compute max_row_width to honour area_priority.
+        #
+        # "Area=High" means HIGH UTILIZATION — the layout bounding box should be
+        # as small as possible with minimal dummy fill.  It does NOT mean "fewest rows".
+        #
+        # Strategy: choose max_row_width so that the wider device type is forced to
+        # split into rows whose width matches the narrower type.  The rectangular
+        # balancer in pre_assign_rows then automatically equalises both types.
+        #
+        # area_priority   max_row_width formula      result
+        #   High          min(pmos_fp, nmos_fp)       widths equalised → ~max utilization
+        #   Medium        geom_mean(pmos_fp, nmos_fp) balanced layout (default)
+        #   Low           max(pmos_fp, nmos_fp)       each type in fewer rows, more spread
+
+        pmos_groups = [g for g in group_nodes if g.get("type") == "pmos"]
+        nmos_groups = [g for g in group_nodes if g.get("type") == "nmos"]
+
+        def _footprint(groups):
+            """Physical layout footprint = sum of finger-pitch widths + inter-group gaps."""
+            if not groups:
+                return 0.0
+            total = 0.0
+            for g in groups:
+                nf = g.get("electrical", {}).get("total_fingers", 1)
+                # Each finger + 2 edge dummies if it's an ABBA merged block,
+                # otherwise just nf fingers. Use STD_PITCH per slot.
+                if g.get("_matched_block"):
+                    slots = nf + 2   # ABBA block has 2 edge dummy slots
+                else:
+                    slots = nf
+                total += slots * STD_PITCH
+            total += STD_PITCH * max(0, len(groups) - 1)   # inter-group gaps
+            return total
+
+        pmos_fp = _footprint(pmos_groups)
+        nmos_fp = _footprint(nmos_groups)
+
+        # Minimum single-device width (no row can be narrower than this)
+        widest = max(
+            (g.get("geometry", {}).get("width", 0.0) for g in group_nodes),
+            default=0.1,
+        )
+        _min_w = widest + STD_PITCH
+
+        if pmos_fp > 0 and nmos_fp > 0:
+            import math as _math
+            if area_priority == "High":
+                # Minimise bounding box: force wider type to split to match narrower
+                dynamic_row_width = max(min(pmos_fp, nmos_fp), _min_w)
+            elif area_priority == "Low":
+                # Spread out: each type stays in as few (wide) rows as possible
+                dynamic_row_width = max(max(pmos_fp, nmos_fp), _min_w)
+            else:  # Medium
+                # Geometric mean — balanced between the two extremes
+                dynamic_row_width = max(_math.sqrt(pmos_fp * nmos_fp), _min_w)
+        else:
+            # Only one type present — use its full footprint
+            dynamic_row_width = max(max(pmos_fp, nmos_fp, 0.1), _min_w)
+
+        # Rectangular balancing is ALWAYS enabled — it equalises PMOS/NMOS row widths
+        # and is the primary mechanism for maximising space utilisation.
+        disable_bal = False
+
+        try:
+            from ai_agent.utils.logging import log_detail as _ld
+            _ld(f"[row_width] area={area_priority} "
+                f"pmos_fp={pmos_fp:.3f} nmos_fp={nmos_fp:.3f} "
+                f"-> max_row_width={dynamic_row_width:.3f}um")
+        except Exception:
+            pass
+
+        # Step 6: pre-assign rows (deterministic bin-packing)
+        # Use filtered_info (not raw matching_info) so _symmetry_order only
+        # sees the pairs that survived tier filtering for the current priority.
+        #
+        # fold_lambda tunes the fold optimizer's cost function:
+        #   High area  -> lambda=5   (minimise dummy fill / maximise utilisation;
+        #                             fold or not fold based purely on device count)
+        #   Medium     -> lambda=50  (default — balances dummy fill vs aspect ratio)
+        #   Low area   -> lambda=100 (prefer fewer rows / wider rows)
+        _FOLD_LAMBDA = {"High": 5.0, "Medium": 50.0, "Low": 100.0}
+        fold_lam = _FOLD_LAMBDA.get(area_priority, 50.0)
+
+        # fold_min_aspect: minimum width/height ratio accepted by fold optimizer.
+        # Area=High: reject portrait configurations (aspect < 0.7) even if they
+        # reduce dummy count — this stops both blocks from folding simultaneously.
+        # Medium/Low: no constraint (0.0 = accept any aspect ratio).
+        _FOLD_MIN_ASPECT = {"High": 0.7, "Medium": 0.0, "Low": 0.0}
+        fold_min_asp = _FOLD_MIN_ASPECT.get(area_priority, 0.0)
+
         group_nodes, row_summary_str = pre_assign_rows(
             group_nodes,
-            max_row_width=8.0,
-            matching_info=matching_info,
+            max_row_width=dynamic_row_width,
+            matching_info=filtered_info,
             group_terminal_nets=group_terminal_nets,
+            disable_balancing=disable_bal,
+            fold_lambda=fold_lam,
+            fold_min_aspect=fold_min_asp,
+            # Area=High: bypass the 3-tier topology split so all NMOS groups
+            # are packed together → MM8+MM9+MM10+MM6+MM7 in 1 row.
+            merge_nmos_rows=(area_priority == "High"),
         )
 
-        # Step 6: build matching section string
+        # Step 7: build matching section string
         matching_section_str = build_matching_section(
             group_nodes, group_edges, group_terminal_nets
         )
 
-        # Step 7: build finger group section
+        # Step 8: build finger group section
         finger_group_str = build_finger_group_section(finger_map, group_nodes)
 
         return group_nodes, finger_map, row_summary_str, matching_section_str, finger_group_str, merged_blocks
     except Exception as exc:
         import traceback
-        # Write to log so failures are visible during pipeline execution
         try:
             from ai_agent.utils.logging import vprint
             vprint(f"[_compute_matching_and_rows] ERROR: {exc}")
@@ -586,6 +724,7 @@ def _compute_matching_and_rows(nodes, edges, terminal_nets, no_abutment=False):
         return [], {}, "", "", "", {}
 
 
+
 def build_placement_context(
     nodes,
     constraints_text="",
@@ -593,21 +732,31 @@ def build_placement_context(
     edges=None,
     spice_nets=None,
     no_abutment=False,
+    placement_goals=None,
 ):
     """Build a comprehensive context string for the Placement Specialist LLM.
 
     Includes pre-computed row assignments, matched groups (ABBA), skill knowledge,
     and net adjacency info so the LLM receives complete domain knowledge upfront.
+    Also forwards placement_goals so row-width and skip_matching are respected.
     """
+    goals = placement_goals or {}
+    goals_active = placement_goals is not None
+    match_priority = goals.get("matching_priority", "High") if goals_active else "High"
+    area_priority  = goals.get("area_priority",    "Medium") if goals_active else "Medium"
+
     lines = ["=" * 60, "CURRENT LAYOUT INVENTORY", "=" * 60]
 
     finger_pattern = re.compile(r"^(?P<base>.+)_f(?P<idx>\d+)$", re.IGNORECASE)
 
     # ── Pre-compute matching groups and row assignments ──────────────────────
-    # This is the core fix: run finger_grouper pipeline to get symmetry-aware
-    # multi-row assignment BEFORE giving the LLM any context.
     group_nodes, finger_map, row_summary_str, matching_section_str, finger_group_str, merged_blocks = \
-        _compute_matching_and_rows(nodes, edges, terminal_nets, no_abutment=no_abutment)
+        _compute_matching_and_rows(
+            nodes, edges, terminal_nets,
+            no_abutment=no_abutment,
+            matching_priority=match_priority,
+            area_priority=area_priority,
+        )
 
     active_fingers = [n for n in nodes if not _is_dummy_node(n)]
     dummy_ids = [n["id"] for n in nodes if _is_dummy_node(n)]
@@ -737,9 +886,45 @@ def build_placement_context(
         lines.append(constraints_text)
         lines.append("")
 
-    # ── Compact analog key rules (NOT full skills — avoids context overflow) ──
-    # Full skill bodies (~42KB) caused the LLM to hang on large prompts.
-    # Instead we embed the 10 most critical layout rules concisely.
+    # ── Net Proximity Hints (wirelength minimization) ────────────────────────
+    _SUPPLY_NETS = {"vdd", "vss", "gnd", "vcc", "vb", "vcm", "vref",
+                    "6nd", "6np", "6gnd", "clk"}
+    if edges:
+        net_devices: Dict[str, set] = defaultdict(set)
+        for edge in edges:
+            src = str(edge.get("source", ""))
+            tgt = str(edge.get("target", ""))
+            net = str(edge.get("net", edge.get("label", ""))).strip()
+            if not net or net.lower() in _SUPPLY_NETS:
+                continue
+            def _dev(node_id):
+                return node_id.split(".")[0].split(":")[0].strip()
+            d_src, d_tgt = _dev(src), _dev(tgt)
+            if d_src:
+                net_devices[net].add(d_src)
+            if d_tgt:
+                net_devices[net].add(d_tgt)
+
+        proximity_lines = []
+        for net, devs in sorted(net_devices.items()):
+            devs_sorted = sorted(devs)
+            if len(devs_sorted) >= 2:
+                proximity_lines.append(
+                    f"  NET '{net}': {' <-> '.join(devs_sorted)}  -> place in same/adjacent row"
+                )
+
+        if proximity_lines:
+            lines.append("=" * 60)
+            lines.append("NET PROXIMITY HINTS (minimize wirelength)")
+            lines.append("=" * 60)
+            lines.append("Place devices sharing the same signal net in the same row or")
+            lines.append("adjacent rows. Use this to decide X ordering WITHIN a row.")
+            lines.append("Example: if MM6 and MM0 share VOUTN, place MM0 directly above MM6.")
+            lines.append("")
+            lines.extend(proximity_lines)
+            lines.append("")
+
+    # ── Compact analog key rules ──────────────────────────────────────────────
     lines.append("=" * 60)
     lines.append("KEY ANALOG LAYOUT RULES (apply strictly)")
     lines.append("=" * 60)
@@ -766,6 +951,9 @@ def build_placement_context(
 
 8. SQUARE ASPECT RATIO: Aim for width ≈ height. If >3 NMOS rows are assigned,
    keep each row width ≤ 8µm by splitting devices across rows as shown in the table.
+
+9. NET PROXIMITY: Devices listed in NET PROXIMITY HINTS that share a signal net
+   must be placed on the SAME SIDE of the layout (same column region), not randomly.
 """)
     lines.append("")
 

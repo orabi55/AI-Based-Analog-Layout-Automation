@@ -1,5 +1,9 @@
 Traceback (most recent call last):
-  File "c:\Users\DELL G3\Desktop\GP\NEW\AI-Based-Analog-Layout-Automation\symbolic_editor\widgets\welcome_screen.py", line 28, in paintEvent
-    def paintEvent(self, event):
-    
+  File "c:\Users\DELL G3\Desktop\GP\NEW\AI-Based-Analog-Layout-Automation\symbolic_editor\main.py", line 1079, in <module>
+    window = MainWindow(placement_path)
+  File "c:\Users\DELL G3\Desktop\GP\NEW\AI-Based-Analog-Layout-Automation\symbolic_editor\main.py", line 125, in __init__
+    self._create_menu_bar()
+    ~~~~~~~~~~~~~~~~~~~~~^^
+  File "c:\Users\DELL G3\Desktop\GP\NEW\AI-Based-Analog-Layout-Automation\symbolic_editor\main.py", line 435, in _create_menu_bar
+    mb = self.menuBar()
 KeyboardInterrupt
