@@ -684,6 +684,12 @@ class MainWindow(QMainWindow):
         self._act_colorize.toggled.connect(self._on_toggle_colorize)
         tb.addAction(self._act_colorize)
 
+        self._act_moving_groups = QAction("Moving Groups Only", self)
+        self._act_moving_groups.setCheckable(True)
+        self._act_moving_groups.setToolTip("When enabled, dragging a device moves its entire group")
+        self._act_moving_groups.toggled.connect(self._on_toggle_moving_groups)
+        tb.addAction(self._act_moving_groups)
+
         self._tb_act_ai = QAction(icon_ai_placement(), "Run AI Placement", self)
         self._tb_act_ai.setToolTip("Run AI placement (Ctrl+P)")
         self._tb_act_ai.triggered.connect(lambda: self._fwd("do_ai_placement"))
@@ -911,6 +917,11 @@ class MainWindow(QMainWindow):
         tab = self.current_tab()
         if tab:
             tab.set_colorize_mode(checked)
+
+    def _on_toggle_moving_groups(self, checked):
+        tab = self.current_tab()
+        if tab:
+            tab.set_moving_groups_only(checked)
 
     def _on_row_spin_changed(self, value):
         if self._ignore_grid_spin:
