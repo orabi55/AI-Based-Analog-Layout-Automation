@@ -205,13 +205,17 @@ def pipeline_start(name: str, total_stages: int, config: dict | None = None) -> 
     _safe_print()
 
 
-def pipeline_end(summary: dict | None = None) -> None:
-    """Print a placement summary block with key metrics."""
+def pipeline_end(summary: dict | None = None) -> str:
+    """Print a placement summary block with key metrics and return the formatted string."""
     global _pipeline_start
     elapsed = time.time() - _pipeline_start if _pipeline_start else 0
     _pipeline_start = None
 
     s = summary or {}
+    out_lines = []
+    def _print(line=""):
+        out_lines.append(str(line))
+        _safe_print(line)
     width       = s.get("width",        "?")
     height      = s.get("height",       "?")
     aspect      = s.get("aspect",       "?")
@@ -227,21 +231,21 @@ def pipeline_end(summary: dict | None = None) -> None:
     secs = int(elapsed % 60)
 
     bar = "=" * 62
-    _safe_print()
-    _safe_print(bar)
-    _safe_print("  PLACEMENT SUMMARY")
-    _safe_print(bar)
+    _print()
+    _print(bar)
+    _print("  PLACEMENT SUMMARY")
+    _print(bar)
     if width != "?" and height != "?":
-        _safe_print(f"  Layout Size  : {width}um x {height}um  (aspect {aspect})")
-        _safe_print(f"  Total Area   : {area}")
-        _safe_print(f"  Utilization  : {utilization}")
+        _print(f"  Layout Size  : {width}um x {height}um  (aspect {aspect})")
+        _print(f"  Total Area   : {area}")
+        _print(f"  Utilization  : {utilization}")
     if hpwl != "--":
-        _safe_print(f"  HPWL         : {hpwl}um")
-    _safe_print(f"  DRC Status   : {drc_status}")
-    _safe_print(f"  PMOS/NMOS    : {pmos_nmos_sep}")
-    _safe_print(f"  Devices      : {n_placed} placed")
-    _safe_print(f"  Time Total   : {mins}m {secs}s")
-    _safe_print(bar)
+        _print(f"  HPWL         : {hpwl}um")
+    _print(f"  DRC Status   : {drc_status}")
+    _print(f"  PMOS/NMOS    : {pmos_nmos_sep}")
+    _print(f"  Devices      : {n_placed} placed")
+    _print(f"  Time Total   : {mins}m {secs}s")
+    _print(bar)
 
     # -- Placement Quality Benchmark (printed after utilization) -------------
     if quality and isinstance(quality, dict):
@@ -274,10 +278,10 @@ def pipeline_end(summary: dict | None = None) -> None:
             )
 
         qbar = "=" * 64
-        _safe_print()
-        _safe_print(qbar)
-        _safe_print("  MATCHING & SYMMETRY QUALITY BENCHMARK")
-        _safe_print(qbar)
+        _print()
+        _print(qbar)
+        _print("  MATCHING & SYMMETRY QUALITY BENCHMARK")
+        _print(qbar)
 
         # -- Print placement goals that were active for this run ----------------
         goals = s.get("placement_goals") or {}
@@ -286,22 +290,22 @@ def pipeline_end(summary: dict | None = None) -> None:
             sp = goals.get("symmetry_priority",  "Medium")
             ap = goals.get("area_priority",      "Medium")
             ma = goals.get("max_area_um2")
-            _safe_print(f"  Goals applied : Matching={mp}  Symmetry={sp}  Area={ap}"
+            _print(f"  Goals applied : Matching={mp}  Symmetry={sp}  Area={ap}"
                         + (f"  MaxArea={ma}um2" if ma else ""))
 
-        _safe_print(f"  Matched pairs : {n_pairs}")
-        _safe_print(f"  {'Metric':<24}  {'Score':>6}   {'Progress':<22}  Grade")
-        _safe_print(f"  {'-'*24}  {'-'*6}   {'-'*22}  -----")
-        _safe_print(_row("Layout Y Symmetry",   y_score))
-        _safe_print(_row("X Mirror Symmetry",   x_score))
-        _safe_print(_row("Interdigitation",      id_score))
-        _safe_print(_row("Common Centroid (2D)", cc_score))
-        _safe_print(_row("DRC Clean",           drc_q_score))
-        _safe_print(f"  {'-'*24}  {'-'*6}   {'-'*22}  -----")
-        _safe_print(
+        _print(f"  Matched pairs : {n_pairs}")
+        _print(f"  {'Metric':<24}  {'Score':>6}   {'Progress':<22}  Grade")
+        _print(f"  {'-'*24}  {'-'*6}   {'-'*22}  -----")
+        _print(_row("Layout Y Symmetry",   y_score))
+        _print(_row("X Mirror Symmetry",   x_score))
+        _print(_row("Interdigitation",      id_score))
+        _print(_row("Common Centroid (2D)", cc_score))
+        _print(_row("DRC Clean",           drc_q_score))
+        _print(f"  {'-'*24}  {'-'*6}   {'-'*22}  -----")
+        _print(
             f"  {'COMPOSITE':<24}  {composite:>6.1%}   {_bar(composite):<22}  {_grade(composite)}"
         )
-        _safe_print(qbar)
+        _print(qbar)
 
         # -- Explanatory notes based on active goals ----------------------------
         notes = []
@@ -343,16 +347,17 @@ def pipeline_end(summary: dict | None = None) -> None:
             line = "  "
             for w in words:
                 if len(line) + len(w) + 1 > 64:
-                    _safe_print(line)
+                    _print(line)
                     line = "  " + w + " "
                 else:
                     line += w + " "
             if line.strip():
-                _safe_print(line)
+                _print(line)
         if notes:
-            _safe_print()
+            _print()
 
-    _safe_print()
+    _print()
+    return "\n".join(out_lines)
 
 
 

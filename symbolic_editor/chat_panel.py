@@ -404,16 +404,72 @@ class ChatPanel(QWidget):
     @staticmethod
     def _md_to_html(text):
         """Convert basic markdown to HTML (dark-theme aware)."""
+        # Save original newlines for table parsing
+        raw_text = text
         text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        # Code blocks
+
+        # --- Premium Table Parsing (Terminal-to-Rich-UI) ---
+        # Detect PLACEMENT SUMMARY block
+        if "PLACEMENT SUMMARY" in text:
+            summary_pattern = r"={10,}\s+PLACEMENT SUMMARY\s+={10,}(.*?)(?===|$)"
+            match = re.search(summary_pattern, text, re.DOTALL)
+            if match:
+                inner = match.group(1).strip()
+                rows_html = ""
+                for line in inner.split("\n"):
+                    if ":" in line:
+                        k, v = line.split(":", 1)
+                        rows_html += f"<tr><td style='color:#7cb7ff;padding:2px 8px;font-weight:bold;'>{k.strip()}</td>"
+                        rows_html += f"<td style='color:#e0e8f0;padding:2px 8px;'>{v.strip()}</td></tr>"
+                table_html = f"<table style='margin:10px 0;border-collapse:collapse;width:100%;background:#1a2030;border-radius:8px;border:1px solid #2d3548;'>{rows_html}</table>"
+                text = text.replace(match.group(0), table_html)
+
+        # Detect MATCHING & SYMMETRY QUALITY BENCHMARK block
+        if "QUALITY BENCHMARK" in text:
+            benchmark_pattern = r"={10,}\s+MATCHING &amp; SYMMETRY QUALITY BENCHMARK\s+={10,}(.*?)(?===|$)"
+            match = re.search(benchmark_pattern, text, re.DOTALL)
+            if match:
+                inner = match.group(1).strip()
+                rows_html = ""
+                # Skip header lines
+                lines = [l.strip() for l in inner.split("\n") if l.strip() and "----" not in l and "Matched pairs" not in l and "Metric" not in l]
+                for line in lines:
+                    # Match: Metric Score Progress Grade
+                    # Example: Layout Y Symmetry 100.0% #################### A+
+                    parts = re.split(r'\s{2,}', line)
+                    if len(parts) >= 3:
+                        metric = parts[0]
+                        score = parts[1]
+                        prog_chars = parts[2]
+                        grade = parts[3] if len(parts) > 3 else ""
+                        
+                        # Convert progress bars to real UI bars
+                        filled = prog_chars.count("#")
+                        total = len(prog_chars)
+                        pct = (filled / total * 100) if total > 0 else 0
+                        bar_color = "#4caf50" if pct > 80 else "#ff9800" if pct > 50 else "#f44336"
+                        bar_html = f"<div style='width:60px;height:6px;background:#2d3548;border-radius:3px;margin-top:4px;'><div style='width:{pct}%;height:100%;background:{bar_color};border-radius:3px;'></div></div>"
+                        
+                        rows_html += f"<tr style='border-bottom:1px solid #232a38;'>"
+                        rows_html += f"<td style='padding:6px 8px;color:#d0d8e0;'>{metric}</td>"
+                        rows_html += f"<td style='padding:6px 8px;color:#7cb7ff;font-weight:bold;'>{score}</td>"
+                        rows_html += f"<td style='padding:6px 8px;'>{bar_html}</td>"
+                        rows_html += f"<td style='padding:6px 8px;font-weight:bold;color:#fff;'>{grade}</td>"
+                        rows_html += "</tr>"
+                
+                table_html = f"<div style='margin-top:15px;color:#7cb7ff;font-weight:bold;font-size:11px;'>MATCHING & SYMMETRY QUALITY</div>"
+                table_html += f"<table style='margin:5px 0;border-collapse:collapse;width:100%;background:#1a2030;border-radius:8px;border:1px solid #2d3548;'>{rows_html}</table>"
+                text = text.replace(match.group(0), table_html)
+
+        # Code blocks (fallthrough for other terminal-style blocks)
         text = re.sub(
             r'```(\w*)\n(.*?)```',
-            r'<pre style="background:#1a2030;color:#e0e8f0;padding:10px 12px;'
-            r'border-radius:8px;font-size:12px;font-family:Consolas,monospace;'
+            r'<pre style="background:#0d1117;color:#8b9eb0;padding:10px 12px;'
+            r'border-radius:8px;font-size:11px;font-family:Consolas,monospace;'
             r'border:1px solid #2d3548;overflow-x:auto;margin:6px 0;">\2</pre>',
             text, flags=re.DOTALL,
         )
-        # Inline code (dark-theme)
+        # Inline code
         text = re.sub(
             r'`([^`]+)`',
             r'<code style="background:#1e2a3a;color:#7cb7ff;padding:2px 6px;'
@@ -421,25 +477,65 @@ class ChatPanel(QWidget):
             r'border:1px solid #2d3f54;">\1</code>',
             text,
         )
-        # Bold
+        # Detect Routing Pre-Viewer block
+        if "Routing Pre-Viewer" in text or "nets analyzed" in text:
+            routing_pattern = r"(?:─{5,}|={5,})\s*Routing Pre-Viewer\s*(?:─{5,}|={5,})(.*?)(?=\[IP\]|PLACEMENT SUMMARY|$)"
+            match = re.search(routing_pattern, text, re.DOTALL)
+            if not match and "nets analyzed" in text:
+                # Fallback: catch by keyword if the bars are missing/different
+                routing_pattern = r"(9 nets analyzed.*?)(?=\[IP\]|PLACEMENT SUMMARY|$)"
+                match = re.search(routing_pattern, text, re.DOTALL)
+
+            if match:
+                inner = match.group(1).strip()
+                lines = inner.split("\n")
+                html = "<div style='margin-top:15px;padding:12px;background:#1a1f2b;border-radius:10px;border:1px solid #30363d;font-family:Segoe UI, sans-serif;'>"
+                html += "<div style='color:#4FC3F7;font-weight:bold;font-size:12px;margin-bottom:8px;display:flex;align-items:center;'><span>📡 ROUTING DENSITY REPORT</span></div>"
+                
+                in_worst = False
+                in_bands = False
+                
+                for line in lines:
+                    line = line.strip()
+                    if not line: continue
+                    
+                    if "nets analyzed" in line:
+                        html += f"<div style='color:#8b9eb0;font-size:11px;margin-bottom:8px;background:#0d1117;padding:4px 8px;border-radius:4px;'>{line}</div>"
+                    elif "Worst nets" in line:
+                        html += "<div style='color:#e0e8f0;font-weight:bold;font-size:11px;margin-top:10px;margin-bottom:5px;border-bottom:1px solid #2d3548;'>Critical Nets (Worst HPWL)</div>"
+                        in_worst = True
+                        in_bands = False
+                    elif "Routing channels" in line:
+                        html += "<div style='color:#e0e8f0;font-weight:bold;font-size:11px;margin-top:10px;margin-bottom:5px;border-bottom:1px solid #2d3548;'>Inter-Row Routing Tracks</div>"
+                        in_worst = False
+                        in_bands = True
+                    elif "HPWL" in line or "crossings" in line or "cost" in line:
+                        k, v = line.split(":", 1) if ":" in line else (line, "")
+                        html += f"<div style='font-size:12px;'><b>{k.strip()}:</b> <span style='color:#7cb7ff;'>{v.strip()}</span></div>"
+                    elif in_worst and ("critical" in line or "signal" in line):
+                        # Format net details: NetName Type HPWL (Details) [Type]
+                        net_match = re.match(r"(\w+)\s+(\w+)\s+(hpwl=[\d\.]+µm)\s+(.*)", line)
+                        if net_match:
+                            name, ntype, hpwl, details = net_match.groups()
+                            color = "#ff5252" if ntype == "critical" else "#ffb74d"
+                            html += f"<div style='margin-left:4px;font-size:11px;display:flex;justify-content:space-between;'>"
+                            html += f"<span><b style='color:{color};'>{name}</b> <span style='color:#8899aa;'>{hpwl}</span></span>"
+                            html += f"<span style='color:#5c6d7e;font-size:10px;'>{details}</span></div>"
+                        else:
+                            html += f"<div style='margin-left:4px;font-size:11px;color:#abb2bf;'>• {line}</div>"
+                    elif in_bands and line.startswith("band"):
+                        html += f"<div style='margin-left:4px;font-family:Consolas, monospace;font-size:11px;color:#7cb7ff;'>{line}</div>"
+                    else:
+                        html += f"<div style='margin-top:2px;font-size:11px;color:#abb2bf;'>{line}</div>"
+                
+                html += "</div>"
+                text = text.replace(match.group(0), html)
+
+        # Bold/Italic/Lists/Linebreaks
         text = re.sub(r'\*\*(.+?)\*\*', r'<b style="color:#e8f0ff;">\1</b>', text)
-        # Italic
         text = re.sub(r'\*(.+?)\*', r'<i>\1</i>', text)
-        # Bullet lists
-        text = re.sub(
-            r'(?m)^[\-\*]\s+(.+)$',
-            r'<div style="margin:3px 0 3px 14px;padding-left:2px;">'
-            r'<span style="color:#4a90d9;">•</span> \1</div>',
-            text,
-        )
-        # Numbered lists
-        text = re.sub(
-            r'(?m)^(\d+)\.\s+(.+)$',
-            r'<div style="margin:3px 0 3px 14px;">'
-            r'<span style="color:#4a90d9;">\1.</span> \2</div>',
-            text,
-        )
-        # Line breaks
+        text = re.sub(r'(?m)^[\-\*]\s+(.+)$', r'<div style="margin:3px 0 3px 14px;padding-left:2px;"><span style="color:#4a90d9;">•</span> \1</div>', text)
+        text = re.sub(r'(?m)^(\d+)\.\s+(.+)$', r'<div style="margin:3px 0 3px 14px;"><span style="color:#4a90d9;">\1.</span> \2</div>', text)
         text = text.replace("\n", "<br>")
         return text
 

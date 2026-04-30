@@ -1001,6 +1001,52 @@ class LayoutEditorTab(QWidget):
         msg = "Dummy mode ON: move over PMOS/NMOS row and click to place." if enabled else "Dummy mode OFF."
         self.chat_panel._append_message("AI", msg, "#e8f4fd", "#1a1a2e")
 
+    def _on_toggle_route(self, checked: bool):
+        routing_result = getattr(self, "_routing_result", {})
+        channels = routing_result.get("channels", [])
+        if not channels:
+            self.chat_panel._append_message("AI", "No routing channels available. Run placement first.", "#fff3e0", "#e65100")
+            return
+
+        sorted_channels = sorted(channels, key=lambda c: c.get("y_boundary", 0.0))
+        from config.design_rules import ROW_HEIGHT_UM
+        
+        shifts = []
+        for ch in sorted_channels:
+            y_boundary = ch.get("y_boundary", 0.0)
+            current_w = ch.get("current_width_um", 0.0)
+            target_w = ch.get("recommended_width_um", 0.0)
+            if target_w > current_w:
+                shift_amount = target_w - current_w
+                shift_amount = round(shift_amount / ROW_HEIGHT_UM) * ROW_HEIGHT_UM
+                if shift_amount > 0:
+                    shifts.append({"y_boundary": y_boundary, "shift": shift_amount if checked else -shift_amount})
+
+        if not shifts:
+            self.chat_panel._append_message("AI", "No channels needed widening.", "#f1f5f9", "#475569")
+            return
+
+        self._push_undo()
+        for node in self.nodes:
+            geo = node.get("geometry", {})
+            if "y" in geo:
+                if checked:
+                    # Expanding channels: calculate shift based on current Y
+                    node_y = float(geo["y"])
+                    total_shift = sum(sh["shift"] for sh in shifts if node_y > sh["y_boundary"])
+                    if total_shift != 0.0:
+                        geo["y"] = round(node_y + total_shift, 6)
+                        node["_routing_shift"] = total_shift
+                else:
+                    # Removing channels: revert the exact shift we applied
+                    stored_shift = node.pop("_routing_shift", None)
+                    if stored_shift is not None:
+                        geo["y"] = round(float(geo["y"]) - stored_shift, 6)
+        
+        self._refresh_panels(compact=False)
+        action = "Inserted" if checked else "Removed"
+        self.chat_panel._append_message("AI", f"{action} {len(shifts)} routing channel(s).", "#f0fdf4", "#166534")
+
     def set_colorize_mode(self, enabled):
         self._colorize_mode = enabled
         self.editor.set_colorize_mode(enabled)
@@ -1347,13 +1393,17 @@ class LayoutEditorTab(QWidget):
             self._tb_act_compare.setEnabled(False)   # only enable after symmetry runs
             self._showing_before = False
 
-        self.chat_panel._append_message(
-            "AI",
-            f"AI initial placement complete!{locked_msg}\n"
-            f"Saved to: {os.path.basename(out_path)}\n"
-            f"You can now edit the layout, swap devices, or chat with the AI.",
-            "#e8f4fd", "#1a1a2e",
-        )
+        chat_response = data.get("chat_response", "")
+        if chat_response:
+            msg = chat_response
+        else:
+            msg = (
+                f"AI initial placement complete!{locked_msg}\n"
+                f"Saved to: {os.path.basename(out_path)}\n"
+                f"You can now edit the layout, swap devices, or chat with the AI."
+            )
+
+        self.chat_panel._append_message("AI", msg, "#e8f4fd", "#1a1a2e")
 
     def _on_ai_placement_error(self, err_msg):
         self.overlay.hide_overlay()
@@ -1667,11 +1717,14 @@ class LayoutEditorTab(QWidget):
 
             def _on_visual(payload):
                 if isinstance(payload, dict) and payload.get("type") == "final_layout":
-                    final_payload.clear()
+                    # Update existing payload without clearing (to preserve chat_response)
                     final_payload.update(payload)
 
             def _on_error(err_msg):
                 graph_error["message"] = str(err_msg or "Graph execution failed.")
+
+            def _on_response(msg):
+                final_payload["chat_response"] = msg
 
             no_abutment = not abutment_enabled
             abutment_candidates = data.get("abutment_candidates", [])
@@ -1679,6 +1732,7 @@ class LayoutEditorTab(QWidget):
             graph_worker = PlacerGraphWorker()
             graph_worker.visual_viewer_signal.connect(_on_visual)
             graph_worker.error_occurred.connect(_on_error)
+            graph_worker.response_ready.connect(_on_response)
 
             graph_worker.process_initial_placement_request(
                 json.dumps(data),
@@ -1781,6 +1835,10 @@ class LayoutEditorTab(QWidget):
                         
                 for new_node in placed_map.values():
                     data["nodes"].append(copy.deepcopy(new_node))
+                
+                data["routing_result"] = final_payload.get("routing", {})
+                data["chat_response"] = final_payload.get("chat_response", "")
+                print(f"[layout_tab] Captured chat response: {len(data['chat_response'])} chars")
         finally:
             for p in (tmp_in_path, tmp_out_path):
                 try:
@@ -1797,6 +1855,7 @@ class LayoutEditorTab(QWidget):
         self._original_data = data
         self.nodes = data["nodes"]
         self._terminal_nets = data.get("terminal_nets", {})
+        self._routing_result = data.get("routing_result", {})
         self._current_file = file_path
         self._refresh_panels(compact=compact)
         self._sync_klayout_source(source_path=file_path)

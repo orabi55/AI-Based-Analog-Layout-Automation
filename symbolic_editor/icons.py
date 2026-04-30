@@ -595,3 +595,30 @@ def icon_ai_placement() -> QIcon:
     icon = _icon_from_painter(pm, p)
     _CACHE["ai_placement"] = icon
     return icon
+
+
+def icon_route() -> QIcon:
+    if "route" in _CACHE:
+        return _CACHE["route"]
+    pm, p = _make_pixmap()
+    p.setPen(QPen(_ACCENT, 2.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    
+    # A meandering routed trace
+    path = QPainterPath()
+    path.moveTo(6, 26)
+    path.lineTo(6, 16)
+    path.lineTo(16, 16)
+    path.lineTo(16, 6)
+    path.lineTo(26, 6)
+    p.drawPath(path)
+    
+    # Draw vias at ends
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QBrush(_ORANGE))
+    p.drawEllipse(QRectF(4, 24, 4, 4))
+    p.drawEllipse(QRectF(24, 4, 4, 4))
+    
+    icon = _icon_from_painter(pm, p)
+    _CACHE["route"] = icon
+    return icon
