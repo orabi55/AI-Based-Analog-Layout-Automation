@@ -306,6 +306,22 @@ def icon_merge_ss() -> QIcon:
     return icon
 
 
+def icon_group() -> QIcon:
+    if "group" in _CACHE:
+        return _CACHE["group"]
+    pm, p = _make_pixmap()
+    pen = QPen(_FG, 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+    p.setPen(pen)
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    # Draw three stacked rounded rectangles to represent a group
+    p.drawRoundedRect(QRectF(6, 6, 20, 8), 2, 2)
+    p.drawRoundedRect(QRectF(6, 12, 14, 8), 2, 2)
+    p.drawRoundedRect(QRectF(6, 18, 8, 6), 2, 2)
+    icon = _icon_from_painter(pm, p)
+    _CACHE["group"] = icon
+    return icon
+
+
 def icon_merge_dd() -> QIcon:
     if "merge_dd" in _CACHE:
         return _CACHE["merge_dd"]

@@ -7,6 +7,7 @@ grid-snapped editing.
 import math
 import logging
 import os
+from PySide6.QtGui import QUndoCommand
 from typing import List, Dict
 
 
@@ -96,12 +97,35 @@ class HierarchyAwareScene(QGraphicsScene):
         except Exception:
             logging.debug("HierarchyAwareScene selection error", exc_info=True)
 
+class DeleteGroupCommand(QUndoCommand):
+    def __init__(self, editor, group_item):
+        super().__init__(f"Delete Group: {group_item._parent_name}")
+        self.editor = editor
+        self.group_item = group_item
+        self.members = list(group_item._members)
+
+    def redo(self):
+        # Remove from scene and list
+        if self.group_item in self.editor.custom_groups:
+            self.editor.custom_groups.remove(self.group_item)
+        self.editor.scene().removeItem(self.group_item)
+        for m in self.members:
+            m.group_item = None
+
+    def undo(self):
+        # Put it back
+        self.editor.scene().addItem(self.group_item)
+        self.editor.custom_groups.append(self.group_item)
+        for m in self.members:
+            m.group_item = self.group_item
+        self.group_item.update_geometry()
 
 class SymbolicEditor(QGraphicsView):
 
     device_clicked = Signal(str)
     dummy_toggle_requested = Signal()
     drag_finished = Signal()
+    hierarchy_changed = Signal()  # Emitted when groups are created or deleted
 
     def __init__(self):
         super().__init__()
@@ -159,11 +183,11 @@ class SymbolicEditor(QGraphicsView):
         }
 
         # Grid settings
-        self._grid_size = 20   # base grid spacing in scene coords
+        self._grid_size = 10   # base grid spacing in scene coords
         self._grid_color = QColor("#1c2535")
         self._grid_color_major = QColor("#2d3f54")
         self._snap_grid = self._grid_size
-        self._row_pitch = self._grid_size * 3
+        self._row_pitch = self._grid_size * 3 
 
         # Dummy placement mode
         self._dummy_mode = False
@@ -201,6 +225,9 @@ class SymbolicEditor(QGraphicsView):
         # Hierarchy group items (arrays, multipliers, fingers)
         self._hierarchy_groups = []  # list of top-level HierarchyGroupItem
         self._hierarchy_visible = True  # whether hierarchy groups are shown
+
+        # Moving groups only mode
+        self._moving_groups_only = False  # when True, moving a device moves its entire group
 
         # Completely disable scrollbars (policy is more reliable than CSS)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -245,6 +272,12 @@ class SymbolicEditor(QGraphicsView):
     def select_all_devices(self):
         for item in self.device_items.values():
             item.setSelected(True)
+
+    def set_moving_groups_only(self, enabled: bool):
+        """Enable moving groups only mode.
+        When enabled, dragging any device in a group moves the entire group.
+        """
+        self._moving_groups_only = bool(enabled)
 
     def set_colorize_mode(self, enabled: bool):
         """Enable parent-based colorization for all devices."""
@@ -2094,6 +2127,17 @@ class SymbolicEditor(QGraphicsView):
         if self._dummy_mode:
             self._update_dummy_preview(self.mapToScene(event.pos()))
         super().mouseMoveEvent(event)
+    
+    def _should_allow_drag(self, item):
+        if not self.move_groups_only_mode:
+            return True
+        
+        # Check if item belongs to a custom group OR a device-level matched group
+        # Assuming device groups are identified by an attribute like 'group_id' or 'parent_group'
+        has_custom_group = hasattr(item, "group_item") and item.group_item is not None
+        has_device_group = getattr(item, "is_in_device_group", False) # Adjust based on your attribute name
+        
+        return has_custom_group or has_device_group
 
     # -------------------------------------------------
     # Right-click context menu — per-device abutment
@@ -2130,26 +2174,45 @@ class SymbolicEditor(QGraphicsView):
                 self._centroid_items.append(txt)
 
     def contextMenuEvent(self, event):
-        """Show a right-click menu to manually toggle abutment on a device."""
+        """Show a right-click menu for devices or groups."""
         scene_pos = self.mapToScene(event.pos())
         items = self.scene.items(scene_pos)
 
-        # Find the topmost DeviceItem under the cursor
+        # Find the topmost item under the cursor (prioritize HierarchyGroupItem)
         target_item = None
         target_id   = None
+        target_group = None
+        
+        # First, scan for HierarchyGroupItem (since it's below DeviceItems in z-order,
+        # we need to explicitly look for it)
         for it in items:
-            if isinstance(it, DeviceItem):
-                target_item = it
-                # Reverse-lookup device id
-                for dev_id, item in self.device_items.items():
-                    if item is target_item:
-                        target_id = dev_id
-                        break
+            if isinstance(it, HierarchyGroupItem):
+                target_group = it
                 break
+        
+        # If no group found, look for the topmost DeviceItem
+        if target_group is None:
+            for it in items:
+                if isinstance(it, DeviceItem):
+                    target_item = it
+                    # Reverse-lookup device id
+                    for dev_id, item in self.device_items.items():
+                        if item is target_item:
+                            target_id = dev_id
+                            break
+                    break
 
+        # Handle group context menu
+        if target_group is not None:
+            self._show_group_context_menu(target_group, event.globalPos())
+            return
+        
         if target_item is None or target_id is None:
             super().contextMenuEvent(event)
             return
+
+        # Get all currently selected DeviceItems
+        selected_devices = [s for s in self.scene.selectedItems() if isinstance(s, DeviceItem)]
 
         menu = QMenu(self)
         menu.setStyleSheet("""
@@ -2180,6 +2243,16 @@ class SymbolicEditor(QGraphicsView):
         title_act.setEnabled(False)
         menu.addAction(title_act)
         menu.addSeparator()
+
+        # "Create Group" option if multiple items are selected
+        act_create_group = None
+        if len(selected_devices) > 1:
+            act_create_group = QAction("Create Group", self)
+            act_create_group.setToolTip(
+                f"Create a new group with the {len(selected_devices)} selected fingers"
+            )
+            menu.addAction(act_create_group)
+            menu.addSeparator()
 
         # Left abutment toggle
         act_left = QAction("Left Abutment", self)
@@ -2223,7 +2296,9 @@ class SymbolicEditor(QGraphicsView):
 
         chosen = menu.exec(event.globalPos())
 
-        if chosen == act_left:
+        if chosen == act_create_group:
+            self._create_custom_group(selected_devices)
+        elif chosen == act_left:
             target_item.toggle_abut_left()
         elif chosen == act_right:
             target_item.toggle_abut_right()
@@ -2250,6 +2325,135 @@ class SymbolicEditor(QGraphicsView):
             for item in self.scene.items():
                 if hasattr(item, 'get_logical_name') and item.get_logical_name() == target_item.get_logical_name():
                     item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, new_movable)
+
+    def _create_custom_group(self, device_items: List[DeviceItem]):
+        """Create a new HierarchyGroupItem from the given device items.
+        
+        Args:
+            device_items: List of DeviceItem instances to group together
+        """
+        if not device_items or len(device_items) < 2:
+            return
+        
+        try:
+            # Generate a unique group name
+            existing_custom_groups = [
+                g._parent_name for g in self._hierarchy_groups 
+                if g._parent_name.startswith("GROUP_")
+            ]
+            group_num = len(existing_custom_groups) + 1
+            group_name = f"GROUP_{group_num}"
+            
+            # Build hierarchy info
+            hierarchy_info = {
+                "m": 1,
+                "nf": len(device_items),
+                "is_array": False,
+            }
+            
+            # Use a distinctive color for custom groups (e.g., golden/amber)
+            fill_color = QColor(100, 80, 40, 50)
+            border_color = QColor(220, 160, 80, 200)
+            
+            # Create the group
+            group_item = HierarchyGroupItem(
+                group_name, device_items, hierarchy_info,
+                color=fill_color, border_color=border_color,
+            )
+            
+            # Wire up signals
+            group_item.signals.drag_finished.connect(
+                lambda g=group_item: self._on_hierarchy_drag_finished(g)
+            )
+            group_item.signals.descend_requested.connect(self._on_hierarchy_descend)
+            group_item.signals.ascend_requested.connect(self._on_hierarchy_ascend)
+            
+            # Add to scene and tracking list
+            self.scene.addItem(group_item)
+            self._hierarchy_groups.append(group_item)
+            
+            # Clear selection and select the new group
+            self.scene.clearSelection()
+            group_item.setSelected(True)
+            
+            logging.info(f"Created custom group '{group_name}' with {len(device_items)} devices")
+            
+            # Trigger hierarchy update in layout_tab
+            self._notify_hierarchy_changed()
+            
+        except Exception as e:
+            logging.error(f"Failed to create custom group: {e}", exc_info=True)
+    
+    def _delete_group(self, group_item: HierarchyGroupItem):
+        """Delete a group and ungroup its devices.
+        
+        Args:
+            group_item: The HierarchyGroupItem to delete
+        """
+        if group_item not in self._hierarchy_groups:
+            return
+        
+        try:
+            # Remove from scene and tracking list
+            self.scene.removeItem(group_item)
+            self._hierarchy_groups.remove(group_item)
+            
+            logging.info(f"Deleted group '{group_item._parent_name}'")
+            
+            # Trigger hierarchy update in layout_tab
+            self._notify_hierarchy_changed()
+            
+        except Exception as e:
+            logging.error(f"Failed to delete group: {e}", exc_info=True)
+    
+    def _notify_hierarchy_changed(self):
+        """Notify parent (layout_tab) that hierarchy has changed and needs refresh."""
+        try:
+            self.hierarchy_changed.emit()
+        except Exception as e:
+            logging.error(f"Failed to emit hierarchy_changed signal: {e}")
+    
+    def _show_group_context_menu(self, group_item: HierarchyGroupItem, global_pos):
+        """Show context menu for a group."""
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: #1e2130;
+                color: #e0e0e0;
+                border: 1px solid #3a3f55;
+                border-radius: 6px;
+                padding: 4px;
+                font-family: 'Segoe UI';
+            }
+            QMenu::item {
+                padding: 5px 18px;
+                border-radius: 4px;
+            }
+            QMenu::item:selected {
+                background-color: #3a3f55;
+            }
+            QMenu::separator {
+                height: 1px;
+                background: #3a3f55;
+                margin: 3px 8px;
+            }
+        """)
+        
+        # Title (non-interactive label)
+        title_act = QAction(f"Group: {group_item._parent_name}", self)
+        title_act.setEnabled(False)
+        menu.addAction(title_act)
+        menu.addSeparator()
+        
+        # Delete group option
+        act_delete = QAction("Delete Group", self)
+        act_delete.setToolTip("Delete this group (devices will be ungrouped)")
+        menu.addAction(act_delete)
+        
+        chosen = menu.exec(global_pos)
+        
+        if chosen == act_delete:
+            self._delete_group(group_item)
 
     # -------------------------------------------------
     # Export helper — abutment state for OAS writer
