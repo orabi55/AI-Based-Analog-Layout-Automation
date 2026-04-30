@@ -85,6 +85,7 @@ from icons import (
     icon_ai_placement,
     icon_colorize,
     icon_schematic,
+    icon_route,
 )
 from widgets.welcome_screen import WelcomeScreen
 
@@ -679,6 +680,13 @@ class MainWindow(QMainWindow):
         self._act_add_dummy.setToolTip("Toggle dummy placement mode (D)")
         self._act_add_dummy.toggled.connect(self._on_toggle_dummy)
         tb.addAction(self._act_add_dummy)
+        tb.addSeparator()
+
+        self._tb_act_route = QAction(icon_route(), "Toggle Routing Channels", self)
+        self._tb_act_route.setCheckable(True)
+        self._tb_act_route.setToolTip("Insert/Remove Routing Channels")
+        self._tb_act_route.triggered.connect(lambda checked: self._fwd("_on_toggle_route", checked))
+        tb.addAction(self._tb_act_route)
 
         self._act_abutment = QAction(icon_abutment(), "Abutment Analysis", self)
         self._act_abutment.setCheckable(True)

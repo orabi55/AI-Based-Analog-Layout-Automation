@@ -217,7 +217,7 @@ class PlacementWorker(QObject):
         utilization = f"{(active_area_sum / area) * 100:.1f}%" if area > 0 else "?"
 
         from ai_agent.utils.logging import pipeline_end
-        pipeline_end({
+        benchmarks_text = pipeline_end({
             "drc_status": drc_status,
             "n_placed": len(placement_nodes),
             "pmos_nmos_sep": "✓ OK" if drc_pass else "Check editor",
@@ -230,11 +230,20 @@ class PlacementWorker(QObject):
             "placement_goals": final_state.get("placement_goals", {}),
         })
 
+        routing_text = final_state.get("routing_result", {}).get("log_text", "")
+        print(f"[PlacementWorker] Benchmark text length: {len(benchmarks_text)}")
+        print(f"[PlacementWorker] Routing text length: {len(routing_text)}")
+
         summary = (
             "[Initial Placement Complete]\n"
             f"- DRC: {drc_status}\n"
-            f"- Nodes: {len(placement_nodes)} placed"
+            f"- Nodes: {len(placement_nodes)} placed\n\n"
+            f"{benchmarks_text}\n"
         )
+        if routing_text:
+            summary += f"\n{routing_text}\n"
+        
+        print(f"[PlacementWorker] Final summary length: {len(summary)}")
 
         self.visual_viewer_signal.emit({
             "type": "final_layout",
