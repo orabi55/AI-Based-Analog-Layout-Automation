@@ -247,7 +247,8 @@ def pipeline_end(summary: dict | None = None) -> None:
     if quality and isinstance(quality, dict):
         composite   = quality.get("composite_score",       0.0)
         y_score     = quality.get("layout_y_score",        0.0)
-        x_score     = quality.get("matching_x_score",      0.0)
+        x_score     = quality.get("matching_x_score")          # may be None (N/A)
+
         id_score    = quality.get("interdigitation_score")   # may be None
         cc_score    = quality.get("centroid_score")          # may be None
         drc_q_score = quality.get("drc_score",             0.0)
@@ -277,6 +278,17 @@ def pipeline_end(summary: dict | None = None) -> None:
         _safe_print(qbar)
         _safe_print("  MATCHING & SYMMETRY QUALITY BENCHMARK")
         _safe_print(qbar)
+
+        # -- Print placement goals that were active for this run ----------------
+        goals = s.get("placement_goals") or {}
+        if goals:
+            mp = goals.get("matching_priority",  "Medium")
+            sp = goals.get("symmetry_priority",  "Medium")
+            ap = goals.get("area_priority",      "Medium")
+            ma = goals.get("max_area_um2")
+            _safe_print(f"  Goals applied : Matching={mp}  Symmetry={sp}  Area={ap}"
+                        + (f"  MaxArea={ma}um2" if ma else ""))
+
         _safe_print(f"  Matched pairs : {n_pairs}")
         _safe_print(f"  {'Metric':<24}  {'Score':>6}   {'Progress':<22}  Grade")
         _safe_print(f"  {'-'*24}  {'-'*6}   {'-'*22}  -----")
@@ -291,7 +303,57 @@ def pipeline_end(summary: dict | None = None) -> None:
         )
         _safe_print(qbar)
 
+        # -- Explanatory notes based on active goals ----------------------------
+        notes = []
+        if goals:
+            mp = goals.get("matching_priority", "Medium")
+            sp = goals.get("symmetry_priority", "Medium")
+
+            if sp == "Low" and (x_score or 0.0) >= 0.9:
+                notes.append(
+                    "NOTE: Symmetry=Low skipped the global mirror enforcer, but "
+                    "ABBA interdigitation is inherently palindromic -- X Mirror "
+                    "Symmetry will still score high. This is expected and correct."
+                )
+            if sp == "Low":
+                notes.append(
+                    "NOTE: Symmetry enforcer was disabled per user goal. "
+                    "Global two-half axis mirroring was NOT applied."
+                )
+            if mp == "Low":
+                notes.append(
+                    "NOTE: Matching=Low skipped interdigitation entirely. "
+                    "X Mirror / Interdigitation scores reflect natural placement only."
+                )
+            if mp == "Medium":
+                notes.append(
+                    "NOTE: Matching=Medium applied ABBA only for diff pairs and "
+                    "current mirrors. Cross-coupled and load pairs were placed "
+                    "individually without interdigitation."
+                )
+            if mp == "High":
+                notes.append(
+                    "NOTE: Matching=High applied ABBA/common-centroid for ALL "
+                    "detected matched pairs (diff pairs, mirrors, cross-coupled, loads)."
+                )
+
+        for note in notes:
+            # Word-wrap at 62 chars
+            words = note.split()
+            line = "  "
+            for w in words:
+                if len(line) + len(w) + 1 > 64:
+                    _safe_print(line)
+                    line = "  " + w + " "
+                else:
+                    line += w + " "
+            if line.strip():
+                _safe_print(line)
+        if notes:
+            _safe_print()
+
     _safe_print()
+
 
 
 def stage_start(stage_num: int, name: str) -> float:

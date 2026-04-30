@@ -133,9 +133,13 @@ def _infer_pairs_from_rows(nodes: List[dict]) -> List[Tuple[str, str]]:
     """
     Detect matched pairs directly from the physical row pattern.
 
-    For 2-device rows: ABBA/ABAB -> one pair.
-    For 3+ device rows with a palindromic (symmetric) arrangement: all
-    pairwise combinations of the devices in that row are added as pairs.
+    Rules:
+    1. 2-device rows: ABBA/ABAB -> one pair.
+    2. 3+ device rows, palindromic -> all pairwise combinations.
+    3. 3+ device rows: detect singleton pairs -- devices that appear exactly
+       once and occupy mirror-symmetric positions about the row centre.
+       e.g. [MM6, D, MM10, MM10, MM10, MM10, D, MM7] -> MM6 and MM7 are
+       singletons at symmetric positions -> inferred as a matched pair.
     """
     row_nodes: Dict[float, List[dict]] = defaultdict(list)
     for n in nodes:
@@ -160,12 +164,39 @@ def _infer_pairs_from_rows(nodes: List[dict]) -> List[Tuple[str, str]]:
                 a, b = unique[0], unique[1]
                 found.add((min(a, b), max(a, b)))
         else:
-            # Multi-device symmetric row -> all pairwise combos
+            # Multi-device row
             if is_palindrome:
+                # All pairwise combos in palindromic row
                 for i in range(len(unique)):
                     for j in range(i + 1, len(unique)):
                         a, b = unique[i], unique[j]
                         found.add((min(a, b), max(a, b)))
+            else:
+                # Detect singleton pairs: devices appearing exactly once
+                # that sit at mirror-symmetric positions about row centre.
+                from collections import Counter
+                counts = Counter(keys)
+                singletons = [k for k, v in counts.items() if v == 1]
+                if len(singletons) >= 2:
+                    n_devices = len(keys)
+                    # Build position map for singletons
+                    singleton_pos = {keys[i]: i for i in range(n_devices)
+                                     if keys[i] in singletons}
+                    # Pair singletons that are mirror-symmetric about centre
+                    paired = set()
+                    centre = (n_devices - 1) / 2.0
+                    for sa, pos_a in singleton_pos.items():
+                        if sa in paired:
+                            continue
+                        mirror_pos = n_devices - 1 - pos_a
+                        for sb, pos_b in singleton_pos.items():
+                            if sb == sa or sb in paired:
+                                continue
+                            if abs(pos_b - mirror_pos) <= 1:
+                                found.add((min(sa, sb), max(sa, sb)))
+                                paired.add(sa)
+                                paired.add(sb)
+                                break
 
     return list(found)
 
@@ -221,39 +252,41 @@ def _layout_y_symmetry(
 
     # -- Check B: matched pairs in same Y row --------------------------------
     if not matched_pairs:
-        score_b = 1.0
-        details.append("  [B] No matched pairs -- trivially OK [OK]")
-    else:
-        id_to_nodes: Dict[str, List[dict]] = defaultdict(list)
-        for n in active:
-            id_to_nodes[_transistor_key(n["id"])].append(n)
+        # No pairs to evaluate — score is just check A (PMOS/NMOS separation)
+        score = score_a
+        details.append("  [B] No matched pairs — same-row check N/A (score = check A only)")
+        return score, "\n".join(details)
 
-        same_row = 0
-        for a_id, b_id in matched_pairs:
-            ys_a = {_row_y(n) for n in id_to_nodes.get(a_id, [])}
-            ys_b = {_row_y(n) for n in id_to_nodes.get(b_id, [])}
-            if not ys_a or not ys_b:
-                details.append(f"  [B] {a_id}/{b_id}: missing nodes")
-                continue
-            shared = ys_a & ys_b
-            if shared:
-                same_row += 1
-                details.append(
-                    f"  [B] {a_id}/{b_id}: same row(s) Y={sorted(shared)} [OK]"
-                )
-            else:
-                details.append(
-                    f"  [B] {a_id}/{b_id}: DIFFERENT rows "
-                    f"A-Y={sorted(ys_a)}  B-Y={sorted(ys_b)} [FAIL]"
-                )
-        score_b = same_row / len(matched_pairs)
+    id_to_nodes: Dict[str, List[dict]] = defaultdict(list)
+    for n in active:
+        id_to_nodes[_transistor_key(n["id"])].append(n)
+
+    same_row = 0
+    for a_id, b_id in matched_pairs:
+        ys_a = {_row_y(n) for n in id_to_nodes.get(a_id, [])}
+        ys_b = {_row_y(n) for n in id_to_nodes.get(b_id, [])}
+        if not ys_a or not ys_b:
+            details.append(f"  [B] {a_id}/{b_id}: missing nodes")
+            continue
+        shared = ys_a & ys_b
+        if shared:
+            same_row += 1
+            details.append(
+                f"  [B] {a_id}/{b_id}: same row(s) Y={sorted(shared)} [OK]"
+            )
+        else:
+            details.append(
+                f"  [B] {a_id}/{b_id}: DIFFERENT rows "
+                f"A-Y={sorted(ys_a)}  B-Y={sorted(ys_b)} [FAIL]"
+            )
+    score_b = same_row / len(matched_pairs)
 
     score = 0.5 * score_a + 0.5 * score_b
     return score, "\n".join(details)
 
 
 # ---------------------------------------------------------------------------
-# Sub-metric 2 -- Matched-pair X symmetry
+# Sub-metric 2 -- Global layout X mirror symmetry
 # ---------------------------------------------------------------------------
 
 def _matched_pair_x_symmetry(
@@ -261,67 +294,92 @@ def _matched_pair_x_symmetry(
     matched_pairs: List[Tuple[str, str]],
 ) -> Tuple[float, str]:
     """
-    Score how symmetrically matched pairs are placed about their row axis.
+    Check how well the entire layout mirrors itself about a single vertical
+    axis at the global center X.
 
-    Axis is computed from ACTIVE (non-dummy) nodes only so filler cells
-    do not shift the perceived centre.
+    Symmetry means FUNCTIONAL mirroring, not same-name mirroring.
+    Matched pairs (e.g. MM6/MM7 as NMOS latches) are treated as functionally
+    equivalent — so MM6 at position X mirrored by MM7 at the mirror position
+    IS correct symmetry.
+
+    Algorithm:
+      1. Build a symmetry equivalence map: devices in the same matched pair
+         share a group key (e.g. MM6 and MM7 both map to "MM6_MM7_group").
+      2. Compute global_axis = (min_cx + max_cx) / 2 from active devices.
+      3. Per row: for each device at cx, look for any device of the same
+         symmetry group at the mirror position (2*axis - cx).
+      4. row_score = matched / total. Final = mean of row_scores.
     """
-    if not matched_pairs:
-        return 1.0, "No matched pairs -- trivially perfect."
-
     active = [n for n in nodes if not _is_dummy(n)]
+    if not active:
+        return _NA, "No active devices."
 
-    id_to_nodes: Dict[str, List[dict]] = defaultdict(list)
+    # Build symmetry equivalence map from matched pairs.
+    # Devices in the same pair share the same canonical group key.
+    sym_group: Dict[str, str] = {}
+    for a, b in matched_pairs:
+        group_key = f"{min(a,b)}|{max(a,b)}"
+        sym_group[a] = group_key
+        sym_group[b] = group_key
+    # Unmatched devices use their own name as the group key
     for n in active:
-        id_to_nodes[_transistor_key(n["id"])].append(n)
+        tkey = _transistor_key(n["id"])
+        if tkey not in sym_group:
+            sym_group[tkey] = tkey
 
-    # Compute row centre axis from ACTIVE nodes only
+    # Global layout bounds (active devices only)
+    all_cx = [_cx(n) for n in active]
+    global_axis = (min(all_cx) + max(all_cx)) / 2.0
+
+    # Group active devices by row Y
     row_nodes: Dict[float, List[dict]] = defaultdict(list)
     for n in active:
         row_nodes[_row_y(n)].append(n)
-    row_axis: Dict[float, float] = {}
-    for y, rn in row_nodes.items():
-        xs = [float(_get_geo(n).get("x", 0.0)) for n in rn]
-        xe = [x + float(_get_geo(n).get("width", 0.0)) for x, n in zip(xs, rn)]
-        row_axis[y] = (min(xs) + max(xe)) / 2.0
 
-    pair_scores = []
+    tolerance = STD_PITCH * 0.5   # within half a pitch counts as "at mirror"
+
+    row_scores = []
     details = []
-    for a_id, b_id in matched_pairs:
-        nodes_a = id_to_nodes.get(a_id, [])
-        nodes_b = id_to_nodes.get(b_id, [])
-        if not nodes_a or not nodes_b:
-            details.append(f"  {a_id}/{b_id}: no nodes found [SKIP]")
+    for y, rn in sorted(row_nodes.items()):
+        rn_sorted = sorted(rn, key=_cx)
+        total = len(rn_sorted)
+        if total == 0:
             continue
 
-        shared_rows = {_row_y(n) for n in nodes_a} & {_row_y(n) for n in nodes_b}
-        if not shared_rows:
-            pair_scores.append(0.0)
-            details.append(f"  {a_id}/{b_id}: not same row -> symmetry=0.00 [FAIL]")
-            continue
+        # Build lookup: slot → list of symmetry group keys
+        cx_to_groups: Dict[int, List[str]] = defaultdict(list)
+        for n in rn_sorted:
+            slot = round(_cx(n) / tolerance)
+            tkey = _transistor_key(n["id"])
+            cx_to_groups[slot].append(sym_group.get(tkey, tkey))
 
-        for ry in shared_rows:
-            axis = row_axis.get(ry, 0.0)
-            a_row = [n for n in nodes_a if _row_y(n) == ry]
-            b_row = [n for n in nodes_b if _row_y(n) == ry]
+        matched = 0
+        for n in rn_sorted:
+            cx = _cx(n)
+            mirror_cx = 2.0 * global_axis - cx
+            tkey = _transistor_key(n["id"])
+            my_group = sym_group.get(tkey, tkey)
+            mirror_slot = round(mirror_cx / tolerance)
+            found = False
+            for s in (mirror_slot - 1, mirror_slot, mirror_slot + 1):
+                if my_group in cx_to_groups.get(s, []):
+                    found = True
+                    break
+            if found:
+                matched += 1
 
-            cx_a = sum(_cx(n) for n in a_row) / len(a_row)
-            cx_b = sum(_cx(n) for n in b_row) / len(b_row)
-            midpoint = (cx_a + cx_b) / 2.0
-            dev_width = float(_get_geo(nodes_a[0]).get("width", STD_PITCH))
+        row_score = matched / total
+        row_scores.append(row_score)
+        details.append(
+            f"  Row y={y:.4f}: {matched}/{total} devices mirrored "
+            f"(axis={global_axis:.4f}) -> {row_score:.0%}"
+        )
 
-            sym_score  = max(0.0, 1.0 - abs(midpoint - axis) / max(dev_width, 0.001))
-            dist_score = max(0.0, 1.0 - abs(abs(cx_a - axis) - abs(cx_b - axis))
-                             / max(dev_width, 0.001))
-            pair_sym = (sym_score + dist_score) / 2.0
-            pair_scores.append(pair_sym)
-            details.append(
-                f"  {a_id}/{b_id}: axis={axis:.4f} cxA={cx_a:.4f} cxB={cx_b:.4f} "
-                f"sym={pair_sym:.2f} {'[OK]' if pair_sym >= 0.9 else '[FAIL]'}"
-            )
+    if not row_scores:
+        return _NA, "No rows to evaluate."
 
-    score = sum(pair_scores) / len(pair_scores) if pair_scores else 1.0
-    return score, "\n".join(details) if details else "No evaluable pairs."
+    score = sum(row_scores) / len(row_scores)
+    return score, "\n".join(details)
 
 
 # ---------------------------------------------------------------------------
@@ -606,14 +664,16 @@ def score_placement(
     # ── Weighted composite (skip N/A metrics) ────────────────────────────
     active_weights = {
         "layout_y":   WEIGHTS["layout_y"],
-        "matching_x": WEIGHTS["matching_x"],
         "drc_overlap": WEIGHTS["drc_overlap"],
     }
     score_values = {
         "layout_y":   y_score,
-        "matching_x": x_score,
         "drc_overlap": drc_score,
     }
+    # X Mirror Symmetry is now a global geometric check (always applicable)
+    if x_score is not _NA:
+        active_weights["matching_x"] = WEIGHTS["matching_x"]
+        score_values["matching_x"]   = x_score
     if id_score is not _NA:
         active_weights["interdigitation"] = WEIGHTS["interdigitation"]
         score_values["interdigitation"]   = id_score

@@ -1215,6 +1215,26 @@ class LayoutEditorTab(QWidget):
 
         self._sync_node_positions()
         data = copy.deepcopy(self._build_output_data())
+
+        # ── Strip dummies from previous runs ────────────────────────────
+        # On re-run, old filler/edge dummies would pollute the pipeline's
+        # device count, row-width balancing, and footprint calculations.
+        # Keep ONLY real (non-dummy) devices; the pipeline creates new
+        # dummies as needed.
+        def _is_dummy(n):
+            if not isinstance(n, dict):
+                return False
+            if n.get("is_dummy"):
+                return True
+            nid = str(n.get("id", ""))
+            return nid.startswith("FILLER_DUMMY") or nid.startswith("EDGE_DUMMY")
+
+        orig_count = len(data.get("nodes", []))
+        data["nodes"] = [n for n in data.get("nodes", []) if not _is_dummy(n)]
+        stripped = orig_count - len(data["nodes"])
+        if stripped:
+            print(f"[do_ai_placement] Stripped {stripped} dummy device(s) from previous run")
+
         if "terminal_nets" not in data:
             data["terminal_nets"] = self._terminal_nets
         if abutment_enabled:
@@ -1222,6 +1242,9 @@ class LayoutEditorTab(QWidget):
         else:
             data["abutment_candidates"] = []
         data["no_abutment"] = not abutment_enabled
+        # Pass placement goals into pipeline JSON
+        data["placement_goals"] = dialog.get_goals()
+        self._last_placement_goals = data["placement_goals"]
         abut_label = "with abutment" if abutment_enabled else "no abutment"
         pipeline_label = "LangGraph"
         self.overlay.show_message(
@@ -1275,6 +1298,12 @@ class LayoutEditorTab(QWidget):
         with open(out_path, "w") as f:
             json.dump(data, f, indent=4)
         self._load_from_data_dict(data, out_path)
+        # Store a "before symmetry" snapshot for the compare toggle
+        self._pre_symmetry_snapshot = None   # reset; symmetry enforcer will set it
+        # Enable compare button if it exists
+        if hasattr(self, '_tb_act_compare'):
+            self._tb_act_compare.setEnabled(False)
+            self._showing_before = False
         for group in self._matched_groups:
             technique = group.get("technique", "interdigitated")
             if technique == "interdigitated":      color = QColor("#4FC3F7")
@@ -1287,6 +1316,37 @@ class LayoutEditorTab(QWidget):
         locked_msg = ""
         if saved:
             locked_msg = f"\n🔒 {len(saved)} matched devices preserved in place."
+
+        # ── Area constraint check ─────────────────────────────────────
+        goals = getattr(self, "_last_placement_goals", {}) or {}
+        max_area = goals.get("max_area_um2")
+        if max_area is not None:
+            actual_area = self._compute_layout_area()
+            if actual_area > max_area:
+                while True:
+                    from PySide6.QtWidgets import QInputDialog
+                    new_max, ok = QInputDialog.getText(
+                        self,
+                        "Area Constraint Exceeded",
+                        f"⚠️  Layout area is {actual_area:.2f} µm² but your limit is {max_area:.2f} µm².\n"
+                        f"Enter a new max-area limit (µm²) or leave blank to accept:",
+                    )
+                    if not ok or not new_max.strip():
+                        break
+                    try:
+                        max_area = float(new_max.strip())
+                        self._last_placement_goals["max_area_um2"] = max_area
+                        if actual_area <= max_area:
+                            break
+                    except ValueError:
+                        pass
+
+        # ── Enable Compare button ─────────────────────────────────────
+        if hasattr(self, '_tb_act_compare'):
+            self._after_placement_snapshot = copy.deepcopy(data.get("nodes", self.nodes))
+            self._tb_act_compare.setEnabled(False)   # only enable after symmetry runs
+            self._showing_before = False
+
         self.chat_panel._append_message(
             "AI",
             f"AI initial placement complete!{locked_msg}\n"
@@ -1298,6 +1358,43 @@ class LayoutEditorTab(QWidget):
     def _on_ai_placement_error(self, err_msg):
         self.overlay.hide_overlay()
         QMessageBox.warning(self, "AI Placement Failed", f"AI placement failed:\n\n{err_msg}")
+
+    def _compute_layout_area(self) -> float:
+        """Return bounding-box area of all current nodes in µm²."""
+        nodes = [n for n in self.nodes if isinstance(n.get("geometry"), dict)]
+        if not nodes:
+            return 0.0
+        min_x = min(n["geometry"].get("x", 0.0) for n in nodes)
+        min_y = min(n["geometry"].get("y", 0.0) for n in nodes)
+        max_x = max(n["geometry"].get("x", 0.0) + n["geometry"].get("width", 0.0) for n in nodes)
+        max_y = max(n["geometry"].get("y", 0.0) + n["geometry"].get("height", 0.0) for n in nodes)
+        return max(0.0, (max_x - min_x) * (max_y - min_y))
+
+    def _set_pre_symmetry_snapshot(self):
+        """Call this just before symmetry enforcement to capture the baseline."""
+        self._pre_symmetry_snapshot = copy.deepcopy(self.nodes)
+        if hasattr(self, '_tb_act_compare'):
+            self._tb_act_compare.setEnabled(True)
+            self._showing_before = False
+
+    def _toggle_before_after(self):
+        """Toggle the layout view between pre-symmetry and post-symmetry snapshots."""
+        pre  = getattr(self, "_pre_symmetry_snapshot", None)
+        post = getattr(self, "_after_placement_snapshot", None)
+        if not pre or not post:
+            return
+        self._showing_before = not getattr(self, "_showing_before", False)
+        import copy as _copy
+        if self._showing_before:
+            self.nodes = _copy.deepcopy(pre)
+            if hasattr(self, '_tb_act_compare'):
+                self._tb_act_compare.setText("▶ After Symmetry")
+        else:
+            self.nodes = _copy.deepcopy(post)
+            if hasattr(self, '_tb_act_compare'):
+                self._tb_act_compare.setText("◀ Before Symmetry")
+        self._refresh_panels(compact=False)
+
 
     # =================================================================
     #  Static pipelines (unchanged)

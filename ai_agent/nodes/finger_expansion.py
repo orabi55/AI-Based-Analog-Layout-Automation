@@ -53,6 +53,11 @@ def node_finger_expansion(state):
     moved_ids = resolve_overlaps(physical_nodes)
     if moved_ids:
         log_detail(f"Resolved {len(moved_ids)} overlapping device(s)")
+        # External resolver may shift devices off the pitch grid.
+        # Re-run _resolve_row_overlaps to snap positions back to grid
+        # and regenerate correct filler dummies.
+        no_abutment_flag = state.get("no_abutment", False)
+        physical_nodes = _resolve_row_overlaps(physical_nodes, no_abutment_flag)
     else:
         log_detail("No overlaps detected")
     physical_nodes = legalize_vertical_rows(physical_nodes)
@@ -72,10 +77,19 @@ def node_finger_expansion(state):
     # Show position summary
     log_device_positions(physical_nodes, "Finger Expansion Output Positions")
 
+    # Recompute quality score on the FINAL physical nodes (post-filler)
+    # so the benchmark reflects the actual layout, not pre-filler positions.
+    try:
+        from ai_agent.placement.quality_metrics import score_placement
+        quality_report = score_placement(physical_nodes, matching_info=None, verbose=False)
+    except Exception:
+        quality_report = state.get("placement_quality", {})
+
     elapsed = time.time() - t0
     ip_step("4/5 Finger Expansion", f"{len(physical_nodes)} device(s) ({elapsed:.1f}s)")
 
     return {
         "placement_nodes": physical_nodes,
         "deterministic_snapshot": copy.deepcopy(physical_nodes),
+        "placement_quality": quality_report,
     }

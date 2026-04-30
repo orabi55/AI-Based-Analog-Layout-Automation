@@ -103,6 +103,7 @@ class PlacementWorker(QObject):
             "abutment_candidates": abutment_candidates,
             "placement_mode": "auto",   # symmetry_enforcer may upgrade to "two_half"
             "placement_quality": {},        # populated by node_placement_specialist
+            "placement_goals": layout_context.get("placement_goals", {}),  # user priorities
         }
 
         try:
@@ -226,6 +227,7 @@ class PlacementWorker(QObject):
             "area": f"{area:.3f} um²",
             "utilization": utilization,
             "quality": final_state.get("placement_quality", {}),
+            "placement_goals": final_state.get("placement_goals", {}),
         })
 
         summary = (
