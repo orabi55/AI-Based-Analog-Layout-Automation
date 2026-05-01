@@ -20,7 +20,7 @@ Metrics
 
 3. **Interdigitation Pattern** (interdigitation_score)
    ONLY for nodes that carry ``_technique`` in
-   {ABBA_diff_pair, ABBA_current_mirror, ABAB_load_pair, symmetric_cross_coupled}.
+   {ABAB_diff_pair, ABBA_current_mirror, ABAB_load_pair, symmetric_cross_coupled}.
    Checks that the physical finger sequence (sorted by X) forms a valid
    ABBA (palindrome) or ABAB (strict alternation) pattern.
    Score = 1 - (broken_blocks / total_interdigitated_blocks).
@@ -78,7 +78,7 @@ STD_PITCH = 0.294
 
 # Techniques treated as interdigitation (ABBA / ABAB)
 _INTERDIG_TECHNIQUES = frozenset({
-    "ABBA_diff_pair",
+    "ABAB_diff_pair",
     "ABBA_current_mirror",
     "ABAB_load_pair",
     "symmetric_cross_coupled",

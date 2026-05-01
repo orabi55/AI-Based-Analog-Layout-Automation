@@ -27,7 +27,7 @@ def enforce_reflection_symmetry(nodes: list) -> list:
         return nodes
 
     # Find matched blocks
-    _REFLECT_TECHNIQUES = {"symmetric_cross_coupled", "ABBA_diff_pair", "ABAB_load_pair"}
+    _REFLECT_TECHNIQUES = {"symmetric_cross_coupled", "ABAB_diff_pair", "ABAB_load_pair"}
 
     # Group nodes by row (Y value)
     row_buckets: dict = {}

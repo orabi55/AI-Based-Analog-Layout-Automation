@@ -874,7 +874,7 @@ def build_finger_group_section(finger_map: dict, group_nodes: list) -> str:
                 member_ids = gn.get("_members", [])
                 technique  = gn.get("_technique", "matched")
                 tech_label = {
-                    "ABBA_diff_pair":          "ABBA interdigitated diff pair",
+                    "ABAB_diff_pair":          "ABAB interdigitated diff pair",
                     "ABBA_current_mirror":     "ABBA interdigitated current mirror",
                     "ABAB_load_pair":          "ABAB interdigitated active load pair",
                     "symmetric_cross_coupled": "symmetric cross-coupled latch pair",
@@ -1189,7 +1189,7 @@ def merge_matched_groups(
     # 1. Diff pairs (highest priority)
     for a, b in matching_info.get("diff_pairs", []):
         if a not in used and b not in used:
-            clusters_to_merge.append(([a, b], "ABBA_diff_pair"))
+            clusters_to_merge.append(([a, b], "ABAB_diff_pair"))
             used.update([a, b])
 
     # 2. Current mirrors (skip when matching_priority=Low)
@@ -1337,8 +1337,8 @@ def merge_matched_groups(
             continue   # leave both groups unmerged
 
         # Generate interleaved pattern based on technique
-        if technique == "ABBA_diff_pair":
-            interleaved = interdigitate_fingers(fingers_a, fingers_b, pattern="ABBA", edge_dummies=True)
+        if technique == "ABAB_diff_pair":
+            interleaved = interdigitate_fingers(fingers_a, fingers_b, pattern="ABAB", edge_dummies=True)
         elif technique == "ABAB_load_pair":
             interleaved = interdigitate_fingers(fingers_a, fingers_b, pattern="ABAB", edge_dummies=True)
         elif technique == "symmetric_cross_coupled":
@@ -1409,7 +1409,7 @@ def merge_matched_groups(
             # 2D fold eligibility: ABBA diff pairs with equal, even finger counts
             # can be folded into 2 rows to halve layout width and reduce dummies.
             # The actual 1D vs 2D decision is made later by _choose_fold_config.
-            "_can_fold":      technique in ("ABBA_diff_pair", "ABAB_load_pair")
+            "_can_fold":      technique in ("ABAB_diff_pair", "ABAB_load_pair")
                               and len(fingers_a) == len(fingers_b)
                               and len(fingers_a) >= 4
                               and len(fingers_a) % 2 == 0,
@@ -2015,10 +2015,10 @@ def pre_assign_rows(
     # LLM placing things symmetrically.
     #
     # Detection: a group is a "diff pair block" if its _technique is
-    # "ABBA_diff_pair".  For PMOS, "ABBA_diff_pair" precharge blocks also
+    # "ABAB_diff_pair".  For PMOS, "ABAB_diff_pair" precharge blocks also
     # get their own row to keep the precharge pair symmetric.
     def _is_diff_pair_block(g: dict) -> bool:
-        return g.get("_technique", "") == "ABBA_diff_pair"
+        return g.get("_technique", "") == "ABAB_diff_pair"
 
     nmos_diff_pair = [g for g in nmos_groups if _is_diff_pair_block(g)]
     nmos_other     = [g for g in nmos_groups if not _is_diff_pair_block(g)]
@@ -2212,7 +2212,7 @@ def pre_assign_rows(
         anchor_idx = None
         for i, g in enumerate(row):
             tech = g.get("_technique", "")
-            if tech in ("symmetric_cross_coupled", "ABBA_diff_pair", "common_centroid_mirror"):
+            if tech in ("symmetric_cross_coupled", "ABAB_diff_pair", "common_centroid_mirror"):
                 anchor_idx = i
                 break
 

@@ -842,7 +842,7 @@ def build_placement_context(
         lines.append("=" * 60)
         for bid, info in merged_blocks.items():
             technique_label = {
-                "ABBA_diff_pair": "ABBA differential pair",
+                "ABAB_diff_pair": "ABAB differential pair",
                 "ABBA_current_mirror": "ABBA current mirror",
                 "symmetric_cross_coupled": "symmetric cross-coupled latch",
                 "common_centroid_mirror": "2D Common Centroid Matrix",
@@ -932,7 +932,7 @@ def build_placement_context(
 1. ROW Y VALUES: Use ONLY the values from PRE-COMPUTED ROW ASSIGNMENT above.
    Never put all PMOS in one row and all NMOS in one row when the table shows multiple rows.
 
-2. DIFF PAIR (ABBA): Place M1 and M2 fingers interleaved: M1a M2a M2b M1b.
+2. DIFF PAIR (ABAB): Place M1 and M2 fingers strictly alternating: M1a M2a M1b M2b.
    Both devices must share the same Y row and be horizontally adjacent.
 
 3. CURRENT MIRROR: Mref and Mcopy must be adjacent in the same row.
