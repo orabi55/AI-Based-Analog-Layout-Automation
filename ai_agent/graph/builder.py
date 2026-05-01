@@ -21,6 +21,7 @@ from ai_agent.nodes import (
     node_topology_analyst,
     node_strategy_selector,
     node_placement_specialist,
+    node_placement_specialist_chatbot,
     node_finger_expansion,
     node_drc_critic,
     node_routing_previewer,
@@ -136,7 +137,7 @@ def build_chat_graph():
     builder.add_node("router", _node_router)
     builder.add_node("topology_analyst", node_topology_analyst)
     builder.add_node("strategy_selector", node_strategy_selector)
-    builder.add_node("placement_specialist", node_placement_specialist)
+    builder.add_node("placement_specialist", node_placement_specialist_chatbot)
     builder.add_node("drc_critic", node_drc_critic)
     builder.add_node("routing_previewer", node_routing_previewer)
     builder.add_node("human_viewer", node_human_viewer)

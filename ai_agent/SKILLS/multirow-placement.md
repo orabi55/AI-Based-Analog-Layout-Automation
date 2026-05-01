@@ -1,6 +1,7 @@
 ---
 id: multirow_placement
 name: Multi-Row Topology Partitioning
+description: Partition topology groups into multiple placement rows with bias-chain awareness.
 
 trigger:
   keywords: ["multirow", "row partitioning", "topology"]
@@ -9,6 +10,8 @@ inputs:
   - TOPOLOGY_GROUPS (mandatory)
   - SYMMETRY_CONSTRAINTS (CC / MB / DP awareness required)
   - BIAS_CHAIN_LEVELS (optional but overrides row logic if present)
+
+---
 
 ────────────────────────────────────
 SCOPE

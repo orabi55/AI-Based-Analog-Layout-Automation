@@ -8,7 +8,7 @@ Functions:
 """
 from ai_agent.nodes.topology_analyst import node_topology_analyst
 from ai_agent.nodes.strategy_selector import node_strategy_selector
-from ai_agent.nodes.placement_specialist import node_placement_specialist
+from ai_agent.nodes.placement_specialist import node_placement_specialist, node_placement_specialist_chatbot
 from ai_agent.nodes.finger_expansion import node_finger_expansion
 from ai_agent.nodes.drc_critic import node_drc_critic
 from ai_agent.nodes.routing_previewer import node_routing_previewer
@@ -19,6 +19,7 @@ __all__ = [
     "node_topology_analyst",
     "node_strategy_selector",
     "node_placement_specialist",
+    "node_placement_specialist_chatbot",
     "node_finger_expansion",
     "node_drc_critic",
     "node_routing_previewer",
