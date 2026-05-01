@@ -34,7 +34,7 @@ from PySide6.QtGui import QColor, QKeySequence, QShortcut
 try:
     from .chat_panel import ChatPanel
     from .device_tree import DeviceTreePanel
-    from .editor_view import SymbolicEditor
+    from .editor_view import SymbolicEditor, DeleteGroupCommand
     from .klayout_panel import KLayoutPanel
     from .properties_panel import PropertiesPanel
     from .view_toggle import SegmentedToggle
@@ -46,7 +46,7 @@ try:
 except ImportError:
     from chat_panel import ChatPanel
     from device_tree import DeviceTreePanel
-    from editor_view import SymbolicEditor
+    from editor_view import SymbolicEditor, DeleteGroupCommand
     from klayout_panel import KLayoutPanel
     from properties_panel import PropertiesPanel
     from view_toggle import SegmentedToggle
@@ -213,10 +213,12 @@ class LayoutEditorTab(QWidget):
         self.device_tree.device_selected.connect(self._on_tree_device_selected)
         self.device_tree.connection_selected.connect(self._on_connection_selected)
         self.device_tree.block_selected.connect(self._on_tree_block_selected)
+        self.device_tree.group_delete_requested.connect(self._handle_group_delete)
         self.editor.device_clicked.connect(self.device_tree.highlight_device)
         self.editor.dummy_toggle_requested.connect(self._toggle_dummy_shortcut)
         self.editor.drag_finished.connect(self._on_device_drag_end)
         self.editor.device_clicked.connect(self._on_canvas_device_clicked)
+        self.editor.hierarchy_changed.connect(self._on_hierarchy_changed)
         self.editor.scene.selectionChanged.connect(self._on_editor_selection_changed)
 
         # AI command execution (batch for single undo)
@@ -722,6 +724,37 @@ class LayoutEditorTab(QWidget):
     def _on_device_drag_end(self):
         self._sync_node_positions()
 
+    def _on_hierarchy_changed(self):
+        """Refresh the device tree when hierarchy groups are created or deleted."""
+        try:
+            # Build custom groups list from editor hierarchy groups (user-created groups)
+            custom_groups = []
+            try:
+                dev_item_to_id = {v: k for k, v in self.editor.device_items.items()}
+                for g in getattr(self.editor, '_hierarchy_groups', []):
+                    name = getattr(g, '_parent_name', '')
+                    # Treat only user-created groups (named GROUP_*) as custom
+                    if not name.startswith('GROUP_'):
+                        continue
+                    dev_ids = []
+                    for dev_item in getattr(g, '_all_descendant_devices', []):
+                        dev_id = dev_item_to_id.get(dev_item)
+                        if dev_id:
+                            dev_ids.append(dev_id)
+                    if dev_ids:
+                        custom_groups.append({'name': name, 'devices': dev_ids})
+            except Exception:
+                custom_groups = []
+
+            # Provide custom groups to the device tree and reload
+            try:
+                self.device_tree.set_custom_groups(custom_groups)
+            except Exception:
+                pass
+            self.device_tree.load_devices(self.nodes)
+        except Exception as e:
+            logging.debug(f"Failed to refresh device tree after hierarchy change: {e}")
+
     def do_undo(self):
         if not self._undo_stack:
             return
@@ -741,7 +774,27 @@ class LayoutEditorTab(QWidget):
         self._original_data["nodes"] = self.nodes
         self._refresh_panels()
         self._update_undo_redo_state()
-
+    
+    def _handle_tree_group_deletion(self, group_name):
+        # Find the group item in the editor by name
+        group_item = self.editor.find_group_by_name(group_name)
+        if group_item:
+            # Create the command and push it to the stack
+            command = DeleteGroupCommand(self.editor, group_item)
+            self.undo_stack.push(command)
+    def _handle_group_delete(self, group_name):
+        # 1. Find the group in the editor
+        target_group = None
+        for group in self.editor.custom_groups:
+            if group._parent_name == group_name:
+                target_group = group
+                break
+        
+        if target_group:
+            # 2. Push the command to the undo stack
+            from .editor_view import DeleteGroupCommand # Import here to avoid circularity
+            command = DeleteGroupCommand(self.editor, target_group)
+            self.undo_stack.push(command)
     # =================================================================
     #  Select All / Swap / Merge / Flip / Delete
     # =================================================================
@@ -1015,6 +1068,10 @@ class LayoutEditorTab(QWidget):
             self._abutment_candidates = []
             msg = "Abutment analysis cleared."
         self.chat_panel._append_message("AI", msg, "#e8f4fd", "#1a1a2e")
+
+    def set_moving_groups_only(self, enabled):
+        """Enable/disable moving groups only mode."""
+        self.editor.set_moving_groups_only(enabled)
 
     # =================================================================
     #  Dummy helpers
