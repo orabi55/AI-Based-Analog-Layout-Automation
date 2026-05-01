@@ -1,5 +1,8 @@
 Traceback (most recent call last):
-  File "c:\Users\DELL G3\Desktop\GP\NEW\AI-Based-Analog-Layout-Automation\symbolic_editor\widgets\welcome_screen.py", line 232, in _tick
-    def _tick(self):
-    
-KeyboardInterrupt
+  File "c:\Users\DELL G3\Desktop\GP\NEW\AI-Based-Analog-Layout-Automation\symbolic_editor\editor_view.py", line 353, in set_net_labels_visible
+    group.set_net_labels(nets, self._color_seed)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\DELL G3\Desktop\GP\NEW\AI-Based-Analog-Layout-Automation\symbolic_editor\hierarchy_group_item.py", line 101, in set_net_labels
+    self.update()
+    ~~~~~~~~~~~^^
+RuntimeError: Internal C++ object (HierarchyGroupItem) already deleted.
