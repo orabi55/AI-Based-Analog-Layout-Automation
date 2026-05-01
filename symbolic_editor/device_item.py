@@ -57,6 +57,13 @@ class DeviceItem(QGraphicsRectItem):
         self._parent_id = None
         self._sibling_group = []    # populated by editor after all items are created
         self._propagating_move = False  # guard against recursive move propagation
+        self._original_z = None  # Store original Z order to prevent reordering on move
+        
+        # ── Axis-locked movement ──
+        # Lock movement to X or Y axis based on initial drag direction
+        self._drag_axis = None  # "x", "y", or None (unset during drag)
+        self._drag_initial_pos = QPointF()  # position when drag starts
+        self._is_directly_dragged = False  # True only for the item being directly dragged
 
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
@@ -324,53 +331,218 @@ class DeviceItem(QGraphicsRectItem):
         self.update()
 
     def itemChange(self, change, value):
-        """Snap dragged positions to grid so devices never float between tracks."""
-        if (
-            change == QGraphicsItem.GraphicsItemChange.ItemPositionChange
-            and self._snap_grid_x
-            and self._snap_grid_y
-        ):
-            x = round(value.x() / self._snap_grid_x) * self._snap_grid_x
-            y = round(value.y() / self._snap_grid_y) * self._snap_grid_y
-            return QPointF(x, y)
+        """
+        Snap dragged positions to grid.
+        """
+        if change == QGraphicsItem.GraphicsItemChange.ItemPositionChange:
+            # Bypass double-snapping if custom drag engine is currently steering the item
+            if getattr(self, '_drag_active', False) or getattr(self, '_propagating_move', False):
+                return super().itemChange(change, value)
+                
+            # Only apply snapping if enabled
+            if self._snap_grid_x and self._snap_grid_y:
+                new_pos = value
+                # Apply grid snapping
+                x = round(new_pos.x() / self._snap_grid_x) * self._snap_grid_x
+                y = round(new_pos.y() / self._snap_grid_y) * self._snap_grid_y
+                return QPointF(x, y)
+        
+        # Preserve Z-order when item moves
+        if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
+            if self._original_z is not None:
+                self.setZValue(self._original_z)
+        
         return super().itemChange(change, value)
 
     # --------------------------------------------------
     # Drag tracking
     # --------------------------------------------------
+    def get_selected_group(self):
+        """
+        Return list of this device + all selected siblings that will move together.
+        Useful for UI feedback or validation.
+        """
+        selected_group = [self]
+        if self._sibling_group:
+            selected_group.extend([s for s in self._sibling_group if s.isSelected()])
+        return selected_group
+
+    def will_move_with_siblings(self):
+        """Check if any siblings are selected and will move with this device."""
+        if not self._sibling_group:
+            return False
+        return any(s.isSelected() for s in self._sibling_group)
+
+    # --------------------------------------------------
+    # Drag tracking and collision handling
+    # --------------------------------------------------
     def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            self._drag_start_pos = self.pos()
-            self._drag_active = False
+        # Let Qt handle standard selection first so we can accurately capture selected items
         super().mousePressEvent(event)
+        
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_start_scene_pos = event.scenePos()
+            self._drag_axis = None
+            self._is_directly_dragged = True
+            self._drag_active = False
+            self._original_z = self.zValue()  # Preserve Z order
+
+            # Check if "moving groups only" is enabled
+            moving_groups_only = False
+            editor = None
+            if self.scene():
+                # Try to get the editor from the scene
+                scene = self.scene()
+                if hasattr(scene, '_editor') and hasattr(scene._editor, '_moving_groups_only'):
+                    moving_groups_only = scene._editor._moving_groups_only
+                    editor = scene._editor
+
+            # Identify all moving items (the selected group)
+            self._moving_items = []
+            group_devices = []  # devices in the same group
+            
+            if self.scene():
+                if moving_groups_only:
+                    # Try to find all devices in the same group
+                    # First, check _sibling_group (for hierarchical devices)
+                    if self._sibling_group:
+                        group_devices = list(self._sibling_group)
+                    # Otherwise, check if device is in a HierarchyGroupItem
+                    elif editor:
+                        for group in editor._hierarchy_groups:
+                            if self in group._all_descendant_devices:
+                                group_devices = list(group._all_descendant_devices)
+                                break
+                    
+                    # If we found group devices, move them all
+                    if group_devices:
+                        for item in group_devices:
+                            item._drag_initial_pos = item.pos()
+                            self._moving_items.append(item)
+                            item.setSelected(True)  # Select all group members
+                
+                # If not in moving_groups_only mode or no group found, use normal selection
+                if not self._moving_items:
+                    for item in self.scene().selectedItems():
+                        if isinstance(item, DeviceItem):
+                            item._drag_initial_pos = item.pos()
+                            self._moving_items.append(item)
+                        
+            # Ensure the primary dragged item itself is always included
+            if self not in self._moving_items:
+                self._drag_initial_pos = self.pos()
+                self._moving_items.append(self)
+            
+            # Cache obstacles once at drag start instead of recalculating on every mouseMoveEvent
+            self._cached_obstacles = []
+            if self.scene():
+                for it in self.scene().items():
+                    if isinstance(it, DeviceItem) and it not in self._moving_items:
+                        self._cached_obstacles.append(it)
 
     def mouseMoveEvent(self, event):
-        old_pos = self.pos()
-        super().mouseMoveEvent(event)
-        new_pos = self.pos()
+        if not getattr(self, '_is_directly_dragged', False):
+            return
 
-        if not self._drag_active and new_pos != self._drag_start_pos:
+        if not self._drag_active:
             self._drag_active = True
             self.signals.drag_started.emit()
 
-        # ── Hierarchical group movement ──
-        # If this item is part of a parent group, propagate the same
-        # delta to all siblings so the entire transistor moves as one.
-        if self._sibling_group and not self._propagating_move:
-            dx = new_pos.x() - old_pos.x()
-            dy = new_pos.y() - old_pos.y()
-            if dx != 0 or dy != 0:
-                for sibling in self._sibling_group:
-                    if sibling is not self:
-                        sibling._propagating_move = True
-                        sibling.moveBy(dx, dy)
-                        sibling._propagating_move = False
+        mouse_delta = event.scenePos() - self._drag_start_scene_pos
+        dx = mouse_delta.x()
+        dy = mouse_delta.y()
+
+        # 1. Enforce strict Orthogonal (XY) movement
+        if self._drag_axis is None:
+            if abs(dx) > abs(dy) + 2:
+                self._drag_axis = "x"
+            elif abs(dy) > abs(dx) + 2:
+                self._drag_axis = "y"
+            else:
+                return
+
+        if self._drag_axis == "x":
+            dy = 0
+        elif self._drag_axis == "y":
+            dx = 0
+
+        proposed_pos = self._drag_initial_pos + QPointF(dx, dy)
+        
+        # Initial grid snapping
+        if self._snap_grid_x and self._snap_grid_y:
+            snap_x = round(proposed_pos.x() / self._snap_grid_x) * self._snap_grid_x
+            snap_y = round(proposed_pos.y() / self._snap_grid_y) * self._snap_grid_y
+            proposed_pos = QPointF(snap_x, snap_y)
+            
+        actual_delta = proposed_pos - self._drag_initial_pos
+
+        # 2. Continuous Sweep Collision & Perfect Edge Snapping
+        moving_group = getattr(self, '_moving_items', [self])
+        obstacles = getattr(self, '_cached_obstacles', [])
+
+        if self._drag_axis == "y":
+            for item in moving_group:
+                start_rect = item.rect().translated(item._drag_initial_pos)
+                start_test = start_rect.adjusted(0.1, 0, -0.1, 0)
+                for obs in obstacles:
+                    obs_rect = obs.rect().translated(obs.pos())
+                    obs_test = obs_rect.adjusted(0.1, 0, -0.1, 0)
+                    
+                    # Ignore if not in the same vertical lane
+                    if start_test.right() <= obs_test.left() or start_test.left() >= obs_test.right():
+                        continue
+                        
+                    if actual_delta.y() > 0: # Moving down
+                        if obs_rect.top() >= start_rect.bottom() - 0.1:
+                            dist = obs_rect.top() - start_rect.bottom()
+                            if dist < actual_delta.y():
+                                actual_delta.setY(dist)
+                    elif actual_delta.y() < 0: # Moving up
+                        if obs_rect.bottom() <= start_rect.top() + 0.1:
+                            dist = obs_rect.bottom() - start_rect.top()
+                            if dist > actual_delta.y():
+                                actual_delta.setY(dist)
+
+        elif self._drag_axis == "x":
+            for item in moving_group:
+                start_rect = item.rect().translated(item._drag_initial_pos)
+                start_test = start_rect.adjusted(0, 0.1, 0, -0.1)
+                for obs in obstacles:
+                    obs_rect = obs.rect().translated(obs.pos())
+                    obs_test = obs_rect.adjusted(0, 0.1, 0, -0.1)
+                    
+                    # Ignore if not in the same horizontal lane
+                    if start_test.bottom() <= obs_test.top() or start_test.top() >= obs_test.bottom():
+                        continue
+                        
+                    if actual_delta.x() > 0: # Moving right
+                        if obs_rect.left() >= start_rect.right() - 0.1:
+                            dist = obs_rect.left() - start_rect.right()
+                            if dist < actual_delta.x():
+                                actual_delta.setX(dist)
+                    elif actual_delta.x() < 0: # Moving left
+                        if obs_rect.right() <= start_rect.left() + 0.1:
+                            dist = obs_rect.right() - start_rect.left()
+                            if dist > actual_delta.x():
+                                actual_delta.setX(dist)
+
+        # 3. Apply uniform group movement
+        for item in moving_group:
+            new_pos = item._drag_initial_pos + actual_delta
+            item._propagating_move = True  # Flag to bypass redundant snapping in itemChange
+            item.setPos(new_pos)
+            item._propagating_move = False
 
     def mouseReleaseEvent(self, event):
-        if self._drag_active:
+        if getattr(self, '_drag_active', False):
             self._drag_active = False
             self.signals.drag_finished.emit()
-        self._propagating_move = False
+            
+        # Reset state parameters
+        self._drag_axis = None
+        self._is_directly_dragged = False
+        self._moving_items = []
+        self._cached_obstacles = []
         super().mouseReleaseEvent(event)
 
     # --------------------------------------------------
