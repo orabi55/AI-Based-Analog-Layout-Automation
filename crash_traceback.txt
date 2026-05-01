@@ -1,1 +1,11 @@
-
+Traceback (most recent call last):
+  File "C:\Users\youss\University\GP\Automation Phase\Code\AI-Based-Analog-Layout-Automation\symbolic_editor\editor_view.py", line 1837, in _on_selection_changed
+    self.clear_highlighted_net()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\youss\University\GP\Automation Phase\Code\AI-Based-Analog-Layout-Automation\symbolic_editor\editor_view.py", line 432, in clear_highlighted_net
+    group.clear_highlighted_net()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\youss\University\GP\Automation Phase\Code\AI-Based-Analog-Layout-Automation\symbolic_editor\hierarchy_group_item.py", line 115, in clear_highlighted_net
+    self.update()
+    ~~~~~~~~~~~^^
+RuntimeError: Internal C++ object (HierarchyGroupItem) already deleted.
