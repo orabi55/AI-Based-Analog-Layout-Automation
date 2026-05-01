@@ -36,17 +36,12 @@ def node_strategy_selector(state):
     user_message = state.get("user_message", "Select a strategy based on the analysis.")
     selected_model = state.get("selected_model", "Gemini")
 
-    chat_history = _update_and_save_chat_history(
-        chat_history=chat_history,
-        user_content="",
-        node_role="System",
-        node_content="Starting **Strategy Selector**..."
-    )
+    # Avoid injecting a redundant system message into the chat history.
 
     strategy_prompt = _build_llm_messages(
         strategy_selector.STRATEGY_SELECTOR_PROMPT,
-        chat_history,
-        f"User request: {state.get('user_message', '')}\n\n"
+        [],
+        f"User request: {user_message}\n\n"
         f"Analysis Result:\n{analysis_txt}\n\n"
         f"Layout Constraints:\n{constraint_text}\n\n",
     )

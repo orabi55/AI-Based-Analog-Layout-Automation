@@ -384,20 +384,12 @@ YOU MUST emit ONE [CMD] per matched block (not one per finger):
 # Agent creation helper
 # ---------------------------------------------------------------------------
 def create_placement_specialist_agent(middlewares: Optional[List[object]] = None) -> Dict[str, object]:
-  """Create placement specialist agent config with middleware stack.
-
-  Uses 'plain' framework (direct LLM invocation) because the ReAct framework
-  produced 0 CMD blocks — the agent was consuming tool calls but never emitting
-  the final [CMD] placement output. Plain mode gives full control to the LLM
-  to produce CMDs after receiving a comprehensive context with pre-computed
-  matching groups, row assignments, and skill knowledge.
-  """
-  return {
-    "name": "placement_specialist",
-    "framework": "plain",          # ReAct was broken — produced 0 CMDs
-    "system_prompt": PLACEMENT_SPECIALIST_PROMPT,
-    "middlewares": list(middlewares or []),
-  }
+    """Create placement specialist agent config with middleware stack."""
+    return {
+        "name": "placement_specialist",
+        "system_prompt": PLACEMENT_SPECIALIST_PROMPT,
+        "middlewares": list(middlewares or []),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -562,6 +554,141 @@ def _compute_matching_and_rows(nodes, edges, terminal_nets, no_abutment=False):
         except Exception:
             pass
         return [], {}, "", "", "", {}
+
+
+def build_placement_context_chatbot(
+    nodes,
+    constraints_text="",
+    terminal_nets=None,
+    edges=None,
+    spice_nets=None,
+    no_abutment=False,
+):
+    """Build a placement context for chat mode without precomputing matching/rows.
+
+    Uses the current node geometry to provide row Y references and avoids
+    calling the matching/row assignment pipeline.
+    """
+    lines = ["=" * 60, "CURRENT LAYOUT INVENTORY", "=" * 60]
+
+    active_fingers = [n for n in nodes if not _is_dummy_node(n)]
+    dummy_ids = [n["id"] for n in nodes if _is_dummy_node(n)]
+
+    group_nodes = []
+    finger_map = {}
+    finger_group_str = ""
+    try:
+        from ai_agent.placement.finger_grouper import (
+            aggregate_to_logical_devices,
+            build_finger_group_section,
+        )
+
+        if edges is not None:
+            grouped = aggregate_to_logical_devices(active_fingers, edges or [])
+            if isinstance(grouped, tuple):
+                group_nodes, _, finger_map = grouped
+            else:
+                group_nodes = grouped
+        else:
+            group_nodes = aggregate_to_logical_devices(active_fingers)
+
+        if finger_map:
+            finger_group_str = build_finger_group_section(finger_map, group_nodes)
+    except Exception:
+        group_nodes = []
+        finger_map = {}
+
+    lines.append(f"\nTOTAL FINGER INSTANCE COUNT : {len(active_fingers)}")
+    lines.append(f"TOTAL LOGICAL DEVICE COUNT  : {len(group_nodes)}")
+
+    logical_ids = sorted([g["id"] for g in group_nodes])
+    lines.append(f"LOGICAL TRANSISTORS ({len(logical_ids)}): " + ", ".join(logical_ids))
+    lines.append(
+        f"FLUID DUMMIES ({len(dummy_ids)}): "
+        + (", ".join(dummy_ids) if dummy_ids else "none")
+    )
+    lines.append("")
+
+    lines.append("DEVICE -> FINGER INSTANCES MAP:")
+    sorted_groups = sorted(group_nodes, key=lambda g: (g.get("type", ""), g["id"]))
+    for gn in sorted_groups:
+        gid = gn["id"]
+        fingers = finger_map.get(gid, [])
+        f_ids = [f.get("id", "?") for f in fingers]
+        lines.append(
+            f"  {gid:<14} fingers={len(f_ids):<2} -> " + ", ".join(f_ids)
+        )
+    lines.append("")
+
+    if finger_group_str:
+        lines.append(finger_group_str)
+        lines.append("")
+
+    # Use existing geometry for row Y references
+    pmos_ys = sorted(set(
+        round(n.get("geometry", {}).get("y", 0.0), 6) for n in nodes
+        if str(n.get("type", "")).lower().startswith("p")
+    ))
+    nmos_ys = sorted(set(
+        round(n.get("geometry", {}).get("y", 0.0), 6) for n in nodes
+        if str(n.get("type", "")).lower().startswith("n")
+    ))
+    lines.append("ROW Y-VALUE REFERENCE (copy these exactly into move CMDs):")
+    for y in pmos_ys:
+        row_nodes = [n["id"] for n in nodes
+                     if str(n.get("type", "")).lower().startswith("p")
+                     and abs(n.get("geometry", {}).get("y", 0.0) - y) < 1e-4]
+        lines.append(
+            f"  PMOS row  y = {y:.6f}   (fingers: {', '.join(sorted(row_nodes)[:10])}"
+            f"{'...' if len(row_nodes)>10 else ''})"
+        )
+    for y in nmos_ys:
+        row_nodes = [n["id"] for n in nodes
+                     if str(n.get("type", "")).lower().startswith("n")
+                     and abs(n.get("geometry", {}).get("y", 0.0) - y) < 1e-4]
+        lines.append(
+            f"  NMOS row  y = {y:.6f}   (fingers: {', '.join(sorted(row_nodes)[:10])}"
+            f"{'...' if len(row_nodes)>10 else ''})"
+        )
+    lines.append("")
+
+    if constraints_text:
+        lines.append("=" * 60)
+        lines.append("TOPOLOGY CONSTRAINTS (from Topology Analyst - Stage 1)")
+        lines.append("=" * 60)
+        lines.append(constraints_text)
+        lines.append("")
+
+    lines.append("=" * 60)
+    lines.append("KEY ANALOG LAYOUT RULES (apply strictly)")
+    lines.append("=" * 60)
+    lines.append("""\
+1. ROW Y VALUES: Use ONLY the values from ROW Y-VALUE REFERENCE above.
+   Never put all PMOS in one row and all NMOS in one row when multiple rows exist.
+
+2. DIFF PAIR (ABBA): Place M1 and M2 fingers interleaved: M1a M2a M2b M1b.
+   Both devices must share the same Y row and be horizontally adjacent.
+
+3. CURRENT MIRROR: Mref and Mcopy must be adjacent in the same row.
+   If nf differs use common-centroid: Mref Mcopy Mcopy Mref.
+
+4. MATCHED BLOCKS: Any block listed in FIXED MATCHED BLOCKS gets ONE [CMD].
+   Use the block ID as the device name and assign only the origin X.
+   Do NOT emit individual finger CMDs for matched blocks.
+
+5. NMOS/PMOS SEPARATION: All NMOS Y values must be strictly less than all PMOS Y values.
+
+6. NO OVERLAP: Each (x, y) coordinate must be unique. x = slot * 0.294.
+
+7. DEVICE CONSERVATION: Every finger instance in IMMUTABLE TRANSISTORS must appear
+   in exactly one [CMD]. No additions, no deletions.
+
+8. SQUARE ASPECT RATIO: Aim for width ~= height. If >3 NMOS rows are assigned,
+   keep each row width <= 8um by splitting devices across rows as shown above.
+""")
+    lines.append("")
+
+    return "\n".join(lines)
 
 
 def build_placement_context(

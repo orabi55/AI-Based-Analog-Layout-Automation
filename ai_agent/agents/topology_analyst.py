@@ -254,6 +254,14 @@ def analyze_json(nodes: List[dict], terminal_nets: dict) -> str:
             value = safe_terminal_nets.get(key)
             if isinstance(value, dict):
                 return value
+        # Fallback: match on base prefix (e.g., MM5 -> MM5_m1/MM5_m2)
+        if dev_key:
+            base = dev_key.split("<", 1)[0].split("_", 1)[0]
+            for key, value in safe_terminal_nets.items():
+                if not isinstance(value, dict):
+                    continue
+                if str(key).startswith(base):
+                    return value
         return {}
 
     def _resolve_node_nets(node: dict) -> dict:
@@ -292,6 +300,32 @@ def analyze_json(nodes: List[dict], terminal_nets: dict) -> str:
                 resolved[pin] = "|".join(sorted(values))
         return resolved
 
+    def _extract_xy(node: dict) -> tuple:
+        geo = node.get("geometry", {}) if isinstance(node.get("geometry", {}), dict) else {}
+        x_val = geo.get("x")
+        y_val = geo.get("y")
+
+        if x_val is None:
+            x_val = node.get("x")
+        if y_val is None:
+            y_val = node.get("y")
+
+        # Fallback for logical nodes without geometry: use type defaults.
+        if y_val is None:
+            dev_type = str(node.get("type", "")).lower()
+            try:
+                from config.design_rules import PMOS_Y, NMOS_Y
+                if dev_type.startswith("p"):
+                    y_val = PMOS_Y
+                elif dev_type.startswith("n"):
+                    y_val = NMOS_Y
+            except Exception:
+                y_val = 0.0
+        if x_val is None:
+            x_val = 0.0
+
+        return x_val, y_val
+
     lines: List[str] = []
     lines.append("=== LAYOUT JSON SUMMARY ===")
     lines.append(
@@ -317,9 +351,7 @@ def analyze_json(nodes: List[dict], terminal_nets: dict) -> str:
         dev_type = str(node.get("type", "unknown"))
         geo = node.get("geometry", {}) if isinstance(node.get("geometry", {}), dict) else {}
         elec = node.get("electrical", {}) if isinstance(node.get("electrical", {}), dict) else {}
-
-        x_val = geo.get("x", "?")
-        y_val = geo.get("y", "?")
+        x_val, y_val = _extract_xy(node)
         try:
             x_text = f"{float(x_val):.3f}"
         except (TypeError, ValueError):

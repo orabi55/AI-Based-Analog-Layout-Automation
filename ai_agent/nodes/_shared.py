@@ -26,6 +26,7 @@ import re
 import time
 import logging
 from pathlib import Path
+from ai_agent.knowledge.skill_injector import SkillMiddleware
 
 from ai_agent.graph.state import LayoutState
 from ai_agent.llm.factory import get_langchain_llm
@@ -260,11 +261,13 @@ def _invoke_react_agent_with_retry(
     max_retries = 1 if task_weight == "light" else 2
     for attempt in range(max_retries + 1):
         try:
-            from langgraph.prebuilt import create_react_agent
+            from langchain.agents import create_agent
             llm = get_langchain_llm(selected_model, task_weight=task_weight)
-            react_agent = create_react_agent(
+            react_agent = create_agent(
                 model=llm,
                 tools=list(tools or []),
+                system_prompt=_strip_thinking_text(str(system_prompt)),
+                middleware=[SkillMiddleware()],                                   
             )
             history_messages = _normalize_chat_history(chat_history)[-8:]
             input_messages = [
@@ -277,7 +280,17 @@ def _invoke_react_agent_with_retry(
             input_messages.append(
                 {"role": "user", "content": _strip_thinking_text(str(user_prompt).strip())}
             )
-            return react_agent.invoke({"messages": input_messages})
+            try:
+                prompt_text = json.dumps(input_messages, indent=2, ensure_ascii=False, default=str)
+            except Exception:
+                prompt_text = str(input_messages)
+            vprint(f"[{stage_tag}] ReAct Prompt (attempt {attempt + 1}):\n{prompt_text}")
+
+            result = react_agent.invoke({"messages": input_messages})
+            response_content = _extract_agent_output_content(result)
+            response_text = _content_to_text(response_content) if response_content is not None else str(result)
+            vprint(f"[{stage_tag}] ReAct Response (attempt {attempt + 1}):\n{response_text}")
+            return result
         except Exception as exc:
             msg = str(exc).lower()
             is_timeout = "timed out" in msg or "timeout" in msg or "read operation timed out" in msg
