@@ -424,5 +424,129 @@ def analyze_json(nodes: List[dict], terminal_nets: dict) -> str:
     if not any_group:
         lines.append("- No shared gate/drain/source groups found")
 
+    # ── Append machine-readable [SYMMETRY] block ─────────────────────────
+    sym_block = extract_symmetry_block(safe_nodes, safe_terminal_nets)
+    if sym_block:
+        lines.append("")
+        lines.append(sym_block)
+
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Pure-Python symmetry detector — produces [SYMMETRY] machine block
+# ---------------------------------------------------------------------------
+_POWER_NETS = {"VDD", "VSS", "GND", "VCC", "AVDD", "AVSS", "VDDA", "VSSA"}
+
+
+def extract_symmetry_block(nodes: List[dict], terminal_nets: dict) -> str:
+    """
+    Detect diff pairs, load mirrors, and tail current sources from the netlist
+    and return a machine-readable [SYMMETRY] block string.
+
+    Detection rules:
+    - Diff pair (rank 1): two same-type devices sharing a source net NOT in
+      _POWER_NETS.
+    - Load mirror (rank 2): two same-type devices sharing a gate net where
+      that gate net is NOT a power net AND not the same type as the diff pair
+      (or is a different polarity row).
+    - Axis device: a device whose drain net equals the diff pair's shared
+      source net (i.e., the tail current source).
+
+    Returns:
+        A [SYMMETRY]...[/SYMMETRY] block string, or "" if no symmetry found.
+    """
+    if not nodes or not terminal_nets:
+        return ""
+
+    safe_tn = terminal_nets if isinstance(terminal_nets, dict) else {}
+
+    def _nets(dev_id: str) -> dict:
+        for key in (dev_id, dev_id.upper(), dev_id.lower()):
+            v = safe_tn.get(key)
+            if isinstance(v, dict):
+                return v
+        return {}
+
+    def _net(dev_id: str, pin: str) -> str:
+        return str(_nets(dev_id).get(pin, "")).upper().strip()
+
+    # Build type-grouped maps
+    by_type: Dict[str, List[str]] = {}  # type -> [dev_id, ...]
+    for n in nodes:
+        if n.get("is_dummy"):
+            continue
+        dev_id = str(n.get("id", ""))
+        dtype = str(n.get("type", "")).lower()
+        by_type.setdefault(dtype, []).append(dev_id)
+
+    # ── Step 1: Find diff pair (shared source, non-power) ──
+    diff_pairs: List[Tuple[str, str]] = []
+    diff_source_nets: List[str] = []
+
+    for dtype, devs in by_type.items():
+        # Build source-net groups
+        src_map: Dict[str, List[str]] = {}
+        for did in devs:
+            snet = _net(did, "S")
+            if snet and snet not in _POWER_NETS:
+                src_map.setdefault(snet, []).append(did)
+        for snet, members in src_map.items():
+            if len(members) == 2:
+                diff_pairs.append((members[0], members[1]))
+                diff_source_nets.append(snet)
+            elif len(members) > 2:
+                # Larger group: take the first two as the primary pair
+                diff_pairs.append((members[0], members[1]))
+                diff_source_nets.append(snet)
+
+    if not diff_pairs:
+        return ""  # No symmetry structure detected
+
+    # ── Step 2: Find load mirrors (shared gate, non-power, different type) ──
+    diff_pair_ids = {did for pair in diff_pairs for did in pair}
+    diff_type = ""
+    for n in nodes:
+        if str(n.get("id", "")) in diff_pair_ids:
+            diff_type = str(n.get("type", "")).lower()
+            break
+
+    load_pairs: List[Tuple[str, str]] = []
+    for dtype, devs in by_type.items():
+        if dtype == diff_type:
+            continue  # Skip same type as diff pair for loads
+        gate_map: Dict[str, List[str]] = {}
+        for did in devs:
+            gnet = _net(did, "G")
+            if gnet and gnet not in _POWER_NETS:
+                gate_map.setdefault(gnet, []).append(did)
+        for gnet, members in gate_map.items():
+            if len(members) == 2:
+                load_pairs.append((members[0], members[1]))
+            elif len(members) > 2:
+                load_pairs.append((members[0], members[1]))
+
+    # ── Step 3: Find tail/axis device (drain == diff-pair shared source) ──
+    axis_devices: List[str] = []
+    for snet in diff_source_nets:
+        for n in nodes:
+            if n.get("is_dummy"):
+                continue
+            did = str(n.get("id", ""))
+            if did in diff_pair_ids:
+                continue
+            if _net(did, "D") == snet:
+                axis_devices.append(did)
+
+    # ── Step 4: Build block string ──
+    block_lines = ["[SYMMETRY]", "mode=two_half axis_row=both"]
+    for i, (left, right) in enumerate(diff_pairs, start=1):
+        block_lines.append(f"pair={left},{right} rank={i}")
+    for i, (left, right) in enumerate(load_pairs, start=len(diff_pairs) + 1):
+        block_lines.append(f"pair={left},{right} rank={i}")
+    for ax in axis_devices:
+        block_lines.append(f"axis={ax}")
+    block_lines.append("[/SYMMETRY]")
+
+    return "\n".join(block_lines)
 

@@ -63,9 +63,9 @@ ANALOG_KB = """\
 - Abutted devices MUST be in the same row with the same orientation.
 
 ## MATCHING TECHNIQUES (for precision analog)
-- INTERDIGITATION (ABBA): For differential pairs and current mirrors.
-  Place fingers of matched transistors in alternating pattern: A1 B1 B2 A2 A3 B3 B4 A4
-  This cancels linear process gradients and improves matching.
+- INTERDIGITATION (ABAB): For differential pairs.
+  Place fingers of matched transistors in strict alternating pattern: A1 B1 A2 B2 A3 B3 A4 B4
+  This minimises parasitic capacitance differences and improves matching speed.
 - COMMON-CENTROID: For 4+ matched devices. Arrange symmetrically around a center.
   Pattern for ABCD: D C B A A B C D (mirror around center axis).
   Cancels both linear and quadratic process gradients.
@@ -74,10 +74,10 @@ ANALOG_KB = """\
 
 ## TOPOLOGY-SPECIFIC RULES
 - DIFFERENTIAL PAIR: Two devices with complementary gate inputs (VINP/VINN)
-  -> MUST be SYMMETRIC about centre. Use ABBA interdigitation for best matching.
+  -> MUST be SYMMETRIC about centre. Use ABAB interdigitation for best matching.
   -> Place tail current source ADJACENT to the diff pair.
 - CURRENT MIRROR: Diode-connected device + copies sharing that gate net
-  -> MUST be ADJACENT with ABBA interdigitation. Same orientation.
+  -> MUST be ADJACENT with COMMON-CENTROID arrangement. Same orientation.
 - STRONG-ARM LATCH COMPARATOR:
   -> Cross-coupled latch pairs at CENTER of each row.
   -> Diff pair flanking the latch. CLK switches at outer edges.

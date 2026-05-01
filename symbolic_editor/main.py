@@ -84,6 +84,8 @@ from icons import (
     icon_abutment,
     icon_ai_placement,
     icon_colorize,
+    icon_schematic,
+    icon_route,
 )
 from widgets.welcome_screen import WelcomeScreen
 
@@ -503,6 +505,7 @@ class MainWindow(QMainWindow):
         view_menu.addAction("Reset Zoom", lambda: self._fwd_editor("zoom_reset"))
         view_menu.addSeparator()
         view_menu.addAction("Toggle Device Tree", lambda: self._fwd("_toggle_device_tree"))
+        view_menu.addAction("Toggle Schematic Assistant", lambda: self._fwd("_toggle_schematic_panel"))
         view_menu.addAction("Toggle Chat Panel", lambda: self._fwd("_toggle_chat_panel"))
         view_menu.addAction("Toggle KLayout Preview", lambda: self._fwd("_toggle_klayout_panel"))
         view_menu.addSeparator()
@@ -629,6 +632,12 @@ class MainWindow(QMainWindow):
         tb.addAction(self._tb_act_redo)
         tb.addSeparator()
 
+        self._tb_act_schematic = QAction(icon_schematic(), "Toggle Schematic Assistant", self)
+        self._tb_act_schematic.setToolTip("Toggle Schematic Assistant")
+        self._tb_act_schematic.triggered.connect(lambda: self._fwd("_toggle_schematic_panel"))
+        tb.addAction(self._tb_act_schematic)
+        tb.addSeparator()
+
         self._tb_act_fit = QAction(icon_fit_view(), "Fit View", self)
         self._tb_act_fit.setToolTip("Fit to view (F)")
         self._tb_act_fit.triggered.connect(lambda: self._fwd_editor("fit_to_view"))
@@ -671,6 +680,13 @@ class MainWindow(QMainWindow):
         self._act_add_dummy.setToolTip("Toggle dummy placement mode (D)")
         self._act_add_dummy.toggled.connect(self._on_toggle_dummy)
         tb.addAction(self._act_add_dummy)
+        tb.addSeparator()
+
+        self._tb_act_route = QAction(icon_route(), "Toggle Routing Channels", self)
+        self._tb_act_route.setCheckable(True)
+        self._tb_act_route.setToolTip("Insert/Remove Routing Channels")
+        self._tb_act_route.triggered.connect(lambda checked: self._fwd("_on_toggle_route", checked))
+        tb.addAction(self._tb_act_route)
 
         self._act_abutment = QAction(icon_abutment(), "Abutment Analysis", self)
         self._act_abutment.setCheckable(True)
@@ -694,7 +710,16 @@ class MainWindow(QMainWindow):
         self._tb_act_ai.setToolTip("Run AI placement (Ctrl+P)")
         self._tb_act_ai.triggered.connect(lambda: self._fwd("do_ai_placement"))
         tb.addAction(self._tb_act_ai)
+
+        self._tb_act_compare = QAction("↔ Before/After", self)
+        self._tb_act_compare.setToolTip(
+            "Toggle between layout before and after symmetry enhancement"
+        )
+        self._tb_act_compare.setEnabled(False)
+        self._tb_act_compare.triggered.connect(lambda: self._fwd("_toggle_before_after"))
+        tb.addAction(self._tb_act_compare)
         tb.addSeparator()
+
 
         self._ignore_grid_spin = False
         self._tb_act_select_all = QAction(icon_select_all(), "Select All", self)

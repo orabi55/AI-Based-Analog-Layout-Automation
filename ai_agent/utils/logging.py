@@ -205,43 +205,160 @@ def pipeline_start(name: str, total_stages: int, config: dict | None = None) -> 
     _safe_print()
 
 
-def pipeline_end(summary: dict | None = None) -> None:
-    """Print a placement summary block with key metrics."""
+def pipeline_end(summary: dict | None = None) -> str:
+    """Print a placement summary block with key metrics and return the formatted string."""
     global _pipeline_start
     elapsed = time.time() - _pipeline_start if _pipeline_start else 0
     _pipeline_start = None
 
     s = summary or {}
-    width = s.get("width", "?")
-    height = s.get("height", "?")
-    aspect = s.get("aspect", "?")
-    area = s.get("area", "?")
-    utilization = s.get("utilization", "?")
-    hpwl = s.get("hpwl", "--")
-    drc_status = s.get("drc_status", "?")
+    out_lines = []
+    def _print(line=""):
+        out_lines.append(str(line))
+        _safe_print(line)
+    width       = s.get("width",        "?")
+    height      = s.get("height",       "?")
+    aspect      = s.get("aspect",       "?")
+    area        = s.get("area",         "?")
+    utilization = s.get("utilization",  "?")
+    hpwl        = s.get("hpwl",         "--")
+    drc_status  = s.get("drc_status",   "?")
     pmos_nmos_sep = s.get("pmos_nmos_sep", "?")
-    n_placed = s.get("n_placed", "?")
+    n_placed    = s.get("n_placed",     "?")
+    quality     = s.get("quality",      {})   # placement quality report dict
 
     mins = int(elapsed // 60)
     secs = int(elapsed % 60)
 
     bar = "=" * 62
-    _safe_print()
-    _safe_print(bar)
-    _safe_print("  PLACEMENT SUMMARY")
-    _safe_print(bar)
+    _print()
+    _print(bar)
+    _print("  PLACEMENT SUMMARY")
+    _print(bar)
     if width != "?" and height != "?":
-        _safe_print(f"  Layout Size  : {width}um x {height}um  (aspect {aspect})")
-        _safe_print(f"  Total Area   : {area}")
-        _safe_print(f"  Utilization  : {utilization}")
+        _print(f"  Layout Size  : {width}um x {height}um  (aspect {aspect})")
+        _print(f"  Total Area   : {area}")
+        _print(f"  Utilization  : {utilization}")
     if hpwl != "--":
-        _safe_print(f"  HPWL         : {hpwl}um")
-    _safe_print(f"  DRC Status   : {drc_status}")
-    _safe_print(f"  PMOS/NMOS    : {pmos_nmos_sep}")
-    _safe_print(f"  Devices      : {n_placed} placed")
-    _safe_print(f"  Time Total   : {mins}m {secs}s")
-    _safe_print(bar)
-    _safe_print()
+        _print(f"  HPWL         : {hpwl}um")
+    _print(f"  DRC Status   : {drc_status}")
+    _print(f"  PMOS/NMOS    : {pmos_nmos_sep}")
+    _print(f"  Devices      : {n_placed} placed")
+    _print(f"  Time Total   : {mins}m {secs}s")
+    _print(bar)
+
+    # -- Placement Quality Benchmark (printed after utilization) -------------
+    if quality and isinstance(quality, dict):
+        composite   = quality.get("composite_score",       0.0)
+        y_score     = quality.get("layout_y_score",        0.0)
+        x_score     = quality.get("matching_x_score")          # may be None (N/A)
+
+        id_score    = quality.get("interdigitation_score")   # may be None
+        cc_score    = quality.get("centroid_score")          # may be None
+        drc_q_score = quality.get("drc_score",             0.0)
+        n_pairs     = quality.get("matched_pairs_count",   0)
+
+        def _bar(score: float, width: int = 20) -> str:
+            filled = int(round(score * width))
+            return "#" * filled + "-" * (width - filled)
+
+        def _grade(score: float) -> str:
+            if score >= 0.95: return "A+"
+            if score >= 0.90: return "A"
+            if score >= 0.80: return "B"
+            if score >= 0.70: return "C"
+            if score >= 0.50: return "D"
+            return "F"
+
+        def _row(label, val):
+            if val is None:
+                return f"  {label:<24}  {'N/A':>6}   {'(not applicable)':<22}"
+            return (
+                f"  {label:<24}  {val:>6.1%}   {_bar(val):<22}  {_grade(val)}"
+            )
+
+        qbar = "=" * 64
+        _print()
+        _print(qbar)
+        _print("  MATCHING & SYMMETRY QUALITY BENCHMARK")
+        _print(qbar)
+
+        # -- Print placement goals that were active for this run ----------------
+        goals = s.get("placement_goals") or {}
+        if goals:
+            mp = goals.get("matching_priority",  "Medium")
+            sp = goals.get("symmetry_priority",  "Medium")
+            ap = goals.get("area_priority",      "Medium")
+            ma = goals.get("max_area_um2")
+            _print(f"  Goals applied : Matching={mp}  Symmetry={sp}  Area={ap}"
+                        + (f"  MaxArea={ma}um2" if ma else ""))
+
+        _print(f"  Matched pairs : {n_pairs}")
+        _print(f"  {'Metric':<24}  {'Score':>6}   {'Progress':<22}  Grade")
+        _print(f"  {'-'*24}  {'-'*6}   {'-'*22}  -----")
+        _print(_row("Layout Y Symmetry",   y_score))
+        _print(_row("X Mirror Symmetry",   x_score))
+        _print(_row("Interdigitation",      id_score))
+        _print(_row("Common Centroid (2D)", cc_score))
+        _print(_row("DRC Clean",           drc_q_score))
+        _print(f"  {'-'*24}  {'-'*6}   {'-'*22}  -----")
+        _print(
+            f"  {'COMPOSITE':<24}  {composite:>6.1%}   {_bar(composite):<22}  {_grade(composite)}"
+        )
+        _print(qbar)
+
+        # -- Explanatory notes based on active goals ----------------------------
+        notes = []
+        if goals:
+            mp = goals.get("matching_priority", "Medium")
+            sp = goals.get("symmetry_priority", "Medium")
+
+            if sp == "Low" and (x_score or 0.0) >= 0.9:
+                notes.append(
+                    "NOTE: Symmetry=Low skipped the global mirror enforcer, but "
+                    "ABBA interdigitation is inherently palindromic -- X Mirror "
+                    "Symmetry will still score high. This is expected and correct."
+                )
+            if sp == "Low":
+                notes.append(
+                    "NOTE: Symmetry enforcer was disabled per user goal. "
+                    "Global two-half axis mirroring was NOT applied."
+                )
+            if mp == "Low":
+                notes.append(
+                    "NOTE: Matching=Low skipped interdigitation entirely. "
+                    "X Mirror / Interdigitation scores reflect natural placement only."
+                )
+            if mp == "Medium":
+                notes.append(
+                    "NOTE: Matching=Medium applied ABBA only for diff pairs and "
+                    "current mirrors. Cross-coupled and load pairs were placed "
+                    "individually without interdigitation."
+                )
+            if mp == "High":
+                notes.append(
+                    "NOTE: Matching=High applied ABBA/common-centroid for ALL "
+                    "detected matched pairs (diff pairs, mirrors, cross-coupled, loads)."
+                )
+
+        for note in notes:
+            # Word-wrap at 62 chars
+            words = note.split()
+            line = "  "
+            for w in words:
+                if len(line) + len(w) + 1 > 64:
+                    _print(line)
+                    line = "  " + w + " "
+                else:
+                    line += w + " "
+            if line.strip():
+                _print(line)
+        if notes:
+            _print()
+
+    _print()
+    return "\n".join(out_lines)
+
 
 
 def stage_start(stage_num: int, name: str) -> float:

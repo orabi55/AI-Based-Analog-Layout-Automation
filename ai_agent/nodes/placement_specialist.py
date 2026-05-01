@@ -60,6 +60,7 @@ from ai_agent.utils.logging import (
 )
 from ai_agent.tools.inventory import validate_device_count
 from ai_agent.placement.symmetry import enforce_reflection_symmetry
+from ai_agent.placement.quality_metrics import score_placement
 
 # ── Module-level singletons ─────────────────────────────────────────────────
 #
@@ -72,7 +73,6 @@ _PLACEMENT_SKILL_MIDDLEWARE = SkillMiddleware()
 _PLACEMENT_SPECIALIST_AGENT = create_placement_specialist_agent(
     middlewares=[_PLACEMENT_SKILL_MIDDLEWARE]
 )
-
 # Build augmented prompt and collect tool dicts from all middlewares.
 _PLACEMENT_SYSTEM_PROMPT: str = str(
     _PLACEMENT_SPECIALIST_AGENT.get("system_prompt", PLACEMENT_SPECIALIST_PROMPT)
@@ -82,13 +82,180 @@ _PLACEMENT_TOOLS: list = []
 for _mw in _PLACEMENT_SPECIALIST_AGENT.get("middlewares", []):
     if isinstance(_mw, SkillMiddleware):
         _PLACEMENT_SYSTEM_PROMPT = _mw.augment_system_prompt(_PLACEMENT_SYSTEM_PROMPT)
-        _PLACEMENT_TOOLS.extend(_mw.tool_dicts)  # plain dicts — ReAct-compatible
+        _PLACEMENT_TOOLS.extend(_mw.tool_dicts)  # plain dicts - ReAct-compatible
 
 log_detail(
     f"[placement_specialist] SkillMiddleware: "
     f"{len(_PLACEMENT_SKILL_MIDDLEWARE.registry)} skill(s) registered, "
     f"{len(_PLACEMENT_TOOLS)} tool(s) available"
 )
+
+
+# Priority level -> numeric weight (mirrors placement_goals_widget.PRIORITY_WEIGHTS)
+_PRIORITY_NUM = {"Low": 1, "Medium": 5, "High": 10}
+
+_ROW_HEIGHT = 0.668   # um per row
+
+
+def _snap_orphan_dummies(nodes: list) -> list:
+    """
+    Post-placement safety pass: detects dummy devices that ended up at Y
+    coordinates far from the rest of the layout (the "flying transistor" bug
+    that occurs when matching=Low removes ABBA blocks that used to anchor them).
+
+    For each orphan dummy:
+      - Collect all valid Y values used by active (non-dummy) devices of the
+        same PMOS/NMOS type.
+      - Snap the dummy's Y to the closest valid Y.
+      - Append it at the rightmost X of that row (after the last real device).
+
+    A device is considered a "dummy" if its id starts with D, FILLER_DUMMY_,
+    EDGE_DUMMY, or DUMMY_matrix_.
+    """
+    import statistics
+
+    def _is_dummy(node):
+        nid = str(node.get("id", ""))
+        return (
+            node.get("is_dummy")
+            or nid.startswith(("FILLER_DUMMY_", "DUMMY_matrix_", "EDGE_DUMMY"))
+            or (len(nid) >= 2 and nid[0] == "D" and nid[1:].isdigit())
+        )
+
+    def _dev_type(node):
+        t = str(node.get("type", "")).lower()
+        return "pmos" if "pmos" in t or "p_mos" in t else "nmos"
+
+    # Gather valid Y values per type from non-dummy devices
+    active_y: dict[str, list[float]] = {"pmos": [], "nmos": []}
+    active_x_by_y: dict[tuple, list[float]] = {}   # (type, y_rounded) -> [x values]
+
+    for n in nodes:
+        if _is_dummy(n):
+            continue
+        g = n.get("geometry", {})
+        x = g.get("x", 0.0)
+        y = g.get("y", 0.0)
+        dt = _dev_type(n)
+        active_y[dt].append(y)
+        key = (dt, round(y, 3))
+        active_x_by_y.setdefault(key, []).append(x)
+
+    if not any(active_y.values()):
+        return nodes   # nothing to snap to
+
+    # Compute median Y per type and the set of "valid" row Ys
+    valid_ys: dict[str, list[float]] = {}
+    for dt, ys in active_y.items():
+        if ys:
+            # Cluster: round to nearest _ROW_HEIGHT grid
+            rounded = sorted({round(y / _ROW_HEIGHT) * _ROW_HEIGHT for y in ys})
+            valid_ys[dt] = rounded
+
+    # Identify orphan threshold: a dummy is orphan if its Y is > 1.5 row-heights
+    # away from ALL valid rows of its type
+    result = []
+    for n in nodes:
+        if not _is_dummy(n):
+            result.append(n)
+            continue
+
+        g = n.get("geometry", {})
+        dx = g.get("x", 0.0)
+        dy = g.get("y", 0.0)
+        w  = g.get("width", 0.07)
+        dt = _dev_type(n)
+
+        rows = valid_ys.get(dt, [])
+        if not rows:
+            result.append(n)
+            continue
+
+        # Find nearest valid row Y
+        nearest_y = min(rows, key=lambda ry: abs(ry - dy))
+        gap = abs(nearest_y - dy)
+
+        if gap > _ROW_HEIGHT * 1.5:
+            # Orphan detected - snap
+            key = (dt, round(nearest_y, 3))
+            taken_xs = active_x_by_y.get(key, [])
+            new_x = (max(taken_xs) + w + 0.01) if taken_xs else 0.0
+            # Update node in place (shallow copy geometry)
+            n = dict(n)
+            n["geometry"] = dict(g)
+            n["geometry"]["x"] = round(new_x, 4)
+            n["geometry"]["y"] = round(nearest_y, 4)
+            # Register in active_x_by_y so multiple orphans don't overlap
+            active_x_by_y.setdefault(key, []).append(new_x)
+            log_detail(
+                f"[snap_orphan] {n['id']}: y={dy:.3f} -> {nearest_y:.3f} (gap={gap:.3f}um)"
+            )
+
+        result.append(n)
+    return result
+
+
+def _goals_to_prompt(goals: dict) -> str:
+    """
+    Convert a placement_goals dict (from the UI) into a plain-English
+    priority block prepended to the LLM context.
+
+    Crucially, this section OVERRIDES conflicting rules in the system prompt
+    so all pipeline stages (deterministic + LLM) stay in sync.
+
+    Returns an empty string when no goals are set (panel was closed).
+    """
+    if not goals:
+        return ""
+
+    area_p   = goals.get("area_priority",    "Medium")
+    match_p  = goals.get("matching_priority", "Medium")
+    sym_p    = goals.get("symmetry_priority", "High")
+    max_area = goals.get("max_area_um2")
+
+    # Area instructions
+    _AREA_INSTR = {
+        "Low":    "Area is NOT a priority - rows may grow; focus on matching quality.",
+        "Medium": "Aim for a compact layout; avoid unnecessary empty space.",
+        "High":   "MINIMISE area: pack devices into the FEWEST possible rows. "
+                  "Each row should be as full as DRC rules allow before starting a new row.",
+    }
+    # Matching instructions (also overrides system-prompt ABBA rules)
+    _MATCH_INSTR = {
+        "Low":    "Apply ABBA interdigitation for differential pairs and current mirrors only. "
+                  "Cross-coupled and load pairs are placed individually without interdigitation.",
+        "Medium": "Apply ABBA for differential pairs, current mirrors, cross-coupled pairs, "
+                  "and load pairs (all standard matching tiers).",
+        "High":   "MANDATORY: apply ABBA or common-centroid for EVERY transistor pair the "
+                  "engine can match - including any additional pairs not in the standard tiers. "
+                  "No matchable pair should be left uninterdigitated.",
+    }
+    # Symmetry instructions
+    _SYM_INSTR = {
+        "Low":    "Global mirror symmetry is DISABLED for this run. "
+                  "Do NOT enforce a shared vertical axis for left/right halves. "
+                  "This OVERRIDES the TWO-HALF symmetry rules in the system prompt. "
+                  "Place devices for best area packing without mirroring constraints.",
+        "Medium": "Apply reflection symmetry for matched pairs where it does not cost area.",
+        "High":   "MANDATORY: every matched group must be placed mirror-symmetrically "
+                  "about the layout centre line. Sacrificing area for symmetry is acceptable.",
+    }
+
+    lines = [
+        "=" * 62,
+        "  PLACEMENT GOALS  (user-set - these OVERRIDE all system-prompt rules below)",
+        "=" * 62,
+        f"  Area priority     : {area_p:6s}  -> {_AREA_INSTR[area_p]}",
+        f"  Matching priority : {match_p:6s}  -> {_MATCH_INSTR[match_p]}",
+        f"  Symmetry priority : {sym_p:6s}  -> {_SYM_INSTR[sym_p]}",
+    ]
+    if max_area is not None:
+        lines.append(
+            f"  Max area          : {max_area} um2  "
+            f"-> The total bounding-box area MUST NOT exceed this value."
+        )
+    lines += ["=" * 62, ""]
+    return "\n".join(lines) + "\n"
 
 
 # ── Shared helper ───────────────────────────────────────────────────────────
@@ -137,9 +304,170 @@ def _sync_group_geometry_from_members(group_nodes, finger_map):
             group_geo["y"] = Counter([round(v, 6) for v in ys]).most_common(1)[0][0]
         if orientation:
             group_geo["orientation"] = orientation
+# Priority level -> numeric weight (mirrors placement_goals_widget.PRIORITY_WEIGHTS)
+_PRIORITY_NUM = {"Low": 1, "Medium": 5, "High": 10}
+
+_ROW_HEIGHT = 0.668   # µm per row
 
 
-# ── Node: primary pipeline path ─────────────────────────────────────────────
+def _snap_orphan_dummies(nodes: list) -> list:
+    """
+    Post-placement safety pass: detects dummy devices that ended up at Y
+    coordinates far from the rest of the layout (the "flying transistor" bug
+    that occurs when matching=Low removes ABBA blocks that used to anchor them).
+
+    For each orphan dummy:
+      - Collect all valid Y values used by active (non-dummy) devices of the
+        same PMOS/NMOS type.
+      - Snap the dummy's Y to the closest valid Y.
+      - Append it at the rightmost X of that row (after the last real device).
+
+    A device is considered a "dummy" if its id starts with D, FILLER_DUMMY_,
+    EDGE_DUMMY, or DUMMY_matrix_.
+    """
+    import statistics
+
+    def _is_dummy(node):
+        nid = str(node.get("id", ""))
+        return (
+            node.get("is_dummy")
+            or nid.startswith(("FILLER_DUMMY_", "DUMMY_matrix_", "EDGE_DUMMY"))
+            or (len(nid) >= 2 and nid[0] == "D" and nid[1:].isdigit())
+        )
+
+    def _dev_type(node):
+        t = str(node.get("type", "")).lower()
+        return "pmos" if "pmos" in t or "p_mos" in t else "nmos"
+
+    # Gather valid Y values per type from non-dummy devices
+    active_y: dict[str, list[float]] = {"pmos": [], "nmos": []}
+    active_x_by_y: dict[tuple, list[float]] = {}   # (type, y_rounded) -> [x values]
+
+    for n in nodes:
+        if _is_dummy(n):
+            continue
+        g = n.get("geometry", {})
+        x = g.get("x", 0.0)
+        y = g.get("y", 0.0)
+        dt = _dev_type(n)
+        active_y[dt].append(y)
+        key = (dt, round(y, 3))
+        active_x_by_y.setdefault(key, []).append(x)
+
+    if not any(active_y.values()):
+        return nodes   # nothing to snap to
+
+    # Compute median Y per type and the set of "valid" row Ys
+    valid_ys: dict[str, list[float]] = {}
+    for dt, ys in active_y.items():
+        if ys:
+            # Cluster: round to nearest _ROW_HEIGHT grid
+            rounded = sorted({round(y / _ROW_HEIGHT) * _ROW_HEIGHT for y in ys})
+            valid_ys[dt] = rounded
+
+    # Identify orphan threshold: a dummy is orphan if its Y is > 1.5 row-heights
+    # away from ALL valid rows of its type
+    result = []
+    for n in nodes:
+        if not _is_dummy(n):
+            result.append(n)
+            continue
+
+        g = n.get("geometry", {})
+        dx = g.get("x", 0.0)
+        dy = g.get("y", 0.0)
+        w  = g.get("width", 0.07)
+        dt = _dev_type(n)
+
+        rows = valid_ys.get(dt, [])
+        if not rows:
+            result.append(n)
+            continue
+
+        # Find nearest valid row Y
+        nearest_y = min(rows, key=lambda ry: abs(ry - dy))
+        gap = abs(nearest_y - dy)
+
+        if gap > _ROW_HEIGHT * 1.5:
+            # Orphan detected — snap
+            key = (dt, round(nearest_y, 3))
+            taken_xs = active_x_by_y.get(key, [])
+            new_x = (max(taken_xs) + w + 0.01) if taken_xs else 0.0
+            # Update node in place (shallow copy geometry)
+            n = dict(n)
+            n["geometry"] = dict(g)
+            n["geometry"]["x"] = round(new_x, 4)
+            n["geometry"]["y"] = round(nearest_y, 4)
+            # Register in active_x_by_y so multiple orphans don't overlap
+            active_x_by_y.setdefault(key, []).append(new_x)
+            log_detail(f"[snap_orphan] {n['id']}: y={dy:.3f} -> {nearest_y:.3f} (gap={gap:.3f}µm)")
+
+        result.append(n)
+    return result
+
+
+
+def _goals_to_prompt(goals: dict) -> str:
+    """
+    Convert a placement_goals dict (from the UI) into a plain-English
+    priority block prepended to the LLM context.
+
+    Crucially, this section OVERRIDES conflicting rules in the system prompt
+    so all pipeline stages (deterministic + LLM) stay in sync.
+
+    Returns an empty string when no goals are set (panel was closed).
+    """
+    if not goals:
+        return ""
+
+    area_p   = goals.get("area_priority",    "Medium")
+    match_p  = goals.get("matching_priority", "Medium")
+    sym_p    = goals.get("symmetry_priority", "High")
+    max_area = goals.get("max_area_um2")
+
+    # ── Area instructions ────────────────────────────────────────────────
+    _AREA_INSTR = {
+        "Low":    "Area is NOT a priority — rows may grow; focus on matching quality.",
+        "Medium": "Aim for a compact layout; avoid unnecessary empty space.",
+        "High":   "MINIMISE area: pack devices into the FEWEST possible rows. "
+                  "Each row should be as full as DRC rules allow before starting a new row.",
+    }
+    # ── Matching instructions (also overrides system-prompt ABBA rules) ──
+    _MATCH_INSTR = {
+        "Low":    "Apply ABBA interdigitation for differential pairs and current mirrors only. "
+                  "Cross-coupled and load pairs are placed individually without interdigitation.",
+        "Medium": "Apply ABBA for differential pairs, current mirrors, cross-coupled pairs, "
+                  "and load pairs (all standard matching tiers).",
+        "High":   "MANDATORY: apply ABBA or common-centroid for EVERY transistor pair the "
+                  "engine can match — including any additional pairs not in the standard tiers. "
+                  "No matchable pair should be left uninterdigitated.",
+    }
+    # ── Symmetry instructions ────────────────────────────────────────────
+    _SYM_INSTR = {
+        "Low":    "Global mirror symmetry is DISABLED for this run. "
+                  "Do NOT enforce a shared vertical axis for left/right halves. "
+                  "This OVERRIDES the TWO-HALF symmetry rules in the system prompt. "
+                  "Place devices for best area packing without mirroring constraints.",
+        "Medium": "Apply reflection symmetry for matched pairs where it does not cost area.",
+        "High":   "MANDATORY: every matched group must be placed mirror-symmetrically "
+                  "about the layout centre line. Sacrificing area for symmetry is acceptable.",
+    }
+
+    lines = [
+        "=" * 62,
+        "  PLACEMENT GOALS  (user-set — these OVERRIDE all system-prompt rules below)",
+        "=" * 62,
+        f"  Area priority     : {area_p:6s}  -> {_AREA_INSTR[area_p]}",
+        f"  Matching priority : {match_p:6s}  -> {_MATCH_INSTR[match_p]}",
+        f"  Symmetry priority : {sym_p:6s}  -> {_SYM_INSTR[sym_p]}",
+    ]
+    if max_area is not None:
+        lines.append(
+            f"  Max area          : {max_area} um2  "
+            f"-> The total bounding-box area MUST NOT exceed this value."
+        )
+    lines += ["=" * 62, ""]
+    return "\n".join(lines) + "\n"
 
 def node_placement_specialist(state):
     """Primary placement node.
@@ -172,9 +500,31 @@ def node_placement_specialist(state):
 
     # ── Step 3a: Build context (matching + row assignment) ───────────────────
     log_section("Step 3a: Computing matching groups & row assignments")
+    # placement_goals is None when the panel was collapsed -> original defaults
+    raw_goals = state.get("placement_goals")   # None = panel not opened
+    goals_for_context = raw_goals or {}        # {} -> all defaults in helpers
+    goals_active = raw_goals is not None       # True only when panel was used
+
+    if goals_active:
+        match_priority = goals_for_context.get("matching_priority", "High")
+        area_priority = goals_for_context.get("area_priority", "Medium")
+        log_detail("Goals panel was OPEN - applying user priorities")
+        log_detail(
+            f"  Matching={match_priority}  Area={area_priority}  "
+            f"Symmetry={goals_for_context.get('symmetry_priority','Medium')}"
+        )
+    else:
+        match_priority = "High"
+        area_priority = "Medium"
+        log_detail("Goals panel was CLOSED - running with original pipeline defaults")
+
     context_text = build_placement_context(
-        nodes, constraint_text,
-        terminal_nets=terminal_nets, edges=edges, no_abutment=no_abutment_flag,
+        nodes,
+        constraint_text,
+        terminal_nets=terminal_nets,
+        edges=edges,
+        no_abutment=no_abutment_flag,
+        placement_goals=goals_for_context if goals_active else None,
     )
 
     grp_nodes  = copy.deepcopy(nodes)
@@ -183,10 +533,16 @@ def node_placement_specialist(state):
     try:
         from ai_agent.agents.placement_specialist import _compute_matching_and_rows
         grp_nodes, finger_map, row_str, match_str, _, merged = _compute_matching_and_rows(
-            nodes, edges, terminal_nets, no_abutment=no_abutment_flag
+            nodes, edges, terminal_nets,
+            no_abutment=no_abutment_flag,
+            matching_priority=match_priority,
+            area_priority=area_priority,
         )
         log_detail(
-            f"Finger grouping: {len(nodes)} fingers → {len(grp_nodes)} logical groups"
+            f"Finger grouping: {len(nodes)} fingers -> {len(grp_nodes)} logical groups"
+        )
+        log_detail(
+            f"Matching priority={match_priority}  area_priority={area_priority}"
         )
         log_detail(
             f"Matched blocks: {len(merged)} "
@@ -205,7 +561,17 @@ def node_placement_specialist(state):
 
     # ── Step 3b: Call LLM for placement commands ───────────────────────────
     log_section("Step 3b: Calling LLM for placement commands")
+
+    goals = state.get("placement_goals") or {}
+    goals_paragraph = _goals_to_prompt(goals)
+    if goals_paragraph:
+        log_detail(f"Goals injected: area={goals.get('area_priority','Medium')} "
+                   f"matching={goals.get('matching_priority','Medium')} "
+                   f"symmetry={goals.get('symmetry_priority','Medium')} "
+                   f"max_area={goals.get('max_area_um2')}")
+
     placer_user = (
+        f"{goals_paragraph}"
         f"User request: {user_message}\n\n"
         f"Selected Strategy: {strategy_result}\n\n"
         f"{context_text}"
@@ -303,7 +669,13 @@ def node_placement_specialist(state):
     )
     working_nodes = legalize_vertical_rows(working_nodes)
 
-    # ── Step 3f: Validate device conservation ────────────────────────────────
+    # ── Snap orphan dummies (flying-transistor fix) ─────────────────────
+    # When matching=Low (skip_matching), dummy devices (D-prefixed) that were
+    # previously anchored inside ABBA blocks may end up at isolated Y coords.
+    # Move any such device to the nearest valid active-device row.
+    working_nodes = _snap_orphan_dummies(working_nodes)
+
+    # ── Step 3f: Validate device conservation ────────────────────────────
     log_section("Step 3f: Device conservation check")
     conservation = validate_device_count(nodes, working_nodes)
     if not conservation["pass"]:
@@ -316,18 +688,52 @@ def node_placement_specialist(state):
 
     log_device_positions(working_nodes, "Final Placement Positions")
 
+    # ── Step 3g: Quality benchmark ───────────────────────────────────────
+    log_section("Step 3g: Placement Quality Benchmark")
+    try:
+        quality_report = score_placement(
+            working_nodes,
+            matching_info=merged if merged else None,
+            finger_map=finger_map if finger_map else None,
+            verbose=True,
+        )
+        log_detail(quality_report["summary"])
+        if "details" in quality_report:
+            for metric, detail_text in quality_report["details"].items():
+                if detail_text:
+                    log_detail(f"[{metric}]\n{detail_text}")
+        composite = quality_report["composite_score"]
+
+        def _fmt(v):
+            return f"{v:.1%}" if v is not None else "N/A"
+
+        log_detail(
+            f"Quality: Y={_fmt(quality_report.get('layout_y_score'))}  "
+            f"X={_fmt(quality_report.get('matching_x_score'))}  "
+            f"Interdig={_fmt(quality_report.get('interdigitation_score'))}  "
+            f"Centroid={_fmt(quality_report.get('centroid_score'))}  "
+            f"DRC={_fmt(quality_report.get('drc_score'))}  "
+            f"-> COMPOSITE={composite:.1%}"
+        )
+    except Exception as _q_exc:
+        log_detail(f"WARNING: quality benchmark failed: {_q_exc}")
+        quality_report = {}
+        composite = 0.0
+
     elapsed = time.time() - t0
     cons = "ok" if conservation["pass"] else "FAILED"
+    q_str = f", quality={composite:.1%}" if quality_report else ""
     ip_step(
         "3/5 Placement Specialist",
-        f"{len(stage2_cmds)} cmd(s), {elapsed:.1f}s, conservation={cons}",
+        f"{len(stage2_cmds)} cmd(s), {elapsed:.1f}s, conservation={cons}{q_str}",
     )
 
     return {
         "placement_nodes":         working_nodes,
         "pending_cmds":            state.get("pending_cmds", []) + stage2_cmds,
         "original_placement_cmds": state.get("pending_cmds", []) + stage2_cmds,
-        "chat_history":            updated_chat_history,
+    "chat_history":            updated_chat_history,
+    "placement_quality":       quality_report,
     }
 
 

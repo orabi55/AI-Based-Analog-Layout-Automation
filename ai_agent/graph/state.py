@@ -64,3 +64,12 @@ class LayoutState(TypedDict):
     # --- Pipeline config (from UI) ---
     no_abutment: bool
     abutment_candidates: List[Dict]
+
+    # --- Symmetry enforcement ---
+    placement_mode: str   # "auto" | "two_half"
+
+    # --- Quality benchmark ---
+    placement_quality: Dict[str, Any]  # output of score_placement()
+
+    # --- Placement goals (user-specified priorities) ---
+    placement_goals: Dict[str, Any]    # area/matching/symmetry + max_area_um2

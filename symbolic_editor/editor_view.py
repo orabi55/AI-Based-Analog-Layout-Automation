@@ -1686,10 +1686,109 @@ class SymbolicEditor(QGraphicsView):
         self._clear_connections()
         self.set_highlighted_net(net_name)
 
-    def highlight_net_by_name(self, net_name, color):
-        """Highlight a net's terminal labels across the layout."""
+    def highlight_net_by_name(self, net_name: str, color=None):
+        """Highlight a net across the layout and draw dotted flight lines (ratsnest).
+
+        Steps:
+          1. Clear any transistor selection (mutually exclusive with net highlight)
+          2. Highlight terminal labels on all devices connected to this net
+          3. Collect every terminal anchor point for the net across all fingers
+          4. Draw dotted lines connecting consecutive anchor points (virtual routing)
+        """
+        # ── 1. Clear transistor selection ────────────────────────────────────
+        self.scene.blockSignals(True)
+        self.scene.clearSelection()
+        self.scene.blockSignals(False)
         self._clear_connections()
+
+        if not net_name or net_name == "?":
+            self.clear_highlighted_net()
+            return
+
+        # ── 2. Highlight net terminal labels ─────────────────────────────────
         self.set_highlighted_net(net_name)
+
+        # ── 3. Collect anchor points for every finger connected to this net ──
+        anchor_points = []
+        connected_items = []
+        net_up = net_name.strip().upper()
+
+        for dev_id, item in self.device_items.items():
+            term_nets = self._terminal_nets_for_device(dev_id)
+            if not term_nets:
+                continue
+            # Find which terminal(s) connect to this net
+            for terminal, tnet in term_nets.items():
+                if str(tnet).strip().upper() == net_up:
+                    connected_items.append(item)
+                    try:
+                        anchors = item.terminal_anchors()
+                        pt = (anchors.get(terminal)
+                              or anchors.get("G")
+                              or anchors.get("D")
+                              or anchors.get("S")
+                              or (next(iter(anchors.values())) if anchors else None))
+                        if pt is not None:
+                            anchor_points.append(pt)
+                    except (AttributeError, RuntimeError):
+                        pass
+                    break  # one terminal per device for the flight-line
+
+        # Apply focus dimming to non-connected devices
+        self._apply_dimming_for_selection(connected_items)
+
+        if len(anchor_points) < 2:
+            return  # nothing to connect
+
+        # ── 4. Draw dotted flight lines between sorted anchor points ─────────
+        # Sort by X so lines flow left→right (clean visual order)
+        anchor_points.sort(key=lambda p: p.x())
+
+        # Bright cyan dotted lines — clearly visible on the dark layout background
+        flight_color = QColor("#00e5ff")
+        flight_color.setAlpha(220)
+        pen = QPen(flight_color, 1.8, Qt.PenStyle.DotLine,
+                   Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+        pen.setCosmetic(True)
+
+        self.scene.blockSignals(True)
+        try:
+            for i in range(len(anchor_points) - 1):
+                p1 = anchor_points[i]
+                p2 = anchor_points[i + 1]
+                line_item = QGraphicsPathItem(
+                    self._connection_path(p1, p2, i, offset_factor=0.12)
+                )
+                line_item.setPen(pen)
+                line_item.setZValue(20)
+                line_item.setFlag(
+                    QGraphicsPathItem.GraphicsItemFlag.ItemIsSelectable, False
+                )
+                self.scene.addItem(line_item)
+                self._conn_lines.append(line_item)
+
+                # Small filled circle at each anchor point for clarity
+                dot = self.scene.addEllipse(
+                    p1.x() - 3, p1.y() - 3, 6, 6,
+                    QPen(Qt.PenStyle.NoPen),
+                    QBrush(flight_color)
+                )
+                dot.setZValue(21)
+                self._conn_lines.append(dot)
+
+            # Dot on the last point too
+            p_last = anchor_points[-1]
+            dot_last = self.scene.addEllipse(
+                p_last.x() - 3, p_last.y() - 3, 6, 6,
+                QPen(Qt.PenStyle.NoPen),
+                QBrush(flight_color)
+            )
+            dot_last.setZValue(21)
+            self._conn_lines.append(dot_last)
+        finally:
+            self.scene.blockSignals(False)
+
+        self.scene.update()
 
 
     def _on_selection_changed(self):
@@ -1730,12 +1829,34 @@ class SymbolicEditor(QGraphicsView):
         # If no devices remain selectable, clear connections and return
         if not selected:
             self._clear_connections()
+            self._reset_dimming()
             return
+        
+        # Clear any lingering net highlights — transistor and net highlights are mutually exclusive
+        self._clear_connections()
+        self.clear_highlighted_net()
         
         # Emit the signal for the first selectable device
         dev_id = selected[0].device_name
         self.device_clicked.emit(dev_id)
-        self._show_connections(dev_id)
+        # Apply dimming to all non-selected devices
+        self._apply_dimming_for_selection(selected)
+
+    def _apply_dimming_for_selection(self, selected_items):
+        """Dim all devices EXCEPT the selected ones to create a 'Focus Mode'."""
+        self.scene.blockSignals(True)
+        # Convert list to set for faster lookup
+        selected_set = set(selected_items)
+        for item in self.device_items.values():
+            item.set_dimmed(item not in selected_set)
+        self.scene.blockSignals(False)
+
+    def _reset_dimming(self):
+        """Restore full opacity to all devices."""
+        self.scene.blockSignals(True)
+        for item in self.device_items.values():
+            item.set_dimmed(False)
+        self.scene.blockSignals(False)
 
     def fit_to_view(self):
         """Zoom and pan to fit all devices in the viewport."""
@@ -1763,14 +1884,49 @@ class SymbolicEditor(QGraphicsView):
         )
         self._zoom_level = self.transform().m11()
 
-    def highlight_device(self, dev_id):
-        """Highlight a device by its id without moving the view."""
+    def highlight_device(self, dev_id: str):
+        """Highlight a device by its ID."""
+        if not dev_id:
+            self.scene.blockSignals(True)
+            self.scene.clearSelection()
+            self.scene.blockSignals(False)
+            self._reset_dimming()
+            self._clear_connections()
+            self.clear_highlighted_net()
+            return
+
         self.scene.blockSignals(True)
         self.scene.clearSelection()
+
+        matched_items = []
+        # Try exact match first
         item = self.device_items.get(dev_id)
         if item:
             item.setSelected(True)
+            matched_items.append(item)
+        else:
+            # Parent-level match: select every finger whose ID starts with dev_id
+            # Use both '_m' (multiplier) and '_f' (finger) suffix patterns
+            prefix = dev_id + "_"
+            matched = False
+            for fid, fitem in self.device_items.items():
+                if fid == dev_id or fid.startswith(prefix):
+                    fitem.setSelected(True)
+                    matched_items.append(fitem)
+                    matched = True
+            # Also try matching by electrical.parent field on DeviceItems
+            if not matched:
+                for fid, fitem in self.device_items.items():
+                    elec = getattr(fitem, '_electrical', {})
+                    if elec.get('parent', '') == dev_id:
+                        fitem.setSelected(True)
+                        matched_items.append(fitem)
+
         self.scene.blockSignals(False)
+        # Apply focus dimming to non-matched devices
+        self._apply_dimming_for_selection(matched_items)
+        # Trigger visual repaint
+        self.scene.update()
 
     def keyPressEvent(self, event):
         """Handle global keyboard shortcuts."""
