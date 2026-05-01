@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QGraphicsRectItem, QGraphicsItem
 from PySide6.QtGui import (
     QBrush, QPen, QColor, QFont, QPainter,
     QLinearGradient, QPainterPath,
+    QColor as tcolor,
 )
 from PySide6.QtCore import Qt, QRectF, QObject, Signal, QPointF
 

@@ -216,3 +216,100 @@ def format_matrix_for_prompt(matrix_data: Dict) -> str:
         lines.append(f"    Row {r}: {row_str}")
 
     return "\n".join(lines)
+
+
+def generate_2d_abba_matrix(
+    fingers_a: List[Dict],
+    fingers_b: List[Dict],
+    n_rows: int = 2,
+) -> Dict:
+    """
+    Generate a 2D ABBA interdigitation matrix for a matched pair folded across
+    multiple physical rows.
+
+    Instead of the 1D pattern:
+        [D A B B A A B B A ... D]  ← one long row
+
+    This produces ``n_rows`` rows each with ``nf_per_row`` fingers:
+        Row 0: [D A B B A A B B A D]
+        Row 1: [D A B B A A B B A D]
+        ...
+
+    Each row independently satisfies the ABBA pattern and contains equal
+    numbers of A and B fingers, giving:
+    - 1D common-centroid within each row (same as standard ABBA)
+    - 2D gradient cancellation: both X and Y thermal/oxide gradients canceled
+    - Half the width of the equivalent 1D layout
+
+    The matrix uses device base-IDs (e.g. "MM8", "MM9") as cell values,
+    matching the format expected by ``expand_to_fingers``'s matrix path.
+    "dummy" is used for edge isolation cells.
+
+    Parameters
+    ----------
+    fingers_a, fingers_b : List[Dict]
+        Finger node lists for device A and B.  Must have equal length.
+    n_rows : int
+        Number of physical rows to fold across (2 is standard).
+
+    Returns
+    -------
+    Dict with keys: "matrix" (List[List[str]]), "rows", "cols", "total_fingers"
+    """
+    import math
+
+    if not fingers_a or not fingers_b:
+        return {"matrix": [], "rows": 0, "cols": 0, "total_fingers": 0}
+
+    nf_a = len(fingers_a)
+    nf_b = len(fingers_b)
+
+    # Require equal finger counts for true ABBA symmetry
+    nf = min(nf_a, nf_b)
+    if nf_a != nf_b:
+        # Trim the larger set — the caller should ensure equality
+        nf = min(nf_a, nf_b)
+
+    # Fingers per device per row (must divide evenly for ABBA quads)
+    nf_per_row = math.ceil(nf / n_rows)
+    # Round up to nearest even so ABBA pairs (ABBA = 4-cell group) fit
+    if nf_per_row % 2 != 0:
+        nf_per_row += 1
+
+    # Extract base IDs from the first finger of each device
+    def _base(f: Dict) -> str:
+        fid = f.get("id", "")
+        # Strip _m<N> suffix to get parent device base ID
+        parts = fid.rsplit("_m", 1)
+        return parts[0] if len(parts) == 2 else fid
+
+    id_a = _base(fingers_a[0])
+    id_b = _base(fingers_b[0])
+
+    # Build the ABBA sequence for a single row with ``nf_per_row`` fingers each
+    # ABBA pattern: A B B A  A B B A  ...
+    # With nf_per_row of each device, we get 2*nf_per_row real cells + 2 edge dummies
+    def _build_row_pattern(nf_each: int) -> List[str]:
+        cells = []
+        for i in range(nf_each // 2):  # one ABBA quad per 2 iterations
+            cells += [id_a, id_b, id_b, id_a]
+        # Handle odd nf_each: add one more AB pair at center
+        if nf_each % 2 != 0:
+            cells += [id_a, id_b]
+        return ["dummy"] + cells + ["dummy"]
+
+    row_pattern = _build_row_pattern(nf_per_row)
+    cols = len(row_pattern)
+
+    # Stack n_rows identical row patterns
+    # (each row is an independent ABBA — 2D common centroid is achieved
+    #  by having the same pattern in every row, meaning any X/Y gradient
+    #  hits both A and B identically)
+    matrix = [list(row_pattern) for _ in range(n_rows)]
+
+    return {
+        "matrix": matrix,
+        "rows": n_rows,
+        "cols": cols,
+        "total_fingers": nf * 2,        # real fingers only (excl. edge dummies)
+    }

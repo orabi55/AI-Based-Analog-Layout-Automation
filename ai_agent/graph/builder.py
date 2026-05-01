@@ -23,6 +23,7 @@ from ai_agent.nodes import (
     node_placement_specialist,
     node_placement_specialist_chatbot,
     node_finger_expansion,
+    node_symmetry_enforcer,
     node_drc_critic,
     node_routing_previewer,
     node_human_viewer,
@@ -95,6 +96,7 @@ def build_layout_graph(mode: str = "initial"):
     builder.add_node("node_strategy_selector", node_strategy_selector)
     builder.add_node("node_placement_specialist", node_placement_specialist)
     builder.add_node("node_finger_expansion", node_finger_expansion)
+    builder.add_node("node_symmetry_enforcer", node_symmetry_enforcer)
     builder.add_node("node_drc_critic", node_drc_critic)
     builder.add_node("node_routing_previewer", node_routing_previewer)
     builder.add_node("node_human_viewer", node_human_viewer)
@@ -110,7 +112,8 @@ def build_layout_graph(mode: str = "initial"):
     builder.add_edge("node_topology_analyst", "node_strategy_selector")
     builder.add_edge("node_strategy_selector", "node_placement_specialist")
     builder.add_edge("node_placement_specialist", "node_finger_expansion")
-    builder.add_edge("node_finger_expansion", "node_routing_previewer")
+    builder.add_edge("node_finger_expansion", "node_symmetry_enforcer")
+    builder.add_edge("node_symmetry_enforcer", "node_routing_previewer")
     builder.add_edge("node_routing_previewer", "node_drc_critic")
 
     # ── Conditional / cyclic flows ──

@@ -1,34 +1,43 @@
 """
 Routing Pre-Viewer Node
-======================
-A LangGraph node that evaluates the routing complexity of a placement 
-using estimated wire lengths and net-crossing counts.
+========================
+LangGraph node that evaluates routing complexity of the current placement
+using deterministic Manhattan HPWL analysis. Pure observer — no mutations.
 
 Functions:
-- node_routing_previewer: Executes the routing scoring logic and updates the state.
-  - Inputs: state (dict)
-  - Outputs: routing result updates for the state.
+- node_routing_previewer: runs the routing analysis and updates graph state.
+  Inputs:  state (dict) — must contain 'placement_nodes', 'edges', 'terminal_nets'
+  Outputs: {'routing_result': dict}  (legacy dict shape for backward compat)
 """
 
 import time
-from ai_agent.agents.routing_previewer import score_routing, format_routing_for_llm
-from ai_agent.nodes._shared import vprint, ip_step
+from ai_agent.agents.routing_previewer import build_routing_report
+from ai_agent.nodes._shared import ip_step
+from ai_agent.utils.logging import log_section, log_detail
 
 
-def node_routing_previewer(state):
+def node_routing_previewer(state: dict) -> dict:
     t0 = time.time()
-    vprint("\n" + "─" * 60, flush=True)
-    vprint("  ROUTING PRE-VIEWER", flush=True)
-    vprint("─" * 60, flush=True)
 
-    nodes = state.get("placement_nodes", [])
-    edges = state.get("edges", [])
+    nodes         = state.get("placement_nodes", [])
+    edges         = state.get("edges", [])
     terminal_nets = state.get("terminal_nets", {})
 
-    routing_result = score_routing(nodes, edges or [], terminal_nets or {})
-    vprint(f"[ROUTING] Score: {routing_result.get('score', 'N/A')}", flush=True)
+    report = build_routing_report(nodes, edges or [], terminal_nets or {})
+
+    # ── Structured terminal log ───────────────────────────────────────────────
+    log_section("Routing Pre-Viewer")
+    for line in report.format_log().splitlines():
+        log_detail(line)
 
     elapsed = time.time() - t0
-    ip_step("5.5/5 Routing Pre-Viewer", f"score={routing_result.get('score')} ({elapsed:.1f}s)")
+    ip_step(
+        "5.5/5 Routing Pre-Viewer",
+        f"score={report.estimated_crossings}  "
+        f"hpwl={report.total_hpwl_um:.3f}µm  "
+        f"cost={report.weighted_cost:.1f} ({elapsed:.1f}s)"
+    )
 
-    return {"routing_result": routing_result}
+    routing_legacy = report.to_legacy_dict()
+    routing_legacy["log_text"] = report.format_log()
+    return {"routing_result": routing_legacy}

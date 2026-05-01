@@ -29,3 +29,18 @@ PIXELS_PER_UM  = 34.0     # conversion factor for editor display
 # ---------------------------------------------------------------------------
 BLOCK_GAP_UM        = PITCH_UM * 2    # gap between hierarchy blocks
 PASSIVE_ROW_GAP_UM  = PITCH_UM        # gap for passive component rows
+
+# ---------------------------------------------------------------------------
+# Metal layer pitches (SAED 14nm — from PDK table)
+# width + spacing = pitch
+# ---------------------------------------------------------------------------
+METAL_M1_PITCH_UM  = 0.130   # M1: width 0.100 + spacing 0.030
+METAL_PITCH_UM     = 0.134   # M2–M8: width 0.100 + spacing 0.034 (primary routing)
+METAL_M9_PITCH_UM  = 0.314   # M9: width 0.280 + spacing 0.034
+METAL_MRDL_PITCH_UM = 0.384  # MRDL: width 0.350 + spacing 0.034
+
+# ---------------------------------------------------------------------------
+# Routing channel planner sizing
+# ---------------------------------------------------------------------------
+CHANNEL_MARGIN_TRACKS = 1     # extra slack tracks per channel (safety margin)
+MAX_CHANNEL_WIDTH_UM  = 5.0   # cap — prevent runaway expansion for dense nets

@@ -1,228 +1,195 @@
-# Fix FinFET CPP-Width Bug: Unified Tech Constants
+# Two-Half Vertical-Axis Symmetry Enforcement
 
-## Problem
+## Goal
 
-The placement pipeline has a dimension bug: NMOS fingers come out at **0.070 µm** x-width while PMOS fingers come out at **0.294 µm** x-width for the same 14 nm FinFET technology. In reality, every gate sits on one shared **contacted poly pitch (CPP = 0.078 µm)** regardless of device type.
-
-The root cause is two stale constants defined in [design_rules.py](file:///c:/Users/DELL%20G3/Desktop/GP/NEW/AI-Based-Analog-Layout-Automation/config/design_rules.py):
-- `PITCH_UM = 0.294` (used as non-abutted width → wrong, this is ~4× CPP)
-- `FINGER_PITCH = 0.070` (used as abutted finger pitch → wrong, this is ~0.9× CPP)
-- `ROW_HEIGHT_UM = 0.668` / `ROW_PITCH = 0.668` (wrong, should be derived from nfin)
-
-Both values should be `CPP_UM = 0.078` — every single finger occupies exactly one CPP slot.
-
-## Proposed Changes
-
-### [NEW] Tech Constants Module
-
-#### [NEW] [tech_constants.py](file:///c:/Users/DELL%20G3/Desktop/GP/NEW/AI-Based-Analog-Layout-Automation/ai_agent/tech_constants.py)
-
-Single source of truth for 14 nm FinFET constants:
-
-```python
-CPP_UM              = 0.078   # contacted poly pitch — x-step per finger
-FIN_PITCH_UM        = 0.048   # fin-to-fin pitch (y direction)
-NFIN_DEFAULT        = 7       # from netlist; override per node if set
-DIFF_EXT_UM         = 0.050   # diffusion extension top and bottom
-DEVICE_HEIGHT_UM    = NFIN_DEFAULT * FIN_PITCH_UM + 2 * DIFF_EXT_UM  # 0.436
-ROW_GAP_UM          = 0.164   # inter-row margin (well/NP spacing)
-ROW_PITCH_UM        = DEVICE_HEIGHT_UM + ROW_GAP_UM                  # 0.600
-MIN_POLY_PITCH_UM   = CPP_UM  # = 0.078
-NMOS_DIFF_LAYER     = 1       # GDS layer for NMOS active
-PMOS_DIFF_LAYER     = 2       # GDS layer for PMOS active
-```
+When you run **Ctrl+P (AI Initial Placement)** on a comparator or differential circuit, all transistors should be placed symmetrically around a single **vertical axis per row** — no LLM randomness, no approximations. This is a fully deterministic, post-LLM correction pass.
 
 ---
 
-### Config Module
+## Understanding: What Exists Already
 
-#### [MODIFY] [design_rules.py](file:///c:/Users/DELL%20G3/Desktop/GP/NEW/AI-Based-Analog-Layout-Automation/config/design_rules.py)
+The current flow **already does** ABBA/ABAB interdigitation via `merge_matched_groups()` in `finger_grouper.py` → expanded by `node_finger_expansion`. And `enforce_reflection_symmetry()` in `symmetry.py` already tries to reflect matched-block pairs.
 
-Replace all hardcoded values with imports from `ai_agent.tech_constants`:
+**The gap:** `enforce_reflection_symmetry` fires on `_matched_block` nodes using `_technique` flags, but it does NOT enforce that:
+- The vertical axis is **shared across PMOS and NMOS rows** (x_axis_pmos == x_axis_nmos).
+- Axis devices (tail current sources) are **centered exactly on the axis**.
+- Left/right rank assignments are **deterministic** (rank 1 = diff pair innermost, rank 2 = loads).
 
-| Old constant | Old value | New source |
-|---|---|---|
-| `PITCH_UM` | 0.294 | `CPP_UM` (0.078) |
-| `ROW_PITCH` | 0.668 | `ROW_PITCH_UM` (0.600) |
-| `ROW_HEIGHT_UM` | 0.668 | `DEVICE_HEIGHT_UM` (0.436) |
-| `ROW_GAP_UM` | 0.000 | `ROW_GAP_UM` (0.164) |
-| `FINGER_PITCH` | 0.070 | `CPP_UM` (0.078) — **same as PITCH_UM now** |
-| `PMOS_Y` | 0.668 | `ROW_PITCH_UM` (0.600) |
-| `NMOS_Y` | 0.000 | 0.0 (unchanged) |
-| Derived `BLOCK_GAP_UM` | `PITCH_UM * 2` | `CPP_UM * 2` |
-| Derived `PASSIVE_ROW_GAP_UM` | `PITCH_UM` | `CPP_UM` |
+**What this plan adds:**
+1. A pure-Python `[SYMMETRY]` block appended to `constraint_text` by `analyze_json()` — machine-readable, no LLM.
+2. A new `node_symmetry_enforcer` LangGraph node that reads the `[SYMMETRY]` block and runs `_enforce_two_half()`.
+3. `_enforce_two_half()` reuses `enforce_reflection_symmetry` logic but extends it to share axis across rows and handle axis devices.
+4. Wire the new node into the graph: `finger_expansion → symmetry_enforcer → routing_previewer`.
+5. State gets a new `placement_mode` field, and DRC Critic gets a symmetry-aware guard.
+
+---
+
+## Key Design Decisions
 
 > [!IMPORTANT]
-> `FINGER_PITCH` and `PITCH_UM` are now **identical** (both = CPP_UM). The concept of "abutted" vs "non-abutted" pitch no longer exists at the finger level — every finger is one CPP wide. The old 0.294 was a leftover from a planar-CMOS model.
+> **Pure Python, No LLM.** The `[SYMMETRY]` block is detected algorithmically, and `_enforce_two_half()` is a rigid math transform — same result every run.
 
----
-
-### Placement Module — [finger_grouper.py](file:///c:/Users/DELL%20G3/Desktop/GP/NEW/AI-Based-Analog-Layout-Automation/ai_agent/placement/finger_grouper.py)
-
-This is the largest file and the core of the dimension pipeline:
-
-1. **`aggregate_to_logical_devices` (line ~361)**: Width formula `(total_fingers - 1) * FINGER_PITCH + STD_PITCH` → `total_fingers * CPP_UM` (since both pitches are now CPP, this simplifies). Height fallback `0.568` → `DEVICE_HEIGHT_UM`.
-2. **`interdigitate_fingers` (lines ~866–1008)**: No changes to pattern logic. Edge dummy width/height to use `CPP_UM` / `DEVICE_HEIGHT_UM`.
-3. **`expand_to_fingers` (lines ~1848–1970)**: Finger geometry `"width": pitch` → `"width": CPP_UM`, `"height"` → `DEVICE_HEIGHT_UM`. The `"x"` formula already uses `pitch` variable which will now resolve to `CPP_UM`.
-4. **`_resolve_row_overlaps` (lines ~2026–2235)**: `pitch_abut` and `pitch_std` both become `CPP_UM`. Filler dummy `"width": pitch_std` → `CPP_UM`, `"height": ref_height` → `DEVICE_HEIGHT_UM`. Consecutive filler limit: cap at 3 consecutive `FILLER_DUMMY_*` entries.
-5. **`expand_logical_to_fingers` (line 2262)**: Default `pitch: float = 0.294` → `pitch: float = CPP_UM`. Width/height emitted in the inner loop.
-6. **`merge_matched_groups` (lines ~1173, 1269)**: Block height `0.668` → `DEVICE_HEIGHT_UM`. Block width formulas already use `block_pitch` which flows from the unified constants.
-
----
-
-### Placement Module — [abutment.py](file:///c:/Users/DELL%20G3/Desktop/GP/NEW/AI-Based-Analog-Layout-Automation/ai_agent/placement/abutment.py)
-
-- Lines 182–183: `ABUT_SPACING = 0.070` / `PITCH = 0.294` → import from tech_constants → `CPP_UM` for both.
-- Lines 401–402: same fix in `force_abutment_spacing`.
-- Default height fallbacks (`0.668`) → `DEVICE_HEIGHT_UM`.
-
----
-
-### Agent Prompts — [placement_specialist.py](file:///c:/Users/DELL%20G3/Desktop/GP/NEW/AI-Based-Analog-Layout-Automation/ai_agent/agents/placement_specialist.py)
-
-- Replace hardcoded prompt text `0.294`, `0.070`, `0.668` with f-string references to tech constants.
-- Lines 252, 296, 362–363, 682, 731: update all numeric literals in the prompt strings.
-
----
-
-### Agent — [prompts.py](file:///c:/Users/DELL%20G3/Desktop/GP/NEW/AI-Based-Analog-Layout-Automation/ai_agent/agents/prompts.py)
-
-- Lines 57–58, 245, 282, 306, 310, 315: replace hardcoded `0.294`, `0.070`, `0.668` with imports from tech_constants.
-
----
-
-### Agent — [drc_critic.py](file:///c:/Users/DELL%20G3/Desktop/GP/NEW/AI-Based-Analog-Layout-Automation/ai_agent/agents/drc_critic.py)
-
-- Lines 681, 711, 786: Replace hardcoded `0.294` and `0.668` with imports from tech_constants.
-
----
-
-### Agent — [routing_previewer.py](file:///c:/Users/DELL%20G3/Desktop/GP/NEW/AI-Based-Analog-Layout-Automation/ai_agent/agents/routing_previewer.py)
-
-- Line 191: `_ROW_HEIGHT_UM = 0.668` → import `ROW_PITCH_UM` from tech_constants.
-
----
-
-### Placement Module — [validators.py](file:///c:/Users/DELL%20G3/Desktop/GP/NEW/AI-Based-Analog-Layout-Automation/ai_agent/placement/validators.py)
-
-- Line 69: `abs(dx - 0.070) > 0.005` → use `CPP_UM` tolerance.
-
----
-
-### Placement Module — [symmetry.py](file:///c:/Users/DELL%20G3/Desktop/GP/NEW/AI-Based-Analog-Layout-Automation/ai_agent/placement/symmetry.py)
-
-- Lines 72, 78: Default width fallback `0.294` → `CPP_UM`.
-
----
-
-### Tools — [cmd_parser.py](file:///c:/Users/DELL%20G3/Desktop/GP/NEW/AI-Based-Analog-Layout-Automation/ai_agent/tools/cmd_parser.py)
-
-- Line 23: `DEFAULT_MIN_DEVICE_SPACING_UM = 0.294` → `CPP_UM`.
-
----
-
-### Tools — [overlap_resolver.py](file:///c:/Users/DELL%20G3/Desktop/GP/NEW/AI-Based-Analog-Layout-Automation/ai_agent/tools/overlap_resolver.py)
-
-- Line 35: `MIN_SPACING = 0.294` → `CPP_UM`.
-
----
-
-### Knowledge — [analog_rules.py](file:///c:/Users/DELL%20G3/Desktop/GP/NEW/AI-Based-Analog-Layout-Automation/ai_agent/knowledge/analog_rules.py)
-
-- Lines 67, 310: Update comment text from `0.294` to `CPP_UM`.
-
----
-
-### Symbolic Editor — [layout_tab.py](file:///c:/Users/DELL%20G3/Desktop/GP/NEW/AI-Based-Analog-Layout-Automation/symbolic_editor/layout_tab.py)
-
-- Lines 479, 480, 490: Scale factor references `0.294`, `0.668` → `CPP_UM`, `ROW_PITCH_UM`.
-- Lines 1502–1509: Default geometry dict → use tech constants.
-- Line 2145: `0.070` → `CPP_UM`.
-
----
-
-### Symbolic Editor — [editor_view.py](file:///c:/Users/DELL%20G3/Desktop/GP/NEW/AI-Based-Analog-Layout-Automation/symbolic_editor/editor_view.py)
-
-- Lines 1228–1233: Replace `0.070` with `CPP_UM`.
-
----
-
-### Symbolic Editor — [device_item.py](file:///c:/Users/DELL%20G3/Desktop/GP/NEW/AI-Based-Analog-Layout-Automation/symbolic_editor/device_item.py)
-
-- No `set_abut_state` method with `shared_net_left` condition was found. The file has `set_abut_left`/`set_abut_right` methods (lines 159–164, 288–294) that take a simple `state` boolean. No fix needed per the prompt's request since the check `if shared_net_left:` does not exist in this file.
-
----
-
-### Export — [export_json.py](file:///c:/Users/DELL%20G3/Desktop/GP/NEW/AI-Based-Analog-Layout-Automation/export/export_json.py)
-
-- The current `export_json.py` does **not** have a `_detect_abutments` function. This is a **new function to add**. It will:
-  - Detect abutted pairs when `|edge_gap| < 0.5 * CPP_UM` AND facing terminal nets are the same.
-  - Emit `{left, right, net, overlap_um, boundary_kind}` for each abutted pair.
-
----
-
-### Export — [oas_writer.py](file:///c:/Users/DELL%20G3/Desktop/GP/NEW/AI-Based-Analog-Layout-Automation/export/oas_writer.py)
-
-- No `merge_diff_layer` parameter exists yet. The request asks to add NMOS/PMOS-specific diffusion layer arguments and a `--no-merge-diff` CLI toggle. 
+> [!IMPORTANT]
+> **Runs AFTER finger expansion.** The enforcer sees real physical finger nodes (e.g., `MM1_f1`, `MM2_f2`) not logical groups. This means it operates on the correct final positions, after ABBA has already been applied internally within each pair.
 
 > [!WARNING]
-> The `update_oas_placement` is called from `layout_tab.py` line 1814 with a simple signature. Adding `merge_diff_layer` would be a new feature requiring a new `_merge_diffusion` function that does not currently exist in the codebase.
+> **Axis shared across rows (CRITICAL).** `x_axis_pmos` and `x_axis_nmos` must be equal. The current `enforce_reflection_symmetry` does NOT do this — it processes each row independently. The new enforcer will compute a global axis from the bounding box of ALL symmetry-constrained fingers.
 
----
-
-### Dialogs — [ai_model_dialog.py](file:///c:/Users/DELL%20G3/Desktop/GP/NEW/AI-Based-Analog-Layout-Automation/symbolic_editor/dialogs/ai_model_dialog.py)
-
-- Line 180: Update prompt string `0.070` → `CPP_UM`.
-
----
-
-### Tests
-
-#### [MODIFY] [test_deterministic_placement_fixes.py](file:///c:/Users/DELL%20G3/Desktop/GP/NEW/AI-Based-Analog-Layout-Automation/tests/test_deterministic_placement_fixes.py)
-
-Update all hardcoded `0.294`, `0.668`, `0.818`, `0.070`, `1.636` → use tech constants.
-
-#### [MODIFY] [test_placement_pipeline.py](file:///c:/Users/DELL%20G3/Desktop/GP/NEW/AI-Based-Analog-Layout-Automation/tests/test_placement_pipeline.py)
-
-Same — update all geometry constants in test fixtures.
-
-#### [MODIFY] [test_finger_grouper_pipeline.py](file:///c:/Users/DELL%20G3/Desktop/GP/NEW/AI-Based-Analog-Layout-Automation/tests/test_finger_grouper_pipeline.py)
-
-Update geometry fixtures.
-
-#### [MODIFY] [test_design_rules.py](file:///c:/Users/DELL%20G3/Desktop/GP/NEW/AI-Based-Analog-Layout-Automation/tests/test_design_rules.py)
-
-Update assertions for new constant values.
-
-#### [NEW] [test_abutment_comparator.py](file:///c:/Users/DELL%20G3/Desktop/GP/NEW/AI-Based-Analog-Layout-Automation/tests/test_abutment_comparator.py)
-
-Regression test per the prompt's spec. Note: the prompt references `examples/StrongARMComparator/comparator.sp` but the actual file is at `examples/comparator/comparator.sp`. The test will use the actual path.
+> [!NOTE]
+> **`analyze_json()` is a Python-only function** (no LLM). The `[SYMMETRY]` block it appends will be seen by the LLM in the `constraint_text` passed to the Placement Specialist, which will help the LLM output the right rough positions. But the actual enforcement is done by `_enforce_two_half()` which OVERRIDES whatever the LLM produced.
 
 ---
 
 ## Open Questions
 
 > [!IMPORTANT]
-> **StrongARMComparator path**: The prompt says `examples/StrongARMComparator/comparator.sp` but the repo has `examples/comparator/comparator.sp`. I'll use the actual path. Please confirm this is the intended circuit.
+> **Rank detection for >2 device types per row:** The current detection rule is: diff-pair = shared-source (not VDD/VSS) → rank 1; load mirror = shared-gate on row directly above diff-pair → rank 2. Is this sufficient for your comparator? Some comparators have cross-coupled loads (symmetric_cross_coupled) which are already detected. Please confirm.
 
-> [!IMPORTANT]
-> **Diffusion merging**: The prompt asks for `_merge_diffusion` in `oas_writer.py` and a `--no-merge-diff` CLI toggle. This function does not exist yet — it would be a new OASIS polygon-merging feature. Should I implement a full polygon union on GDS layers 1/2, or just stub the API and pass the layer constants through?
+> [!NOTE]
+> **Multi-row axis:** For a 5T-OTA comparator, the tail (MM7) is on the NMOS row, the diff pair (MM1/MM2) is on the same NMOS row (or next), and loads (MM4/MM5) are on the PMOS row. The plan detects `axis_row=both` meaning the vertical axis is shared. Is this the structure of your comparator?
 
-> [!IMPORTANT]
-> **`set_abut_state` with `shared_net_left`**: This function/pattern does not exist in `device_item.py`. The file uses simple boolean `set_abut_left(state)` / `set_abut_right(state)`. Should I create a new `set_abut_state` method that accepts `shared_net_left` / `shared_net_right` parameters, or is the prompt referring to logic elsewhere?
+---
 
-> [!WARNING]
-> **Abutment concept change**: With `FINGER_PITCH = PITCH_UM = CPP_UM`, the distinction between "abutted" and "non-abutted" spacing disappears at the finger level. All fingers are always one CPP apart. The `no_abutment` flag would now only control whether abutment *flags* (leftAbut/rightAbut) are set on PCell variants for diffusion sharing — not spacing. Is this the correct interpretation?
+## Proposed Changes
+
+### Component 1: `[SYMMETRY]` Block Detection
+
+#### [MODIFY] [topology_analyst.py](file:///c:/Users/DELL%20G3/Desktop/GP/NEW/AI-Based-Analog-Layout-Automation/ai_agent/agents/topology_analyst.py)
+
+Add a new pure-Python function `extract_symmetry_block(nodes, terminal_nets) -> str` at the bottom of the file. It will be called at the end of `analyze_json()` and its output appended to the returned text.
+
+**Detection rules (all pure Python):**
+- **Diff pair (rank 1):** Two same-type devices where `S-net` is NOT in `{VDD, VSS, GND, VCC, AVDD, AVSS}` AND both devices share the same `S-net`.
+- **Load mirror (rank 2):** Two same-type devices where `G-net` is shared AND they are NOT on the same row as the diff-pair (i.e., different device type OR same type but not sharing S-net with a diff pair S-net).
+- **Axis device:** A device whose `D-net` equals the shared `S-net` of the diff pair (i.e., it is the tail current source draining into the common source).
+
+**Output appended to `constraint_text`:**
+```
+[SYMMETRY]
+mode=two_half axis_row=both
+pair=MM1,MM2 rank=1
+pair=MM4,MM5 rank=2
+axis=MM7
+[/SYMMETRY]
+```
+
+---
+
+### Component 2: State Extension
+
+#### [MODIFY] [state.py](file:///c:/Users/DELL%20G3/Desktop/GP/NEW/AI-Based-Analog-Layout-Automation/ai_agent/graph/state.py)
+
+Add one field to `LayoutState`:
+```python
+placement_mode: str  # "auto" | "two_half"
+```
+Default `"auto"` (set in `placement_worker.py`'s `initial_state` dict).
+
+---
+
+### Component 3: Strategy Selector — `two_half` mode parsing
+
+#### [MODIFY] [agents/strategy_selector.py](file:///c:/Users/DELL%20G3/Desktop/GP/NEW/AI-Based-Analog-Layout-Automation/ai_agent/agents/strategy_selector.py)
+
+- Add option 4 to `_mirror_fallback_strategies()`: **"Two-Half (Vertical Axis Symmetry)"** for fully-differential circuits.
+- Extend `parse_placement_mode()` to map `"two-half"`, `"2 halves"`, `"axis symmetry"`, `"4"` → `"two_half"`.
+- Update `STRATEGY_SELECTOR_PROMPT` to mention Two-Half symmetry as an option.
+
+#### [MODIFY] [nodes/strategy_selector.py](file:///c:/Users/DELL%20G3/Desktop/GP/NEW/AI-Based-Analog-Layout-Automation/ai_agent/nodes/strategy_selector.py)
+
+After getting `strategy_text`, detect if `[SYMMETRY]` is present in `constraint_text`. If so, call `parse_placement_mode(strategy_text, constraint_text)` and include `placement_mode` in the returned state update dict.
+
+---
+
+### Component 4: New `node_symmetry_enforcer`
+
+#### [NEW] [nodes/symmetry_enforcer.py](file:///c:/Users/DELL%20G3/Desktop/GP/NEW/AI-Based-Analog-Layout-Automation/ai_agent/nodes/symmetry_enforcer.py)
+
+This is the core new file. Contains:
+
+**`parse_symmetry_block(constraint_text: str) -> dict`**
+- Parses `[SYMMETRY]...[/SYMMETRY]` from `constraint_text`.
+- Returns `{"mode": str, "pairs": [(left, right, rank), ...], "axis_devices": [str, ...]}` or `{}` if not found.
+
+**`_enforce_two_half(nodes, pairs, axis_devices, pitch=0.294) -> list`**
+
+Deterministic algorithm:
+1. Collect all finger IDs belonging to any pair device or axis device (using `_fingers` list on logical nodes, or matching by prefix on physical finger nodes).
+2. Compute `x_axis` = midpoint of bounding x-range of all collected fingers. Snap to nearest `pitch/2 = 0.147` so that `x_axis ± k*pitch` are valid slots.
+3. **Force shared axis across rows:** all rows use the same `x_axis` value.
+4. For each `(left_id, right_id, rank)` pair:
+   - Place all fingers of `left_id` at `x_axis - rank * pitch`, `x_axis - rank * pitch - pitch`, etc. (left side, ABBA already done, just shift).
+   - Place all fingers of `right_id` at `x_axis + rank * pitch`, etc. (right side).
+   - Set `orientation = "R0"` for left, `"R0_FH"` for right.
+5. For each `axis_device`:
+   - If `nf=1`: set `x = x_axis`.
+   - If `nf` even: split half-and-half around axis.
+   - If `nf` odd: centre finger at axis, rest symmetric.
+
+**`node_symmetry_enforcer(state) -> dict`**
+
+LangGraph node that:
+1. Reads `constraint_text` and calls `parse_symmetry_block()`.
+2. If no `[SYMMETRY]` block or `placement_mode == "auto"` and no pairs found: return `{}` (pass through).
+3. Otherwise calls `_enforce_two_half(placement_nodes, pairs, axis_devices)`.
+4. Runs `validate_device_count()` and `resolve_overlaps()`.
+5. Returns `{"placement_nodes": enforced_nodes, "deterministic_snapshot": enforced_nodes}`.
+
+---
+
+### Component 5: Graph Wiring
+
+#### [MODIFY] [graph/builder.py](file:///c:/Users/DELL%20G3/Desktop/GP/NEW/AI-Based-Analog-Layout-Automation/ai_agent/graph/builder.py)
+
+- Import `node_symmetry_enforcer` from `ai_agent.nodes`.
+- Register it: `builder.add_node("node_symmetry_enforcer", node_symmetry_enforcer)`.
+- Change edge: `placement_specialist → finger_expansion → symmetry_enforcer → routing_previewer`.
+
+#### [MODIFY] [nodes/\_\_init\_\_.py](file:///c:/Users/DELL%20G3/Desktop/GP/NEW/AI-Based-Analog-Layout-Automation/ai_agent/nodes/__init__.py)
+
+Export `node_symmetry_enforcer`.
+
+---
+
+### Component 6: DRC Critic Symmetry Guard
+
+#### [MODIFY] [nodes/drc_critic.py](file:///c:/Users/DELL%20G3/Desktop/GP/NEW/AI-Based-Analog-Layout-Automation/ai_agent/nodes/drc_critic.py)
+
+In `compute_prescriptive_fixes`: before applying a fix that displaces a device, check if that device is one side of a `[SYMMETRY]` pair. If so, move both sides in opposite X directions by the same delta (mirror-preserving fix).
+
+---
+
+### Component 7: Placement Specialist Prompt
+
+#### [MODIFY] [agents/placement_specialist.py](file:///c:/Users/DELL%20G3/Desktop/GP/NEW/AI-Based-Analog-Layout-Automation/ai_agent/agents/placement_specialist.py)
+
+- Add a `MODE = TWO_HALF` section to `PLACEMENT_SPECIALIST_PROMPT` (after current Step 3 DIFF_PAIR rules) with a 5T-OTA worked example:
+  ```
+  TWO-HALF SYMMETRY MODE (active when [SYMMETRY] block present):
+  - All pairs placed around a single vertical axis x_axis
+  - rank 1 (diff pair): left at x_axis - 0.294, right at x_axis + 0.294
+  - rank 2 (loads): left at x_axis - 0.588, right at x_axis + 0.588
+  - axis device (tail): centered at x_axis
+  Example (5T-OTA, x_axis = 0.588):
+    MM7 (tail)  → x=0.588
+    MM1 (left)  → x=0.294  MM2 (right) → x=0.882
+    MM4 (load L)→ x=0.000  MM5 (load R) → x=1.176
+  ```
+- Extend `build_placement_context()` to surface the `[SYMMETRY]` excerpt if present.
+
+---
 
 ## Verification Plan
 
 ### Automated Tests
-1. `python -m pytest tests/test_design_rules.py -v` — verify new constant values
-2. `python -m pytest tests/test_deterministic_placement_fixes.py -v` — verify geometry updates
-3. `python -m pytest tests/test_placement_pipeline.py -v` — verify pipeline integration
-4. `python -m pytest tests/test_finger_grouper_pipeline.py -v` — verify finger grouper
-5. `python -m pytest tests/test_abutment_comparator.py -v` — new regression test
+1. Run `python -m pytest tests/` (if tests exist).
+2. Import test: `python -c "from ai_agent.nodes.symmetry_enforcer import node_symmetry_enforcer; print('ok')"`.
 
-### Manual Verification
-- Load the comparator example through the GUI and inspect finger widths are uniform 0.078 µm
-- Verify NMOS/PMOS row pitch is 0.600 µm
+### Pipeline Test
+Run the full application and import a comparator SPICE netlist. Then press **Ctrl+P** (Run AI Initial Placement). Verify:
+- The `[SYMMETRY]` block appears in the console log under Stage 1 (Topology Analyst).
+- Stage 3.5 (Symmetry Enforcer) appears in the pipeline log.
+- On the canvas: diff-pair fingers are equidistant from the vertical center line.
+- Load pair fingers are further out, also equidistant.
+- Tail current source is exactly centered.
+- DRC: no overlaps introduced.

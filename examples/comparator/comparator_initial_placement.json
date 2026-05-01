@@ -15,8 +15,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.646,
-                "y": 1.636002,
+                "x": 1.47,
+                "y": 2.454003,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -41,8 +41,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 3.528,
-                "y": 1.636002,
+                "x": 2.352,
+                "y": 2.454003,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -67,8 +67,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 3.822,
-                "y": 1.636002,
+                "x": 2.646,
+                "y": 2.454003,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -93,8 +93,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 4.704,
-                "y": 1.636002,
+                "x": 3.528,
+                "y": 2.454003,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -119,8 +119,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.94,
-                "y": 1.636002,
+                "x": 1.764,
+                "y": 2.454003,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -145,8 +145,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 3.234,
-                "y": 1.636002,
+                "x": 2.058,
+                "y": 2.454003,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -171,8 +171,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 4.116,
-                "y": 1.636002,
+                "x": 2.94,
+                "y": 2.454003,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -197,8 +197,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 4.41,
-                "y": 1.636002,
+                "x": 3.234,
+                "y": 2.454003,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -223,8 +223,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.47,
-                "y": 0.818001,
+                "x": 0.294,
+                "y": 1.636002,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -249,8 +249,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.058,
-                "y": 0.818001,
+                "x": 0.882,
+                "y": 1.636002,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -275,8 +275,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.646,
-                "y": 0.818001,
+                "x": 1.47,
+                "y": 1.636002,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -301,8 +301,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 3.234,
-                "y": 0.818001,
+                "x": 2.058,
+                "y": 1.636002,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -327,8 +327,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 3.822,
-                "y": 0.818001,
+                "x": 2.646,
+                "y": 1.636002,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -353,8 +353,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 4.41,
-                "y": 0.818001,
+                "x": 3.234,
+                "y": 1.636002,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -379,8 +379,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 4.998,
-                "y": 0.818001,
+                "x": 3.822,
+                "y": 1.636002,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -405,8 +405,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 5.586,
-                "y": 0.818001,
+                "x": 4.41,
+                "y": 1.636002,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -431,8 +431,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 5.292,
-                "y": 1.636002,
+                "x": 0.294,
+                "y": 3.272004,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -457,8 +457,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 5.586,
-                "y": 1.636002,
+                "x": 0.882,
+                "y": 3.272004,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -483,8 +483,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 5.88,
-                "y": 1.636002,
+                "x": 1.47,
+                "y": 3.272004,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -509,8 +509,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 6.174,
-                "y": 1.636002,
+                "x": 2.058,
+                "y": 3.272004,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -535,8 +535,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 6.468,
-                "y": 1.636002,
+                "x": 2.646,
+                "y": 3.272004,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -561,8 +561,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 6.762,
-                "y": 1.636002,
+                "x": 3.234,
+                "y": 3.272004,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -587,8 +587,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 7.056,
-                "y": 1.636002,
+                "x": 3.822,
+                "y": 3.272004,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -613,8 +613,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 7.35,
-                "y": 1.636002,
+                "x": 4.41,
+                "y": 3.272004,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -639,8 +639,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 0.0,
-                "y": 1.636002,
+                "x": 0.588,
+                "y": 3.272004,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -665,8 +665,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 0.294,
-                "y": 1.636002,
+                "x": 1.176,
+                "y": 3.272004,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -691,8 +691,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 0.588,
-                "y": 1.636002,
+                "x": 1.764,
+                "y": 3.272004,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -717,8 +717,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 0.882,
-                "y": 1.636002,
+                "x": 2.352,
+                "y": 3.272004,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -743,8 +743,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.176,
-                "y": 1.636002,
+                "x": 2.94,
+                "y": 3.272004,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -769,8 +769,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.47,
-                "y": 1.636002,
+                "x": 3.528,
+                "y": 3.272004,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -795,8 +795,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.764,
-                "y": 1.636002,
+                "x": 4.116,
+                "y": 3.272004,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -821,8 +821,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.058,
-                "y": 1.636002,
+                "x": 4.704,
+                "y": 3.272004,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -847,8 +847,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.764,
-                "y": 0.818001,
+                "x": 0.588,
+                "y": 1.636002,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -873,8 +873,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.352,
-                "y": 0.818001,
+                "x": 1.176,
+                "y": 1.636002,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -899,8 +899,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.94,
-                "y": 0.818001,
+                "x": 1.764,
+                "y": 1.636002,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -925,8 +925,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 3.528,
-                "y": 0.818001,
+                "x": 2.352,
+                "y": 1.636002,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -951,8 +951,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 4.116,
-                "y": 0.818001,
+                "x": 2.94,
+                "y": 1.636002,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -977,8 +977,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 4.704,
-                "y": 0.818001,
+                "x": 3.528,
+                "y": 1.636002,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -1003,8 +1003,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 5.292,
-                "y": 0.818001,
+                "x": 4.116,
+                "y": 1.636002,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -1029,8 +1029,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 5.88,
-                "y": 0.818001,
+                "x": 4.704,
+                "y": 1.636002,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -1055,7 +1055,7 @@
                 "array_index": 7
             },
             "geometry": {
-                "x": 5.292,
+                "x": 4.704,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.8180000000000001,
@@ -1081,7 +1081,7 @@
                 "array_index": 6
             },
             "geometry": {
-                "x": 4.998,
+                "x": 4.116,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.8180000000000001,
@@ -1107,7 +1107,7 @@
                 "array_index": 5
             },
             "geometry": {
-                "x": 4.116,
+                "x": 3.528,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.8180000000000001,
@@ -1133,7 +1133,7 @@
                 "array_index": 4
             },
             "geometry": {
-                "x": 3.822,
+                "x": 2.94,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.8180000000000001,
@@ -1159,7 +1159,7 @@
                 "array_index": 3
             },
             "geometry": {
-                "x": 2.94,
+                "x": 2.352,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.8180000000000001,
@@ -1181,7 +1181,7 @@
                 "array_index": 2
             },
             "geometry": {
-                "x": 2.646,
+                "x": 1.764,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.8180000000000001,
@@ -1203,7 +1203,7 @@
                 "array_index": 1
             },
             "geometry": {
-                "x": 1.764,
+                "x": 1.176,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.8180000000000001,
@@ -1225,7 +1225,7 @@
                 "array_index": 0
             },
             "geometry": {
-                "x": 1.47,
+                "x": 0.588,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.8180000000000001,
@@ -1247,7 +1247,7 @@
                 "array_index": 7
             },
             "geometry": {
-                "x": 5.586,
+                "x": 4.41,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.8180000000000001,
@@ -1269,7 +1269,7 @@
                 "array_index": 6
             },
             "geometry": {
-                "x": 4.704,
+                "x": 3.822,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.8180000000000001,
@@ -1291,7 +1291,7 @@
                 "array_index": 5
             },
             "geometry": {
-                "x": 4.41,
+                "x": 3.234,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.8180000000000001,
@@ -1317,7 +1317,7 @@
                 "array_index": 4
             },
             "geometry": {
-                "x": 3.528,
+                "x": 2.646,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.8180000000000001,
@@ -1343,7 +1343,7 @@
                 "array_index": 3
             },
             "geometry": {
-                "x": 3.234,
+                "x": 2.058,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.8180000000000001,
@@ -1369,7 +1369,7 @@
                 "array_index": 2
             },
             "geometry": {
-                "x": 2.352,
+                "x": 1.47,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.8180000000000001,
@@ -1395,7 +1395,7 @@
                 "array_index": 1
             },
             "geometry": {
-                "x": 2.058,
+                "x": 0.882,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.8180000000000001,
@@ -1421,7 +1421,7 @@
                 "array_index": 0
             },
             "geometry": {
-                "x": 1.176,
+                "x": 0.294,
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.8180000000000001,
@@ -1447,8 +1447,8 @@
                 "array_index": 3
             },
             "geometry": {
-                "x": 7.35,
-                "y": 0.0,
+                "x": 2.94,
+                "y": 0.818001,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -1473,8 +1473,8 @@
                 "array_index": 2
             },
             "geometry": {
-                "x": 7.056,
-                "y": 0.0,
+                "x": 2.646,
+                "y": 0.818001,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -1499,8 +1499,8 @@
                 "array_index": 1
             },
             "geometry": {
-                "x": 6.762,
-                "y": 0.0,
+                "x": 2.352,
+                "y": 0.818001,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -1525,8 +1525,8 @@
                 "array_index": 0
             },
             "geometry": {
-                "x": 6.468,
-                "y": 0.0,
+                "x": 2.058,
+                "y": 0.818001,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -1551,8 +1551,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 0.0,
-                "y": 0.0,
+                "x": 3.528,
+                "y": 0.818001,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -1577,8 +1577,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 0.294,
-                "y": 0.0,
+                "x": 1.47,
+                "y": 0.818001,
                 "width": 0.294,
                 "height": 0.8180000000000001,
                 "orientation": "R0"
@@ -1591,7 +1591,7 @@
         {
             "_block_id": "MM8_MM9_matched",
             "_matched_block": true,
-            "_technique": "ABBA_diff_pair",
+            "_technique": "ABAB_diff_pair",
             "abutment": {
                 "abut_left": false,
                 "abut_right": true
@@ -1606,7 +1606,7 @@
                 "height": 0.8180000000000001,
                 "orientation": "R0",
                 "width": 0.294,
-                "x": 0.882,
+                "x": 0.0,
                 "y": 0.0
             },
             "id": "EDGE_DUMMY_L_MM8_MM9_matched_0",
@@ -1616,7 +1616,7 @@
         {
             "_block_id": "MM8_MM9_matched",
             "_matched_block": true,
-            "_technique": "ABBA_diff_pair",
+            "_technique": "ABAB_diff_pair",
             "abutment": {
                 "abut_left": true,
                 "abut_right": false
@@ -1631,12 +1631,62 @@
                 "height": 0.8180000000000001,
                 "orientation": "R0",
                 "width": 0.294,
-                "x": 5.88,
+                "x": 4.998,
                 "y": 0.0
             },
             "id": "EDGE_DUMMY_R_MM8_MM9_matched_17",
             "is_dummy": true,
             "type": "nmos"
+        },
+        {
+            "_block_id": "MM2_MM1_matched",
+            "_matched_block": true,
+            "_technique": "ABAB_diff_pair",
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
+            },
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 7.0,
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 0.0,
+                "y": 3.272004
+            },
+            "id": "EDGE_DUMMY_L_MM2_MM1_matched_0",
+            "is_dummy": true,
+            "type": "pmos"
+        },
+        {
+            "_block_id": "MM2_MM1_matched",
+            "_matched_block": true,
+            "_technique": "ABAB_diff_pair",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": false
+            },
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 7.0,
+                "w": 0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 4.998,
+                "y": 3.272004
+            },
+            "id": "EDGE_DUMMY_R_MM2_MM1_matched_17",
+            "is_dummy": true,
+            "type": "pmos"
         },
         {
             "_block_id": "MM3_MM0_matched",
@@ -1656,8 +1706,8 @@
                 "height": 0.8180000000000001,
                 "orientation": "R0",
                 "width": 0.294,
-                "x": 1.176,
-                "y": 0.818001
+                "x": 0.0,
+                "y": 1.636002
             },
             "id": "EDGE_DUMMY_L_MM3_MM0_matched_0",
             "is_dummy": true,
@@ -1681,48 +1731,12 @@
                 "height": 0.8180000000000001,
                 "orientation": "R0",
                 "width": 0.294,
-                "x": 6.174,
-                "y": 0.818001
+                "x": 4.998,
+                "y": 1.636002
             },
             "id": "EDGE_DUMMY_R_MM3_MM0_matched_17",
             "is_dummy": true,
             "type": "pmos"
-        },
-        {
-            "electrical": {
-                "l": 2.8000000000000003e-08,
-                "multiplier": 1,
-                "nf_per_device": 1,
-                "nfin": 7.0
-            },
-            "geometry": {
-                "height": 0.8180000000000001,
-                "orientation": "R0",
-                "width": 0.294,
-                "x": 0.588,
-                "y": 0.0
-            },
-            "id": "FILLER_DUMMY_1_nmos",
-            "is_dummy": true,
-            "type": "nmos"
-        },
-        {
-            "electrical": {
-                "l": 2.8000000000000003e-08,
-                "multiplier": 1,
-                "nf_per_device": 1,
-                "nfin": 7.0
-            },
-            "geometry": {
-                "height": 0.8180000000000001,
-                "orientation": "R0",
-                "width": 0.294,
-                "x": 6.174,
-                "y": 0.0
-            },
-            "id": "FILLER_DUMMY_2_nmos",
-            "is_dummy": true,
-            "type": "nmos"
         },
         {
             "electrical": {
@@ -1735,8 +1749,44 @@
                 "height": 0.8180000000000001,
                 "orientation": "R0",
                 "width": 0.294,
-                "x": 2.352,
-                "y": 1.636002
+                "x": 0.0,
+                "y": 2.454003
+            },
+            "id": "FILLER_DUMMY_1_pmos",
+            "is_dummy": true,
+            "type": "pmos"
+        },
+        {
+            "electrical": {
+                "l": 1.4e-08,
+                "multiplier": 1,
+                "nf_per_device": 1,
+                "nfin": 7.0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 0.294,
+                "y": 2.454003
+            },
+            "id": "FILLER_DUMMY_2_pmos",
+            "is_dummy": true,
+            "type": "pmos"
+        },
+        {
+            "electrical": {
+                "l": 1.4e-08,
+                "multiplier": 1,
+                "nf_per_device": 1,
+                "nfin": 7.0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 0.588,
+                "y": 2.454003
             },
             "id": "FILLER_DUMMY_3_pmos",
             "is_dummy": true,
@@ -1753,10 +1803,118 @@
                 "height": 0.8180000000000001,
                 "orientation": "R0",
                 "width": 0.294,
-                "x": 4.998,
-                "y": 1.636002
+                "x": 0.882,
+                "y": 2.454003
             },
             "id": "FILLER_DUMMY_4_pmos",
+            "is_dummy": true,
+            "type": "pmos"
+        },
+        {
+            "electrical": {
+                "l": 1.4e-08,
+                "multiplier": 1,
+                "nf_per_device": 1,
+                "nfin": 7.0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 1.176,
+                "y": 2.454003
+            },
+            "id": "FILLER_DUMMY_5_pmos",
+            "is_dummy": true,
+            "type": "pmos"
+        },
+        {
+            "electrical": {
+                "l": 1.4e-08,
+                "multiplier": 1,
+                "nf_per_device": 1,
+                "nfin": 7.0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 3.822,
+                "y": 2.454003
+            },
+            "id": "FILLER_DUMMY_6_pmos",
+            "is_dummy": true,
+            "type": "pmos"
+        },
+        {
+            "electrical": {
+                "l": 1.4e-08,
+                "multiplier": 1,
+                "nf_per_device": 1,
+                "nfin": 7.0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 4.116,
+                "y": 2.454003
+            },
+            "id": "FILLER_DUMMY_7_pmos",
+            "is_dummy": true,
+            "type": "pmos"
+        },
+        {
+            "electrical": {
+                "l": 1.4e-08,
+                "multiplier": 1,
+                "nf_per_device": 1,
+                "nfin": 7.0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 4.41,
+                "y": 2.454003
+            },
+            "id": "FILLER_DUMMY_8_pmos",
+            "is_dummy": true,
+            "type": "pmos"
+        },
+        {
+            "electrical": {
+                "l": 1.4e-08,
+                "multiplier": 1,
+                "nf_per_device": 1,
+                "nfin": 7.0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 4.704,
+                "y": 2.454003
+            },
+            "id": "FILLER_DUMMY_9_pmos",
+            "is_dummy": true,
+            "type": "pmos"
+        },
+        {
+            "electrical": {
+                "l": 1.4e-08,
+                "multiplier": 1,
+                "nf_per_device": 1,
+                "nfin": 7.0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 4.998,
+                "y": 2.454003
+            },
+            "id": "FILLER_DUMMY_10_pmos",
             "is_dummy": true,
             "type": "pmos"
         },
@@ -1774,9 +1932,9 @@
                 "x": 0.0,
                 "y": 0.818001
             },
-            "id": "FILLER_DUMMY_5_pmos",
+            "id": "FILLER_DUMMY_11_nmos",
             "is_dummy": true,
-            "type": "pmos"
+            "type": "nmos"
         },
         {
             "electrical": {
@@ -1792,9 +1950,9 @@
                 "x": 0.294,
                 "y": 0.818001
             },
-            "id": "FILLER_DUMMY_6_pmos",
+            "id": "FILLER_DUMMY_12_nmos",
             "is_dummy": true,
-            "type": "pmos"
+            "type": "nmos"
         },
         {
             "electrical": {
@@ -1810,9 +1968,9 @@
                 "x": 0.588,
                 "y": 0.818001
             },
-            "id": "FILLER_DUMMY_7_pmos",
+            "id": "FILLER_DUMMY_13_nmos",
             "is_dummy": true,
-            "type": "pmos"
+            "type": "nmos"
         },
         {
             "electrical": {
@@ -1828,9 +1986,9 @@
                 "x": 0.882,
                 "y": 0.818001
             },
-            "id": "FILLER_DUMMY_8_pmos",
+            "id": "FILLER_DUMMY_14_nmos",
             "is_dummy": true,
-            "type": "pmos"
+            "type": "nmos"
         },
         {
             "electrical": {
@@ -1843,12 +2001,12 @@
                 "height": 0.8180000000000001,
                 "orientation": "R0",
                 "width": 0.294,
-                "x": 6.468,
+                "x": 1.176,
                 "y": 0.818001
             },
-            "id": "FILLER_DUMMY_9_pmos",
+            "id": "FILLER_DUMMY_15_nmos",
             "is_dummy": true,
-            "type": "pmos"
+            "type": "nmos"
         },
         {
             "electrical": {
@@ -1861,12 +2019,12 @@
                 "height": 0.8180000000000001,
                 "orientation": "R0",
                 "width": 0.294,
-                "x": 6.762,
+                "x": 1.764,
                 "y": 0.818001
             },
-            "id": "FILLER_DUMMY_10_pmos",
+            "id": "FILLER_DUMMY_16_nmos",
             "is_dummy": true,
-            "type": "pmos"
+            "type": "nmos"
         },
         {
             "electrical": {
@@ -1879,12 +2037,12 @@
                 "height": 0.8180000000000001,
                 "orientation": "R0",
                 "width": 0.294,
-                "x": 7.056,
+                "x": 3.234,
                 "y": 0.818001
             },
-            "id": "FILLER_DUMMY_11_pmos",
+            "id": "FILLER_DUMMY_17_nmos",
             "is_dummy": true,
-            "type": "pmos"
+            "type": "nmos"
         },
         {
             "electrical": {
@@ -1897,12 +2055,84 @@
                 "height": 0.8180000000000001,
                 "orientation": "R0",
                 "width": 0.294,
-                "x": 7.35,
+                "x": 3.822,
                 "y": 0.818001
             },
-            "id": "FILLER_DUMMY_12_pmos",
+            "id": "FILLER_DUMMY_18_nmos",
             "is_dummy": true,
-            "type": "pmos"
+            "type": "nmos"
+        },
+        {
+            "electrical": {
+                "l": 1.4e-08,
+                "multiplier": 1,
+                "nf_per_device": 1,
+                "nfin": 7.0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 4.116,
+                "y": 0.818001
+            },
+            "id": "FILLER_DUMMY_19_nmos",
+            "is_dummy": true,
+            "type": "nmos"
+        },
+        {
+            "electrical": {
+                "l": 1.4e-08,
+                "multiplier": 1,
+                "nf_per_device": 1,
+                "nfin": 7.0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 4.41,
+                "y": 0.818001
+            },
+            "id": "FILLER_DUMMY_20_nmos",
+            "is_dummy": true,
+            "type": "nmos"
+        },
+        {
+            "electrical": {
+                "l": 1.4e-08,
+                "multiplier": 1,
+                "nf_per_device": 1,
+                "nfin": 7.0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 4.704,
+                "y": 0.818001
+            },
+            "id": "FILLER_DUMMY_21_nmos",
+            "is_dummy": true,
+            "type": "nmos"
+        },
+        {
+            "electrical": {
+                "l": 1.4e-08,
+                "multiplier": 1,
+                "nf_per_device": 1,
+                "nfin": 7.0
+            },
+            "geometry": {
+                "height": 0.8180000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 4.998,
+                "y": 0.818001
+            },
+            "id": "FILLER_DUMMY_22_nmos",
+            "is_dummy": true,
+            "type": "nmos"
         }
     ],
     "edges": [
@@ -7635,5 +7865,292 @@
         }
     },
     "abutment_candidates": [],
-    "no_abutment": true
+    "no_abutment": true,
+    "placement_goals": null,
+    "routing_result": {
+        "channels": [
+            {
+                "band_index": 0,
+                "nets": [],
+                "recommended_width_um": 0.134,
+                "track_count": 0,
+                "y_boundary": 0.334
+            },
+            {
+                "band_index": 1,
+                "nets": [
+                    "VX",
+                    "VY",
+                    "net2<0>",
+                    "net2<1>",
+                    "net2<2>",
+                    "net2<3>"
+                ],
+                "recommended_width_um": 0.938,
+                "track_count": 6,
+                "y_boundary": 1.002
+            },
+            {
+                "band_index": 2,
+                "nets": [
+                    "CLK",
+                    "VOUTN",
+                    "VOUTP",
+                    "VX",
+                    "VY"
+                ],
+                "recommended_width_um": 0.804,
+                "track_count": 5,
+                "y_boundary": 2.004
+            },
+            {
+                "band_index": 3,
+                "nets": [
+                    "CLK",
+                    "VOUTN",
+                    "VOUTP"
+                ],
+                "recommended_width_um": 0.536,
+                "track_count": 3,
+                "y_boundary": 3.006
+            }
+        ],
+        "log_text": "9 nets analyzed  (3 critical, 6 signal, 0 bias, 0 power)\nTotal Manhattan HPWL : 21.844 \u00b5m\nEstimated crossings  : 41\nWeighted cost        : 545.0\n\nWorst nets (by weighted HPWL):\n  VOUTN          critical hpwl=4.512\u00b5m  (\u0394x=2.058, \u0394y=2.454)  [CROSS-ROW]\n  VOUTP          critical hpwl=4.512\u00b5m  (\u0394x=2.058, \u0394y=2.454)  [CROSS-ROW]\n  CLK            critical hpwl=2.748\u00b5m  (\u0394x=0.294, \u0394y=2.454)  [CROSS-ROW]\n  VY             signal   hpwl=2.812\u00b5m  (\u0394x=1.176, \u0394y=1.636)  [CROSS-ROW]\n  VX             signal   hpwl=2.812\u00b5m  (\u0394x=1.176, \u0394y=1.636)  [CROSS-ROW]\n\nRouting channels (inter-row bands):\n  band 0  y\u22480.334\u00b5m  0 track(s)  \u2192 widen to 0.134 \u00b5m\n  band 1  y\u22481.002\u00b5m  6 track(s)  \u2192 widen to 0.938 \u00b5m\n  band 2  y\u22482.004\u00b5m  5 track(s)  \u2192 widen to 0.804 \u00b5m\n  band 3  y\u22483.006\u00b5m  3 track(s)  \u2192 widen to 0.536 \u00b5m",
+        "net_details": {
+            "CLK": {
+                "criticality": "critical",
+                "cross_row": true,
+                "devices": [
+                    "MM10",
+                    "MM0",
+                    "MM1",
+                    "MM2",
+                    "MM3"
+                ],
+                "nmos_devs": [],
+                "pmos_devs": [
+                    "MM10",
+                    "MM0",
+                    "MM1",
+                    "MM2",
+                    "MM3"
+                ],
+                "span": 0.294,
+                "wire_length": 2.748003,
+                "x_max": 2.793,
+                "x_min": 2.499
+            },
+            "VOUTN": {
+                "criticality": "critical",
+                "cross_row": true,
+                "devices": [
+                    "MM1",
+                    "MM4",
+                    "MM7",
+                    "MM6",
+                    "MM5"
+                ],
+                "nmos_devs": [],
+                "pmos_devs": [
+                    "MM1",
+                    "MM4",
+                    "MM7",
+                    "MM6",
+                    "MM5"
+                ],
+                "span": 2.058,
+                "wire_length": 4.512003,
+                "x_max": 3.675,
+                "x_min": 1.617
+            },
+            "VOUTP": {
+                "criticality": "critical",
+                "cross_row": true,
+                "devices": [
+                    "MM4",
+                    "MM7",
+                    "MM6",
+                    "MM2",
+                    "MM5"
+                ],
+                "nmos_devs": [],
+                "pmos_devs": [
+                    "MM4",
+                    "MM7",
+                    "MM6",
+                    "MM2",
+                    "MM5"
+                ],
+                "span": 2.058,
+                "wire_length": 4.512003,
+                "x_max": 3.675,
+                "x_min": 1.617
+            },
+            "VX": {
+                "criticality": "signal",
+                "cross_row": true,
+                "devices": [
+                    "MM0",
+                    "MM8",
+                    "MM7"
+                ],
+                "nmos_devs": [],
+                "pmos_devs": [
+                    "MM0",
+                    "MM8",
+                    "MM7"
+                ],
+                "span": 1.176,
+                "wire_length": 2.812002,
+                "x_max": 3.675,
+                "x_min": 2.499
+            },
+            "VY": {
+                "criticality": "signal",
+                "cross_row": true,
+                "devices": [
+                    "MM6",
+                    "MM3",
+                    "MM9"
+                ],
+                "nmos_devs": [],
+                "pmos_devs": [
+                    "MM6",
+                    "MM3",
+                    "MM9"
+                ],
+                "span": 1.176,
+                "wire_length": 2.812002,
+                "x_max": 2.793,
+                "x_min": 1.617
+            },
+            "net2<0>": {
+                "criticality": "signal",
+                "cross_row": false,
+                "devices": [
+                    "MM10",
+                    "MM8",
+                    "MM9"
+                ],
+                "nmos_devs": [],
+                "pmos_devs": [
+                    "MM10",
+                    "MM8",
+                    "MM9"
+                ],
+                "span": 0.294,
+                "wire_length": 1.112001,
+                "x_max": 2.793,
+                "x_min": 2.499
+            },
+            "net2<1>": {
+                "criticality": "signal",
+                "cross_row": false,
+                "devices": [
+                    "MM10",
+                    "MM8",
+                    "MM9"
+                ],
+                "nmos_devs": [],
+                "pmos_devs": [
+                    "MM10",
+                    "MM8",
+                    "MM9"
+                ],
+                "span": 0.294,
+                "wire_length": 1.112001,
+                "x_max": 2.793,
+                "x_min": 2.499
+            },
+            "net2<2>": {
+                "criticality": "signal",
+                "cross_row": false,
+                "devices": [
+                    "MM10",
+                    "MM8",
+                    "MM9"
+                ],
+                "nmos_devs": [],
+                "pmos_devs": [
+                    "MM10",
+                    "MM8",
+                    "MM9"
+                ],
+                "span": 0.294,
+                "wire_length": 1.112001,
+                "x_max": 2.793,
+                "x_min": 2.499
+            },
+            "net2<3>": {
+                "criticality": "signal",
+                "cross_row": false,
+                "devices": [
+                    "MM10",
+                    "MM8",
+                    "MM9"
+                ],
+                "nmos_devs": [],
+                "pmos_devs": [
+                    "MM10",
+                    "MM8",
+                    "MM9"
+                ],
+                "span": 0.294,
+                "wire_length": 1.112001,
+                "x_max": 2.793,
+                "x_min": 2.499
+            }
+        },
+        "net_spans": {
+            "CLK": [
+                2.499,
+                2.793
+            ],
+            "VOUTN": [
+                1.617,
+                3.675
+            ],
+            "VOUTP": [
+                1.617,
+                3.675
+            ],
+            "VX": [
+                2.499,
+                3.675
+            ],
+            "VY": [
+                1.617,
+                2.793
+            ],
+            "net2<0>": [
+                2.499,
+                2.793
+            ],
+            "net2<1>": [
+                2.499,
+                2.793
+            ],
+            "net2<2>": [
+                2.499,
+                2.793
+            ],
+            "net2<3>": [
+                2.499,
+                2.793
+            ]
+        },
+        "placement_cost": 60.5513,
+        "score": 41,
+        "summary": "Routing preview: ~41 crossing(s), HPWL=21.844 \u00b5m. Worst: VOUTN(4.512\u00b5m), VOUTP(4.512\u00b5m), CLK(2.748\u00b5m)",
+        "total_wire_length": 21.844017,
+        "weighted_cost": 544.9613,
+        "worst_nets": [
+            "VOUTN",
+            "VOUTP",
+            "CLK",
+            "VY",
+            "VX"
+        ]
+    },
+    "chat_response": "[Initial Placement Complete]\n- DRC: \u2713 Clean\n- Nodes: 90 placed\n\n\n==============================================================\n  PLACEMENT SUMMARY\n==============================================================\n  Layout Size  : 5.292um x 4.090um  (aspect 1.29)\n  Total Area   : 21.644 um\u00b2\n  Utilization  : 68.9%\n  DRC Status   : \u2713 Clean\n  PMOS/NMOS    : \u2713 OK\n  Devices      : 90 placed\n  Time Total   : 3m 33s\n==============================================================\n\n================================================================\n  MATCHING & SYMMETRY QUALITY BENCHMARK\n================================================================\n  Matched pairs : 5\n  Metric                     Score   Progress                Grade\n  ------------------------  ------   ----------------------  -----\n  Layout Y Symmetry         100.0%   ####################    A+\n  X Mirror Symmetry         100.0%   ####################    A+\n  Interdigitation           100.0%   ####################    A+\n  Common Centroid (2D)         N/A   (not applicable)      \n  DRC Clean                 100.0%   ####################    A+\n  ------------------------  ------   ----------------------  -----\n  COMPOSITE                 100.0%   ####################    A+\n================================================================\n\n\n9 nets analyzed  (3 critical, 6 signal, 0 bias, 0 power)\nTotal Manhattan HPWL : 21.844 \u00b5m\nEstimated crossings  : 41\nWeighted cost        : 545.0\n\nWorst nets (by weighted HPWL):\n  VOUTN          critical hpwl=4.512\u00b5m  (\u0394x=2.058, \u0394y=2.454)  [CROSS-ROW]\n  VOUTP          critical hpwl=4.512\u00b5m  (\u0394x=2.058, \u0394y=2.454)  [CROSS-ROW]\n  CLK            critical hpwl=2.748\u00b5m  (\u0394x=0.294, \u0394y=2.454)  [CROSS-ROW]\n  VY             signal   hpwl=2.812\u00b5m  (\u0394x=1.176, \u0394y=1.636)  [CROSS-ROW]\n  VX             signal   hpwl=2.812\u00b5m  (\u0394x=1.176, \u0394y=1.636)  [CROSS-ROW]\n\nRouting channels (inter-row bands):\n  band 0  y\u22480.334\u00b5m  0 track(s)  \u2192 widen to 0.134 \u00b5m\n  band 1  y\u22481.002\u00b5m  6 track(s)  \u2192 widen to 0.938 \u00b5m\n  band 2  y\u22482.004\u00b5m  5 track(s)  \u2192 widen to 0.804 \u00b5m\n  band 3  y\u22483.006\u00b5m  3 track(s)  \u2192 widen to 0.536 \u00b5m\n"
 }
