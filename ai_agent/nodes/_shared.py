@@ -267,7 +267,6 @@ def _invoke_react_agent_with_retry(
                 model=llm,
                 tools=list(tools or []),
                 system_prompt=_strip_thinking_text(str(system_prompt)),
-                middleware=[SkillMiddleware()],                                   
             )
             history_messages = _normalize_chat_history(chat_history)[-8:]
             input_messages = [
