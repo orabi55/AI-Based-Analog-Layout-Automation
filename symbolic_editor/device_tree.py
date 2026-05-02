@@ -14,17 +14,25 @@ from PySide6.QtWidgets import (
     QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
+    QMenu,
 )
 
 try:
     from .icons import icon_panel_toggle
 except ImportError:
     from icons import icon_panel_toggle
+try:
+    from .icons import icon_group
+except ImportError:
+    try:
+        from icons import icon_group
+    except Exception:
+        icon_group = None
 
 
 class DeviceTreePanel(QWidget):
     """Left sidebar showing design hierarchy, nets, and groups."""
-
+    group_delete_requested = Signal(str) # Signal to pass the group name/ID
     device_selected = Signal(str)
     connection_selected = Signal(str, str, str)
     block_selected = Signal(str)
@@ -39,8 +47,11 @@ class DeviceTreePanel(QWidget):
         self._conn_map = {}
         self._nodes = []
         self._blocks = {}
+        self._custom_groups = []
         self._active_tab = "instances"
         self._init_ui()
+        self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.tree.customContextMenuRequested.connect(self._show_context_menu)
 
     def _init_ui(self):
         layout = QVBoxLayout(self)
@@ -63,7 +74,7 @@ class DeviceTreePanel(QWidget):
         header_layout.addStretch()
 
         toggle_btn = QPushButton()
-        toggle_btn.setIcon(icon_panel_toggle())
+        toggle_btn.setText("<")
         toggle_btn.setFixedSize(26, 26)
         toggle_btn.setToolTip("Hide panel")
         toggle_btn.setStyleSheet(
@@ -72,9 +83,14 @@ class DeviceTreePanel(QWidget):
                 background: transparent;
                 border: none;
                 border-radius: 4px;
+                color: #9aa4b2;
+                font-family: 'Segoe UI';
+                font-size: 14px;
+                font-weight: 700;
             }
             QPushButton:hover {
                 background-color: rgba(255,255,255,0.12);
+                color: #ffffff;
             }
             QPushButton:pressed {
                 background-color: rgba(255,255,255,0.20);
@@ -205,6 +221,22 @@ class DeviceTreePanel(QWidget):
         self.tree.itemClicked.connect(self._on_item_clicked)
         layout.addWidget(self.tree, 1)
 
+    def _show_context_menu(self, position):
+        item = self.tree.itemAt(position)
+        if not item:
+            return
+            
+        role = item.data(0, Qt.ItemDataRole.UserRole)
+        # Check if the clicked item is a Group header
+        if role == "__group_header__": # Use your specific group role key
+            menu = QMenu()
+            delete_action = menu.addAction("Delete Group")
+            action = menu.exec(self.tree.viewport().mapToGlobal(position))
+            
+            if action == delete_action:
+                group_id = item.text(0)
+                self.group_delete_requested.emit(group_id)
+
     def _switch_tab(self, tab_name):
         self._active_tab = tab_name
         self.tab_instances.setChecked(tab_name == "instances")
@@ -230,6 +262,13 @@ class DeviceTreePanel(QWidget):
 
     def set_terminal_nets(self, terminal_nets):
         self._terminal_nets = terminal_nets or {}
+
+    def set_custom_groups(self, groups):
+        """Set runtime custom groups to show in the Groups tab.
+
+        groups: list of dicts {'name': str, 'devices': [dev_id,...]}
+        """
+        self._custom_groups = groups or []
 
     def load_devices(self, nodes, blocks=None):
         self.tree.clear()
@@ -363,6 +402,9 @@ class DeviceTreePanel(QWidget):
                 )
                 group_item.setFont(0, QFont("Segoe UI", 10, QFont.Weight.DemiBold))
                 group_item.setForeground(0, QColor("#bc9ce0"))
+                # Set group icon if available
+                if icon_group:
+                    group_item.setIcon(0, icon_group())
                 for dev_id in sorted(dev_ids):
                     child = QTreeWidgetItem(group_item, [f"  {dev_id}"])
                     child.setForeground(0, QColor("#9a8eb8"))
@@ -370,6 +412,27 @@ class DeviceTreePanel(QWidget):
                     child.setData(0, Qt.ItemDataRole.UserRole, dev_id)
                 group_item.setExpanded(False)
             groups_root.setExpanded(True)
+
+        # Show custom (user-created) groups if present
+        if self._custom_groups:
+            custom_root = QTreeWidgetItem(self.tree, [f"Custom Groups  |  {len(self._custom_groups)}"])
+            custom_root.setFont(0, QFont("Segoe UI", 10, QFont.Weight.Bold))
+            custom_root.setForeground(0, QColor("#f0d07a"))
+            for grp in sorted(self._custom_groups, key=lambda g: g.get('name', '')):
+                name = grp.get('name', 'group')
+                dev_ids = grp.get('devices', [])
+                group_item = QTreeWidgetItem(custom_root, [f"{name}  |  {len(dev_ids)} devices"])
+                group_item.setFont(0, QFont("Segoe UI", 10, QFont.Weight.DemiBold))
+                group_item.setForeground(0, QColor("#f0d07a"))
+                if icon_group:
+                    group_item.setIcon(0, icon_group())
+                for dev_id in sorted(dev_ids):
+                    child = QTreeWidgetItem(group_item, [f"  {dev_id}"])
+                    child.setForeground(0, QColor("#8f7a44"))
+                    child.setFont(0, QFont("Segoe UI", 9))
+                    child.setData(0, Qt.ItemDataRole.UserRole, dev_id)
+                group_item.setExpanded(False)
+            custom_root.setExpanded(True)
 
     def _group_by_parent(self, nodes):
         groups = {}

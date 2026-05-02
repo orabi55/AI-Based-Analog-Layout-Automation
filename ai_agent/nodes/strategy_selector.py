@@ -1,17 +1,6 @@
-"""
-Strategy Selector Node
-======================
-A LangGraph node that generates high-level placement strategies from 
-topology analysis and user requests using an LLM.
-
-Functions:
-- node_strategy_selector: Prompts the LLM for strategies and updates the chat history.
-  - Inputs: state (dict)
-  - Outputs: strategy result and updated chat history.
-"""
-
 import time
 import ai_agent.agents.strategy_selector as strategy_selector
+from ai_agent.agents.strategy_selector import parse_placement_mode
 from ai_agent.nodes._shared import (
     _build_llm_messages,
     _invoke_with_retry,
@@ -36,17 +25,12 @@ def node_strategy_selector(state):
     user_message = state.get("user_message", "Select a strategy based on the analysis.")
     selected_model = state.get("selected_model", "Gemini")
 
-    chat_history = _update_and_save_chat_history(
-        chat_history=chat_history,
-        user_content="",
-        node_role="System",
-        node_content="Starting **Strategy Selector**..."
-    )
+    # Avoid injecting a redundant system message into the chat history.
 
     strategy_prompt = _build_llm_messages(
         strategy_selector.STRATEGY_SELECTOR_PROMPT,
-        chat_history,
-        f"User request: {state.get('user_message', '')}\n\n"
+        [],
+        f"User request: {user_message}\n\n"
         f"Analysis Result:\n{analysis_txt}\n\n"
         f"Layout Constraints:\n{constraint_text}\n\n",
     )
@@ -65,14 +49,19 @@ def node_strategy_selector(state):
         chat_history=chat_history, user_content=user_message,
     )
 
+    # Determine placement_mode from [SYMMETRY] block or strategy text
+    placement_mode = parse_placement_mode(strategy_text or "", constraint_text)
+    vprint(f"[STRATEGY] placement_mode={placement_mode}", flush=True)
+
     elapsed = time.time() - t0
     nchar = len(strategy_text) if strategy_text else 0
     if strategy_text:
-        ip_step("2/5 Strategy Selector", f"ok ({elapsed:.1f}s, {nchar} chars)")
+        ip_step("2/5 Strategy Selector", f"ok ({elapsed:.1f}s, {nchar} chars, mode={placement_mode})")
     else:
-        ip_step("2/5 Strategy Selector", f"no strategies ({elapsed:.1f}s)")
+        ip_step("2/5 Strategy Selector", f"no strategies ({elapsed:.1f}s, mode={placement_mode})")
 
     return {
         "strategy_result": strategy_text,
         "chat_history": updated_chat_history,
+        "placement_mode": placement_mode,
     }

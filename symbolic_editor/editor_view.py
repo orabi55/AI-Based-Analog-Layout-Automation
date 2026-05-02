@@ -7,6 +7,7 @@ grid-snapped editing.
 import math
 import logging
 import os
+from PySide6.QtGui import QUndoCommand
 from typing import List, Dict
 
 
@@ -96,12 +97,35 @@ class HierarchyAwareScene(QGraphicsScene):
         except Exception:
             logging.debug("HierarchyAwareScene selection error", exc_info=True)
 
+class DeleteGroupCommand(QUndoCommand):
+    def __init__(self, editor, group_item):
+        super().__init__(f"Delete Group: {group_item._parent_name}")
+        self.editor = editor
+        self.group_item = group_item
+        self.members = list(group_item._members)
+
+    def redo(self):
+        # Remove from scene and list
+        if self.group_item in self.editor.custom_groups:
+            self.editor.custom_groups.remove(self.group_item)
+        self.editor.scene().removeItem(self.group_item)
+        for m in self.members:
+            m.group_item = None
+
+    def undo(self):
+        # Put it back
+        self.editor.scene().addItem(self.group_item)
+        self.editor.custom_groups.append(self.group_item)
+        for m in self.members:
+            m.group_item = self.group_item
+        self.group_item.update_geometry()
 
 class SymbolicEditor(QGraphicsView):
 
     device_clicked = Signal(str)
     dummy_toggle_requested = Signal()
     drag_finished = Signal()
+    hierarchy_changed = Signal()  # Emitted when groups are created or deleted
 
     def __init__(self):
         super().__init__()
@@ -159,11 +183,11 @@ class SymbolicEditor(QGraphicsView):
         }
 
         # Grid settings
-        self._grid_size = 20   # base grid spacing in scene coords
+        self._grid_size = 10   # base grid spacing in scene coords
         self._grid_color = QColor("#1c2535")
         self._grid_color_major = QColor("#2d3f54")
         self._snap_grid = self._grid_size
-        self._row_pitch = self._grid_size * 3
+        self._row_pitch = self._grid_size * 3 
 
         # Dummy placement mode
         self._dummy_mode = False
@@ -201,6 +225,9 @@ class SymbolicEditor(QGraphicsView):
         # Hierarchy group items (arrays, multipliers, fingers)
         self._hierarchy_groups = []  # list of top-level HierarchyGroupItem
         self._hierarchy_visible = True  # whether hierarchy groups are shown
+
+        # Moving groups only mode
+        self._moving_groups_only = False  # when True, moving a device moves its entire group
 
         # Completely disable scrollbars (policy is more reliable than CSS)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -245,6 +272,12 @@ class SymbolicEditor(QGraphicsView):
     def select_all_devices(self):
         for item in self.device_items.values():
             item.setSelected(True)
+
+    def set_moving_groups_only(self, enabled: bool):
+        """Enable moving groups only mode.
+        When enabled, dragging any device in a group moves the entire group.
+        """
+        self._moving_groups_only = bool(enabled)
 
     def set_colorize_mode(self, enabled: bool):
         """Enable parent-based colorization for all devices."""
@@ -293,6 +326,33 @@ class SymbolicEditor(QGraphicsView):
                 item.set_net_colorize_enabled(enabled, self._color_seed)
         self.viewport().update()
 
+    def _terminal_nets_for_device(self, dev_id):
+        """Return terminal nets for exact, hierarchical, or finger-expanded ids."""
+        if not dev_id:
+            return {}
+        if dev_id in self._terminal_nets:
+            return self._terminal_nets.get(dev_id, {})
+
+        text = str(dev_id)
+        normalized = (
+            text.replace("/", "_")
+            .replace("\\", "_")
+            .replace(".", "_")
+            .replace(":", "_")
+        )
+        tokens = [tok for tok in normalized.split("_") if tok]
+        for key, nets in sorted(
+            self._terminal_nets.items(),
+            key=lambda item: len(str(item[0])),
+            reverse=True,
+        ):
+            key_text = str(key)
+            if key_text in tokens:
+                return nets
+            if normalized.endswith(f"_{key_text}") or f"_{key_text}_" in normalized:
+                return nets
+        return {}
+
     def set_net_labels_visible(self, visible: bool):
         """Toggle net name labels on all device terminals.
 
@@ -300,9 +360,11 @@ class SymbolicEditor(QGraphicsView):
         from the stored _terminal_nets mapping.
         """
         self._net_labels_visible = bool(visible)
+        if not visible:
+            self.clear_highlighted_net()
         for dev_id, item in self.device_items.items():
             if visible:
-                nets = self._terminal_nets.get(dev_id, {})
+                nets = self._terminal_nets_for_device(dev_id)
                 if hasattr(item, 'set_net_labels'):
                     item.set_net_labels(nets, self._color_seed)
             else:
@@ -314,18 +376,60 @@ class SymbolicEditor(QGraphicsView):
             if visible:
                 # Look up nets from the parent name or first child device
                 parent_name = group._parent_name
-                nets = self._terminal_nets.get(parent_name, {})
+                nets = self._terminal_nets_for_device(parent_name)
                 if not nets and group._device_items:
                     # Try the first child device's name
                     first_child = group._device_items[0]
-                    nets = self._terminal_nets.get(
-                        getattr(first_child, 'device_name', ''), {})
+                    nets = self._terminal_nets_for_device(
+                        getattr(first_child, 'device_name', ''))
                 if hasattr(group, 'set_net_labels'):
                     group.set_net_labels(nets, self._color_seed)
             else:
                 if hasattr(group, 'clear_net_labels'):
                     group.clear_net_labels()
 
+        self.viewport().update()
+
+    def set_highlighted_net(self, net_name: str | None):
+        """Focus a net by highlighting matching terminal labels, not wires."""
+        net_name = str(net_name).strip() if net_name else ""
+        if not net_name or net_name == "?":
+            self.clear_highlighted_net()
+            return
+
+        self._highlighted_net = net_name
+        self._net_labels_visible = True
+
+        for dev_id, item in self.device_items.items():
+            nets = self._terminal_nets_for_device(dev_id)
+            if hasattr(item, "set_net_labels"):
+                item.set_net_labels(nets, self._color_seed)
+            if hasattr(item, "set_highlighted_net"):
+                item.set_highlighted_net(net_name)
+
+        for group in self._hierarchy_groups:
+            parent_name = group._parent_name
+            nets = self._terminal_nets_for_device(parent_name)
+            if not nets and group._device_items:
+                first_child = group._device_items[0]
+                nets = self._terminal_nets_for_device(
+                    getattr(first_child, "device_name", "")
+                )
+            if hasattr(group, "set_net_labels"):
+                group.set_net_labels(nets, self._color_seed)
+            if hasattr(group, "set_highlighted_net"):
+                group.set_highlighted_net(net_name)
+
+        self.viewport().update()
+
+    def clear_highlighted_net(self):
+        self._highlighted_net = None
+        for item in self.device_items.values():
+            if hasattr(item, "clear_highlighted_net"):
+                item.clear_highlighted_net()
+        for group in self._hierarchy_groups:
+            if hasattr(group, "clear_highlighted_net"):
+                group.clear_highlighted_net()
         self.viewport().update()
 
     def _snap_value(self, value):
@@ -1448,7 +1552,7 @@ class SymbolicEditor(QGraphicsView):
 
     def _get_terminal_for_net(self, dev_id, net_name):
         """Return which terminal ('S','G','D') of dev_id connects to net_name."""
-        term_map = self._terminal_nets.get(dev_id, {})
+        term_map = self._terminal_nets_for_device(dev_id)
         for term, net in term_map.items():
             if net == net_name:
                 return term
@@ -1462,17 +1566,96 @@ class SymbolicEditor(QGraphicsView):
             self._net_colors[net_name] = palette[idx]
         return self._net_colors[net_name]
 
+    def _anchor_for_net(self, dev_id, item, net_name):
+        """Resolve a robust terminal anchor for a net/device pair."""
+        try:
+            anchors = item.terminal_anchors()
+        except (AttributeError, RuntimeError):
+            return None
+        if not anchors:
+            return None
+        term = self._get_terminal_for_net(dev_id, net_name)
+        return (
+            anchors.get(term)
+            or anchors.get("G")
+            or anchors.get("D")
+            or anchors.get("S")
+            or next(iter(anchors.values()))
+        )
+
+    @staticmethod
+    def _connection_path(p1, p2, index=0, offset_factor=0.25):
+        path = QPainterPath()
+        path.moveTo(p1)
+        dx = p2.x() - p1.x()
+        dy = p2.y() - p1.y()
+        offset = max(abs(dx), abs(dy)) * offset_factor
+        sign = 1.0 if index % 2 == 0 else -1.0
+        if abs(dx) > abs(dy):
+            ctrl1 = QPointF(p1.x() + dx * 0.33, p1.y() + sign * offset)
+            ctrl2 = QPointF(p1.x() + dx * 0.66, p2.y() + sign * offset)
+        else:
+            ctrl1 = QPointF(p1.x() + sign * offset, p1.y() + dy * 0.33)
+            ctrl2 = QPointF(p2.x() + sign * offset, p1.y() + dy * 0.66)
+        path.cubicTo(ctrl1, ctrl2, p2)
+        return path
+
+    def _iter_drawable_edges(self):
+        """Yield unique drawable edge tuples: (source, target, net)."""
+        drawn = set()
+        for edge in self._edges or []:
+            src = edge.get("source")
+            tgt = edge.get("target")
+            net = edge.get("net", "")
+            if not src or not tgt or not net:
+                continue
+            if src not in self.device_items or tgt not in self.device_items:
+                continue
+            edge_sig = (net, *tuple(sorted((str(src), str(tgt)))))
+            if edge_sig in drawn:
+                continue
+            drawn.add(edge_sig)
+            yield src, tgt, net
+
+    def _add_connection_line(self, src, tgt, net_name, index, color, width,
+                             style=Qt.PenStyle.SolidLine, alpha=255, z=10):
+        src_item = self.device_items.get(src)
+        tgt_item = self.device_items.get(tgt)
+        if not src_item or not tgt_item:
+            return False
+        p1 = self._anchor_for_net(src, src_item, net_name)
+        p2 = self._anchor_for_net(tgt, tgt_item, net_name)
+        if p1 is None or p2 is None:
+            return False
+
+        path_item = QGraphicsPathItem(self._connection_path(p1, p2, index))
+        line_color = QColor(color)
+        line_color.setAlpha(alpha)
+        pen = QPen(line_color, width, style)
+        pen.setCosmetic(True)
+        path_item.setPen(pen)
+        path_item.setZValue(z)
+        path_item.setFlag(QGraphicsPathItem.GraphicsItemFlag.ItemIsSelectable, False)
+        self.scene.addItem(path_item)
+        self._conn_lines.append(path_item)
+        return True
+
     def _clear_connections(self):
         """Remove all connection lines and labels from the scene."""
         if self._conn_lines:
             self.scene.blockSignals(True)
             for item in self._conn_lines:
-                self.scene.removeItem(item)
+                try:
+                    if item.scene() is self.scene:
+                        self.scene.removeItem(item)
+                except RuntimeError:
+                    pass
             self._conn_lines.clear()
             self.scene.blockSignals(False)
 
     def _show_connections(self, dev_id):
         """Draw curved lines from dev_id terminals to connected device terminals."""
+        self.clear_highlighted_net()
         self._clear_connections()
         connections = self._conn_map.get(dev_id, [])
         if not connections:
@@ -1482,153 +1665,130 @@ class SymbolicEditor(QGraphicsView):
         if not src_item:
             return
 
-        src_anchors = src_item.terminal_anchors()
-
         self.scene.blockSignals(True)
-        for i, (other_id, net_name) in enumerate(connections):
-            tgt_item = self.device_items.get(other_id)
-            if not tgt_item:
-                continue
-
-            tgt_anchors = tgt_item.terminal_anchors()
-            color = self._get_net_color(net_name)
-
-            # Look up correct terminals from SPICE data
-            src_term = self._get_terminal_for_net(dev_id, net_name)
-            tgt_term = self._get_terminal_for_net(other_id, net_name)
-            p1 = src_anchors[src_term]
-            p2 = tgt_anchors[tgt_term]
-
-            # Build a curved bezier path
-            path = QPainterPath()
-            path.moveTo(p1)
-            dx = p2.x() - p1.x()
-            dy = p2.y() - p1.y()
-            offset = max(abs(dx), abs(dy)) * 0.3
-            sign = 1.0 if i % 2 == 0 else -1.0
-            if abs(dx) > abs(dy):
-                ctrl1 = QPointF(p1.x() + dx * 0.33, p1.y() + sign * offset)
-                ctrl2 = QPointF(p1.x() + dx * 0.66, p2.y() + sign * offset)
-            else:
-                ctrl1 = QPointF(p1.x() + sign * offset, p1.y() + dy * 0.33)
-                ctrl2 = QPointF(p2.x() + sign * offset, p1.y() + dy * 0.66)
-            path.cubicTo(ctrl1, ctrl2, p2)
-
-            path_item = QGraphicsPathItem(path)
-            pen = QPen(color, 0.5, Qt.PenStyle.DashLine)
-            path_item.setPen(pen)
-            path_item.setZValue(10)
-            path_item.setFlag(QGraphicsPathItem.GraphicsItemFlag.ItemIsSelectable, False)
-            self.scene.addItem(path_item)
-            self._conn_lines.append(path_item)
-        self.scene.blockSignals(False)
+        try:
+            for i, (other_id, net_name) in enumerate(connections):
+                if other_id not in self.device_items:
+                    continue
+                color = self._get_net_color(net_name)
+                self._add_connection_line(
+                    dev_id, other_id, net_name, i,
+                    color, 1.4,
+                    style=Qt.PenStyle.DashLine,
+                    alpha=210,
+                    z=10,
+                )
+        finally:
+            self.scene.blockSignals(False)
 
     def _show_net_connections(self, dev_id, net_name):
-        """Highlight only connections for a specific net from a device."""
+        """Highlight a selected net while keeping other nets dimmed for context."""
         self._clear_connections()
-        connections = [(oid, n) for oid, n in self._conn_map.get(dev_id, [])
-                       if n == net_name]
-        if not connections:
-            return
+        self.set_highlighted_net(net_name)
 
-        src_item = self.device_items.get(dev_id)
-        if not src_item:
-            return
+    def highlight_net_by_name(self, net_name: str, color=None):
+        """Highlight a net across the layout and draw dotted flight lines (ratsnest).
 
-        src_anchors = src_item.terminal_anchors()
-        src_term = self._get_terminal_for_net(dev_id, net_name)
-        color = self._get_net_color(net_name)
-
+        Steps:
+          1. Clear any transistor selection (mutually exclusive with net highlight)
+          2. Highlight terminal labels on all devices connected to this net
+          3. Collect every terminal anchor point for the net across all fingers
+          4. Draw dotted lines connecting consecutive anchor points (virtual routing)
+        """
+        # ── 1. Clear transistor selection ────────────────────────────────────
         self.scene.blockSignals(True)
-        for i, (other_id, _) in enumerate(connections):
-            tgt_item = self.device_items.get(other_id)
-            if not tgt_item:
+        self.scene.clearSelection()
+        self.scene.blockSignals(False)
+        self._clear_connections()
+
+        if not net_name or net_name == "?":
+            self.clear_highlighted_net()
+            return
+
+        # ── 2. Highlight net terminal labels ─────────────────────────────────
+        self.set_highlighted_net(net_name)
+
+        # ── 3. Collect anchor points for every finger connected to this net ──
+        anchor_points = []
+        connected_items = []
+        net_up = net_name.strip().upper()
+
+        for dev_id, item in self.device_items.items():
+            term_nets = self._terminal_nets_for_device(dev_id)
+            if not term_nets:
                 continue
+            # Find which terminal(s) connect to this net
+            for terminal, tnet in term_nets.items():
+                if str(tnet).strip().upper() == net_up:
+                    connected_items.append(item)
+                    try:
+                        anchors = item.terminal_anchors()
+                        pt = (anchors.get(terminal)
+                              or anchors.get("G")
+                              or anchors.get("D")
+                              or anchors.get("S")
+                              or (next(iter(anchors.values())) if anchors else None))
+                        if pt is not None:
+                            anchor_points.append(pt)
+                    except (AttributeError, RuntimeError):
+                        pass
+                    break  # one terminal per device for the flight-line
 
-            tgt_anchors = tgt_item.terminal_anchors()
-            tgt_term = self._get_terminal_for_net(other_id, net_name)
-            p1 = src_anchors[src_term]
-            p2 = tgt_anchors[tgt_term]
+        # Apply focus dimming to non-connected devices
+        self._apply_dimming_for_selection(connected_items)
 
-            path = QPainterPath()
-            path.moveTo(p1)
-            dx = p2.x() - p1.x()
-            dy = p2.y() - p1.y()
-            offset = max(abs(dx), abs(dy)) * 0.25
-            sign = 1.0 if i % 2 == 0 else -1.0
-            if abs(dx) > abs(dy):
-                ctrl1 = QPointF(p1.x() + dx * 0.33, p1.y() + sign * offset)
-                ctrl2 = QPointF(p1.x() + dx * 0.66, p2.y() + sign * offset)
-            else:
-                ctrl1 = QPointF(p1.x() + sign * offset, p1.y() + dy * 0.33)
-                ctrl2 = QPointF(p2.x() + sign * offset, p1.y() + dy * 0.66)
-            path.cubicTo(ctrl1, ctrl2, p2)
+        if len(anchor_points) < 2:
+            return  # nothing to connect
 
-            path_item = QGraphicsPathItem(path)
-            pen = QPen(color, 0.5, Qt.PenStyle.DashLine)
-            path_item.setPen(pen)
-            path_item.setZValue(10)
-            self.scene.addItem(path_item)
-            self._conn_lines.append(path_item)
-        self.scene.blockSignals(False)
+        # ── 4. Draw dotted flight lines between sorted anchor points ─────────
+        # Sort by X so lines flow left→right (clean visual order)
+        anchor_points.sort(key=lambda p: p.x())
 
-    def highlight_net_by_name(self, net_name, color):
-        """Highlight all connections for a specific net across the layout using a custom color."""
-        if not getattr(self, "_edges", None):
-            return
+        # Bright cyan dotted lines — clearly visible on the dark layout background
+        flight_color = QColor("#00e5ff")
+        flight_color.setAlpha(220)
+        pen = QPen(flight_color, 1.8, Qt.PenStyle.DotLine,
+                   Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+        pen.setCosmetic(True)
 
         self.scene.blockSignals(True)
-        drawn = set()
-        for i, edge in enumerate(self._edges):
-            if edge.get("net") == net_name:
-                src = edge.get("source")
-                tgt = edge.get("target")
-                if not src or not tgt:
-                    continue
-                
-                # Avoid drawing the exact same undirected edge twice if it exists
-                edge_sig = tuple(sorted([src, tgt]))
-                if edge_sig in drawn:
-                    continue
-                drawn.add(edge_sig)
+        try:
+            for i in range(len(anchor_points) - 1):
+                p1 = anchor_points[i]
+                p2 = anchor_points[i + 1]
+                line_item = QGraphicsPathItem(
+                    self._connection_path(p1, p2, i, offset_factor=0.12)
+                )
+                line_item.setPen(pen)
+                line_item.setZValue(20)
+                line_item.setFlag(
+                    QGraphicsPathItem.GraphicsItemFlag.ItemIsSelectable, False
+                )
+                self.scene.addItem(line_item)
+                self._conn_lines.append(line_item)
 
-                src_item = self.device_items.get(src)
-                tgt_item = self.device_items.get(tgt)
-                if not src_item or not tgt_item:
-                    continue
+                # Small filled circle at each anchor point for clarity
+                dot = self.scene.addEllipse(
+                    p1.x() - 3, p1.y() - 3, 6, 6,
+                    QPen(Qt.PenStyle.NoPen),
+                    QBrush(flight_color)
+                )
+                dot.setZValue(21)
+                self._conn_lines.append(dot)
 
-                src_anchors = src_item.terminal_anchors()
-                tgt_anchors = tgt_item.terminal_anchors()
-                
-                src_term = self._get_terminal_for_net(src, net_name)
-                tgt_term = self._get_terminal_for_net(tgt, net_name)
-                
-                p1 = src_anchors[src_term]
-                p2 = tgt_anchors[tgt_term]
+            # Dot on the last point too
+            p_last = anchor_points[-1]
+            dot_last = self.scene.addEllipse(
+                p_last.x() - 3, p_last.y() - 3, 6, 6,
+                QPen(Qt.PenStyle.NoPen),
+                QBrush(flight_color)
+            )
+            dot_last.setZValue(21)
+            self._conn_lines.append(dot_last)
+        finally:
+            self.scene.blockSignals(False)
 
-                path = QPainterPath()
-                path.moveTo(p1)
-                dx = p2.x() - p1.x()
-                dy = p2.y() - p1.y()
-                offset = max(abs(dx), abs(dy)) * 0.25
-                sign = 1.0 if i % 2 == 0 else -1.0
-                if abs(dx) > abs(dy):
-                    ctrl1 = QPointF(p1.x() + dx * 0.33, p1.y() + sign * offset)
-                    ctrl2 = QPointF(p1.x() + dx * 0.66, p2.y() + sign * offset)
-                else:
-                    ctrl1 = QPointF(p1.x() + sign * offset, p1.y() + dy * 0.33)
-                    ctrl2 = QPointF(p2.x() + sign * offset, p1.y() + dy * 0.66)
-                path.cubicTo(ctrl1, ctrl2, p2)
-
-                path_item = QGraphicsPathItem(path)
-                # use solid thicker line for highlight
-                pen = QPen(QColor(color), 1.5, Qt.PenStyle.SolidLine)
-                path_item.setPen(pen)
-                path_item.setZValue(15)
-                path_item.setFlag(QGraphicsPathItem.GraphicsItemFlag.ItemIsSelectable, False)
-                self.scene.addItem(path_item)
-                self._conn_lines.append(path_item)
-        self.scene.blockSignals(False)
+        self.scene.update()
 
 
     def _on_selection_changed(self):
@@ -1669,12 +1829,34 @@ class SymbolicEditor(QGraphicsView):
         # If no devices remain selectable, clear connections and return
         if not selected:
             self._clear_connections()
+            self._reset_dimming()
             return
+        
+        # Clear any lingering net highlights — transistor and net highlights are mutually exclusive
+        self._clear_connections()
+        self.clear_highlighted_net()
         
         # Emit the signal for the first selectable device
         dev_id = selected[0].device_name
         self.device_clicked.emit(dev_id)
-        self._show_connections(dev_id)
+        # Apply dimming to all non-selected devices
+        self._apply_dimming_for_selection(selected)
+
+    def _apply_dimming_for_selection(self, selected_items):
+        """Dim all devices EXCEPT the selected ones to create a 'Focus Mode'."""
+        self.scene.blockSignals(True)
+        # Convert list to set for faster lookup
+        selected_set = set(selected_items)
+        for item in self.device_items.values():
+            item.set_dimmed(item not in selected_set)
+        self.scene.blockSignals(False)
+
+    def _reset_dimming(self):
+        """Restore full opacity to all devices."""
+        self.scene.blockSignals(True)
+        for item in self.device_items.values():
+            item.set_dimmed(False)
+        self.scene.blockSignals(False)
 
     def fit_to_view(self):
         """Zoom and pan to fit all devices in the viewport."""
@@ -1702,14 +1884,49 @@ class SymbolicEditor(QGraphicsView):
         )
         self._zoom_level = self.transform().m11()
 
-    def highlight_device(self, dev_id):
-        """Highlight a device by its id without moving the view."""
+    def highlight_device(self, dev_id: str):
+        """Highlight a device by its ID."""
+        if not dev_id:
+            self.scene.blockSignals(True)
+            self.scene.clearSelection()
+            self.scene.blockSignals(False)
+            self._reset_dimming()
+            self._clear_connections()
+            self.clear_highlighted_net()
+            return
+
         self.scene.blockSignals(True)
         self.scene.clearSelection()
+
+        matched_items = []
+        # Try exact match first
         item = self.device_items.get(dev_id)
         if item:
             item.setSelected(True)
+            matched_items.append(item)
+        else:
+            # Parent-level match: select every finger whose ID starts with dev_id
+            # Use both '_m' (multiplier) and '_f' (finger) suffix patterns
+            prefix = dev_id + "_"
+            matched = False
+            for fid, fitem in self.device_items.items():
+                if fid == dev_id or fid.startswith(prefix):
+                    fitem.setSelected(True)
+                    matched_items.append(fitem)
+                    matched = True
+            # Also try matching by electrical.parent field on DeviceItems
+            if not matched:
+                for fid, fitem in self.device_items.items():
+                    elec = getattr(fitem, '_electrical', {})
+                    if elec.get('parent', '') == dev_id:
+                        fitem.setSelected(True)
+                        matched_items.append(fitem)
+
         self.scene.blockSignals(False)
+        # Apply focus dimming to non-matched devices
+        self._apply_dimming_for_selection(matched_items)
+        # Trigger visual repaint
+        self.scene.update()
 
     def keyPressEvent(self, event):
         """Handle global keyboard shortcuts."""
@@ -2066,6 +2283,17 @@ class SymbolicEditor(QGraphicsView):
         if self._dummy_mode:
             self._update_dummy_preview(self.mapToScene(event.pos()))
         super().mouseMoveEvent(event)
+    
+    def _should_allow_drag(self, item):
+        if not self.move_groups_only_mode:
+            return True
+        
+        # Check if item belongs to a custom group OR a device-level matched group
+        # Assuming device groups are identified by an attribute like 'group_id' or 'parent_group'
+        has_custom_group = hasattr(item, "group_item") and item.group_item is not None
+        has_device_group = getattr(item, "is_in_device_group", False) # Adjust based on your attribute name
+        
+        return has_custom_group or has_device_group
 
     # -------------------------------------------------
     # Right-click context menu — per-device abutment
@@ -2102,26 +2330,45 @@ class SymbolicEditor(QGraphicsView):
                 self._centroid_items.append(txt)
 
     def contextMenuEvent(self, event):
-        """Show a right-click menu to manually toggle abutment on a device."""
+        """Show a right-click menu for devices or groups."""
         scene_pos = self.mapToScene(event.pos())
         items = self.scene.items(scene_pos)
 
-        # Find the topmost DeviceItem under the cursor
+        # Find the topmost item under the cursor (prioritize HierarchyGroupItem)
         target_item = None
         target_id   = None
+        target_group = None
+        
+        # First, scan for HierarchyGroupItem (since it's below DeviceItems in z-order,
+        # we need to explicitly look for it)
         for it in items:
-            if isinstance(it, DeviceItem):
-                target_item = it
-                # Reverse-lookup device id
-                for dev_id, item in self.device_items.items():
-                    if item is target_item:
-                        target_id = dev_id
-                        break
+            if isinstance(it, HierarchyGroupItem):
+                target_group = it
                 break
+        
+        # If no group found, look for the topmost DeviceItem
+        if target_group is None:
+            for it in items:
+                if isinstance(it, DeviceItem):
+                    target_item = it
+                    # Reverse-lookup device id
+                    for dev_id, item in self.device_items.items():
+                        if item is target_item:
+                            target_id = dev_id
+                            break
+                    break
 
+        # Handle group context menu
+        if target_group is not None:
+            self._show_group_context_menu(target_group, event.globalPos())
+            return
+        
         if target_item is None or target_id is None:
             super().contextMenuEvent(event)
             return
+
+        # Get all currently selected DeviceItems
+        selected_devices = [s for s in self.scene.selectedItems() if isinstance(s, DeviceItem)]
 
         menu = QMenu(self)
         menu.setStyleSheet("""
@@ -2152,6 +2399,16 @@ class SymbolicEditor(QGraphicsView):
         title_act.setEnabled(False)
         menu.addAction(title_act)
         menu.addSeparator()
+
+        # "Create Group" option if multiple items are selected
+        act_create_group = None
+        if len(selected_devices) > 1:
+            act_create_group = QAction("Create Group", self)
+            act_create_group.setToolTip(
+                f"Create a new group with the {len(selected_devices)} selected fingers"
+            )
+            menu.addAction(act_create_group)
+            menu.addSeparator()
 
         # Left abutment toggle
         act_left = QAction("Left Abutment", self)
@@ -2195,7 +2452,9 @@ class SymbolicEditor(QGraphicsView):
 
         chosen = menu.exec(event.globalPos())
 
-        if chosen == act_left:
+        if chosen == act_create_group:
+            self._create_custom_group(selected_devices)
+        elif chosen == act_left:
             target_item.toggle_abut_left()
         elif chosen == act_right:
             target_item.toggle_abut_right()
@@ -2222,6 +2481,135 @@ class SymbolicEditor(QGraphicsView):
             for item in self.scene.items():
                 if hasattr(item, 'get_logical_name') and item.get_logical_name() == target_item.get_logical_name():
                     item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, new_movable)
+
+    def _create_custom_group(self, device_items: List[DeviceItem]):
+        """Create a new HierarchyGroupItem from the given device items.
+        
+        Args:
+            device_items: List of DeviceItem instances to group together
+        """
+        if not device_items or len(device_items) < 2:
+            return
+        
+        try:
+            # Generate a unique group name
+            existing_custom_groups = [
+                g._parent_name for g in self._hierarchy_groups 
+                if g._parent_name.startswith("GROUP_")
+            ]
+            group_num = len(existing_custom_groups) + 1
+            group_name = f"GROUP_{group_num}"
+            
+            # Build hierarchy info
+            hierarchy_info = {
+                "m": 1,
+                "nf": len(device_items),
+                "is_array": False,
+            }
+            
+            # Use a distinctive color for custom groups (e.g., golden/amber)
+            fill_color = QColor(100, 80, 40, 50)
+            border_color = QColor(220, 160, 80, 200)
+            
+            # Create the group
+            group_item = HierarchyGroupItem(
+                group_name, device_items, hierarchy_info,
+                color=fill_color, border_color=border_color,
+            )
+            
+            # Wire up signals
+            group_item.signals.drag_finished.connect(
+                lambda g=group_item: self._on_hierarchy_drag_finished(g)
+            )
+            group_item.signals.descend_requested.connect(self._on_hierarchy_descend)
+            group_item.signals.ascend_requested.connect(self._on_hierarchy_ascend)
+            
+            # Add to scene and tracking list
+            self.scene.addItem(group_item)
+            self._hierarchy_groups.append(group_item)
+            
+            # Clear selection and select the new group
+            self.scene.clearSelection()
+            group_item.setSelected(True)
+            
+            logging.info(f"Created custom group '{group_name}' with {len(device_items)} devices")
+            
+            # Trigger hierarchy update in layout_tab
+            self._notify_hierarchy_changed()
+            
+        except Exception as e:
+            logging.error(f"Failed to create custom group: {e}", exc_info=True)
+    
+    def _delete_group(self, group_item: HierarchyGroupItem):
+        """Delete a group and ungroup its devices.
+        
+        Args:
+            group_item: The HierarchyGroupItem to delete
+        """
+        if group_item not in self._hierarchy_groups:
+            return
+        
+        try:
+            # Remove from scene and tracking list
+            self.scene.removeItem(group_item)
+            self._hierarchy_groups.remove(group_item)
+            
+            logging.info(f"Deleted group '{group_item._parent_name}'")
+            
+            # Trigger hierarchy update in layout_tab
+            self._notify_hierarchy_changed()
+            
+        except Exception as e:
+            logging.error(f"Failed to delete group: {e}", exc_info=True)
+    
+    def _notify_hierarchy_changed(self):
+        """Notify parent (layout_tab) that hierarchy has changed and needs refresh."""
+        try:
+            self.hierarchy_changed.emit()
+        except Exception as e:
+            logging.error(f"Failed to emit hierarchy_changed signal: {e}")
+    
+    def _show_group_context_menu(self, group_item: HierarchyGroupItem, global_pos):
+        """Show context menu for a group."""
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: #1e2130;
+                color: #e0e0e0;
+                border: 1px solid #3a3f55;
+                border-radius: 6px;
+                padding: 4px;
+                font-family: 'Segoe UI';
+            }
+            QMenu::item {
+                padding: 5px 18px;
+                border-radius: 4px;
+            }
+            QMenu::item:selected {
+                background-color: #3a3f55;
+            }
+            QMenu::separator {
+                height: 1px;
+                background: #3a3f55;
+                margin: 3px 8px;
+            }
+        """)
+        
+        # Title (non-interactive label)
+        title_act = QAction(f"Group: {group_item._parent_name}", self)
+        title_act.setEnabled(False)
+        menu.addAction(title_act)
+        menu.addSeparator()
+        
+        # Delete group option
+        act_delete = QAction("Delete Group", self)
+        act_delete.setToolTip("Delete this group (devices will be ungrouped)")
+        menu.addAction(act_delete)
+        
+        chosen = menu.exec(global_pos)
+        
+        if chosen == act_delete:
+            self._delete_group(group_item)
 
     # -------------------------------------------------
     # Export helper — abutment state for OAS writer

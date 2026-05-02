@@ -76,6 +76,7 @@ class HierarchyGroupItem(QGraphicsRectItem):
         self._show_net_labels = False
         self._net_names = {}       # {"D": "VDD", "G": "clk", "S": "VSS"}
         self._net_color_seed = 0
+        self._highlighted_net = None
 
         # Build a flat list of ALL descendant device items (recursive)
         self._all_descendant_devices = self._collect_all_descendant_devices()
@@ -104,6 +105,28 @@ class HierarchyGroupItem(QGraphicsRectItem):
         self._show_net_labels = False
         self._net_names = {}
         self.update()
+
+    def set_highlighted_net(self, net_name):
+        self._highlighted_net = str(net_name) if net_name else None
+        self.update()
+
+    def clear_highlighted_net(self):
+        self._highlighted_net = None
+        self.update()
+
+    def _net_focus_state(self, net_name):
+        if not self._highlighted_net or not net_name:
+            return "normal"
+        return "focus" if str(net_name) == self._highlighted_net else "dim"
+
+    def _net_label_color(self, net_name):
+        state = self._net_focus_state(net_name)
+        if state == "focus":
+            return QColor("#111827")
+        color = self._get_net_color(net_name)
+        if state == "dim":
+            color.setAlpha(70)
+        return color
 
     def _get_net_color(self, net_name):
         """Consistent unique color for nets (shared logic with DeviceItem)."""
@@ -332,14 +355,36 @@ class HierarchyGroupItem(QGraphicsRectItem):
                         tw = fm.horizontalAdvance(lbl)
                         th = fm.height()
                         rect_lbl = QRectF(-tw/2, -th/2, tw, th)
+                        focus_state = self._net_focus_state(net_str)
+                        if focus_state == "focus":
+                            fill = QColor("#facc15")
+                            fill.setAlpha(180)
+                            painter.setBrush(QBrush(fill))
+                            painter.setPen(QPen(QColor("#f59e0b"), 2.0))
+                            painter.drawRoundedRect(
+                                rect_lbl.adjusted(-4, -2, 4, 2),
+                                3,
+                                3,
+                            )
+                        elif focus_state == "dim":
+                            fill = QColor("#0b0f16")
+                            fill.setAlpha(110)
+                            painter.setBrush(QBrush(fill))
+                            painter.setPen(Qt.PenStyle.NoPen)
+                            painter.drawRoundedRect(
+                                rect_lbl.adjusted(-3, -1, 3, 1),
+                                3,
+                                3,
+                            )
                         
                         # Omni-glow
                         glow_off = fs * 0.05
-                        painter.setPen(QColor(0, 0, 0, 200))
+                        glow_alpha = 90 if focus_state == "dim" else 200
+                        painter.setPen(QColor(0, 0, 0, glow_alpha))
                         for dx, dy in [(-glow_off,0), (glow_off,0), (0,-glow_off), (0,glow_off)]:
                             painter.drawText(rect_lbl.translated(dx, dy), Qt.AlignmentFlag.AlignCenter, lbl)
                         
-                        painter.setPen(self._get_net_color(net_str))
+                        painter.setPen(self._net_label_color(net_str))
                         painter.drawText(rect_lbl, Qt.AlignmentFlag.AlignCenter, lbl)
                         painter.restore()
 

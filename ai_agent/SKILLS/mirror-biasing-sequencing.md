@@ -1,6 +1,7 @@
 ---
 id: bias_mirror
 name: Mirror Bias Symmetry
+description: Enforce mirror symmetry for bias mirror device groups.
 
 trigger:
   mode: MB
@@ -9,6 +10,8 @@ trigger:
 scope:
   - matched_device_set (local symmetry domain only)
   - never applies globally unless explicitly defined as MB group
+
+---
 
 ────────────────────────────────────
 CORE PURPOSE

@@ -1,6 +1,7 @@
 ---
 id: interdigitate
 name: Ratio-Based Interdigitation
+description: Interleave device fingers to preserve ratios and statistical distribution.
 
 trigger:
   mode: IG
@@ -9,6 +10,8 @@ trigger:
 scope:
   - matched_device_set (local group only)
   - may apply to CC substructures only if explicitly enabled by strategy
+
+---
 
 ────────────────────────────────────
 CORE PURPOSE

@@ -46,6 +46,9 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QMenu,
     QStatusBar,
+    QTabBar,
+    QToolButton,
+    QSizePolicy,
 )
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import (
@@ -72,13 +75,17 @@ from icons import (
     icon_flip_h,
     icon_flip_v,
     icon_add_dummy,
-    icon_open_file,
     icon_import_file,
-    icon_save_file,
     icon_export_file,
+    icon_home,
+    icon_new_tab,
+    icon_bell,
+    icon_circuit_tab,
     icon_abutment,
     icon_ai_placement,
     icon_colorize,
+    icon_schematic,
+    icon_route,
 )
 from widgets.welcome_screen import WelcomeScreen
 
@@ -105,19 +112,21 @@ class MainWindow(QMainWindow):
         self._stack.addWidget(self._welcome)  # index 0
 
         self._tab_widget = QTabWidget()
-        self._tab_widget.setTabsClosable(True)
-        self._tab_widget.setMovable(True)
+        self._syncing_document_tabs = False
+        self._doc_tab_bar = None
+        self._tab_widget.setTabsClosable(False)
+        self._tab_widget.setMovable(False)
         self._tab_widget.setDocumentMode(True)
-        self._tab_widget.tabCloseRequested.connect(self._close_tab)
         self._tab_widget.currentChanged.connect(self._on_tab_changed)
         self._tab_widget.setStyleSheet(self._tab_bar_style())
+        self._tab_widget.tabBar().hide()
         self._stack.addWidget(self._tab_widget)  # index 1
 
         # ── Menu bar & Toolbar ───────────────────────────────────
         self._create_menu_bar()
         self._create_file_toolbar()
         self._create_toolbar()
-        self._create_status_bar()
+        self._status_bar = None
 
         # ── Open initial file if given ───────────────────────────
         if initial_file and os.path.isfile(initial_file):
@@ -130,16 +139,171 @@ class MainWindow(QMainWindow):
     #  Tab helpers
     # =================================================================
     def current_tab(self) -> LayoutEditorTab | None:
+        if self._stack.currentIndex() != 1:
+            return None
         w = self._tab_widget.currentWidget()
         return w if isinstance(w, LayoutEditorTab) else None
+
+    def _create_document_tab_bar(self):
+        tab_bar = QTabBar()
+        tab_bar.setDocumentMode(True)
+        tab_bar.setMovable(True)
+        tab_bar.setExpanding(False)
+        tab_bar.setUsesScrollButtons(True)
+        tab_bar.setElideMode(Qt.TextElideMode.ElideRight)
+        tab_bar.setMinimumWidth(1)
+        tab_bar.setMaximumWidth(560)
+        tab_bar.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        tab_bar.setStyleSheet(
+            """
+            QTabBar {
+                background-color: transparent;
+                border: none;
+                qproperty-drawBase: 0;
+            }
+            QTabBar::tab {
+                background-color: #1b1d23;
+                color: #aab2bf;
+                border: 1px solid #2b3038;
+                border-radius: 4px;
+                padding: 4px 24px 4px 10px;
+                margin: 0 2px;
+                min-width: 118px;
+                max-width: 220px;
+                font-family: 'Segoe UI';
+                font-size: 9pt;
+                font-weight: 600;
+            }
+            QTabBar::tab:selected {
+                background-color: #242832;
+                color: #f4f7fb;
+                border-color: #3b4654;
+            }
+            QTabBar::tab:hover:!selected {
+                background-color: #222631;
+                color: #dce3ec;
+                border-color: #394251;
+            }
+            """
+        )
+        tab_bar.currentChanged.connect(self._on_document_tab_changed)
+        tab_bar.tabMoved.connect(self._on_document_tab_moved)
+        self._doc_tab_bar = tab_bar
+        return tab_bar
+
+    def _insert_document_tab(self, index, title):
+        if self._doc_tab_bar is None:
+            return
+        self._syncing_document_tabs = True
+        try:
+            tab_index = self._doc_tab_bar.insertTab(index, icon_circuit_tab(), title)
+            self._doc_tab_bar.setTabToolTip(tab_index, title)
+            self._install_document_tab_close_button(tab_index)
+            self._update_document_tab_bar_width()
+        finally:
+            self._syncing_document_tabs = False
+
+    def _install_document_tab_close_button(self, index):
+        if self._doc_tab_bar is None or index < 0:
+            return
+        button = QToolButton(self._doc_tab_bar)
+        button.setText("x")
+        button.setToolTip("Close tab")
+        button.setCursor(Qt.CursorShape.PointingHandCursor)
+        button.setFixedSize(16, 16)
+        button.setStyleSheet(
+            """
+            QToolButton {
+                background: transparent;
+                color: #7f8793;
+                border: none;
+                border-radius: 4px;
+                font-family: 'Segoe UI';
+                font-size: 9pt;
+                font-weight: 700;
+                padding: 0;
+            }
+            QToolButton:hover {
+                background-color: #313743;
+                color: #f4f7fb;
+            }
+            QToolButton:pressed {
+                background-color: #3b4452;
+            }
+            """
+        )
+        button.clicked.connect(lambda _checked=False, b=button: self._close_tab_from_button(b))
+        self._doc_tab_bar.setTabButton(index, QTabBar.ButtonPosition.RightSide, button)
+
+    def _update_document_tab_bar_width(self):
+        if self._doc_tab_bar is None:
+            return
+        count = self._doc_tab_bar.count()
+        if count <= 0:
+            self._doc_tab_bar.setFixedWidth(1)
+            return
+        fm = self._doc_tab_bar.fontMetrics()
+        width = 8
+        for index in range(count):
+            text_width = fm.horizontalAdvance(self._doc_tab_bar.tabText(index))
+            width += min(max(text_width + 58, 126), 224) + 4
+        self._doc_tab_bar.setFixedWidth(min(width, 560))
+
+    def _close_tab_from_button(self, button):
+        if self._doc_tab_bar is None:
+            return
+        for index in range(self._doc_tab_bar.count()):
+            if self._doc_tab_bar.tabButton(index, QTabBar.ButtonPosition.RightSide) is button:
+                self._close_tab(index)
+                return
+
+    def _set_document_tab_current(self, index):
+        if self._doc_tab_bar is None:
+            return
+        self._syncing_document_tabs = True
+        try:
+            if 0 <= index < self._doc_tab_bar.count():
+                self._doc_tab_bar.setCurrentIndex(index)
+            else:
+                self._doc_tab_bar.setCurrentIndex(-1)
+        finally:
+            self._syncing_document_tabs = False
+
+    def _on_document_tab_changed(self, index):
+        if self._syncing_document_tabs or index < 0 or index >= self._tab_widget.count():
+            return
+        self._stack.setCurrentIndex(1)
+        self._set_chrome_visible(True)
+        self._tab_widget.setCurrentIndex(index)
+        self._on_tab_changed(index)
+
+    def _on_document_tab_moved(self, from_index, to_index):
+        if self._syncing_document_tabs or from_index == to_index:
+            return
+        if not (0 <= from_index < self._tab_widget.count() and 0 <= to_index < self._tab_widget.count()):
+            return
+        widget = self._tab_widget.widget(from_index)
+        title = self._tab_widget.tabText(from_index)
+        icon = self._tab_widget.tabIcon(from_index)
+        self._syncing_document_tabs = True
+        try:
+            self._tab_widget.removeTab(from_index)
+            self._tab_widget.insertTab(to_index, widget, icon, title)
+            self._tab_widget.setCurrentIndex(to_index)
+            self._update_document_tab_bar_width()
+        finally:
+            self._syncing_document_tabs = False
+        self._on_tab_changed(to_index)
 
     def _new_tab(self, placement_file=None) -> LayoutEditorTab:
         tab = LayoutEditorTab(placement_file, parent=self._tab_widget)
         title = tab.document_title
-        idx = self._tab_widget.addTab(tab, title)
-        self._tab_widget.setCurrentIndex(idx)
+        idx = self._tab_widget.addTab(tab, icon_circuit_tab(), title)
+        self._insert_document_tab(idx, title)
         self._stack.setCurrentIndex(1)  # show tabs
         self._set_chrome_visible(True)
+        self._tab_widget.setCurrentIndex(idx)
+        self._set_document_tab_current(idx)
         self.setWindowTitle(f"Symbolic Layout Editor — {title}")
         tab.editor.setFocus(Qt.FocusReason.OtherFocusReason)
 
@@ -152,25 +316,42 @@ class MainWindow(QMainWindow):
 
         # Initial sync
         self._sync_undo_redo(tab.can_undo(), tab.can_redo())
+        tab._update_grid_counts()
         self._sync_selection(tab.selection_count())
         self._sync_mode_toggles()
         return tab
 
     def _close_tab(self, index):
+        if not (0 <= index < self._tab_widget.count()):
+            return
         tab = self._tab_widget.widget(index)
         if isinstance(tab, LayoutEditorTab):
             tab.shutdown()
+        if self._doc_tab_bar is not None and index < self._doc_tab_bar.count():
+            self._syncing_document_tabs = True
+            try:
+                self._doc_tab_bar.removeTab(index)
+                self._update_document_tab_bar_width()
+            finally:
+                self._syncing_document_tabs = False
         self._tab_widget.removeTab(index)
         if self._tab_widget.count() == 0:
             self._stack.setCurrentIndex(0)  # show welcome
             self._set_chrome_visible(False)
             self.setWindowTitle("Symbolic Layout Editor")
+        else:
+            self._stack.setCurrentIndex(1)
+            self._set_chrome_visible(True)
+            self._set_document_tab_current(self._tab_widget.currentIndex())
+            self._on_tab_changed(self._tab_widget.currentIndex())
 
     def _on_tab_changed(self, index):
         tab = self.current_tab()
         if tab is None:
             return
+        self._set_document_tab_current(index)
         self._sync_undo_redo(tab.can_undo(), tab.can_redo())
+        tab._update_grid_counts()
         self._sync_selection(tab.selection_count())
         self._sync_mode_toggles()
         tab.editor.setFocus(Qt.FocusReason.OtherFocusReason)
@@ -179,6 +360,10 @@ class MainWindow(QMainWindow):
         idx = self._tab_widget.indexOf(tab)
         if idx >= 0:
             self._tab_widget.setTabText(idx, title)
+            if self._doc_tab_bar is not None and idx < self._doc_tab_bar.count():
+                self._doc_tab_bar.setTabText(idx, title)
+                self._doc_tab_bar.setTabToolTip(idx, title)
+                self._update_document_tab_bar_width()
         if tab is self.current_tab():
             self.setWindowTitle(f"Symbolic Layout Editor — {title}")
 
@@ -216,7 +401,7 @@ class MainWindow(QMainWindow):
             self._tb_act_redo.setEnabled(can_redo)
 
     def _sync_selection(self, count):
-        self._sel_label.setText(f"  Sel: {count}  ")
+        self._sel_label.setText(f"Sel {count}")
 
     def _sync_grid(self, rows, cols, min_rows, min_cols):
         self._ignore_grid_spin = True
@@ -250,13 +435,15 @@ class MainWindow(QMainWindow):
     def _create_menu_bar(self):
         mb = self.menuBar()
         mb.setStyleSheet(
-            "QMenuBar { background-color: #12161f; color: #c8d0dc; "
-            "border-bottom: 1px solid #2d3548; font-family: 'Segoe UI'; font-size: 10pt; }"
-            "QMenuBar::item:selected { background-color: #2d3f54; }"
-            "QMenu { background-color: #1a1f2b; color: #c8d0dc; border: 1px solid #2d3548; "
+            "QMenuBar { background-color: #15171d; color: #d4dae4; "
+            "border-bottom: 1px solid #2a2f38; font-family: 'Segoe UI'; font-size: 10pt; }"
+            "QMenuBar::item { padding: 4px 9px; }"
+            "QMenuBar::item:selected { background-color: #22262e; color: #ffffff; }"
+            "QMenu { background-color: #1b1e25; color: #d4dae4; border: 1px solid #303642; "
             "font-family: 'Segoe UI'; font-size: 10pt; }"
-            "QMenu::item:selected { background-color: #2d3f54; }"
-            "QMenu::separator { background-color: #2d3548; height: 1px; margin: 4px 8px; }"
+            "QMenu::item { padding: 5px 22px; }"
+            "QMenu::item:selected { background-color: #283141; color: #ffffff; }"
+            "QMenu::separator { background-color: #303642; height: 1px; margin: 4px 8px; }"
         )
 
         # ── File ─────────────────────────────────────────────────
@@ -310,33 +497,6 @@ class MainWindow(QMainWindow):
         edit_menu.addAction("&Delete Selected", lambda: self._fwd("do_delete"), QKeySequence("Del"))
         edit_menu.addSeparator()
 
-        # Close Row Gap — embedded checkbox + spin
-        self._act_close_row_gap = QCheckBox(" Close Row Gap")
-        self._act_close_row_gap.setStyleSheet(
-            "QCheckBox { color: #c8d0dc; font-family: 'Segoe UI'; padding: 4px 8px; }"
-        )
-        self._row_gap_spin = QDoubleSpinBox()
-        self._row_gap_spin.setRange(0.0, 10.0)
-        self._row_gap_spin.setSingleStep(0.1)
-        self._row_gap_spin.setValue(0.0)
-        self._row_gap_spin.setSuffix(" µm")
-        self._row_gap_spin.setEnabled(False)
-        self._row_gap_spin.setFixedWidth(100)
-        self._row_gap_spin.setStyleSheet(
-            "QDoubleSpinBox { background: #1a1f2b; color: #c8d0dc; border: 1px solid #2d3548; "
-            "border-radius: 4px; padding: 2px 6px; }"
-        )
-        w_gap = QWidget()
-        h_gap = QHBoxLayout(w_gap)
-        h_gap.setContentsMargins(8, 2, 8, 2)
-        h_gap.addWidget(self._act_close_row_gap)
-        h_gap.addWidget(self._row_gap_spin)
-        wa_gap = QWidgetAction(self)
-        wa_gap.setDefaultWidget(w_gap)
-        edit_menu.addAction(wa_gap)
-        self._act_close_row_gap.toggled.connect(self._on_close_row_gap_toggled)
-        self._row_gap_spin.valueChanged.connect(self._on_row_gap_spin_changed)
-
         # ── View ─────────────────────────────────────────────────
         view_menu = mb.addMenu("&View")
         view_menu.addAction("Fit to View", lambda: self._fwd_editor("fit_to_view"))
@@ -345,6 +505,7 @@ class MainWindow(QMainWindow):
         view_menu.addAction("Reset Zoom", lambda: self._fwd_editor("zoom_reset"))
         view_menu.addSeparator()
         view_menu.addAction("Toggle Device Tree", lambda: self._fwd("_toggle_device_tree"))
+        view_menu.addAction("Toggle Schematic Assistant", lambda: self._fwd("_toggle_schematic_panel"))
         view_menu.addAction("Toggle Chat Panel", lambda: self._fwd("_toggle_chat_panel"))
         view_menu.addAction("Toggle KLayout Preview", lambda: self._fwd("_toggle_klayout_panel"))
         view_menu.addSeparator()
@@ -383,13 +544,14 @@ class MainWindow(QMainWindow):
         tb.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
         tb.setIconSize(QSize(16, 16))
         tb.setStyleSheet(
-            "QToolBar { background-color: #12161f; border: none; border-bottom: 1px solid #2d3548; spacing: 2px; padding: 2px 8px 4px 8px; }"
-            "QToolBar::separator { background-color: #2d3548; width: 1px; margin: 4px 6px; }"
-            "QToolButton { background: transparent; border: 1px solid transparent; border-radius: 6px; "
-            "padding: 4px; min-width: 24px; min-height: 24px; }"
-            "QToolButton:hover { background-color: #1e2a3a; border-color: #31445c; }"
-            "QToolButton:pressed { background-color: #24354a; }"
-            "QLabel { color: #8a9caf; font-family: 'Segoe UI'; font-size: 8.5pt; font-weight: 600; padding: 0 2px 0 6px; }"
+            "QToolBar { background-color: #15171d; border: none; border-bottom: 1px solid #2a2f38; spacing: 3px; padding: 3px 8px; }"
+            "QToolBar::separator { background-color: #2f3540; width: 1px; margin: 4px 7px; }"
+            "QToolButton { background: transparent; border: 1px solid transparent; border-radius: 5px; "
+            "padding: 4px; color: #d8dde6; min-width: 24px; min-height: 24px; }"
+            "QToolButton:hover { background-color: #22262e; border-color: #3a424e; }"
+            "QToolButton:pressed { background-color: #2b313b; }"
+            "QToolButton:checked { background-color: #243546; border-color: #5aa9e6; }"
+            "QLabel { color: #9aa4b2; font-family: 'Segoe UI'; font-size: 8.5pt; font-weight: 600; padding: 0 2px 0 6px; }"
         )
         self._file_toolbar = tb
         self.addToolBar(Qt.ToolBarArea.TopToolBarArea, tb)
@@ -399,29 +561,42 @@ class MainWindow(QMainWindow):
         self._quick_act_import.triggered.connect(self._on_import)
         tb.addAction(self._quick_act_import)
 
-        self._quick_act_open = QAction(icon_open_file(), "Open JSON", self)
-        self._quick_act_open.setToolTip("Open placement JSON (Ctrl+O)")
-        self._quick_act_open.triggered.connect(self._on_open_file)
-        tb.addAction(self._quick_act_open)
-
-        self._quick_act_save = QAction(icon_save_file(), "Save", self)
-        self._quick_act_save.setToolTip("Save current layout (Ctrl+S)")
-        self._quick_act_save.triggered.connect(lambda: self._fwd("do_save"))
-        tb.addAction(self._quick_act_save)
-
         self._quick_act_export = QAction(icon_export_file(), "Export JSON", self)
         self._quick_act_export.setToolTip("Export placement JSON")
         self._quick_act_export.triggered.connect(lambda: self._fwd("do_export_json"))
         tb.addAction(self._quick_act_export)
 
         tb.addSeparator()
-        self._workspace_toggle_label = QLabel("View")
-        tb.addWidget(self._workspace_toggle_label)
+        self._quick_act_home = QAction(icon_home(), "Home", self)
+        self._quick_act_home.setToolTip("Go to opening page")
+        self._quick_act_home.triggered.connect(self._show_home)
+        tb.addAction(self._quick_act_home)
+
+        tb.addWidget(self._create_document_tab_bar())
+
+        self._quick_act_new_tab = QAction(icon_new_tab(), "New Tab", self)
+        self._quick_act_new_tab.setToolTip("Open a new tab (Ctrl+T)")
+        self._quick_act_new_tab.triggered.connect(self._on_new_tab)
+        tb.addAction(self._quick_act_new_tab)
+
+        left_spacer = QWidget()
+        left_spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        tb.addWidget(left_spacer)
+
         self._workspace_quick_toggle = SegmentedToggle(variant="toolbar")
         self._workspace_quick_toggle.setToolTip("Switch workspace view")
         self._workspace_quick_toggle.mode_changed.connect(self._on_workspace_mode_changed)
         self._workspace_quick_toggle.setEnabled(False)
         tb.addWidget(self._workspace_quick_toggle)
+
+        right_spacer = QWidget()
+        right_spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        tb.addWidget(right_spacer)
+
+        self._quick_act_notifications = QAction(icon_bell(), "Notifications", self)
+        self._quick_act_notifications.setToolTip("Notifications")
+        self._quick_act_notifications.triggered.connect(self._show_notifications)
+        tb.addAction(self._quick_act_notifications)
 
     def _create_toolbar(self):
         tb = QToolBar("Main")
@@ -430,14 +605,16 @@ class MainWindow(QMainWindow):
         tb.setAllowedAreas(Qt.ToolBarArea.LeftToolBarArea)
         tb.setOrientation(Qt.Orientation.Vertical)
         tb.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
-        tb.setIconSize(QSize(18, 18))
+        tb.setIconSize(QSize(16, 16))
         tb.setStyleSheet(
-            "QToolBar { background-color: #10151d; border-right: 1px solid #2d3548; spacing: 4px; padding: 6px 5px; }"
-            "QToolButton { background: transparent; border: 1px solid transparent; border-radius: 8px; "
-            "padding: 5px; color: #c8d0dc; min-width: 28px; min-height: 28px; }"
-            "QToolButton:hover { background-color: #1e2a3a; border-color: #3d5066; }"
-            "QToolButton:pressed { background-color: #2d3f54; }"
-            "QToolButton:checked { background-color: #243a53; border-color: #4a90d9; }"
+            "QToolBar { background-color: #121419; border-right: 1px solid #2a2f38; spacing: 3px; padding: 5px 4px; }"
+            "QToolBar::separator { background-color: #303642; height: 1px; margin: 4px 4px; }"
+            "QToolButton { background: transparent; border: 1px solid transparent; border-radius: 6px; "
+            "padding: 3px; color: #d8dde6; min-width: 24px; min-height: 24px; }"
+            "QToolButton:hover { background-color: #22262e; border-color: #3a424e; }"
+            "QToolButton:pressed { background-color: #2b313b; }"
+            "QToolButton:checked { background-color: #243546; border-color: #5aa9e6; }"
+            "QLabel { color: #9aa4b2; font-family: 'Segoe UI'; font-size: 8pt; font-weight: 600; }"
         )
         self._toolbar = tb
         self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, tb)
@@ -453,6 +630,12 @@ class MainWindow(QMainWindow):
         self._tb_act_redo.setEnabled(False)
         self._tb_act_redo.triggered.connect(lambda: self._fwd("do_redo"))
         tb.addAction(self._tb_act_redo)
+        tb.addSeparator()
+
+        self._tb_act_schematic = QAction(icon_schematic(), "Toggle Schematic Assistant", self)
+        self._tb_act_schematic.setToolTip("Toggle Schematic Assistant")
+        self._tb_act_schematic.triggered.connect(lambda: self._fwd("_toggle_schematic_panel"))
+        tb.addAction(self._tb_act_schematic)
         tb.addSeparator()
 
         self._tb_act_fit = QAction(icon_fit_view(), "Fit View", self)
@@ -497,6 +680,13 @@ class MainWindow(QMainWindow):
         self._act_add_dummy.setToolTip("Toggle dummy placement mode (D)")
         self._act_add_dummy.toggled.connect(self._on_toggle_dummy)
         tb.addAction(self._act_add_dummy)
+        tb.addSeparator()
+
+        self._tb_act_route = QAction(icon_route(), "Toggle Routing Channels", self)
+        self._tb_act_route.setCheckable(True)
+        self._tb_act_route.setToolTip("Insert/Remove Routing Channels")
+        self._tb_act_route.triggered.connect(lambda checked: self._fwd("_on_toggle_route", checked))
+        tb.addAction(self._tb_act_route)
 
         self._act_abutment = QAction(icon_abutment(), "Abutment Analysis", self)
         self._act_abutment.setCheckable(True)
@@ -510,11 +700,26 @@ class MainWindow(QMainWindow):
         self._act_colorize.toggled.connect(self._on_toggle_colorize)
         tb.addAction(self._act_colorize)
 
+        self._act_moving_groups = QAction("Moving Groups Only", self)
+        self._act_moving_groups.setCheckable(True)
+        self._act_moving_groups.setToolTip("When enabled, dragging a device moves its entire group")
+        self._act_moving_groups.toggled.connect(self._on_toggle_moving_groups)
+        tb.addAction(self._act_moving_groups)
+
         self._tb_act_ai = QAction(icon_ai_placement(), "Run AI Placement", self)
         self._tb_act_ai.setToolTip("Run AI placement (Ctrl+P)")
         self._tb_act_ai.triggered.connect(lambda: self._fwd("do_ai_placement"))
         tb.addAction(self._tb_act_ai)
+
+        self._tb_act_compare = QAction("↔ Before/After", self)
+        self._tb_act_compare.setToolTip(
+            "Toggle between layout before and after symmetry enhancement"
+        )
+        self._tb_act_compare.setEnabled(False)
+        self._tb_act_compare.triggered.connect(lambda: self._fwd("_toggle_before_after"))
+        tb.addAction(self._tb_act_compare)
         tb.addSeparator()
+
 
         self._ignore_grid_spin = False
         self._tb_act_select_all = QAction(icon_select_all(), "Select All", self)
@@ -526,6 +731,47 @@ class MainWindow(QMainWindow):
         self._tb_act_delete.setToolTip("Delete selected devices (Delete)")
         self._tb_act_delete.triggered.connect(lambda: self._fwd("do_delete"))
         tb.addAction(self._tb_act_delete)
+        tb.addSeparator()
+
+        spin_style = (
+            "QSpinBox { background: #1a1f2b; color: #e0e8f0; border: 1px solid #2d3548; "
+            "border-radius: 4px; padding: 1px 2px; min-width: 42px; max-width: 42px; min-height: 20px; }"
+            "QSpinBox:focus { border-color: #4a90d9; }"
+            "QSpinBox::up-button, QSpinBox::down-button { width: 10px; }"
+        )
+
+        lbl_r = QLabel("Rows")
+        lbl_r.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl_r.setToolTip("Visible row count")
+        tb.addWidget(lbl_r)
+        self._row_spin = QSpinBox()
+        self._row_spin.setRange(1, 20)
+        self._row_spin.setValue(2)
+        self._row_spin.setToolTip("Visible row count")
+        self._row_spin.setStyleSheet(spin_style)
+        self._row_spin.valueChanged.connect(self._on_row_spin_changed)
+        tb.addWidget(self._row_spin)
+
+        lbl_c = QLabel("Cols")
+        lbl_c.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl_c.setToolTip("Visible column count")
+        tb.addWidget(lbl_c)
+        self._col_spin = QSpinBox()
+        self._col_spin.setRange(1, 50)
+        self._col_spin.setValue(4)
+        self._col_spin.setToolTip("Visible column count")
+        self._col_spin.setStyleSheet(spin_style)
+        self._col_spin.valueChanged.connect(self._on_col_spin_changed)
+        tb.addWidget(self._col_spin)
+
+        self._sel_label = QLabel("Sel 0")
+        self._sel_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._sel_label.setToolTip("Selected device count")
+        self._sel_label.setStyleSheet(
+            "color: #9aa7b7; background: #161c28; border: 1px solid #2d3548; "
+            "border-radius: 4px; padding: 2px 3px; min-width: 42px; max-width: 42px;"
+        )
+        tb.addWidget(self._sel_label)
         return
 
         tb.addAction("⬅", lambda: self._fwd("do_undo")).setToolTip("Undo (Ctrl+Z)")
@@ -591,6 +837,7 @@ class MainWindow(QMainWindow):
 
     def _create_status_bar(self):
         sb = QStatusBar(self)
+        self._status_bar = sb
         sb.setSizeGripEnabled(False)
         sb.setStyleSheet(
             "QStatusBar { background-color: #10151d; border-top: 1px solid #2d3548; color: #9aa7b7; }"
@@ -631,7 +878,8 @@ class MainWindow(QMainWindow):
         self.menuBar().setVisible(visible)
         self._file_toolbar.setVisible(visible)
         self._toolbar.setVisible(visible)
-        self.statusBar().setVisible(visible)
+        if getattr(self, "_status_bar", None) is not None:
+            self._status_bar.setVisible(False)
 
     # =================================================================
     #  Forward helpers (delegate to active tab)
@@ -649,10 +897,25 @@ class MainWindow(QMainWindow):
     # =================================================================
     #  Toolbar → tab callbacks
     # =================================================================
+    def _show_home(self):
+        self._stack.setCurrentIndex(0)
+        self._set_chrome_visible(True)
+        self._toolbar.setVisible(False)
+        self._set_document_tab_current(-1)
+        self._sync_undo_redo(False, False)
+        self._sync_selection(0)
+        self._sync_mode_toggles()
+        self.setWindowTitle("Symbolic Layout Editor - Home")
+
+    def _show_notifications(self):
+        QMessageBox.information(self, "Notifications", "No notifications yet.")
+
     def _on_new_tab(self):
         self._new_tab()
 
     def _close_current_tab(self):
+        if self._stack.currentIndex() != 1:
+            return
         idx = self._tab_widget.currentIndex()
         if idx >= 0:
             self._close_tab(idx)
@@ -679,6 +942,11 @@ class MainWindow(QMainWindow):
         tab = self.current_tab()
         if tab:
             tab.set_colorize_mode(checked)
+
+    def _on_toggle_moving_groups(self, checked):
+        tab = self.current_tab()
+        if tab:
+            tab.set_moving_groups_only(checked)
 
     def _on_row_spin_changed(self, value):
         if self._ignore_grid_spin:
@@ -730,19 +998,19 @@ class MainWindow(QMainWindow):
         return """
             QTabWidget::pane {
                 border: none;
-                background-color: #0e1219;
+                background-color: #101216;
             }
             QTabBar {
-                background-color: #12161f;
-                border-bottom: 1px solid #2d3548;
+                background-color: #15171d;
+                border-bottom: 1px solid #2a2f38;
             }
             QTabBar::tab {
-                background-color: #171c24;
-                color: #8d9aac;
+                background-color: #1b1d23;
+                color: #aab2bf;
                 border: 1px solid transparent;
                 border-bottom: none;
-                border-top-left-radius: 7px;
-                border-top-right-radius: 7px;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
                 padding: 5px 14px;
                 margin-top: 4px;
                 margin-right: 2px;
@@ -751,14 +1019,14 @@ class MainWindow(QMainWindow):
                 min-width: 96px;
             }
             QTabBar::tab:selected {
-                background-color: #1d2430;
-                color: #eef4fb;
-                border-color: #2d3548;
+                background-color: #242832;
+                color: #f4f7fb;
+                border-color: #3b4654;
                 font-weight: 600;
             }
             QTabBar::tab:hover:!selected {
-                background-color: #202937;
-                color: #c8d0dc;
+                background-color: #222631;
+                color: #dce3ec;
             }
             QTabBar::close-button {
                 image: none;
@@ -790,30 +1058,30 @@ if __name__ == "__main__":
     # ── Fusion dark palette ──────────────────────────────────────
     app.setStyle("Fusion")
     palette = QPalette()
-    palette.setColor(QPalette.ColorRole.Window, QColor("#12161f"))
-    palette.setColor(QPalette.ColorRole.WindowText, QColor("#c8d0dc"))
-    palette.setColor(QPalette.ColorRole.Base, QColor("#111621"))
-    palette.setColor(QPalette.ColorRole.AlternateBase, QColor("#1a1f2b"))
-    palette.setColor(QPalette.ColorRole.ToolTipBase, QColor("#1e2636"))
-    palette.setColor(QPalette.ColorRole.ToolTipText, QColor("#d0d8e0"))
-    palette.setColor(QPalette.ColorRole.Text, QColor("#c8d0dc"))
-    palette.setColor(QPalette.ColorRole.Button, QColor("#1a1f2b"))
-    palette.setColor(QPalette.ColorRole.ButtonText, QColor("#c8d0dc"))
+    palette.setColor(QPalette.ColorRole.Window, QColor("#15171d"))
+    palette.setColor(QPalette.ColorRole.WindowText, QColor("#d4dae4"))
+    palette.setColor(QPalette.ColorRole.Base, QColor("#101216"))
+    palette.setColor(QPalette.ColorRole.AlternateBase, QColor("#1b1e25"))
+    palette.setColor(QPalette.ColorRole.ToolTipBase, QColor("#22262e"))
+    palette.setColor(QPalette.ColorRole.ToolTipText, QColor("#e2e7ef"))
+    palette.setColor(QPalette.ColorRole.Text, QColor("#d4dae4"))
+    palette.setColor(QPalette.ColorRole.Button, QColor("#1b1e25"))
+    palette.setColor(QPalette.ColorRole.ButtonText, QColor("#d4dae4"))
     palette.setColor(QPalette.ColorRole.BrightText, QColor("#ffffff"))
-    palette.setColor(QPalette.ColorRole.Link, QColor("#4a90d9"))
-    palette.setColor(QPalette.ColorRole.Highlight, QColor("#4a90d9"))
+    palette.setColor(QPalette.ColorRole.Link, QColor("#5aa9e6"))
+    palette.setColor(QPalette.ColorRole.Highlight, QColor("#5aa9e6"))
     palette.setColor(QPalette.ColorRole.HighlightedText, QColor("#ffffff"))
-    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, QColor("#556677"))
-    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, QColor("#556677"))
+    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, QColor("#687180"))
+    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, QColor("#687180"))
     app.setPalette(palette)
 
     # ── Global tooltip styling ───────────────────────────────────
     app.setStyleSheet("""
         QToolTip {
-            background-color: #1e2636;
-            color: #d0d8e0;
-            border: 1px solid #3d5066;
-            border-radius: 6px;
+            background-color: #22262e;
+            color: #e2e7ef;
+            border: 1px solid #3a424e;
+            border-radius: 5px;
             padding: 6px 10px;
             font-family: 'Segoe UI';
             font-size: 11px;

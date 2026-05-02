@@ -1,6 +1,7 @@
 ---
 id: matched_environment
 name: Matched Environment Consistency
+description: Ensure matched devices see the same local environment and edge effects.
 
 trigger:
   keywords:
@@ -20,12 +21,8 @@ scope:
 
 inputs:
   - ENVIRONMENTAL_MODEL (MANDATORY)
-    includes:
-      - edge proximity
-      - density variation
-      - thermal gradients
-      - stress field direction (if available)
-      - well proximity effects
+
+---
 
 ────────────────────────────────────
 CORE PURPOSE

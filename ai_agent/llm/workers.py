@@ -57,12 +57,14 @@ Functions:
 """
 
 import os
+import copy
 import re
 import uuid
 from pathlib import Path
 from typing import cast
 from dotenv import load_dotenv
 from PySide6.QtCore import QObject, Signal, Slot
+from ai_agent.utils.logging import vprint
 
 from ai_agent.agents.orchestrator import MultiAgentOrchestrator
 from ai_agent.llm.runner import run_llm
@@ -247,12 +249,12 @@ class OrchestratorWorker(LLMWorker):
         import time as _time
         _t0 = _time.time()
 
-        print("\n" + "\u2588"*60, flush=True)
-        print("  CHATBOT ORCHESTRATOR REQUEST", flush=True)
-        print("\u2588"*60, flush=True)
-        print(f"[ORCH] Model: {selected_model} | Weight: {task_weight}", flush=True)
-        print(f"[ORCH] Message: {user_message[:80]!r}", flush=True)
-        print(f"[ORCH] History: {len(chat_history or [])} messages", flush=True)
+        vprint("\n" + "\u2588"*60, flush=True)
+        vprint("  CHATBOT ORCHESTRATOR REQUEST", flush=True)
+        vprint("\u2588"*60, flush=True)
+        vprint(f"[ORCH] Model: {selected_model} | Weight: {task_weight}", flush=True)
+        vprint(f"[ORCH] Message: {user_message[:80]!r}", flush=True)
+        vprint(f"[ORCH] History: {len(chat_history or [])} messages", flush=True)
 
         if chat_history is None:
             chat_history = []
@@ -264,143 +266,102 @@ class OrchestratorWorker(LLMWorker):
 
         try:
             from ai_agent.agents.classifier import classify_intent
-            from ai_agent.llm.runner import run_llm as _run_llm
+            from ai_agent.llm.placement_worker import get_last_initial_state
 
             project_root = Path(__file__).resolve().parent.parent
             sp_file = _resolve_sp_file(layout_context, project_root)
             layout_context["sp_file_path"] = sp_file or ""
-            print(f"[ORCH] SP file: {sp_file or 'N/A'}", flush=True)
-            classify_run_llm = None  # classifier uses llm_factory directly now
-            run_selected_llm = lambda msgs, prompt: _run_llm(
-                msgs, prompt, selected_model, task_weight
+            vprint(f"[ORCH] SP file: {sp_file or 'N/A'}", flush=True)
+
+            last_state = get_last_initial_state()
+            initial_state = copy.deepcopy(last_state) if isinstance(last_state, dict) else {}
+
+            initial_state.update({
+                "mode":            "chat",
+                "intent":          "",
+                "router_target":   "",
+                "user_message":    user_message,
+                "chat_history":    chat_history,
+                "selected_model":  selected_model,
+            })
+
+            if isinstance(layout_context.get("nodes"), list):
+                initial_state["nodes"] = layout_context.get("nodes", [])
+                initial_state["placement_nodes"] = layout_context.get("nodes", [])
+
+            if isinstance(layout_context.get("edges"), list):
+                initial_state["edges"] = layout_context.get("edges", [])
+
+            if isinstance(layout_context.get("terminal_nets"), dict):
+                initial_state["terminal_nets"] = layout_context.get("terminal_nets", {})
+
+            initial_state["sp_file_path"] = layout_context.get("sp_file_path", "")
+
+            initial_state.setdefault("nodes", [])
+            initial_state.setdefault("placement_nodes", [])
+            initial_state.setdefault("edges", [])
+            initial_state.setdefault("terminal_nets", {})
+            initial_state.setdefault("sp_file_path", "")
+
+            initial_state.setdefault("pending_cmds", [])
+            initial_state.setdefault("constraint_text", "")
+            initial_state.setdefault("Analysis_result", "")
+            initial_state.setdefault("deterministic_snapshot", [])
+            initial_state.setdefault("original_placement_cmds", [])
+            initial_state.setdefault("drc_flags", [])
+            initial_state.setdefault("drc_pass", False)
+            initial_state.setdefault("drc_retry_count", 0)
+            initial_state.setdefault("gap_px", layout_context.get("gap_px", 0.0))
+            initial_state.setdefault("routing_pass_count", 0)
+            initial_state.setdefault("routing_result", {})
+            initial_state.setdefault("strategy_result", "")
+            initial_state.setdefault("approved", False)
+            initial_state.setdefault("no_abutment", bool(layout_context.get("no_abutment", False)))
+            initial_state.setdefault("abutment_candidates", layout_context.get("abutment_candidates", []))
+
+            try:
+                from langchain_core.runnables import RunnableConfig
+                self.thread_config = cast(RunnableConfig, {
+                    "configurable": {"thread_id": str(uuid.uuid4())}
+                })
+            except ImportError:
+                self.thread_config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+
+            vprint(
+                f"[ORCH] Initial state ready | {len(initial_state.get('nodes', []))} devices | "
+                f"{len(initial_state.get('edges', []))} edges",
+                flush=True,
             )
 
-            # ── Intent Classification ──────────────────────────────────
-            print(f"[ORCH] Classifying intent...", flush=True)
-            intent = classify_intent(user_message, selected_model)
-            print(f"[ORCH] → Intent: {intent.upper()}", flush=True)
-
-            if intent == "chat":
-                self.intent_classified.emit("chat")
-                print("[ORCH] CHAT intent -> conversational reply")
-                chat_system = (
-                    build_system_prompt(layout_context)
-                    + "\n\n"
-                    + "For this turn, the user requested general conversation. "
-                    + "Reply conversationally and do not emit [CMD] blocks unless "
-                    + "the user explicitly asks for an edit action."
-                )
-                chat_msgs = [{"role": "system", "content": chat_system}] + chat_history
-                if not chat_history or chat_history[-1].get("content") != user_message:
-                    chat_msgs.append({"role": "user", "content": user_message})
-                reply = run_selected_llm(chat_msgs, f"{chat_system}\n\nUser: {user_message}")
-                self.response_ready.emit(reply)
-
-            elif intent == "question":
-                self.intent_classified.emit("question")
-                print("[ORCH] QUESTION intent -> single-agent reply")
-                system_prompt = build_system_prompt(layout_context)
-                chat_msgs = [{"role": "system", "content": system_prompt}] + chat_history
-                if not chat_history or chat_history[-1].get("content") != user_message:
-                    chat_msgs.append({"role": "user", "content": user_message})
-                reply = run_selected_llm(chat_msgs, f"{system_prompt}\n\nUser: {user_message}")
-                self.response_ready.emit(reply)
-
-            elif intent == "concrete":
-                self.intent_classified.emit("concrete")
-                print("[ORCH] CONCRETE intent -> Directly editing layout")
-                system_prompt = (
-                    build_system_prompt(layout_context)
-                    + "\n\n"
-                    + "For this turn, return ONLY a JSON list of command dicts "
-                    + "(no markdown, no prose)."
-                )
-                reply = run_selected_llm(
-                    [{"role": "system", "content": system_prompt},
-                     {"role": "user",   "content": user_message}],
-                    system_prompt
-                )
-                try:
-                    clean_reply = reply.replace("```json", "").replace("```", "").strip()
-                    edits = _json.loads(clean_reply)
-                    if isinstance(edits, dict):
-                        edits = [edits]
-                    elif not isinstance(edits, list):
-                        edits = []
-                    edits = [c for c in edits if isinstance(c, dict)]
-                    self.visual_viewer_signal.emit(
-                        {"type": "visual_review", "placement": edits, "routing": {}}
-                    )
-                except Exception as e:
-                    self.error_occurred.emit(f"Failed to parse concrete command: {str(e)}")
-
-            else:
-                self.intent_classified.emit("abstract")
-                print("[ORCH] ABSTRACT intent → Starting LangGraph Pipeline", flush=True)
-                print("[ORCH] Building initial state...", flush=True)
-                initial_state = {
-                    "user_message":    user_message,
-                    "chat_history":    chat_history,
-                    "nodes":           layout_context.get("nodes", []),
-                    "sp_file_path":    layout_context.get("sp_file_path", ""),
-                    "pending_cmds":    [],
-                    "constraint_text": "",
-                    "Analysis_result": "",
-                    "edges":           [],
-                    "terminal_nets":   layout_context.get("terminal_nets", {}),
-                    "placement_nodes": layout_context.get("nodes", []),
-                    "deterministic_snapshot": [],
-                    "drc_flags":       [],
-                    "drc_pass":        False,
-                    "approved":        False,
-                    "routing_result":  {},
-                    "strategy_result": "",
-                    "gap_px":          layout_context.get("gap_px", 0.0),
-                    "drc_retry_count": 0,
-                    "routing_pass_count": 0,
-                    "selected_model": selected_model,
-                }
-                if isinstance(layout_context.get("edges"), list):
-                    initial_state["edges"] = layout_context["edges"]
-
-                try:
-                    from langchain_core.runnables import RunnableConfig
-                    self.thread_config = cast(RunnableConfig, {
-                        "configurable": {"thread_id": str(uuid.uuid4())}
-                    })
-                except ImportError:
-                    self.thread_config = {"configurable": {"thread_id": str(uuid.uuid4())}}
-
-                print(f"[ORCH] Initial state ready | {len(initial_state.get('nodes', []))} devices | {len(initial_state.get('edges', []))} edges", flush=True)
-
-                self._stream_graph(initial_state)
+            self._stream_graph(initial_state)
 
         except Exception as exc:
             import traceback
-            print(f"[ORCH] Pipeline error:\n{traceback.format_exc()}", flush=True)
+            vprint(f"[ORCH] Pipeline error:\n{traceback.format_exc()}", flush=True)
             self.error_occurred.emit(f"Orchestrator error: {exc}")
 
     def _stream_graph(self, input_data):
         try:
-            from ai_agent.graph.builder import app as langgraph_app
+            from ai_agent.graph.builder import app as initial_graph_app
+            from ai_agent.graph.builder import chat_app as chat_graph_app
             from langgraph.types import Command
 
-            print(f"\n[GRAPH] ▶ Streaming LangGraph...", flush=True)
+            langgraph_app = chat_graph_app if isinstance(input_data, dict) and input_data.get("mode") == "chat" else initial_graph_app
+
+            vprint(f"\n[GRAPH] ▶ Streaming LangGraph...", flush=True)
             interrupted = False
             event_count = 0
             for event in langgraph_app.stream(input_data, self.thread_config, stream_mode="updates"):
                 event_count += 1
                 event_keys = list(event.keys())
-                print(f"[GRAPH]   Event #{event_count}: {event_keys}", flush=True)
+                vprint(f"[GRAPH]   Event #{event_count}: {event_keys}", flush=True)
 
                 if "__interrupt__" in event:
                     interrupt_data = event["__interrupt__"][0].value
                     itype = interrupt_data.get('type', '?')
-                    print(f"[GRAPH]   ⏸ INTERRUPT: type={itype}", flush=True)
+                    vprint(f"[GRAPH]   ⏸ INTERRUPT: type={itype}", flush=True)
 
-                    if itype == "strategy_selection":
-                        self.topology_ready_for_review.emit(interrupt_data["question"])
-                    elif itype == "visual_review":
+                    if itype == "visual_review":
                         placement = interrupt_data.get("placement", [])
                         if not isinstance(placement, list):
                             placement = []
@@ -412,22 +373,32 @@ class OrchestratorWorker(LLMWorker):
                             "placement": placement,
                             "routing": routing,
                         })
+                        try:
+                            from ai_agent.llm.placement_worker import set_last_initial_state
+                            snapshot = langgraph_app.get_state(self.thread_config).values
+                            set_last_initial_state(snapshot)
+                            vprint("[GRAPH]   ✓ Saved state after visual review", flush=True)
+                        except Exception as exc:
+                            vprint(f"[GRAPH]   ✗ Failed to save state: {exc}", flush=True)
+                        self._finalize_pipeline()
+                        interrupted = True
+                        return
 
                     interrupted = True
                     return
 
-            print(f"[GRAPH] ✓ Stream complete ({event_count} events)", flush=True)
+            vprint(f"[GRAPH] ✓ Stream complete ({event_count} events)", flush=True)
             if not interrupted:
                 self._finalize_pipeline()
 
         except Exception as e:
-            print(f"[GRAPH] ✗ Error: {e}", flush=True)
+            vprint(f"[GRAPH] ✗ Error: {e}", flush=True)
             self.error_occurred.emit(f"Graph Execution Error: {str(e)}")
 
     def _finalize_pipeline(self):
-        print("\n" + "═"*60, flush=True)
-        print("  PIPELINE FINALIZATION", flush=True)
-        print("═"*60, flush=True)
+        vprint("\n" + "═"*60, flush=True)
+        vprint("  PIPELINE FINALIZATION", flush=True)
+        vprint("═"*60, flush=True)
         try:
             from ai_agent.graph.builder import app as langgraph_app
         except ImportError:
@@ -445,13 +416,13 @@ class OrchestratorWorker(LLMWorker):
                 x = round(float(n["geometry"]["x"]), 3)
                 y = round(float(n["geometry"]["y"]), 3)
             except (TypeError, KeyError, ValueError) as exc:
-                print(f"[FINALIZE] Skipping {n.get('id', '?')}: bad geometry ({exc})", flush=True)
+                vprint(f"[FINALIZE] Skipping {n.get('id', '?')}: bad geometry ({exc})", flush=True)
                 continue
             final_cmds.append({"action": "move", "device": n["id"], "x": x, "y": y})
 
         pending_cmds = final_state.get("pending_cmds", [])
         if not final_cmds and pending_cmds:
-            print("[FINALIZE] placement_nodes empty — falling back to pending_cmds", flush=True)
+            vprint("[FINALIZE] placement_nodes empty — falling back to pending_cmds", flush=True)
             final_cmds = pending_cmds
 
         drc_pass    = final_state.get("drc_pass", False)
@@ -462,11 +433,11 @@ class OrchestratorWorker(LLMWorker):
         routing_cost    = routing_result.get("placement_cost", None)
         constraint_count = len(final_state.get("constraints", []))
 
-        print(f"[FINALIZE] Devices placed: {len(final_cmds)}", flush=True)
-        print(f"[FINALIZE] DRC: {drc_status}", flush=True)
-        print(f"[FINALIZE] Routing Score: {routing_score}", flush=True)
+        vprint(f"[FINALIZE] Devices placed: {len(final_cmds)}", flush=True)
+        vprint(f"[FINALIZE] DRC: {drc_status}", flush=True)
+        vprint(f"[FINALIZE] Routing Score: {routing_score}", flush=True)
         if routing_cost is not None:
-            print(f"[FINALIZE] Routing Cost: {routing_cost:.2f}", flush=True)
+            vprint(f"[FINALIZE] Routing Cost: {routing_cost:.2f}", flush=True)
 
         summary_header = (
             f"**[Multi-Agent Pipeline Complete]**\n\n"
@@ -485,11 +456,11 @@ class OrchestratorWorker(LLMWorker):
             })
 
         self.response_ready.emit(summary_header)
-        print("[FINALIZE] ✓ Pipeline complete — signals emitted.", flush=True)
+        vprint("[FINALIZE] ✓ Pipeline complete — signals emitted.", flush=True)
 
     @Slot(str)
     def resume_with_strategy(self, user_choice: str):
-        print(f"[ORCH] Resuming graph with strategy: {user_choice}")
+        vprint(f"[ORCH] Resuming graph with strategy: {user_choice}", flush=True)
         try:
             from langgraph.types import Command
             self._stream_graph(Command(resume=user_choice))
@@ -498,7 +469,7 @@ class OrchestratorWorker(LLMWorker):
 
     @Slot(dict)
     def resume_from_viewer(self, viewer_response: dict):
-        print(f"[ORCH] Resuming from visual viewer. Approved: {viewer_response.get('approved')}")
+        vprint(f"[ORCH] Resuming from visual viewer. Approved: {viewer_response.get('approved')}", flush=True)
         try:
             from langgraph.types import Command
             self._stream_graph(Command(resume=viewer_response))

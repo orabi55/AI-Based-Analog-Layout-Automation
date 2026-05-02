@@ -15,8 +15,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 0.882,
-                "y": -1.0230000000000001,
+                "x": 0.0,
+                "y": 0.0,
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
@@ -37,8 +37,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 0.294,
-                "y": -1.6169999999999998,
+                "x": 0.588,
+                "y": 0.0,
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
@@ -59,8 +59,8 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 0.758,
-                "y": -0.34500000000000003,
+                "x": 0.0,
+                "y": 0.668001,
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
@@ -81,35 +81,48 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 0.15,
-                "y": -0.34500000000000003,
+                "x": 0.588,
+                "y": 0.668001,
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
             }
         },
         {
-            "id": "DUMMYN1",
-            "type": "nmos",
-            "is_dummy": true,
             "electrical": {
                 "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 4.0,
-                "w": 0,
-                "parent": null,
-                "m": 1,
-                "multiplier_index": null,
-                "finger_index": null,
-                "array_index": null
+                "multiplier": 1,
+                "nf_per_device": 1,
+                "nfin": 4.0
             },
             "geometry": {
-                "x": 0.882,
-                "y": -1.617,
-                "width": 0.294,
                 "height": 0.6680000000000001,
-                "orientation": "R0"
-            }
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 0.294,
+                "y": 0.0
+            },
+            "id": "FILLER_DUMMY_1_nmos",
+            "is_dummy": true,
+            "type": "nmos"
+        },
+        {
+            "electrical": {
+                "l": 1.4e-08,
+                "multiplier": 1,
+                "nf_per_device": 1,
+                "nfin": 4.0
+            },
+            "geometry": {
+                "height": 0.6680000000000001,
+                "orientation": "R0",
+                "width": 0.294,
+                "x": 0.294,
+                "y": 0.668001
+            },
+            "id": "FILLER_DUMMY_2_pmos",
+            "is_dummy": true,
+            "type": "pmos"
         }
     ],
     "edges": [
@@ -138,5 +151,29 @@
             "target": "MM3",
             "net": "Y"
         }
-    ]
+    ],
+    "terminal_nets": {
+        "MM2": {
+            "D": "net5",
+            "G": "B",
+            "S": "VSS"
+        },
+        "MM1": {
+            "D": "Y",
+            "G": "A",
+            "S": "net5"
+        },
+        "MM4": {
+            "D": "Y",
+            "G": "B",
+            "S": "VDD"
+        },
+        "MM3": {
+            "D": "Y",
+            "G": "A",
+            "S": "VDD"
+        }
+    },
+    "abutment_candidates": [],
+    "no_abutment": true
 }

@@ -57,6 +57,28 @@ def icon_undo() -> QIcon:
     return icon
 
 
+def icon_schematic() -> QIcon:
+    if "schematic" in _CACHE:
+        return _CACHE["schematic"]
+    pm, p = _make_pixmap()
+    pen = QPen(_ACCENT, 2.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+    p.setPen(pen)
+    
+    # Draw a stylized transistor/schematic symbol
+    p.drawLine(QPointF(6, 16), QPointF(26, 16)) # GND/Wire
+    p.drawLine(QPointF(16, 6), QPointF(16, 16)) # Vertical body
+    p.drawLine(QPointF(10, 6), QPointF(22, 6))  # Gate
+    p.drawLine(QPointF(16, 16), QPointF(12, 24)) # Source
+    p.drawLine(QPointF(16, 16), QPointF(20, 24)) # Drain
+    
+    # Add a glowing accent
+    p.setPen(QPen(_ORANGE, 2.0))
+    p.drawEllipse(QRectF(14.5, 14.5, 3, 3))
+    
+    icon = _icon_from_painter(pm, p)
+    _CACHE["schematic"] = icon
+    return icon
+
 def icon_redo() -> QIcon:
     if "redo" in _CACHE:
         return _CACHE["redo"]
@@ -306,6 +328,22 @@ def icon_merge_ss() -> QIcon:
     return icon
 
 
+def icon_group() -> QIcon:
+    if "group" in _CACHE:
+        return _CACHE["group"]
+    pm, p = _make_pixmap()
+    pen = QPen(_FG, 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+    p.setPen(pen)
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    # Draw three stacked rounded rectangles to represent a group
+    p.drawRoundedRect(QRectF(6, 6, 20, 8), 2, 2)
+    p.drawRoundedRect(QRectF(6, 12, 14, 8), 2, 2)
+    p.drawRoundedRect(QRectF(6, 18, 8, 6), 2, 2)
+    icon = _icon_from_painter(pm, p)
+    _CACHE["group"] = icon
+    return icon
+
+
 def icon_merge_dd() -> QIcon:
     if "merge_dd" in _CACHE:
         return _CACHE["merge_dd"]
@@ -439,6 +477,80 @@ def icon_export_file() -> QIcon:
     return icon
 
 
+def icon_home() -> QIcon:
+    if "home" in _CACHE:
+        return _CACHE["home"]
+    pm, p = _make_pixmap()
+    p.setPen(QPen(_FG, 1.9, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    p.setBrush(QBrush(QColor(_FG.red(), _FG.green(), _FG.blue(), 28)))
+    roof = QPainterPath()
+    roof.moveTo(6, 15)
+    roof.lineTo(16, 7)
+    roof.lineTo(26, 15)
+    p.drawPath(roof)
+    p.drawRoundedRect(QRectF(9, 15, 14, 11), 2, 2)
+    p.setPen(QPen(_ACCENT, 1.7, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+    p.drawLine(QPointF(16, 20), QPointF(16, 26))
+    icon = _icon_from_painter(pm, p)
+    _CACHE["home"] = icon
+    return icon
+
+
+def icon_new_tab() -> QIcon:
+    if "new_tab" in _CACHE:
+        return _CACHE["new_tab"]
+    pm, p = _make_pixmap()
+    p.setPen(QPen(_FG, 1.6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    p.setBrush(QBrush(QColor(_ACCENT.red(), _ACCENT.green(), _ACCENT.blue(), 24)))
+    p.drawRoundedRect(QRectF(6, 8, 18, 16), 3, 3)
+    p.setPen(QPen(_GREEN, 2.3, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+    p.drawLine(QPointF(16, 12), QPointF(16, 20))
+    p.drawLine(QPointF(12, 16), QPointF(20, 16))
+    icon = _icon_from_painter(pm, p)
+    _CACHE["new_tab"] = icon
+    return icon
+
+
+def icon_bell() -> QIcon:
+    if "bell" in _CACHE:
+        return _CACHE["bell"]
+    pm, p = _make_pixmap()
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.setPen(QPen(_FG, 1.9, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    bell = QPainterPath()
+    bell.moveTo(10, 21)
+    bell.lineTo(22, 21)
+    bell.cubicTo(20, 18, 21, 15, 20, 12)
+    bell.cubicTo(19, 9, 17, 8, 16, 8)
+    bell.cubicTo(15, 8, 13, 9, 12, 12)
+    bell.cubicTo(11, 15, 12, 18, 10, 21)
+    p.drawPath(bell)
+    p.setPen(QPen(_ACCENT, 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+    p.drawLine(QPointF(13, 24), QPointF(19, 24))
+    p.drawEllipse(QRectF(14.4, 23, 3.2, 3.2))
+    icon = _icon_from_painter(pm, p)
+    _CACHE["bell"] = icon
+    return icon
+
+
+def icon_circuit_tab() -> QIcon:
+    if "circuit_tab" in _CACHE:
+        return _CACHE["circuit_tab"]
+    pm, p = _make_pixmap()
+    p.setPen(QPen(_GREEN, 1.7, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    p.setBrush(QBrush(QColor(_GREEN.red(), _GREEN.green(), _GREEN.blue(), 42)))
+    p.drawRoundedRect(QRectF(8, 8, 16, 16), 3, 3)
+    p.drawLine(QPointF(12, 12), QPointF(20, 20))
+    p.drawLine(QPointF(20, 12), QPointF(12, 20))
+    p.setPen(QPen(_FG, 1.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+    for x in (11, 16, 21):
+        p.drawLine(QPointF(x, 6), QPointF(x, 8))
+        p.drawLine(QPointF(x, 24), QPointF(x, 26))
+    icon = _icon_from_painter(pm, p)
+    _CACHE["circuit_tab"] = icon
+    return icon
+
+
 def icon_abutment() -> QIcon:
     if "abutment" in _CACHE:
         return _CACHE["abutment"]
@@ -498,4 +610,31 @@ def icon_ai_placement() -> QIcon:
     p.drawLine(QPointF(20, 12), QPointF(12, 20))
     icon = _icon_from_painter(pm, p)
     _CACHE["ai_placement"] = icon
+    return icon
+
+
+def icon_route() -> QIcon:
+    if "route" in _CACHE:
+        return _CACHE["route"]
+    pm, p = _make_pixmap()
+    p.setPen(QPen(_ACCENT, 2.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    
+    # A meandering routed trace
+    path = QPainterPath()
+    path.moveTo(6, 26)
+    path.lineTo(6, 16)
+    path.lineTo(16, 16)
+    path.lineTo(16, 6)
+    path.lineTo(26, 6)
+    p.drawPath(path)
+    
+    # Draw vias at ends
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QBrush(_ORANGE))
+    p.drawEllipse(QRectF(4, 24, 4, 4))
+    p.drawEllipse(QRectF(24, 4, 4, 4))
+    
+    icon = _icon_from_painter(pm, p)
+    _CACHE["route"] = icon
     return icon

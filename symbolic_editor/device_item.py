@@ -48,6 +48,8 @@ class DeviceItem(QGraphicsRectItem):
         self._net_names = {}       # {"D": "VDD", "G": "clk", "S": "VSS"}
         self._colorize_nets = False
         self._net_color_seed = 0
+        self._highlighted_net = None
+        self._is_dimmed = False
 
         # ── Hierarchical group movement ──
         # These are set by the editor when loading a layout.
@@ -56,6 +58,13 @@ class DeviceItem(QGraphicsRectItem):
         self._parent_id = None
         self._sibling_group = []    # populated by editor after all items are created
         self._propagating_move = False  # guard against recursive move propagation
+        self._original_z = None  # Store original Z order to prevent reordering on move
+        
+        # ── Axis-locked movement ──
+        # Lock movement to X or Y axis based on initial drag direction
+        self._drag_axis = None  # "x", "y", or None (unset during drag)
+        self._drag_initial_pos = QPointF()  # position when drag starts
+        self._is_directly_dragged = False  # True only for the item being directly dragged
 
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
@@ -197,6 +206,54 @@ class DeviceItem(QGraphicsRectItem):
         self._net_color_seed = seed
         self.update()
 
+    def set_dimmed(self, dimmed: bool):
+        """Decrease opacity to focus on other highlighted items."""
+        if self._is_dimmed != dimmed:
+            self._is_dimmed = bool(dimmed)
+            self.update()
+
+    def set_highlighted_net(self, net_name):
+        """Highlight terminal labels matching net_name and dim the rest."""
+        self._highlighted_net = str(net_name) if net_name else None
+        self.update()
+
+    def clear_highlighted_net(self):
+        self._highlighted_net = None
+        self.update()
+
+    def _net_focus_state(self, net_name):
+        if not self._highlighted_net or not net_name:
+            return "normal"
+        return "focus" if str(net_name) == self._highlighted_net else "dim"
+
+    def _net_display_color(self, net_name, fallback=None):
+        state = self._net_focus_state(net_name)
+        if state == "focus":
+            return QColor("#111827")
+        if self._colorize_nets and not self._is_dummy:
+            color = QColor("#ffffff")
+        else:
+            color = QColor(fallback or self._get_net_color(net_name))
+        if state == "dim":
+            color.setAlpha(70)
+        return color
+
+    def _draw_net_focus_frame(self, painter, rect, net_name, radius=2.0):
+        state = self._net_focus_state(net_name)
+        if state == "focus":
+            fill = QColor("#facc15")
+            fill.setAlpha(175)
+            painter.setBrush(QBrush(fill))
+            painter.setPen(QPen(QColor("#f59e0b"), 2.4))
+            painter.drawRoundedRect(rect.adjusted(1.0, 1.0, -1.0, -1.0), radius, radius)
+            return
+        if state == "dim":
+            veil = QColor("#0b0f16")
+            veil.setAlpha(105)
+            painter.setBrush(QBrush(veil))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawRect(rect)
+
     def _get_net_color(self, net_name):
         """Return a consistent unique QColor for a given net name."""
         if not net_name or net_name == "?":
@@ -281,59 +338,229 @@ class DeviceItem(QGraphicsRectItem):
         self.update()
 
     def itemChange(self, change, value):
-        """Snap dragged positions to grid so devices never float between tracks."""
-        if (
-            change == QGraphicsItem.GraphicsItemChange.ItemPositionChange
-            and self._snap_grid_x
-            and self._snap_grid_y
-        ):
-            x = round(value.x() / self._snap_grid_x) * self._snap_grid_x
-            y = round(value.y() / self._snap_grid_y) * self._snap_grid_y
-            return QPointF(x, y)
+        """
+        Snap dragged positions to grid.
+        """
+        if change == QGraphicsItem.GraphicsItemChange.ItemPositionChange:
+            # Bypass double-snapping if custom drag engine is currently steering the item
+            if getattr(self, '_drag_active', False) or getattr(self, '_propagating_move', False):
+                return super().itemChange(change, value)
+                
+            # Only apply snapping if enabled
+            if self._snap_grid_x and self._snap_grid_y:
+                new_pos = value
+                # Apply grid snapping
+                x = round(new_pos.x() / self._snap_grid_x) * self._snap_grid_x
+                y = round(new_pos.y() / self._snap_grid_y) * self._snap_grid_y
+                return QPointF(x, y)
+        
+        # Preserve Z-order when item moves
+        if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
+            if self._original_z is not None:
+                self.setZValue(self._original_z)
+        
         return super().itemChange(change, value)
 
     # --------------------------------------------------
     # Drag tracking
     # --------------------------------------------------
+    def get_selected_group(self):
+        """
+        Return list of this device + all selected siblings that will move together.
+        Useful for UI feedback or validation.
+        """
+        selected_group = [self]
+        if self._sibling_group:
+            selected_group.extend([s for s in self._sibling_group if s.isSelected()])
+        return selected_group
+
+    def will_move_with_siblings(self):
+        """Check if any siblings are selected and will move with this device."""
+        if not self._sibling_group:
+            return False
+        return any(s.isSelected() for s in self._sibling_group)
+
+    # --------------------------------------------------
+    # Drag tracking and collision handling
+    # --------------------------------------------------
     def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            self._drag_start_pos = self.pos()
-            self._drag_active = False
+        # Let Qt handle standard selection first so we can accurately capture selected items
         super().mousePressEvent(event)
+        
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_start_scene_pos = event.scenePos()
+            self._drag_axis = None
+            self._is_directly_dragged = True
+            self._drag_active = False
+            self._original_z = self.zValue()  # Preserve Z order
+
+            # Check if "moving groups only" is enabled
+            moving_groups_only = False
+            editor = None
+            if self.scene():
+                # Try to get the editor from the scene
+                scene = self.scene()
+                if hasattr(scene, '_editor') and hasattr(scene._editor, '_moving_groups_only'):
+                    moving_groups_only = scene._editor._moving_groups_only
+                    editor = scene._editor
+
+            # Identify all moving items (the selected group)
+            self._moving_items = []
+            group_devices = []  # devices in the same group
+            
+            if self.scene():
+                if moving_groups_only:
+                    # Try to find all devices in the same group
+                    # First, check _sibling_group (for hierarchical devices)
+                    if self._sibling_group:
+                        group_devices = list(self._sibling_group)
+                    # Otherwise, check if device is in a HierarchyGroupItem
+                    elif editor:
+                        for group in editor._hierarchy_groups:
+                            if self in group._all_descendant_devices:
+                                group_devices = list(group._all_descendant_devices)
+                                break
+                    
+                    # If we found group devices, move them all
+                    if group_devices:
+                        for item in group_devices:
+                            item._drag_initial_pos = item.pos()
+                            self._moving_items.append(item)
+                            item.setSelected(True)  # Select all group members
+                
+                # If not in moving_groups_only mode or no group found, use normal selection
+                if not self._moving_items:
+                    for item in self.scene().selectedItems():
+                        if isinstance(item, DeviceItem):
+                            item._drag_initial_pos = item.pos()
+                            self._moving_items.append(item)
+                        
+            # Ensure the primary dragged item itself is always included
+            if self not in self._moving_items:
+                self._drag_initial_pos = self.pos()
+                self._moving_items.append(self)
+            
+            # Cache obstacles once at drag start instead of recalculating on every mouseMoveEvent
+            self._cached_obstacles = []
+            if self.scene():
+                for it in self.scene().items():
+                    if isinstance(it, DeviceItem) and it not in self._moving_items:
+                        self._cached_obstacles.append(it)
 
     def mouseMoveEvent(self, event):
-        old_pos = self.pos()
-        super().mouseMoveEvent(event)
-        new_pos = self.pos()
+        if not getattr(self, '_is_directly_dragged', False):
+            return
 
-        if not self._drag_active and new_pos != self._drag_start_pos:
+        if not self._drag_active:
             self._drag_active = True
             self.signals.drag_started.emit()
 
-        # ── Hierarchical group movement ──
-        # If this item is part of a parent group, propagate the same
-        # delta to all siblings so the entire transistor moves as one.
-        if self._sibling_group and not self._propagating_move:
-            dx = new_pos.x() - old_pos.x()
-            dy = new_pos.y() - old_pos.y()
-            if dx != 0 or dy != 0:
-                for sibling in self._sibling_group:
-                    if sibling is not self:
-                        sibling._propagating_move = True
-                        sibling.moveBy(dx, dy)
-                        sibling._propagating_move = False
+        mouse_delta = event.scenePos() - self._drag_start_scene_pos
+        dx = mouse_delta.x()
+        dy = mouse_delta.y()
+
+        # 1. Enforce strict Orthogonal (XY) movement
+        if self._drag_axis is None:
+            if abs(dx) > abs(dy) + 2:
+                self._drag_axis = "x"
+            elif abs(dy) > abs(dx) + 2:
+                self._drag_axis = "y"
+            else:
+                return
+
+        if self._drag_axis == "x":
+            dy = 0
+        elif self._drag_axis == "y":
+            dx = 0
+
+        proposed_pos = self._drag_initial_pos + QPointF(dx, dy)
+        
+        # Initial grid snapping
+        if self._snap_grid_x and self._snap_grid_y:
+            snap_x = round(proposed_pos.x() / self._snap_grid_x) * self._snap_grid_x
+            snap_y = round(proposed_pos.y() / self._snap_grid_y) * self._snap_grid_y
+            proposed_pos = QPointF(snap_x, snap_y)
+            
+        actual_delta = proposed_pos - self._drag_initial_pos
+
+        # 2. Continuous Sweep Collision & Perfect Edge Snapping
+        moving_group = getattr(self, '_moving_items', [self])
+        obstacles = getattr(self, '_cached_obstacles', [])
+
+        if self._drag_axis == "y":
+            for item in moving_group:
+                start_rect = item.rect().translated(item._drag_initial_pos)
+                start_test = start_rect.adjusted(0.1, 0, -0.1, 0)
+                for obs in obstacles:
+                    obs_rect = obs.rect().translated(obs.pos())
+                    obs_test = obs_rect.adjusted(0.1, 0, -0.1, 0)
+                    
+                    # Ignore if not in the same vertical lane
+                    if start_test.right() <= obs_test.left() or start_test.left() >= obs_test.right():
+                        continue
+                        
+                    if actual_delta.y() > 0: # Moving down
+                        if obs_rect.top() >= start_rect.bottom() - 0.1:
+                            dist = obs_rect.top() - start_rect.bottom()
+                            if dist < actual_delta.y():
+                                actual_delta.setY(dist)
+                    elif actual_delta.y() < 0: # Moving up
+                        if obs_rect.bottom() <= start_rect.top() + 0.1:
+                            dist = obs_rect.bottom() - start_rect.top()
+                            if dist > actual_delta.y():
+                                actual_delta.setY(dist)
+
+        elif self._drag_axis == "x":
+            for item in moving_group:
+                start_rect = item.rect().translated(item._drag_initial_pos)
+                start_test = start_rect.adjusted(0, 0.1, 0, -0.1)
+                for obs in obstacles:
+                    obs_rect = obs.rect().translated(obs.pos())
+                    obs_test = obs_rect.adjusted(0, 0.1, 0, -0.1)
+                    
+                    # Ignore if not in the same horizontal lane
+                    if start_test.bottom() <= obs_test.top() or start_test.top() >= obs_test.bottom():
+                        continue
+                        
+                    if actual_delta.x() > 0: # Moving right
+                        if obs_rect.left() >= start_rect.right() - 0.1:
+                            dist = obs_rect.left() - start_rect.right()
+                            if dist < actual_delta.x():
+                                actual_delta.setX(dist)
+                    elif actual_delta.x() < 0: # Moving left
+                        if obs_rect.right() <= start_rect.left() + 0.1:
+                            dist = obs_rect.right() - start_rect.left()
+                            if dist > actual_delta.x():
+                                actual_delta.setX(dist)
+
+        # 3. Apply uniform group movement
+        for item in moving_group:
+            new_pos = item._drag_initial_pos + actual_delta
+            item._propagating_move = True  # Flag to bypass redundant snapping in itemChange
+            item.setPos(new_pos)
+            item._propagating_move = False
 
     def mouseReleaseEvent(self, event):
-        if self._drag_active:
+        if getattr(self, '_drag_active', False):
             self._drag_active = False
             self.signals.drag_finished.emit()
-        self._propagating_move = False
+            
+        # Reset state parameters
+        self._drag_axis = None
+        self._is_directly_dragged = False
+        self._moving_items = []
+        self._cached_obstacles = []
         super().mouseReleaseEvent(event)
 
     # --------------------------------------------------
     # Painting — Premium Multi-finger MOS layout
     # --------------------------------------------------
     def paint(self, painter: QPainter, option, widget=None):
+        if self._is_dimmed:
+            painter.setOpacity(0.15)
+        else:
+            painter.setOpacity(1.0)
+            
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         rect = self.rect()
@@ -434,18 +661,20 @@ class DeviceItem(QGraphicsRectItem):
                         
                         # Use a taller rect to ensure perfect vertical centering within the column thick
                         rect_lbl = QRectF(-avail_len/2, -avail_thick/2, avail_len, avail_thick)
+                        self._draw_net_focus_frame(
+                            painter, rect_lbl, net_str,
+                            radius=max(1.0, avail_thick * 0.18),
+                        )
                         
                         # ── Stronger Omni-directional Glow ──
                         glow_off = fs * 0.05
-                        painter.setPen(QColor(0, 0, 0, 200))
+                        glow_alpha = 90 if self._net_focus_state(net_str) == "dim" else 200
+                        painter.setPen(QColor(0, 0, 0, glow_alpha))
                         for dx, dy in [(-glow_off,0), (glow_off,0), (0,-glow_off), (0,glow_off)]:
                             painter.drawText(rect_lbl.translated(dx, dy), Qt.AlignmentFlag.AlignCenter, lbl)
                         
                         # Main text
-                        if self._colorize_nets and not self._is_dummy:
-                            painter.setPen(QColor(255, 255, 255))
-                        else:
-                            painter.setPen(self._get_net_color(net_str))
+                        painter.setPen(self._net_display_color(net_str))
                             
                         painter.drawText(rect_lbl, Qt.AlignmentFlag.AlignCenter, lbl)
                         painter.restore()
@@ -504,6 +733,11 @@ class DeviceItem(QGraphicsRectItem):
                 color = self._get_net_color(net)
             else:
                 color = self._source_color if term == "S" else self._drain_color
+            if self._net_focus_state(net) == "focus":
+                color = QColor("#facc15")
+            elif self._net_focus_state(net) == "dim":
+                color = QColor(color)
+                color.setAlpha(80)
                 
             sd_grad = QLinearGradient(cursor_x, y0, cursor_x, y0 + h)
             sd_grad.setColorAt(0.0, color.lighter(110))
@@ -511,6 +745,7 @@ class DeviceItem(QGraphicsRectItem):
             painter.setBrush(QBrush(sd_grad))
             draw_rect = QRectF(cursor_x, y0, sd_w, h).adjusted(0.5, 0.5, -0.5, -0.5)
             painter.drawRect(draw_rect)
+            self._draw_net_focus_frame(painter, draw_rect, net, radius=1.5)
             
             # --- Net Label (Detailed) ---
             if self._show_net_labels and self._net_names:
@@ -543,10 +778,7 @@ class DeviceItem(QGraphicsRectItem):
                     for dx, dy in [(-glow_off,0), (glow_off,0), (0,-glow_off), (0,glow_off)]:
                         painter.drawText(rect_lbl.translated(dx, dy), Qt.AlignmentFlag.AlignCenter, net)
                     
-                    if self._colorize_nets and not self._is_dummy:
-                        painter.setPen(QColor(255, 255, 255))
-                    else:
-                        painter.setPen(self._get_net_color(net))
+                    painter.setPen(self._net_display_color(net))
                     painter.drawText(rect_lbl, Qt.AlignmentFlag.AlignCenter, net)
                     painter.restore()
 
@@ -563,6 +795,17 @@ class DeviceItem(QGraphicsRectItem):
                     g_color = self._gate_color
                     g_top = self._gradient_top
                     g_bot = self._gradient_bottom
+                if self._net_focus_state(g_net) == "focus":
+                    g_color = QColor("#facc15")
+                    g_top = QColor("#fde68a")
+                    g_bot = QColor("#f59e0b")
+                elif self._net_focus_state(g_net) == "dim":
+                    g_color = QColor(g_color)
+                    g_top = QColor(g_top)
+                    g_bot = QColor(g_bot)
+                    g_color.setAlpha(80)
+                    g_top.setAlpha(80)
+                    g_bot.setAlpha(80)
                 
                 gate_rect = QRectF(cursor_x, y0, gate_w, h)
                 grad = QLinearGradient(gate_rect.topLeft(), gate_rect.bottomLeft())
@@ -572,6 +815,7 @@ class DeviceItem(QGraphicsRectItem):
                 painter.setBrush(QBrush(grad))
                 draw_gate_rect = gate_rect.adjusted(0.5, 0.5, -0.5, -0.5)
                 painter.drawRect(draw_gate_rect)
+                self._draw_net_focus_frame(painter, draw_gate_rect, g_net, radius=1.5)
                 
                 # --- Gate Net Label ---
                 if self._show_net_labels and self._net_names:
@@ -599,10 +843,7 @@ class DeviceItem(QGraphicsRectItem):
                         for dx, dy in [(-glow_off,0), (glow_off,0), (0,-glow_off), (0,glow_off)]:
                             painter.drawText(rect_lbl.translated(dx, dy), Qt.AlignmentFlag.AlignCenter, g_net)
 
-                        if self._colorize_nets and not self._is_dummy:
-                            painter.setPen(QColor(255, 255, 255))
-                        else:
-                            painter.setPen(self._get_net_color(g_net))
+                        painter.setPen(self._net_display_color(g_net))
                         painter.drawText(rect_lbl, Qt.AlignmentFlag.AlignCenter, g_net)
                         painter.restore()
 
@@ -616,10 +857,25 @@ class DeviceItem(QGraphicsRectItem):
         painter.drawRoundedRect(rect.adjusted(1.5, 1.5, 0.5, 0.5), corner_r, corner_r)
 
         # Main border
-        border_w = 1.8 if not self.isSelected() else 2.5
-        painter.setPen(QPen(self._border, border_w))
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawRoundedRect(rect.adjusted(0.75, 0.75, -0.75, -0.75), corner_r, corner_r)
+        if self.isSelected():
+            # Glowing yellow highlight + semi-transparent overlay for maximum "pop"
+            painter.save()
+            ovl_color = QColor("#ffff00")
+            ovl_color.setAlpha(40) # 15% opacity yellow fill
+            painter.setBrush(QBrush(ovl_color))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawRoundedRect(rect.adjusted(1.0, 1.0, -1.0, -1.0), corner_r, corner_r)
+
+            hl_pen = QPen(QColor("#ffff00"), 4.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+            hl_pen.setCosmetic(True)
+            painter.setPen(hl_pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRoundedRect(rect.adjusted(1.0, 1.0, -1.0, -1.0), corner_r, corner_r)
+            painter.restore()
+        else:
+            painter.setPen(QPen(self._border, 1.8))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRoundedRect(rect.adjusted(0.75, 0.75, -0.75, -0.75), corner_r, corner_r)
 
         # ── Thin separator lines between S/D and gate columns ────────
         sep_pen = QPen(QColor(self._border.red(), self._border.green(),

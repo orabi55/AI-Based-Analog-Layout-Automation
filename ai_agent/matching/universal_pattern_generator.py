@@ -14,6 +14,13 @@ Functions:
 - parse_gui_string: Parses a GUI pattern string into a 2D grid of device IDs.
 """
 
+import re
+from typing import Dict, List, Optional
+
+class SymmetryError(Exception):
+    """Exception raised for errors in symmetry constraints."""
+    pass
+
 def generate_placement_grid(
     devices_in: Dict[str, int], 
     technique: str, 

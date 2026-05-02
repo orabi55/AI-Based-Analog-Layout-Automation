@@ -1,6 +1,7 @@
 ---
 id: proximity_net
 name: Connectivity-Based Proximity Optimization
+description: Keep strongly connected devices close to reduce wire length and parasitics.
 
 trigger:
   keywords:
@@ -16,11 +17,8 @@ scope:
 
 inputs:
   - NETLIST_GRAPH (MANDATORY)
-    description:
-      Undirected weighted graph:
-        nodes = devices
-        edges = electrical connections
-        weights = connection strength / criticality
+
+---
 
 ────────────────────────────────────
 CORE PURPOSE
