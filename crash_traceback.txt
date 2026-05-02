@@ -1,5 +1,8 @@
 Traceback (most recent call last):
-  File "D:\Senior 2\Layout_Project\Automation\new_main\AI-Based-Analog-Layout-Automation\symbolic_editor\editor_view.py", line 307, in set_net_labels_visible
-    item.set_net_labels(nets, self._color_seed)
-    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
-TypeError: DeviceItem.set_net_labels() takes 2 positional arguments but 3 were given
+  File "D:\Senior 2\Layout_Project\Automation\new_main\AI-Based-Analog-Layout-Automation\symbolic_editor\editor_view.py", line 324, in set_net_labels_visible
+    group.set_net_labels(nets, self._color_seed)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Senior 2\Layout_Project\Automation\new_main\AI-Based-Analog-Layout-Automation\symbolic_editor\hierarchy_group_item.py", line 100, in set_net_labels
+    self.update()
+    ~~~~~~~~~~~^^
+RuntimeError: Internal C++ object (HierarchyGroupItem) already deleted.

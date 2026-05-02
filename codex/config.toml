@@ -1,0 +1,13 @@
+# Changed from gpt-5 to an available model from your screenshot
+model = "deepseek-v3.1" 
+model_provider = "openai-chat-completions"
+preferred_auth_method = "apikey"
+
+[model_providers.openai-chat-completions]
+name = "OpenAI using Chat Completions"
+base_url = "https://agentrouter.org/v1"
+# Changed from env_key to api_key for a hardcoded string
+api_key = "sk-rqlPvFLwE6YLcVNI4ESHZsPCtipdn8ANP2bwii7jHO4wuKoU" 
+wire_api = "chat"
+query_params = {}
+stream_idle_timeout_ms = 300000

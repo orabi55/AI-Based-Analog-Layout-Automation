@@ -6,40 +6,40 @@
     }
   },
   "env": {
-    "DASHSCOPE_API_KEY": "sk-567af8d3cf51494faa346579ba523add",
-    "TOGETHER_API_KEY": "tgp_v1_lirYTn8r6Hw39kROAGmOybiFIUJhf7LZrOn0atA-Ys0"
+    "AgentRouter_API_KEY": "sk-f0PnzCip5u0sO5lPoVbgIG1Ml1Q3CsT7pEMEik0st6ZLtc4C"
   },
   "modelProviders": {
     "openai": [
+     
       {
-        "id": "qwen-max",
-        "name": "qwen-max (Alibaba)",
-        "baseUrl": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
-        "envKey": "DASHSCOPE_API_KEY"
+        "id": "claude-opus-4-6",
+        "name": "Claude Opus 4.6 (AgentRouter)",
+        "baseUrl": "https://agentrouter.org/v1",
+        "envKey": "AgentRouter_API_KEY"
       },
       {
-        "id": "qwen3-max",
-        "name": "Qwen 3 Max (Alibaba)",
-        "baseUrl": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
-        "envKey": "DASHSCOPE_API_KEY"
+        "id": "claude-haiku-4-5-20251001",
+        "name": "Claude Haiku 4.5 (AgentRouter)",
+        "baseUrl": "https://agentrouter.org/v1",
+        "envKey": "AgentRouter_API_KEY"
       },
       {
-        "id": "qwq-plus",
-        "name": "QwQ Thinking (Alibaba)",
-        "baseUrl": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
-        "envKey": "DASHSCOPE_API_KEY"
+        "id": "glm-4.6",
+        "name": "GLM 4.6 (AgentRouter)",
+        "baseUrl": "https://agentrouter.org/v1",
+        "envKey": "AgentRouter_API_KEY"
       },
       {
-        "id": "Qwen/Qwen3-Coder-Next",
-        "name": "Qwen 3 Coder Next (Together)",
-        "baseUrl": "https://api.together.xyz/v1",
-        "envKey": "TOGETHER_API_KEY"
+        "id": "glm-5.1",
+        "name": "GLM 5.1 (AgentRouter)",
+        "baseUrl": "https://agentrouter.org/v1",
+        "envKey": "AgentRouter_API_KEY"
       },
       {
-        "id": "Qwen/Qwen2.5-Coder-32B-Instruct",
-        "name": "Qwen 2.5 Coder 32B (Together)",
-        "baseUrl": "https://api.together.xyz/v1",
-        "envKey": "TOGETHER_API_KEY"
+        "id": "glm-4.5",
+        "name": "GLM 4.5 (AgentRouter)",
+        "baseUrl": "https://agentrouter.org/v1",
+        "envKey": "AgentRouter_API_KEY"
       }
     ]
   },
