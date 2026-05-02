@@ -398,10 +398,16 @@ class SchematicCanvas(QGraphicsView):
                 "G": item.gate_port(),
                 "D": item.drain_port(),
                 "S": item.source_port(),
+                # Map passive terminals to available MOSFET ports for visual continuity
+                "1": item.source_port(),
+                "2": item.drain_port(),
+                "+": item.source_port(),
+                "-": item.drain_port(),
             }
             for terminal, net in tn.items():
-                if net:
+                if net and terminal in port_map:
                     net_terminals[net].append((nid, terminal, port_map[terminal]))
+
 
         for net, connections in net_terminals.items():
             self._draw_net(net, connections)
