@@ -12,7 +12,7 @@ Functions:
 
 import json
 import time
-from ai_agent.placement.finger_grouper import aggregate_to_logical_devices
+from ai_agent.placement.finger_grouper import aggregate_to_logical_devices, legalize_vertical_rows
 from ai_agent.agents.placement_specialist import build_placement_context
 from ai_agent.agents.drc_critic import (
     DRC_CRITIC_PROMPT, run_drc_check, format_drc_violations_for_llm, compute_prescriptive_fixes,
@@ -20,6 +20,7 @@ from ai_agent.agents.drc_critic import (
 from ai_agent.tools.overlap_resolver import resolve_overlaps
 from ai_agent.tools.cmd_parser import extract_cmd_blocks, apply_cmds_to_nodes
 from ai_agent.placement.symmetry import enforce_reflection_symmetry
+from ai_agent.nodes.symmetry_enforcer import parse_symmetry_block
 from ai_agent.nodes._shared import (
     _build_llm_messages,
     _invoke_with_retry,
@@ -34,6 +35,14 @@ from ai_agent.nodes._shared import (
 from ai_agent.utils.logging import (
     log_section, log_detail, log_device_positions, stage_start,
 )
+
+
+def _is_dummy_node(node: dict) -> bool:
+    node_id = str(node.get("id", ""))
+    return bool(
+        node.get("is_dummy")
+        or node_id.startswith(("FILLER_DUMMY_", "DUMMY_matrix_", "EDGE_DUMMY"))
+    )
 
 
 def node_drc_critic(state):
@@ -90,7 +99,8 @@ def node_drc_critic(state):
     log_section("Step 5b: LLM-based DRC fixes")
     prior_cmds_text = "\n".join(f"[CMD]{json.dumps(c)}[/CMD]" for c in pending_cmds[-10:])
     violation_text = format_drc_violations_for_llm(drc_result, prior_cmds_text)
-    logical_nodes = aggregate_to_logical_devices(nodes)
+    active_nodes_for_context = [n for n in nodes if not _is_dummy_node(n)]
+    logical_nodes = aggregate_to_logical_devices(active_nodes_for_context)
     current_placement_context = build_placement_context(
         logical_nodes, constraint_text, terminal_nets=terminal_nets, edges=edges,
     )
@@ -151,9 +161,18 @@ def node_drc_critic(state):
         ]
         log_detail(f"Merged: {len(critic_cmds)} LLM + {len(merged_cmds) - len(critic_cmds)} prescriptive = {len(merged_cmds)} total")
 
-    # ── Step 5e: Apply all fixes ───────────────────────────────────────
+    # ── Step 5e: Apply all fixes (symmetry-aware) ─────────────────────
     log_section("Step 5e: Applying all fixes to snapshot")
-    # snapshot already has original_cmds applied during Stage 3/4.
+
+    # Build symmetry pair lookup from [SYMMETRY] block so that
+    # if we move one side of a pair, we mirror the delta to the other side.
+    sym_info = parse_symmetry_block(constraint_text)
+    sym_pair_map: dict = {}  # device_id -> (partner_id, side: 'left'|'right')
+    if sym_info:
+        for left, right, _rank in sym_info.get("pairs", []):
+            sym_pair_map[left] = (right, "left")
+            sym_pair_map[right] = (left, "right")
+
     accumulated_cmds = list(merged_cmds)
     
     # Deduplicate — keep latest command per device
@@ -169,6 +188,45 @@ def node_drc_critic(state):
     accumulated_cmds = list(deduped_dict.values())
     log_detail(f"Accumulated: {len(accumulated_cmds)} unique commands after dedup")
 
+    # Symmetry mirror guard: if a move cmd targets one side of a [SYMMETRY] pair,
+    # inject a mirrored delta for the partner so symmetry is preserved through DRC fixes.
+    if sym_pair_map:
+        node_x_map: dict = {str(n.get("id", "")): float(n.get("geometry", {}).get("x", 0.0))
+                            for n in snapshot if n.get("geometry")}
+        extra_cmds = []
+        touched_by_guard = set()
+        for cmd in accumulated_cmds:
+            if cmd.get("action") != "move":
+                continue
+            dev_id = cmd.get("device", "")
+            if dev_id not in sym_pair_map or dev_id in touched_by_guard:
+                continue
+            partner_id, side = sym_pair_map[dev_id]
+            if partner_id in touched_by_guard:
+                continue
+            # Compute dx this fix applies to the moved device
+            old_x = node_x_map.get(dev_id, cmd.get("x", 0.0))
+            new_x = float(cmd.get("x", old_x))
+            dx = new_x - old_x
+            if abs(dx) < 1e-9:
+                continue
+            # Mirror dx: left moves right => partner (right) moves left by same dx
+            partner_old_x = node_x_map.get(partner_id, 0.0)
+            mirror_dx = -dx if side == "left" else -dx
+            partner_new_x = round(partner_old_x + mirror_dx, 6)
+            extra_cmds.append({
+                "action": "move",
+                "device": partner_id,
+                "x": partner_new_x,
+                "y": cmd.get("y", node_x_map.get(partner_id, 0.0)),
+            })
+            touched_by_guard.add(dev_id)
+            touched_by_guard.add(partner_id)
+            log_detail(f"[SYMM-GUARD] mirror fix: {dev_id} dx={dx:+.4f} → {partner_id} dx={mirror_dx:+.4f}")
+        if extra_cmds:
+            accumulated_cmds = accumulated_cmds + extra_cmds
+            log_detail(f"[SYMM-GUARD] injected {len(extra_cmds)} mirror cmd(s) to preserve symmetry")
+
     fixed_nodes = apply_cmds_to_nodes(snapshot, accumulated_cmds)
 
     # ── Step 5f: Mechanical overlap resolution ─────────────────────────
@@ -180,6 +238,7 @@ def node_drc_critic(state):
         log_detail("No residual overlaps found")
 
     fixed_nodes = enforce_reflection_symmetry(fixed_nodes)
+    fixed_nodes = legalize_vertical_rows(fixed_nodes)
 
     # ── Step 5g: Final DRC re-check ────────────────────────────────────
     log_section("Step 5g: Final DRC re-check")

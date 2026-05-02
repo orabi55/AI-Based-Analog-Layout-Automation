@@ -32,9 +32,9 @@ Analyze the circuit netlist (devices and connections) and extract precise, struc
 
 Your output must be strict, unambiguous, and directly usable.
 
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 1. OBJECTIVES
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 
 1) Identify fundamental circuit topologies:
 
@@ -57,29 +57,29 @@ Placement Cohesion Rule:
 - Each primary group must correspond to a physically placeable layout block
 - Groups should map to real structural units (diff pair, mirror, load, etc.)
 
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 2. SECONDARY TAGS (OPTIONAL)
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 
 Devices may have zero or more secondary tags.
 
 Controlled SKILL_HINT vocabulary only:
 
-- SKILL_HINT:bias_chain        ΓåÆ vertical current dependency chain
-- SKILL_HINT:common_centroid   ΓåÆ gradient-canceling centroid requirement
-- SKILL_HINT:bias_mirror       ΓåÆ mirrored current mirror structure
-- SKILL_HINT:differential_pair ΓåÆ half of a differential pair
-- SKILL_HINT:interdigitate     ΓåÆ ratio-matching via interdigitation
-- SKILL_HINT:proximity_net     ΓåÆ high-connectivity locality requirement
+- SKILL_HINT:bias_chain        → vertical current dependency chain
+- SKILL_HINT:common_centroid   → gradient-canceling centroid requirement
+- SKILL_HINT:bias_mirror       → mirrored current mirror structure
+- SKILL_HINT:differential_pair → half of a differential pair
+- SKILL_HINT:interdigitate     → ratio-matching via interdigitation
+- SKILL_HINT:proximity_net     → high-connectivity locality requirement
 
 Rules:
 - Tags do NOT affect grouping
 - Multiple tags allowed per device
 - Only controlled vocabulary allowed
 
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 3. DEVICE ROLE CLASSIFICATION
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 
 For each device, specify:
 
@@ -90,15 +90,15 @@ For each device, specify:
   NMOS or PMOS (must be exact)
 
 - nf:
-  integer ΓëÑ 1
+  integer ≥ 1
 
 Rules:
 - nf must be read from input netlist
-- If missing ΓåÆ nf = 1 and mark as (assumed)
+- If missing → nf = 1 and mark as (assumed)
 
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 4. MATCHING & SYMMETRY RULES
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 
 You must explicitly define:
 
@@ -110,9 +110,9 @@ Critical rule:
 - Matching and symmetry must be defined WITHIN groups
 - Do NOT define primary matching relationships across groups unless unavoidable
 
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 5. CIRCUIT FUNCTION IDENTIFICATION
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 
 Identify overall circuit type:
 
@@ -123,9 +123,9 @@ Examples:
 - Logic gate
 - Multi-stage amplifier
 
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 6. CRITICAL RULES
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 
 - Use EXACT device names (no renaming)
 - Each device must appear in exactly ONE primary group
@@ -135,31 +135,31 @@ Examples:
 - Secondary tags must only use SKILL_HINT vocabulary
 - Devices may have multiple secondary tags
 
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 7. CURRENT_FLOW_GRAPH RULES
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 
 - Must be derived from:
   current mirrors, cascodes, tail sources
 
 - Format:
-  A ΓåÆ B means A provides bias current to B
+  A → B means A provides bias current to B
 
 - Must use exact device names
 
 - Graph must be acyclic
 
 If cycle detected:
-ΓåÆ report topology error
+→ report topology error
 
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 8. NETLIST_GRAPH RULES
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 
 Undirected weighted connectivity:
 
 Format:
-- A ΓÇö B : net_name : HIGH|MEDIUM|LOW
+- A — B : net_name : HIGH|MEDIUM|LOW
 
 Weight rules:
 - Differential nets = HIGH
@@ -167,11 +167,11 @@ Weight rules:
 - Supply/ground = LOW
 
 If no meaningful connections:
-ΓåÆ write NONE
+→ write NONE
 
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 9. OUTPUT FORMAT (STRICT)
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 
 CIRCUIT_TYPE:
 [one-line circuit function]
@@ -200,33 +200,33 @@ PAIR_MAPPING: (ONLY if Differential Pair, else NONE)
 
 (repeat for all groups)
 
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 CURRENT_FLOW_GRAPH:
-- A ΓåÆ B
-- C ΓåÆ D
+- A → B
+- C → D
 or NONE
 
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 NETLIST_GRAPH:
-- A ΓÇö B : net : HIGH|MEDIUM|LOW
+- A — B : net : HIGH|MEDIUM|LOW
 or NONE
 
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 10. FINAL VALIDATION (MANDATORY)
-ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+────────────────────────────────────────────
 
 Before output ensure:
 
-Γ£ô Every device assigned exactly once
-Γ£ô No duplicate group membership
-Γ£ô All roles include Type + nf
-Γ£ô Matching and symmetry clearly defined
-Γ£ô Output follows strict format
-Γ£ô Graphs are valid and acyclic
-Γ£ô No missing devices
+✓ Every device assigned exactly once
+✓ No duplicate group membership
+✓ All roles include Type + nf
+✓ Matching and symmetry clearly defined
+✓ Output follows strict format
+✓ Graphs are valid and acyclic
+✓ No missing devices
 
 If any rule is violated:
-ΓåÆ regenerate output
+→ regenerate output
 """
 
 
@@ -254,6 +254,14 @@ def analyze_json(nodes: List[dict], terminal_nets: dict) -> str:
             value = safe_terminal_nets.get(key)
             if isinstance(value, dict):
                 return value
+        # Fallback: match on base prefix (e.g., MM5 -> MM5_m1/MM5_m2)
+        if dev_key:
+            base = dev_key.split("<", 1)[0].split("_", 1)[0]
+            for key, value in safe_terminal_nets.items():
+                if not isinstance(value, dict):
+                    continue
+                if str(key).startswith(base):
+                    return value
         return {}
 
     def _resolve_node_nets(node: dict) -> dict:
@@ -292,6 +300,32 @@ def analyze_json(nodes: List[dict], terminal_nets: dict) -> str:
                 resolved[pin] = "|".join(sorted(values))
         return resolved
 
+    def _extract_xy(node: dict) -> tuple:
+        geo = node.get("geometry", {}) if isinstance(node.get("geometry", {}), dict) else {}
+        x_val = geo.get("x")
+        y_val = geo.get("y")
+
+        if x_val is None:
+            x_val = node.get("x")
+        if y_val is None:
+            y_val = node.get("y")
+
+        # Fallback for logical nodes without geometry: use type defaults.
+        if y_val is None:
+            dev_type = str(node.get("type", "")).lower()
+            try:
+                from config.design_rules import PMOS_Y, NMOS_Y
+                if dev_type.startswith("p"):
+                    y_val = PMOS_Y
+                elif dev_type.startswith("n"):
+                    y_val = NMOS_Y
+            except Exception:
+                y_val = 0.0
+        if x_val is None:
+            x_val = 0.0
+
+        return x_val, y_val
+
     lines: List[str] = []
     lines.append("=== LAYOUT JSON SUMMARY ===")
     lines.append(
@@ -317,9 +351,7 @@ def analyze_json(nodes: List[dict], terminal_nets: dict) -> str:
         dev_type = str(node.get("type", "unknown"))
         geo = node.get("geometry", {}) if isinstance(node.get("geometry", {}), dict) else {}
         elec = node.get("electrical", {}) if isinstance(node.get("electrical", {}), dict) else {}
-
-        x_val = geo.get("x", "?")
-        y_val = geo.get("y", "?")
+        x_val, y_val = _extract_xy(node)
         try:
             x_text = f"{float(x_val):.3f}"
         except (TypeError, ValueError):
@@ -392,5 +424,129 @@ def analyze_json(nodes: List[dict], terminal_nets: dict) -> str:
     if not any_group:
         lines.append("- No shared gate/drain/source groups found")
 
+    # ── Append machine-readable [SYMMETRY] block ─────────────────────────
+    sym_block = extract_symmetry_block(safe_nodes, safe_terminal_nets)
+    if sym_block:
+        lines.append("")
+        lines.append(sym_block)
+
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Pure-Python symmetry detector — produces [SYMMETRY] machine block
+# ---------------------------------------------------------------------------
+_POWER_NETS = {"VDD", "VSS", "GND", "VCC", "AVDD", "AVSS", "VDDA", "VSSA"}
+
+
+def extract_symmetry_block(nodes: List[dict], terminal_nets: dict) -> str:
+    """
+    Detect diff pairs, load mirrors, and tail current sources from the netlist
+    and return a machine-readable [SYMMETRY] block string.
+
+    Detection rules:
+    - Diff pair (rank 1): two same-type devices sharing a source net NOT in
+      _POWER_NETS.
+    - Load mirror (rank 2): two same-type devices sharing a gate net where
+      that gate net is NOT a power net AND not the same type as the diff pair
+      (or is a different polarity row).
+    - Axis device: a device whose drain net equals the diff pair's shared
+      source net (i.e., the tail current source).
+
+    Returns:
+        A [SYMMETRY]...[/SYMMETRY] block string, or "" if no symmetry found.
+    """
+    if not nodes or not terminal_nets:
+        return ""
+
+    safe_tn = terminal_nets if isinstance(terminal_nets, dict) else {}
+
+    def _nets(dev_id: str) -> dict:
+        for key in (dev_id, dev_id.upper(), dev_id.lower()):
+            v = safe_tn.get(key)
+            if isinstance(v, dict):
+                return v
+        return {}
+
+    def _net(dev_id: str, pin: str) -> str:
+        return str(_nets(dev_id).get(pin, "")).upper().strip()
+
+    # Build type-grouped maps
+    by_type: Dict[str, List[str]] = {}  # type -> [dev_id, ...]
+    for n in nodes:
+        if n.get("is_dummy"):
+            continue
+        dev_id = str(n.get("id", ""))
+        dtype = str(n.get("type", "")).lower()
+        by_type.setdefault(dtype, []).append(dev_id)
+
+    # ── Step 1: Find diff pair (shared source, non-power) ──
+    diff_pairs: List[Tuple[str, str]] = []
+    diff_source_nets: List[str] = []
+
+    for dtype, devs in by_type.items():
+        # Build source-net groups
+        src_map: Dict[str, List[str]] = {}
+        for did in devs:
+            snet = _net(did, "S")
+            if snet and snet not in _POWER_NETS:
+                src_map.setdefault(snet, []).append(did)
+        for snet, members in src_map.items():
+            if len(members) == 2:
+                diff_pairs.append((members[0], members[1]))
+                diff_source_nets.append(snet)
+            elif len(members) > 2:
+                # Larger group: take the first two as the primary pair
+                diff_pairs.append((members[0], members[1]))
+                diff_source_nets.append(snet)
+
+    if not diff_pairs:
+        return ""  # No symmetry structure detected
+
+    # ── Step 2: Find load mirrors (shared gate, non-power, different type) ──
+    diff_pair_ids = {did for pair in diff_pairs for did in pair}
+    diff_type = ""
+    for n in nodes:
+        if str(n.get("id", "")) in diff_pair_ids:
+            diff_type = str(n.get("type", "")).lower()
+            break
+
+    load_pairs: List[Tuple[str, str]] = []
+    for dtype, devs in by_type.items():
+        if dtype == diff_type:
+            continue  # Skip same type as diff pair for loads
+        gate_map: Dict[str, List[str]] = {}
+        for did in devs:
+            gnet = _net(did, "G")
+            if gnet and gnet not in _POWER_NETS:
+                gate_map.setdefault(gnet, []).append(did)
+        for gnet, members in gate_map.items():
+            if len(members) == 2:
+                load_pairs.append((members[0], members[1]))
+            elif len(members) > 2:
+                load_pairs.append((members[0], members[1]))
+
+    # ── Step 3: Find tail/axis device (drain == diff-pair shared source) ──
+    axis_devices: List[str] = []
+    for snet in diff_source_nets:
+        for n in nodes:
+            if n.get("is_dummy"):
+                continue
+            did = str(n.get("id", ""))
+            if did in diff_pair_ids:
+                continue
+            if _net(did, "D") == snet:
+                axis_devices.append(did)
+
+    # ── Step 4: Build block string ──
+    block_lines = ["[SYMMETRY]", "mode=two_half axis_row=both"]
+    for i, (left, right) in enumerate(diff_pairs, start=1):
+        block_lines.append(f"pair={left},{right} rank={i}")
+    for i, (left, right) in enumerate(load_pairs, start=len(diff_pairs) + 1):
+        block_lines.append(f"pair={left},{right} rank={i}")
+    for ax in axis_devices:
+        block_lines.append(f"axis={ax}")
+    block_lines.append("[/SYMMETRY]")
+
+    return "\n".join(block_lines)
 

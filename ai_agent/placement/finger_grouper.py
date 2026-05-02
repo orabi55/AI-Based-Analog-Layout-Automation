@@ -122,7 +122,8 @@ from ai_agent.utils.logging import vprint
 # Constants — sourced from centralized design rules config
 # ---------------------------------------------------------------------------
 from config.design_rules import (
-    PMOS_Y, NMOS_Y, ROW_PITCH, FINGER_PITCH, PITCH_UM as STD_PITCH,
+    PMOS_Y, NMOS_Y, ROW_PITCH, ROW_HEIGHT_UM, ROW_GAP_UM,
+    FINGER_PITCH, PITCH_UM as STD_PITCH,
 )
 
 # Regex: split "MM9<3>_f4" -> ("MM9", "3", "4")  (legacy array-bus)
@@ -137,6 +138,83 @@ _PLAIN_FINGER_RE = re.compile(r'^(.+?)_f(\d+)$')
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+def _node_height_um(node: dict, fallback: float = ROW_HEIGHT_UM) -> float:
+    """Return the physical device height from geometry, with a PDK-safe fallback."""
+    try:
+        height = float(node.get("geometry", {}).get("height", 0.0))
+    except (TypeError, ValueError):
+        height = 0.0
+    return height if height > 0 else fallback
+
+
+def _row_step_um(row_or_nodes: List[dict]) -> float:
+    """Origin-to-origin spacing needed after a row of devices.
+
+    Uses the tallest device's height + ROW_GAP_UM.  When ROW_GAP_UM is
+    0 the rows touch edge-to-edge with no gap.
+    """
+    if not row_or_nodes:
+        return ROW_HEIGHT_UM
+    row_height = max(_node_height_um(n) for n in row_or_nodes)
+    return row_height + ROW_GAP_UM
+
+
+def _is_dummy_node(node: dict) -> bool:
+    """Return True for generated or explicit filler/dummy devices."""
+    node_id = str(node.get("id", ""))
+    return bool(
+        node.get("is_dummy")
+        or node_id.startswith(("FILLER_DUMMY_", "DUMMY_matrix_", "EDGE_DUMMY"))
+    )
+
+
+def _is_regenerated_filler_dummy(node: dict) -> bool:
+    """Return True for non-structural fillers that can be regenerated safely."""
+    return str(node.get("id", "")).startswith("FILLER_DUMMY_")
+
+
+def legalize_vertical_rows(nodes: List[dict], row_gap: float | None = None) -> List[dict]:
+    """Restack physical rows so their bounding boxes cannot overlap vertically.
+
+    Earlier deterministic stages may mix fixed row pitches with real device
+    heights.  This pass keeps each row's relative order and x placement, but
+    shifts whole rows upward when the previous row's actual height would
+    otherwise collide with it.
+    """
+    if not nodes:
+        return nodes
+
+    gap = ROW_GAP_UM if row_gap is None else float(row_gap)
+    touch_epsilon = 0.000001
+    rows: Dict[Tuple[float, str], List[dict]] = defaultdict(list)
+    for node in nodes:
+        geo = node.get("geometry", {})
+        if not isinstance(geo, dict):
+            continue
+        try:
+            y = round(float(geo.get("y", 0.0)), 6)
+        except (TypeError, ValueError):
+            continue
+        dev_type = str(node.get("type", "")).strip().lower()
+        rows[(y, dev_type)].append(node)
+
+    type_order = {"nmos": 0, "res": 1, "cap": 1, "pmos": 2}
+    cursor = None
+    for (row_y, dev_type), row_nodes in sorted(
+        rows.items(),
+        key=lambda item: (item[0][0], type_order.get(item[0][1], 1), item[0][1]),
+    ):
+        if not row_nodes:
+            continue
+        row_height = max(_node_height_um(n) for n in row_nodes)
+        new_y = row_y if cursor is None else max(row_y, cursor)
+        if abs(new_y - row_y) > 1e-9:
+            for node in row_nodes:
+                node.setdefault("geometry", {})["y"] = round(new_y, 6)
+        cursor = round(new_y + row_height + gap + touch_epsilon, 6)
+
+    return nodes
 
 def _parse_id(node_id: str) -> Tuple[str, int | None, int | None]:
     """
@@ -225,6 +303,8 @@ def aggregate_to_logical_devices(nodes: list, edges: list = None) -> list:
     # --- 1. Bucket every finger node under its logical transistor key --------
     buckets: Dict[str, List[dict]] = defaultdict(list)
     for n in nodes:
+        if _is_dummy_node(n):
+            continue
         key = _transistor_key(n["id"])
         buckets[key].append(n)
 
@@ -409,6 +489,9 @@ def _enrich_matching_info(
     Detects:
       - Differential pairs (VINP/VINN gated, same type)
       - Cross-coupled latches (D_A == G_B AND D_B == G_A, same type)
+      - CLK-symmetric pairs: two same-type same-size devices whose gate is CLK
+        and whose drain nets are the two sides of a symmetric latch/output
+        (e.g. MM1/MM2 precharge PMOS in a comparator with D=VOUTN/VOUTP)
       - Load pairs (same-type devices whose drains connect to the diff pair
         output nets — typically PMOS active loads in a comparator)
       - Tail sources (devices sharing a non-power S/D net with the diff pair)
@@ -452,6 +535,58 @@ def _enrich_matching_info(
                     tb.get("D") and tb.get("D") == ta.get("G")):
                 cross_pairs.append((ga, gb))
     matching_info["cross_coupled"] = cross_pairs
+
+    # --- CLK-symmetric pairs: same-type, same-size, gate=CLK, symmetric drains
+    # In a dynamic comparator: MM1 (D=VOUTN, G=CLK, S=VDD) and
+    # MM2 (D=VOUTP, G=CLK, S=VDD) are precharge devices that must be
+    # placed symmetrically (ABBA) around the vertical axis.
+    # Detection: two same-type, same-signature devices share the CLK gate
+    # AND their drain nets form a symmetric pair (each drain of one appears
+    # as the gate of the other in any cross-coupled pair).
+    clk_sym_pairs: List[Tuple[str, str]] = []
+    cross_drain_nets: set = set()
+    for ga, gb in cross_pairs:
+        ta = group_terminal_nets.get(ga, {})
+        tb = group_terminal_nets.get(gb, {})
+        if ta.get("D"):
+            cross_drain_nets.add(ta["D"])
+        if tb.get("D"):
+            cross_drain_nets.add(tb["D"])
+
+    # Group CLK-gated devices by (type, electrical_signature)
+    clk_by_sig: Dict[tuple, List[str]] = defaultdict(list)
+    for gid, t in group_terminal_nets.items():
+        g = t.get("G", "")
+        if g.upper() == "CLK":
+            node = grp_lookup.get(gid, {})
+            sig = (_electrical_signature(node), node.get("type", ""))
+            clk_by_sig[sig].append(gid)
+
+    for sig, members in clk_by_sig.items():
+        if len(members) < 2:
+            continue
+        # Only pair CLK devices whose drains BOTH feed the cross-coupled latch outputs
+        for i, ma in enumerate(members):
+            for mb in members[i + 1:]:
+                ta = group_terminal_nets.get(ma, {})
+                tb = group_terminal_nets.get(mb, {})
+                d_a = ta.get("D", "")
+                d_b = tb.get("D", "")
+                # Both drains must go to the cross-coupled latch's output nets
+                # AND must be different nets (left/right side of axis)
+                if (d_a in cross_drain_nets and d_b in cross_drain_nets
+                        and d_a != d_b):
+                    clk_sym_pairs.append((ma, mb))
+
+    # Remove duplicates with cross_pairs (avoid double-counting)
+    cross_set = {frozenset(p) for p in cross_pairs}
+    clk_sym_pairs = [p for p in clk_sym_pairs if frozenset(p) not in cross_set]
+
+    # NOTE: clk_sym_pairs are kept SEPARATE from diff_pairs.
+    # They are matched at Medium and High priority but NOT at Low.
+    # (Low only matches true input diff pairs at VINP/VINN and current mirrors.)
+    matching_info["diff_pairs"]    = diff_pairs        # VINP/VINN input pairs only
+    matching_info["clk_sym_pairs"] = clk_sym_pairs     # CLK precharge pairs (separate tier)
 
     # --- Load pairs: same-type devices whose drains connect to diff outputs
     # In a comparator, the PMOS loads have drains on VOUTP/VOUTN which are
@@ -739,7 +874,7 @@ def build_finger_group_section(finger_map: dict, group_nodes: list) -> str:
                 member_ids = gn.get("_members", [])
                 technique  = gn.get("_technique", "matched")
                 tech_label = {
-                    "ABBA_diff_pair":          "ABBA interdigitated diff pair",
+                    "ABAB_diff_pair":          "ABAB interdigitated diff pair",
                     "ABBA_current_mirror":     "ABBA interdigitated current mirror",
                     "ABAB_load_pair":          "ABAB interdigitated active load pair",
                     "symmetric_cross_coupled": "symmetric cross-coupled latch pair",
@@ -760,12 +895,31 @@ def build_finger_group_section(finger_map: dict, group_nodes: list) -> str:
             else:
                 nf   = elec.get("nf_per_device", 1)
                 m    = elec.get("multiplier", 1)
-                lines.append(
-                    f"  {grp_id:<12}  nf={nf}  m={m}  "
-                    f"total_fingers={tot}  "
-                    f"footprint={w:.3f} um  "
-                    f"(place fingers at X, X+0.070, X+0.140, ...)"
-                )
+                partner = gn.get("_matching_partner")
+                if partner:
+                    # Single-finger unmerged symmetry pair
+                    lines.append(
+                        f"  {grp_id:<30}  [FREE SYMMETRIC DEVICE]"
+                    )
+                    lines.append(
+                        f"    Symmetric partner: {partner}  (topology: {gn.get('_technique','matched')})"
+                    )
+                    lines.append(
+                        f"    total_fingers={tot}  footprint={w:.3f} um"
+                    )
+                    lines.append(
+                        f"    ** Place symmetrically: one on each SIDE of the center axis. **"
+                    )
+                    lines.append(
+                        f"    ** May share a row with adjacent unmatched devices (e.g. tail switch). **"
+                    )
+                else:
+                    lines.append(
+                        f"  {grp_id:<12}  nf={nf}  m={m}  "
+                        f"total_fingers={tot}  "
+                        f"footprint={w:.3f} um  "
+                        f"(place fingers at X, X+0.070, X+0.140, ...)"
+                    )
 
     lines.append(
         "LLM TASK: Assign an origin X and use the pre-assigned Y from the "
@@ -985,7 +1139,9 @@ def merge_matched_groups(
         matching_info: dict,
         group_terminal_nets: dict,
         terminal_nets: dict,
-        no_abutment: bool = False
+        no_abutment: bool = False,
+        skip_current_mirrors: bool = False,
+        already_enriched: bool = False,
 ) -> Tuple[list, list, dict, dict]:
     """
     Merge symmetrical transistor pairs into fixed interdigitated monolithic blocks.
@@ -1022,7 +1178,8 @@ def merge_matched_groups(
     """
     _POWER = frozenset({"VDD", "VSS", "GND", "VCC", "AVDD", "AVSS", ""})
 
-    if group_terminal_nets:
+    # Only enrich if not already done by the caller (avoids overwriting tier filtering)
+    if group_terminal_nets and not already_enriched:
         _enrich_matching_info(matching_info, group_terminal_nets, group_nodes)
 
     # Collect all clusters to merge (diff pairs + current mirrors + cross-coupled)
@@ -1032,15 +1189,19 @@ def merge_matched_groups(
     # 1. Diff pairs (highest priority)
     for a, b in matching_info.get("diff_pairs", []):
         if a not in used and b not in used:
-            clusters_to_merge.append(([a, b], "ABBA_diff_pair"))
+            clusters_to_merge.append(([a, b], "ABAB_diff_pair"))
             used.update([a, b])
 
-    # 2. Current mirrors
-    cm_clusters = _detect_current_mirrors(group_nodes, group_terminal_nets)
-    for cluster in cm_clusters:
-        if all(m not in used for m in cluster):
-            clusters_to_merge.append((cluster, "common_centroid_mirror"))
-            used.update(cluster)
+    # 2. Current mirrors (skip when matching_priority=Low)
+    if not skip_current_mirrors:
+        cm_clusters = _detect_current_mirrors(group_nodes, group_terminal_nets)
+        for cluster in cm_clusters:
+            if all(m not in used for m in cluster):
+                clusters_to_merge.append((cluster, "common_centroid_mirror"))
+                used.update(cluster)
+    else:
+        vprint("[merge_matched_groups] skip_current_mirrors=True "
+               "-> current mirror ABBA skipped (matching_priority=Low)")
 
     # 3. Cross-coupled pairs (symmetric mirror — reflection constraint)
     for a, b in matching_info.get("cross_coupled", []):
@@ -1148,9 +1309,36 @@ def merge_matched_groups(
         if not fingers_a or not fingers_b:
             continue
 
+        # ── Single-finger guard ─────────────────────────────────────────────
+        # Interdigitation is only meaningful when each device has ≥ 2 fingers.
+        # A 1-finger device (nf=1, m=1) cannot be interdigitated — the only
+        # matching benefit for single-finger pairs is symmetric PLACEMENT
+        # (left/right of the symmetry axis), which the deterministic axis-
+        # centering already guarantees without merging.
+        #
+        # Keeping them UNMERGED lets the AI/row assigner pack them beside
+        # other devices in the same tier (e.g., MM6 and MM7 beside MM10),
+        # improving area utilization by eliminating a dedicated dummy-padded
+        # row for a 2-finger block.
+        nf_a = len(fingers_a)
+        nf_b = len(fingers_b)
+        if nf_a == 1 and nf_b == 1:
+            # Mark both original group nodes as topological partners.
+            # These nodes live in grp_lookup (original list), NOT in new_group_nodes
+            # (which only holds fully merged blocks). Write directly to grp_lookup.
+            grp_lookup[grp_a_id]["_matching_partner"] = grp_b_id
+            grp_lookup[grp_a_id]["_technique"]        = technique
+            grp_lookup[grp_b_id]["_matching_partner"] = grp_a_id
+            grp_lookup[grp_b_id]["_technique"]        = technique
+            vprint(
+                f"[merge_matched] SKIP {grp_a_id}+{grp_b_id}: single-finger pair "
+                f"({technique}) — no interdigitation possible, keeping as free devices"
+            )
+            continue   # leave both groups unmerged
+
         # Generate interleaved pattern based on technique
-        if technique == "ABBA_diff_pair":
-            interleaved = interdigitate_fingers(fingers_a, fingers_b, pattern="ABBA", edge_dummies=True)
+        if technique == "ABAB_diff_pair":
+            interleaved = interdigitate_fingers(fingers_a, fingers_b, pattern="ABAB", edge_dummies=True)
         elif technique == "ABAB_load_pair":
             interleaved = interdigitate_fingers(fingers_a, fingers_b, pattern="ABAB", edge_dummies=True)
         elif technique == "symmetric_cross_coupled":
@@ -1218,6 +1406,15 @@ def merge_matched_groups(
             "_block_pitch":   block_pitch,
             "_members":       [grp_a_id, grp_b_id],
             "_technique":     technique,
+            # 2D fold eligibility: ABBA diff pairs with equal, even finger counts
+            # can be folded into 2 rows to halve layout width and reduce dummies.
+            # The actual 1D vs 2D decision is made later by _choose_fold_config.
+            "_can_fold":      technique in ("ABAB_diff_pair", "ABAB_load_pair")
+                              and len(fingers_a) == len(fingers_b)
+                              and len(fingers_a) >= 4
+                              and len(fingers_a) % 2 == 0,
+            "_fingers_a":     fingers_a,   # kept for 2D matrix generation
+            "_fingers_b":     fingers_b,
         }
 
         if "block" in grp_a:
@@ -1410,8 +1607,12 @@ def _symmetry_order(
     tail_right = []
     for t in tail_ids:
         if t not in used:
-            # Put half tails on each side
-            if len(tail_left) <= len(tail_right):
+            # If this row has NO diff pair (it's a pure latch+tail row),
+            # treat the tail as a center device so _assign_row_x anchors it
+            # on the symmetry axis (odd-finger tail sources are axis devices).
+            if not near_left and not near_right:
+                center_ids.append(t)   # goes right of cross-coupled at axis
+            elif len(tail_left) <= len(tail_right):
                 tail_left.append(t)
             else:
                 tail_right.append(t)
@@ -1439,11 +1640,215 @@ def _symmetry_order(
     return result
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Dynamic 1D vs 2D fold decision
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _choose_fold_config(
+    all_groups: List[dict],
+    pitch: float = STD_PITCH,
+    target_aspect: float = 1.3,
+    aspect_lambda: float = 50.0,
+    min_aspect: float = 0.0,
+    row_width: float = 0.0,
+) -> List[dict]:
+    """
+    Decide, for each ABBA matched block, whether to keep it as a 1D row or
+    fold it into a 2D matrix across 2 physical rows.
+
+    **Decision is layout-global and ASPECT-RATIO-AWARE** — it jointly minimises:
+      1. Total dummy/filler cells across all rows (utilization objective)
+      2. Deviation of the layout aspect ratio from ``target_aspect``
+         (shape objective — prevents folding from creating tall portrait layouts)
+
+    Cost function for each candidate fold mask:
+        cost = dummy_count + λ × |layout_w / layout_h - target_aspect|
+
+    Where:
+        layout_w = max(group_widths in mask)
+        layout_h = Σ (n_rows × row_pitch) for all groups in mask
+        λ = ``aspect_lambda`` (weight for aspect-ratio term)
+
+    This dual objective correctly handles mixed circuits:
+    - A block that is already near the target width → NOT folded (folding adds rows
+      without reducing width → worse aspect ratio)
+    - A block that is much wider than other rows → folded (reduces width, few extra rows)
+    - Result: some blocks stay 1D, others become 2D — per-circuit, per-block decision.
+
+    Parameters
+    ----------
+    all_groups : list
+        All group-level nodes (merged + unmerged), WITH ``geometry.width`` set.
+    pitch : float
+        STD_PITCH used for width/dummy calculation.
+    target_aspect : float
+        Target width/height ratio (default 1.3 = slightly wider than tall).
+        Analog layouts are typically 1.0–2.0. Set to 1.0 for perfectly square.
+    aspect_lambda : float
+        Weight for aspect ratio deviation vs dummy count.
+        Higher = more aggressive aspect ratio enforcement.
+        Lower = more dummy-reduction focused.
+
+    Returns
+    -------
+    list
+        Modified ``all_groups`` with ``_n_rows`` set on each group.
+    """
+    import copy as _copy
+    import math as _math
+
+    ROW_PITCH_UM = ROW_HEIGHT_UM   # height of one physical row (incl. guard rings)
+
+    # ── Helpers ─────────────────────────────────────────────────────────────
+    def _group_width(g: dict) -> float:
+        return g.get("geometry", {}).get("width", 0.0)
+
+    def _group_rows(g: dict) -> int:
+        return g.get("_n_rows", 1)
+
+    def _score(groups: List[dict]) -> float:
+        """Compute the combined dummy + aspect-ratio cost for a configuration."""
+        if not groups:
+            return 0.0
+        group_max_w = max(_group_width(g) for g in groups)
+        # Use the actual row width (max_row_width) when it is known.
+        # Without this, the optimizer uses max(group widths) which may be
+        # smaller than the real row — causing it to underestimate baseline
+        # dummies and incorrectly choose to fold.
+        layout_w = max(group_max_w, row_width)
+        layout_h = sum(_group_rows(g) * ROW_PITCH_UM for g in groups)
+        if layout_h == 0 or layout_w == 0:
+            return 0.0
+        # Dummy count
+        dummy = sum(
+            max(0.0, (layout_w - _group_width(g)) / pitch) * _group_rows(g)
+            for g in groups
+        )
+        # Aspect ratio deviation (width/height should equal target)
+        actual_aspect = layout_w / layout_h
+        aspect_dev = abs(actual_aspect - target_aspect)
+        return dummy + aspect_lambda * aspect_dev
+
+    # ── Initialise ───────────────────────────────────────────────────────────
+    groups = [_copy.copy(g) for g in all_groups]
+    for g in groups:
+        if "_n_rows" not in g:
+            g["_n_rows"] = 1
+
+    # ── Compute folded widths for each candidate ─────────────────────────────
+    fold_map: dict = {}   # group_id -> folded_width
+    for g in groups:
+        if not g.get("_can_fold", False):
+            continue
+        current_w  = _group_width(g)
+        total_cols = _math.ceil(current_w / pitch)
+        folded_cols = _math.ceil(total_cols / 2)
+        real_per_row = folded_cols - 2
+        if real_per_row < 2:
+            continue   # too narrow after fold — ABBA pattern would break
+        fold_map[g["id"]] = round(folded_cols * pitch, 6)
+
+    if not fold_map:
+        return groups   # no foldable blocks → no decision needed
+
+    # ── Exhaustive search over all 2^N subsets ───────────────────────────────
+    # For N ≤ 8 candidates (covers all realistic analog circuits), 2^8=256
+    # combinations are checked instantly.
+    candidates = [g for g in groups if g["id"] in fold_map]
+    n_cand     = len(candidates)
+    cand_idx   = {g["id"]: i for i, g in enumerate(candidates)}
+
+    baseline_score = _score(groups)
+    best_score     = baseline_score
+    best_mask      = 0   # 0 = no fold (baseline)
+
+    for mask in range(1, 1 << n_cand):
+        sim = []
+        for g in groups:
+            bit = cand_idx.get(g["id"])
+            if bit is not None and (mask >> bit) & 1:
+                g_sim = _copy.copy(g)
+                g_sim["_n_rows"]  = 2
+                g_sim["geometry"] = _copy.copy(g["geometry"])
+                g_sim["geometry"]["width"] = fold_map[g["id"]]
+                sim.append(g_sim)
+            else:
+                sim.append(g)
+
+        s = _score(sim)
+        # Reject configurations that produce aspect ratio below min_aspect
+        # (prevents over-folding into portrait layouts when Area=High)
+        if min_aspect > 0:
+            _sim_w = max(_group_width(g) for g in sim) if sim else 0
+            _sim_h = sum(_group_rows(g) * ROW_PITCH_UM for g in sim) if sim else 1
+            if _sim_h > 0 and (_sim_w / _sim_h) < min_aspect:
+                continue  # skip: too portrait
+        if s < best_score - 1e-6:
+            best_score = s
+            best_mask  = mask
+
+    # ── Diagnostics ──────────────────────────────────────────────────────────
+    # Compute what layout_w and layout_h will be under the chosen mask
+    _sim_final = []
+    for g in groups:
+        bit = cand_idx.get(g["id"])
+        if bit is not None and (best_mask >> bit) & 1:
+            g_sim = _copy.copy(g)
+            g_sim["_n_rows"]  = 2
+            g_sim["geometry"] = _copy.copy(g["geometry"])
+            g_sim["geometry"]["width"] = fold_map[g["id"]]
+            _sim_final.append(g_sim)
+        else:
+            _sim_final.append(g)
+
+    _lw = max(_group_width(g) for g in _sim_final) if _sim_final else 0
+    _lh = sum(_group_rows(g) * ROW_PITCH_UM for g in _sim_final) if _sim_final else 0
+    _asp = _lw / _lh if _lh > 0 else 0
+
+    vprint(
+        f"[fold_config] baseline_score={baseline_score:.2f} -> best_score={best_score:.2f} "
+        f"| mask={bin(best_mask)} "
+        f"| predicted W={_lw:.3f}um H={_lh:.3f}um aspect={_asp:.2f} (target={target_aspect})"
+    )
+
+    # ── Apply the winning configuration ─────────────────────────────────────
+    if best_mask == 0:
+        vprint("[fold_config] No fold improves the combined score — keeping all 1D")
+        return groups
+
+    baseline_dummy = sum(
+        max(0.0, (max(_group_width(g) for g in groups) - _group_width(g)) / pitch)
+        * _group_rows(g)
+        for g in groups
+    )
+
+    for gid, idx in cand_idx.items():
+        if (best_mask >> idx) & 1:
+            g = next(gg for gg in groups if gg["id"] == gid)
+            old_w = _group_width(g)
+            new_w = fold_map[gid]
+            g["_n_rows"]            = 2
+            g["geometry"]           = _copy.copy(g["geometry"])
+            g["geometry"]["width"]  = new_w
+            g["_folded_cols"]       = _math.ceil(old_w / pitch) // 2 + 1
+            g["_fold_real_per_row"] = g["_folded_cols"] - 2
+            vprint(f"[fold_config] Fold {gid}: 1D {old_w:.3f}um -> 2D {new_w:.3f}um x2rows")
+
+    return groups
+
+
+
+
 def pre_assign_rows(
         group_nodes: list,
         max_row_width: float = MAX_ROW_WIDTH,
         matching_info: dict | None = None,
         group_terminal_nets: dict | None = None,
+        disable_balancing: bool = False,
+        fold_lambda: float = 50.0,
+        fold_min_aspect: float = 0.0,
+        disable_folding: bool = False,
+        merge_nmos_rows: bool = False,
 ) -> Tuple[list, str]:
     """
     Deterministically allocate transistor groups into physical Y-rows via bin packing.
@@ -1474,6 +1879,43 @@ def pre_assign_rows(
     """
     import copy as _copy
 
+    # ── Step 0: Dynamic 1D vs 2D fold decision ────────────────────────────
+    # _choose_fold_config evaluates the entire layout (all group widths)
+    # and decides which ABBA blocks benefit from being folded into 2 rows.
+    # fold_lambda controls the trade-off between dummy fill and aspect ratio:
+    #   Low lambda  (e.g. 5)  -> optimise for dummy fill / utilisation (Area=High)
+    #   High lambda (e.g. 50) -> also penalise aspect ratio deviation (default)
+    if not disable_folding:
+        group_nodes = _choose_fold_config(
+            group_nodes, pitch=STD_PITCH,
+            aspect_lambda=fold_lambda,
+            min_aspect=fold_min_aspect,
+            row_width=max_row_width,
+        )
+    else:
+        for g in group_nodes:
+            g["_n_rows"] = 1
+        vprint("[pre_assign_rows] disable_folding=True — all blocks stay 1D")
+
+    # For groups that were folded (_n_rows=2), generate the 2D matrix now
+    # so expand_to_fingers uses the matrix path automatically.
+    from ai_agent.placement.centroid_generator import generate_2d_abba_matrix
+    for g in group_nodes:
+        if g.get("_n_rows", 1) >= 2 and g.get("_can_fold") and "_matrix_data" not in g:
+            fa = g.pop("_fingers_a", [])
+            fb = g.pop("_fingers_b", [])
+            if fa and fb:
+                g["_matrix_data"] = generate_2d_abba_matrix(fa, fb, n_rows=2)
+                vprint(
+                    f"[pre_assign_rows] 2D matrix for {g['id']}: "
+                    f"{g['_matrix_data']['rows']}×{g['_matrix_data']['cols']} "
+                    f"(width={g['geometry']['width']:.3f}µm)"
+                )
+        else:
+            # Not folded — discard the stored finger lists (no longer needed)
+            g.pop("_fingers_a", None)
+            g.pop("_fingers_b", None)
+
     pmos_groups    = [n for n in group_nodes if n.get("type") == "pmos"]
     nmos_groups    = [n for n in group_nodes if n.get("type") == "nmos"]
     passive_groups = [n for n in group_nodes
@@ -1482,9 +1924,15 @@ def pre_assign_rows(
     # --- Rectangular balancing: equalise PMOS / NMOS row widths ----------
     # Compute total footprint per type (sum of group widths + inter-group gaps)
     def _total_footprint(groups: list) -> float:
+        """Physical footprint: sum of finger-pitch widths + inter-group gaps."""
         if not groups:
             return 0.0
-        total = sum(g.get("geometry", {}).get("width", 0.0) for g in groups)
+        total = 0.0
+        for g in groups:
+            nf = g.get("electrical", {}).get("total_fingers", 1)
+            # ABBA merged blocks have 2 extra edge dummy slots
+            slots = (nf + 2) if g.get("_matched_block") else nf
+            total += slots * STD_PITCH
         total += STD_PITCH * max(0, len(groups) - 1)   # gaps between groups
         return total
 
@@ -1498,7 +1946,7 @@ def pre_assign_rows(
     pmos_max = max_row_width
     nmos_max = max_row_width
 
-    if pmos_total > 0 and nmos_total > 0:
+    if not disable_balancing and pmos_total > 0 and nmos_total > 0:
         wider  = max(pmos_total, nmos_total)
         narrow = min(pmos_total, nmos_total)
         # Lower threshold to 1.15 so even moderate imbalances trigger row splitting.
@@ -1510,7 +1958,9 @@ def pre_assign_rows(
             target_width = wider / num_rows_needed
             # Don't go below the single widest device (otherwise it can't fit)
             widest_device = max(
-                (g.get("geometry", {}).get("width", 0.0) for g in group_nodes),
+                ((g.get("electrical", {}).get("total_fingers", 1) +
+                  (2 if g.get("_matched_block") else 0)) * STD_PITCH
+                 for g in group_nodes),
                 default=0.0,
             )
             balanced_max = max(target_width, widest_device + STD_PITCH)
@@ -1531,7 +1981,11 @@ def pre_assign_rows(
         """Greedy largest-first bin-pack.  Returns list-of-rows (each = list of nodes)."""
         if not groups:
             return []
-        # Largest total_fingers (widest) first
+        def _phys_width(g: dict) -> float:
+            nf = g.get("electrical", {}).get("total_fingers", 1)
+            slots = (nf + 2) if g.get("_matched_block") else nf
+            return slots * STD_PITCH
+
         sorted_g = sorted(groups,
                           key=lambda n: n.get("electrical", {}).get("total_fingers", 1),
                           reverse=True)
@@ -1539,7 +1993,7 @@ def pre_assign_rows(
         widths: List[float]     = [0.0]
 
         for g in sorted_g:
-            w = g.get("geometry", {}).get("width", 0.0)
+            w = _phys_width(g)
             placed = False
             for i, (row, rw) in enumerate(zip(rows, widths)):
                 gap = STD_PITCH if rw > 0 else 0.0
@@ -1553,9 +2007,128 @@ def pre_assign_rows(
                 widths.append(w)
         return rows
 
-    nmos_rows    = _bin_pack(nmos_groups,    nmos_max)
-    pmos_rows    = _bin_pack(pmos_groups,    pmos_max)
-    num_nmos     = len(nmos_rows)
+    # ── Topology-aware NMOS row split ──────────────────────────────────────
+    # Diff-pair ABBA blocks (e.g. MM8+MM9) MUST be in their own row so the
+    # symmetry enforcer can center the interdigitated block perfectly.
+    # Latch (cross-coupled) + tail devices go to a separate row above the
+    # diff pair row.  This split is DETERMINISTIC — it does not rely on the
+    # LLM placing things symmetrically.
+    #
+    # Detection: a group is a "diff pair block" if its _technique is
+    # "ABAB_diff_pair".  For PMOS, "ABAB_diff_pair" precharge blocks also
+    # get their own row to keep the precharge pair symmetric.
+    def _is_diff_pair_block(g: dict) -> bool:
+        return g.get("_technique", "") == "ABAB_diff_pair"
+
+    nmos_diff_pair = [g for g in nmos_groups if _is_diff_pair_block(g)]
+    nmos_other     = [g for g in nmos_groups if not _is_diff_pair_block(g)]
+
+    pmos_diff_pair = [g for g in pmos_groups if _is_diff_pair_block(g)]
+    pmos_other     = [g for g in pmos_groups if not _is_diff_pair_block(g)]
+
+    if nmos_diff_pair and not merge_nmos_rows:
+        # Three-tier NMOS row split for dynamic comparators:
+        #   Row 0 (bottom): ABBA diff-pair block(s) — input pair, centered
+        #   Row 1 (middle): cross-coupled latch block(s) — centered
+        #   Row 2 (top):    tail/switch device(s) — centered
+        #
+        # Skipped when merge_nmos_rows=True (Area=High priority) so all
+        # NMOS groups are packed together for maximum utilisation.
+        def _is_cross_coupled(g: dict) -> bool:
+            return g.get("_technique", "") in ("symmetric_cross_coupled", "common_centroid_mirror")
+
+        def _is_tail(g: dict, matching_info: dict) -> bool:
+            """True if this group is a tail/axis device (in tail_sources list)."""
+            tail_ids = matching_info.get("tail_sources", []) if matching_info else []
+            # Also check by _technique absence (not a matched block but an axis device)
+            return g["id"] in tail_ids
+
+        def _is_single_finger_unmerged(g: dict) -> bool:
+            """True for single-finger cross-coupled devices skipped during merge.
+
+            Detected by finger count + technique alone — does NOT require
+            _matching_partner flag (as a safety measure since _technique is now
+            reliably set by the skip guard directly on grp_lookup).
+            """
+            # Must be cross-coupled topology
+            if not _is_cross_coupled(g):
+                return False
+            # Must NOT be a merged block
+            if g.get("_matched_block", False):
+                return False
+            # Check total finger count from electrical dict (always set by group_fingers)
+            total = g.get("electrical", {}).get("total_fingers", 1)
+            return total <= 1
+
+        # Split cross-coupled groups:
+        #   - Multi-finger merged latch blocks → their own row (common centroid needed)
+        #   - Single-finger unmerged partners → join the tail row beside MM10
+        nmos_latch_real   = [g for g in nmos_other
+                             if _is_cross_coupled(g) and not _is_single_finger_unmerged(g)]
+        nmos_latch_singlef = [g for g in nmos_other
+                              if _is_cross_coupled(g) and _is_single_finger_unmerged(g)]
+        nmos_tail  = [g for g in nmos_other if _is_tail(g, matching_info)]
+        nmos_misc  = [g for g in nmos_other
+                      if not _is_cross_coupled(g) and not _is_tail(g, matching_info)]
+
+        # Single-finger latch devices join the tail row for better packing.
+        # Target row order: [MM7 | MM10 | MM6]
+        #   — one cross-coupled device on each side of the tail device.
+        # Build the tail row manually for symmetric ordering:
+        nmos_tail_row_candidates = nmos_tail + nmos_misc + nmos_latch_singlef
+
+        nmos_rows_diff  = _bin_pack(nmos_diff_pair, nmos_max)
+        nmos_rows_latch = _bin_pack(nmos_latch_real, nmos_max) if nmos_latch_real else []
+
+        if nmos_tail_row_candidates:
+            # Use bin-pack first, then reorder each row for symmetric flanking:
+            # If this row contains both tail devices and single-finger cross-coupled
+            # partners, reorder to [left_partner ... | center_tail | ... right_partner].
+            nmos_rows_tail = _bin_pack(nmos_tail_row_candidates, nmos_max)
+            for row_idx, row in enumerate(nmos_rows_tail):
+                _tail_devs     = [g for g in row if _is_tail(g, matching_info) or
+                                  (not _is_cross_coupled(g) and not _is_tail(g, matching_info))]
+                _singlef_devs  = [g for g in row if _is_single_finger_unmerged(g)]
+                if _singlef_devs and _tail_devs:
+                    # Symmetric: put half of single-finger devices on each side of tail
+                    mid   = len(_singlef_devs) // 2
+                    left  = _singlef_devs[:mid] or []
+                    right = _singlef_devs[mid:] or []
+                    nmos_rows_tail[row_idx] = left + _tail_devs + right
+                    vprint(
+                        f"[pre_assign_rows] Tail row {row_idx} reordered: "
+                        f"[{' '.join(g['id'] for g in left)}] | "
+                        f"[{' '.join(g['id'] for g in _tail_devs)}] | "
+                        f"[{' '.join(g['id'] for g in right)}]"
+                    )
+        else:
+            nmos_rows_tail = []
+
+        # Order bottom-to-top: diff pair | latch | tail+single-finger-latch
+        nmos_rows = nmos_rows_diff + nmos_rows_latch + nmos_rows_tail
+        vprint(f"[pre_assign_rows] NMOS 3-tier split: "
+               f"diff={len(nmos_diff_pair)} latch={len(nmos_latch_real)} "
+               f"tail={len(nmos_tail+nmos_misc)} "
+               f"(+{len(nmos_latch_singlef)} single-finger latch device(s) moved to tail row)")
+    else:
+        # Area=High or no diff pair: pack all NMOS together for max utilisation
+        nmos_rows = _bin_pack(nmos_groups, nmos_max)
+        if merge_nmos_rows:
+            vprint(f"[pre_assign_rows] NMOS merged (Area=High): "
+                   f"{len(nmos_groups)} groups -> {len(nmos_rows)} row(s)")
+
+    if pmos_diff_pair:
+        pmos_rows_diff  = _bin_pack(pmos_diff_pair, pmos_max)
+        pmos_rows_other = _bin_pack(pmos_other, pmos_max) if pmos_other else []
+        # PMOS order: latch/load rows first (bottom of PMOS), precharge pair above
+        pmos_rows = pmos_rows_other + pmos_rows_diff
+        vprint(f"[pre_assign_rows] PMOS split: "
+               f"{len(pmos_diff_pair)} diff-pair block(s) in {len(pmos_rows_diff)} row(s) + "
+               f"{len(pmos_other)} other block(s) in {len(pmos_rows_other)} row(s)")
+    else:
+        pmos_rows = _bin_pack(pmos_groups, pmos_max)
+
+    num_nmos = len(nmos_rows)
 
     # --- Symmetry-aware reordering within each row -----------------------
     if matching_info and group_terminal_nets:
@@ -1564,47 +2137,148 @@ def pre_assign_rows(
         for i, row in enumerate(pmos_rows):
             pmos_rows[i] = _symmetry_order(row, matching_info, group_terminal_nets)
 
-    def _compute_height(g: dict) -> float:
-        nfin = g.get("electrical", {}).get("nfin", 2)
-        h1 = 0.55 + nfin * 0.05
-        h2 = g.get("geometry", {}).get("height", 0.0)
-        return max(h1, h2, 0.5) + 0.05
-
     def _row_height(row: list) -> float:
-        if not row:
-            return ROW_PITCH
-        return max(_compute_height(g) for g in row)
+        return _row_step_um(row)
 
-    # Build group_id -> Y map
+    # ── Build group_id → (Y, X) maps ─────────────────────────────────────
+    # Y: deterministic stacking (NMOS bottom, PMOS top)
+    # X: deterministic centering — each row is centered on a shared x_axis
+    #    so the layout is symmetric WITHOUT depending on the LLM.
     y_map: Dict[str, float] = {}
+    x_map: Dict[str, float] = {}
     current_y = 0.0
-    
+
+    all_rows = []  # for X centering calculation
+
     nmos_row_ys = []
     for row_idx, row in enumerate(nmos_rows):
         nmos_row_ys.append(current_y)
-        row_h = _row_height(row)
         for g in row:
             y_map[g["id"]] = current_y
-        current_y += row_h
+        all_rows.append(row)
+        # 2D blocks consume n_rows Y slots
+        max_n_rows = max((g.get("_n_rows", 1) for g in row), default=1)
+        current_y += _row_height(row) * max_n_rows
 
     pmos_row_ys = []
     for row_idx, row in enumerate(pmos_rows):
         pmos_row_ys.append(current_y)
-        row_h = _row_height(row)
         for g in row:
             y_map[g["id"]] = current_y
-        current_y += row_h
+        all_rows.append(row)
+        # 2D blocks consume n_rows Y slots
+        max_n_rows = max((g.get("_n_rows", 1) for g in row), default=1)
+        current_y += _row_height(row) * max_n_rows
 
     passive_y = current_y
     for g in passive_groups:
         y_map[g["id"]] = passive_y
 
-    # Clone nodes and update geometry.y
+    # --- Deterministic X centering ----------------------------------------
+    # Compute the layout width as the widest row total footprint.
+    # CRITICAL: use physical finger-pitch widths, NOT geometry.width (logical).
+    def _phys_w(g: dict) -> float:
+        """Physical width of a group in layout pitch units."""
+        nf = g.get("electrical", {}).get("total_fingers", 1)
+        slots = (nf + 2) if g.get("_matched_block") else nf
+        return slots * STD_PITCH
+
+    def _row_total_w(row: list) -> float:
+        if not row:
+            return 0.0
+        total = sum(_phys_w(g) for g in row)
+        total += STD_PITCH * max(0, len(row) - 1)
+        return total
+
+    layout_width = max((_row_total_w(r) for r in all_rows), default=0.0)
+    layout_width = max(layout_width, STD_PITCH)   # safety floor
+    x_axis = layout_width / 2.0
+
+    def _assign_row_x(row: list) -> None:
+        """
+        Assign x_map positions for groups in a single row.
+
+        Strategy:
+        - If the row contains exactly one group: center it on x_axis.
+        - If the row has a 'cross-coupled' or ABBA block at position idx:
+            anchor that block's centre on x_axis; place remaining groups
+            to the left (then right) of it symmetrically.
+        - Otherwise: center the full row cluster on x_axis.
+        """
+        if not row:
+            return
+
+        # Identify the "axis anchor": prefer a cross-coupled/ABBA merged block
+        anchor_idx = None
+        for i, g in enumerate(row):
+            tech = g.get("_technique", "")
+            if tech in ("symmetric_cross_coupled", "ABAB_diff_pair", "common_centroid_mirror"):
+                anchor_idx = i
+                break
+
+        if anchor_idx is None or len(row) == 1:
+            # No special anchor: just center the whole row cluster
+            row_w = _row_total_w(row)
+            import math as _m
+            start_x = round(_m.floor((x_axis - row_w / 2.0) / STD_PITCH) * STD_PITCH, 6)
+            cursor_x = start_x
+            for g in row:
+                w = _phys_w(g)
+                x_map[g["id"]] = cursor_x
+                cursor_x = round(cursor_x + w + STD_PITCH, 6)
+            return
+
+        # Anchor centering only makes sense when the anchor has groups on BOTH
+        # sides.  If it is at the edge (anchor_idx=0 or =last), all siblings go
+        # to one side → the row content would extend beyond layout_width.
+        # Fall back to plain centering in that case.
+        has_left  = anchor_idx > 0
+        has_right = anchor_idx < len(row) - 1
+        if not (has_left and has_right):
+            row_w = _row_total_w(row)
+            import math as _m
+            start_x = round(_m.floor((x_axis - row_w / 2.0) / STD_PITCH) * STD_PITCH, 6)
+            cursor_x = start_x
+            for g in row:
+                w = _phys_w(g)
+                x_map[g["id"]] = cursor_x
+                cursor_x = round(cursor_x + w + STD_PITCH, 6)
+            return
+
+        # Anchor the special block at x_axis
+        anchor = row[anchor_idx]
+        anchor_w = _phys_w(anchor)
+        import math as _m
+        anchor_x = round(_m.floor((x_axis - anchor_w / 2.0) / STD_PITCH) * STD_PITCH, 6)
+        x_map[anchor["id"]] = anchor_x
+
+        # Place groups to the LEFT of anchor (reverse order)
+        cursor_left = anchor_x - STD_PITCH
+        for g in reversed(row[:anchor_idx]):
+            w = _phys_w(g)
+            x_map[g["id"]] = round(cursor_left - w, 6)
+            cursor_left = round(cursor_left - w - STD_PITCH, 6)
+
+        # Place groups to the RIGHT of anchor
+        cursor_right = round(anchor_x + anchor_w + STD_PITCH, 6)
+        for g in row[anchor_idx + 1:]:
+            w = _phys_w(g)
+            x_map[g["id"]] = cursor_right
+            cursor_right = round(cursor_right + w + STD_PITCH, 6)
+
+    for row in all_rows:
+        _assign_row_x(row)
+
+    vprint(f"[pre_assign_rows] layout_width={layout_width:.4f} um → x_axis={x_axis:.4f} um")
+
+    # Clone nodes and update geometry.y AND geometry.x
     updated: List[dict] = []
     for n in group_nodes:
         nc = _copy.deepcopy(n)
         if nc["id"] in y_map:
             nc["geometry"]["y"] = y_map[nc["id"]]
+        if nc["id"] in x_map:
+            nc["geometry"]["x"] = x_map[nc["id"]]
         updated.append(nc)
 
     # Build human-readable summary for the LLM prompt
@@ -1613,13 +2287,15 @@ def pre_assign_rows(
         y = nmos_row_ys[row_idx]
         ids    = ", ".join(g["id"] for g in row)
         widths = " + ".join(f"{g['geometry']['width']:.3f}" for g in row)
-        lines.append(f"   NMOS Row {row_idx}  y={y:.3f} um : {ids}  (footprints: {widths} um)")
+        xs     = " | ".join(f"{x_map.get(g['id'],0):.3f}" for g in row)
+        lines.append(f"   NMOS Row {row_idx}  y={y:.3f} um : {ids}  (widths: {widths} um, x_start: {xs})")
 
     for row_idx, row in enumerate(pmos_rows):
         y = pmos_row_ys[row_idx]
         ids    = ", ".join(g["id"] for g in row)
         widths = " + ".join(f"{g['geometry']['width']:.3f}" for g in row)
-        lines.append(f"   PMOS Row {row_idx}  y={y:.3f} um : {ids}  (footprints: {widths} um)")
+        xs     = " | ".join(f"{x_map.get(g['id'],0):.3f}" for g in row)
+        lines.append(f"   PMOS Row {row_idx}  y={y:.3f} um : {ids}  (widths: {widths} um, x_start: {xs})")
 
     if passive_groups:
         ids = ", ".join(g["id"] for g in passive_groups)
@@ -1706,19 +2382,16 @@ def expand_to_fingers(
         grp_geom = placed.get(grp_id, {}).get("geometry", {})
         raw_y = grp_geom.get("y", NMOS_Y)
         dev_type = members[0].get("type", "nmos")
-        rep_elec = members[0].get("electrical", {})
+        member_height = max((_node_height_um(m) for m in members), default=ROW_HEIGHT_UM)
+        llm_height = _node_height_um({"geometry": grp_geom}, fallback=0.0)
 
-        # Compute height from nfin (number of fins in the vertical direction)
-        # FinFET device height scales linearly with nfin.
-        # Conservative estimate: base=0.55 um, fin_pitch=0.05 um
-        # This accounts for the actual OAS PCell height which is often larger
-        # than the nominal geometric bounding box.
-        nfin = rep_elec.get("nfin", 2)
-        computed_height = 0.55 + nfin * 0.05
-        # Also check the LLM-provided height — use the larger of the two
-        llm_height = grp_geom.get("height", 0.0)
-        # Add a safety margin of 0.05 um to prevent any edge overlap
-        group_heights[grp_id] = max(computed_height, llm_height, 0.5) + 0.05
+        # Use actual geometry height — do NOT clamp to ROW_HEIGHT_UM.
+        # The old max(height, ROW_HEIGHT_UM) inflated 0.568 → 0.668 which made
+        # expand_to_fingers think NMOS extended further than pre_assign_rows
+        # planned, re-introducing the gap we eliminated.
+        computed_height = member_height
+        llm_height = max(llm_height, 0.0)
+        group_heights[grp_id] = max(computed_height, llm_height) if llm_height > 0 else computed_height
 
         group_types[grp_id] = dev_type
         # DON'T re-snap — trust the Y from the geometry engine which already
@@ -1730,24 +2403,28 @@ def expand_to_fingers(
     nmos_top_edges = []
     for grp_id, y in group_ys.items():
         if group_types.get(grp_id) == "nmos":
-            h = group_heights.get(grp_id, 0.668)
+            h = group_heights.get(grp_id, ROW_HEIGHT_UM)
             # The top edge of the NMOS bounding box is y + height
             nmos_top_edges.append(y + h)
 
     max_nmos_top = max(nmos_top_edges) if nmos_top_edges else 0.0
 
-    # PMOS bottom edge must be at or above max NMOS top edge
-    min_pmos_y = max_nmos_top
+    # PMOS bottom edge must be at or above max NMOS top edge plus the configured
+    # active-row gap.
+    # PMOS bottom edge must be at or above max NMOS top edge (+ ROW_GAP_UM).
+    # With ROW_GAP_UM = 0, rows touch without any gap.
+    min_pmos_y = max_nmos_top + ROW_GAP_UM
 
     # Also ensure NMOS and PMOS are on different row grid levels
     # (prevents same-row overlap even with height check)
     nmos_ys_used = {y for grp_id, y in group_ys.items()
                     if group_types.get(grp_id) == "nmos"}
     max_nmos_y = max(nmos_ys_used) if nmos_ys_used else 0.0
-    # PMOS must be on a row strictly above the highest NMOS row
-    min_pmos_row = max_nmos_y + ROW_PITCH
-    # Take the larger of the two constraints
-    min_pmos_y = max(min_pmos_y, min_pmos_row)
+    # PMOS must be strictly above the highest NMOS top edge.
+    # Instead of adding a full ROW_PITCH from the NMOS *origin* (which
+    # creates an artificial gap), we use the bounding-box constraint
+    # already computed above (max_nmos_top + ROW_GAP_UM).
+    min_pmos_y = max(min_pmos_y, max_nmos_top + ROW_GAP_UM)
 
     # Find the current lowest PMOS row
     pmos_ys = [y for grp_id, y in group_ys.items() if group_types.get(grp_id) == "pmos"]
@@ -1806,7 +2483,7 @@ def expand_to_fingers(
                     dev_fingers[base] = []
                 dev_fingers[base].append(m)
                 
-            MATRIX_ROW_PITCH = 0.668
+            MATRIX_ROW_PITCH = _row_step_um(members)
             rep_node = members[0]
             dummy_idx = 0
             
@@ -1816,6 +2493,7 @@ def expand_to_fingers(
                     if base == "dummy" or base not in dev_fingers or len(dev_fingers[base]) == 0:
                         node = copy.deepcopy(rep_node)
                         node["id"] = f"DUMMY_matrix_{grp_id}_{dummy_idx}"
+                        node["is_dummy"] = True
                         dummy_idx += 1
                         node["net_d"] = "NC"
                         node["net_g"] = "NC"
@@ -1851,6 +2529,15 @@ def expand_to_fingers(
 
         for finger_idx, orig_node in enumerate(members):
             node = copy.deepcopy(orig_node)
+            if node.get("is_dummy"):
+                raw_id = str(node.get("id", "DUMMY"))
+                if raw_id == "EDGE_DUMMY_L":
+                    dummy_label = "EDGE_DUMMY_L"
+                elif raw_id == "EDGE_DUMMY_R":
+                    dummy_label = "EDGE_DUMMY_R"
+                else:
+                    dummy_label = "MATCH_DUMMY"
+                node["id"] = f"{dummy_label}_{grp_id}_{finger_idx}"
             # Place each sibling at consecutive positions with the group's pitch
             # This ensures abutment for all hierarchy leaves within the group
             fx = round(origin_x + finger_idx * pitch, 6)
@@ -1891,6 +2578,7 @@ def expand_to_fingers(
     # --- Pass 4: resolve inter-group overlaps per row ----------------------
     vprint(f"[expand_to_fingers] Before overlap resolution: {len(expanded)} devices expanded")
     expanded = _resolve_row_overlaps(expanded, no_abutment)
+    expanded = legalize_vertical_rows(expanded)
     vprint(f"[expand_to_fingers] After overlap resolution: returning {len(expanded)} devices")
 
     # POST-EXPANSION VALIDATION: Check for duplicate positions
@@ -1937,8 +2625,9 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
     if not nodes:
         return nodes
 
-    # STRIP existing dummies so we don't group them into giant blocks and duplicate them
-    active_nodes = [n for n in nodes if not n.get("is_dummy", False)]
+    # Strip only regenerated density fillers.  Structural edge/matrix dummies
+    # are part of matched/current-mirror blocks and must survive legalization.
+    active_nodes = [n for n in nodes if not _is_regenerated_filler_dummy(n)]
     
     pitch_abut = STD_PITCH if no_abutment else FINGER_PITCH  # 0.294 or 0.070
     pitch_std  = STD_PITCH     # 0.294
@@ -1975,6 +2664,32 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
             key=lambda ch: ch[0].get("geometry", {}).get("x", 0.0),
         )
 
+        # --- Step 3b: Redistribute flanking chains around the anchor --------
+        # Anchor = chain with the most fingers (e.g. ABBA block or MM10x4).
+        # Rule:
+        #   - Non-singleton flanking chains (>1 finger) go LEFT of anchor
+        #   - Singleton flanking chains (1 finger, e.g. MM6, MM7) go RIGHT
+        #   - If ALL flanking are singletons: split evenly on both sides
+        # Produces: [MM10, ABBA, MM7, MM6] (3-row) or [MM7, MM10, MM6] (5-row)
+        if len(sorted_chains) >= 3:
+            anchor_idx = max(range(len(sorted_chains)),
+                             key=lambda i: len(sorted_chains[i]))
+            anchor_chain = sorted_chains[anchor_idx]
+            flanking = [c for i, c in enumerate(sorted_chains) if i != anchor_idx]
+            singletons = [c for c in flanking if len(c) == 1]
+            non_single = [c for c in flanking if len(c) > 1]
+            if singletons:
+                if non_single:
+                    # Non-singletons left, all singletons right
+                    left_flank  = non_single
+                    right_flank = singletons
+                else:
+                    # Only singletons: split evenly on both sides
+                    n_left = len(singletons) // 2
+                    left_flank  = singletons[:n_left]
+                    right_flank = singletons[n_left:]
+                sorted_chains = left_flank + [anchor_chain] + right_flank
+
         # --- Step 4: Place chains left-to-right, gap-preserving -----------
         if not sorted_chains:
             continue
@@ -1996,15 +2711,19 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
         for chain_idx, chain in enumerate(sorted_chains):
             chain_first_orig, chain_last_orig = chain_footprints[chain_idx]
 
-            # If this chain starts before the cursor (overlap), shift it right.
-            # Otherwise preserve its original position (gap-preserving).
-            if chain_idx > 0 and chain_first_orig < cursor:
-                shift = round(cursor - chain_first_orig, 6)
-                vprint(f"[resolve_overlaps] Shifting chain by +{shift:.4f} to resolve overlap")
-                chain_start = cursor
+            # Place chains left-to-right with uniform 1-pitch_std gaps.
+            # For the first chain: snap its original position to the nearest
+            # pitch grid.  For subsequent chains: always use the cursor
+            # (= 1 pitch_std gap after the previous chain), ensuring equal
+            # inter-chain spacing.  Step 5 centering then distributes the
+            # outer fillers symmetrically.
+            import math as _m
+            if chain_idx == 0:
+                chain_start = round(round(chain_first_orig / pitch_std) * pitch_std, 6)
             else:
-                shift = 0.0
-                chain_start = chain_first_orig
+                chain_start = cursor
+            shift = round(chain_start - chain_first_orig, 6)
+            vprint(f"[resolve_overlaps]   chain[{chain_idx}] orig={chain_first_orig:.4f} -> snapped={chain_start:.4f} (shift={shift:.4f}, cursor={cursor:.4f})")
 
             for dev_idx, dev in enumerate(chain):
                 geo = dev.get("geometry", {})
@@ -2026,8 +2745,14 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
                         dev_w = pitch_std
                     chain_start = round(chain_start + dev_w, 6)
 
-            # Update cursor for next chain: enforce minimum gap
-            cursor = round(max(chain_start, chain_last_orig + shift) + min_inter_chain_gap, 6)
+            # Update cursor for next chain: enforce minimum gap.
+            # CRITICAL: snap cursor to the next pitch_std grid position so
+            # inter-chain gaps are always exact multiples of pitch_std.
+            # Without this, abutment-pitch chains (FINGER_PITCH=0.070) leave
+            # fractional gaps that the filler engine cannot fill.
+            import math as _m
+            raw_cursor = max(chain_start, chain_last_orig + shift) + min_inter_chain_gap
+            cursor = round(_m.ceil(raw_cursor / pitch_std) * pitch_std, 6)
 
         # Clean abutment flags for standalone (single-device) chains
         for chain in chains.values():
@@ -2052,15 +2777,16 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
         global_max_x = max(b[1] for b in row_bounds.values())
         global_center = (global_min_x + global_max_x) / 2.0
 
-        new_dummies = []
-        dummy_counter = 0
-
         for (y_key, dev_type), row_nodes in type_rows.items():
             min_x, max_x = row_bounds[(y_key, dev_type)]
             row_center = (min_x + max_x) / 2.0
             
-            # Shift the row to align its center with the global center
-            shift = round(global_center - row_center, 6)
+            # Shift the row to align its center with the global center.
+            # CRITICAL: snap to nearest pitch_std multiple so all devices
+            # stay on the pitch grid — prevents fractional-pitch gaps that
+            # cause unequal filler counts across rows.
+            raw_shift = global_center - row_center
+            shift = round(round(raw_shift / pitch_std) * pitch_std, 6)
             if abs(shift) > 0.0001:
                 for n in row_nodes:
                     geo = n.get("geometry", {})
@@ -2070,7 +2796,33 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
             footprints = []
             for n in row_nodes:
                 x = n.get("geometry", {}).get("x", 0.0)
-                w = n.get("geometry", {}).get("width", pitch_std)
+                w = max(n.get("geometry", {}).get("width", pitch_std), pitch_std)
+                footprints.append((x, x + w))
+
+        # Recompute global bounds AFTER all centering shifts have been applied,
+        # and snap to pitch grid so filler filling produces equal-width rows.
+        import math as _math
+        all_xs = []
+        all_xe = []
+        for (y_key, dev_type), row_nodes in type_rows.items():
+            for n in row_nodes:
+                x = n.get("geometry", {}).get("x", 0.0)
+                w = max(n.get("geometry", {}).get("width", pitch_std), pitch_std)
+                all_xs.append(x)
+                all_xe.append(x + w)
+        if all_xs:
+            global_min_x = _math.floor(min(all_xs) / pitch_std) * pitch_std
+            global_max_x = _math.ceil(max(all_xe) / pitch_std) * pitch_std
+
+        new_dummies = []
+        dummy_counter = 0
+
+        for (y_key, dev_type), row_nodes in type_rows.items():
+            # Recompute footprints after centering
+            footprints = []
+            for n in row_nodes:
+                x = n.get("geometry", {}).get("x", 0.0)
+                w = max(n.get("geometry", {}).get("width", pitch_std), pitch_std)
                 footprints.append((x, x + w))
             
             footprints.sort(key=lambda f: f[0])
@@ -2087,7 +2839,7 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
                         curr_start, curr_end = f_start, f_end
                 merged_footprints.append((curr_start, curr_end))
 
-            # Identify all gaps from global_min_x to global_max_x
+            # Identify all gaps from global_min_x to global_max_x.
             gaps = []
             if not merged_footprints:
                 gaps.append((global_min_x, global_max_x))
@@ -2124,26 +2876,32 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
                         }
                     break
 
-            # Fill each gap with left-aligned dummies (flush placement)
+            # Fill each gap with dummies placed at pitch-grid-aligned positions.
+            # Abutment-pitch chains create gap boundaries that are NOT on the
+            # pitch_std grid.  Instead of placing fillers at g_start + i*pitch
+            # (which would be off-grid), we enumerate all pitch_std grid
+            # positions that fall within the gap and place one filler at each.
+            import math as _m
             for g_start, g_end in gaps:
-                gap_width = g_end - g_start
-                # Relax tolerance: any gap >= 0.290 can hold at least one 0.294 device
-                num_fillers = int((gap_width + 0.005) / pitch_std)
-                if num_fillers > 0:
-                    for i in range(num_fillers):
-                        dummy_counter += 1
-                        # Left-align: place dummies flush from gap start
-                        curr_x = round(g_start + i * pitch_std, 6)
-                        # Safety: don't overshoot the gap end
-                        if curr_x + pitch_std > g_end + 0.01:
-                            break
-                        new_dummies.append({
-                            "id": f"FILLER_DUMMY_{dummy_counter}_{dev_type}",
-                            "type": dev_type,
-                            "is_dummy": True,
-                            "geometry": {"x": curr_x, "y": float(y_key), "width": pitch_std, "height": ref_height, "orientation": "R0"},
-                            "electrical": dict(ref_elec)
-                        })
+                # First grid position at or after the gap start
+                first_slot = int(_m.ceil(g_start / pitch_std - 1e-9))
+                # Last grid position whose filler fits entirely within the gap
+                last_slot  = int(_m.floor((g_end - pitch_std) / pitch_std + 1e-9))
+                for slot in range(first_slot, last_slot + 1):
+                    curr_x = round(slot * pitch_std, 6)
+                    # Guard: filler must not overlap with existing devices
+                    if curr_x + pitch_std > g_end + 0.01:
+                        break
+                    if curr_x < g_start - 0.01:
+                        continue
+                    dummy_counter += 1
+                    new_dummies.append({
+                        "id": f"FILLER_DUMMY_{dummy_counter}_{dev_type}",
+                        "type": dev_type,
+                        "is_dummy": True,
+                        "geometry": {"x": curr_x, "y": float(y_key), "width": pitch_std, "height": ref_height, "orientation": "R0"},
+                        "electrical": dict(ref_elec)
+                    })
 
         if new_dummies:
             active_nodes.extend(new_dummies)

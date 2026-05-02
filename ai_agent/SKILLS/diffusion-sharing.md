@@ -1,6 +1,7 @@
 ---
 id: diffusion_sharing
 name: Diffusion Sharing Optimization
+description: Share diffusion among compatible adjacent devices to reduce area and junction parasitics.
 
 trigger:
   keywords:
@@ -17,11 +18,8 @@ scope:
 
 inputs:
   - DEVICE_GEOMETRY_MODEL (MANDATORY)
-    description:
-      finger-based transistor geometry with:
-        - source/drain regions
-        - diffusion boundaries
-        - adjacency compatibility rules
+
+---
 
 ────────────────────────────────────
 CORE PURPOSE

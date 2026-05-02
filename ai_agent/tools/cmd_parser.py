@@ -58,21 +58,31 @@ def _deduplicate_positions(
 ):
     rows = {}
     for n in nodes:
-        ry = round(float(n['geometry']['y']), 4)
-        rows.setdefault(ry, []).append(n)
+        if "geometry" not in n:
+            continue
+        ry = round(float(n["geometry"].get("y", 0.0)), 4)
+        dev_type = str(n.get("type", "")).strip().lower()
+        rows.setdefault((ry, dev_type), []).append(n)
 
     for row_nodes in rows.values():
-        row_nodes.sort(key=lambda n: float(n['geometry']['x']))
-        for i in range(1, len(row_nodes)):
-            prev = row_nodes[i - 1]
-            curr = row_nodes[i]
-            prev_end = float(prev['geometry']['x']) + float(prev['geometry']['width'])
-            curr_x   = float(curr['geometry']['x'])
-            if curr_x < prev_end - 0.001:
-                snapped = round(prev_end / min_spacing) * min_spacing
-                if snapped < prev_end - 0.001:
+        row_nodes.sort(
+            key=lambda n: (
+                float(n["geometry"].get("x", 0.0)),
+                str(n.get("id", "")),
+            )
+        )
+        cursor = None
+        for node in row_nodes:
+            geo = node["geometry"]
+            x = float(geo.get("x", 0.0))
+            width = max(float(geo.get("width", min_spacing)), 0.0)
+            if cursor is not None and x < cursor - 0.001:
+                snapped = round(cursor / min_spacing) * min_spacing
+                if snapped < cursor - 0.001:
                     snapped += min_spacing
-                curr['geometry']['x'] = snapped
+                x = round(snapped, 6)
+                geo["x"] = x
+            cursor = max(cursor if cursor is not None else x, x + width)
 
 def extract_cmd_blocks(text: str) -> List[dict]:
     if not text:
