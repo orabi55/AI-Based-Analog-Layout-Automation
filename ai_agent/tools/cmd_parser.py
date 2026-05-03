@@ -84,10 +84,11 @@ def _deduplicate_positions(
                 geo["x"] = x
             cursor = max(cursor if cursor is not None else x, x + width)
 
-def extract_cmd_blocks(text: str) -> List[dict]:
+def extract_cmd_blocks(text: str) -> List[dict] | tuple[List[dict], str]:
     if not text:
-        return []
+        return [], ""
 
+    original_text = text
     text = re.sub(r'```[a-zA-Z]*\n?', '', text)
     text = re.sub(r'```', '', text)
     text = text.replace('\uff3b', '[').replace('\uff3d', ']')
@@ -97,6 +98,12 @@ def extract_cmd_blocks(text: str) -> List[dict]:
         lambda m: '[/CMD]' if '/' in m.group() else '[CMD]',
         text,
     )
+
+    other_text = re.sub(r'\[CMD\].*?\[/CMD\]', '', original_text, flags=re.DOTALL | re.IGNORECASE)
+    other_text = re.sub(r'```[a-zA-Z]*\n?', '', other_text)
+    other_text = re.sub(r'```', '', other_text)
+    other_text = other_text.replace('\uff3b', '[').replace('\uff3d', ']')
+    other_text = other_text.replace('\u27e6', '[').replace('\u27e7', ']')
 
     cmds: List[dict] = []
     pattern = re.compile(r'\[CMD\](.*?)\[/CMD\]', re.DOTALL | re.IGNORECASE)
@@ -130,7 +137,7 @@ def extract_cmd_blocks(text: str) -> List[dict]:
         if raw_markers:
             _log(f"⚠ Found {len(raw_markers)} CMD markers but parsed 0 blocks")
 
-    return cmds
+    return cmds, other_text.strip()
 
 def apply_cmds_to_nodes(nodes: List[dict], cmds: List[dict]) -> List[dict]:
     nodes  = copy.deepcopy(nodes)

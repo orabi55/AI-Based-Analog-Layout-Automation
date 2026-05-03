@@ -86,6 +86,7 @@ def node_drc_critic(state):
         return {
             "drc_pass": True, "drc_flags": [],
             "chat_history": updated_chat_history, "drc_retry_count": retry_num + 1,
+            "last_agent": "drc_critic",
         }
 
     n_violations = len(drc_result['violations'])
@@ -120,7 +121,7 @@ def node_drc_critic(state):
         llm_elapsed = time.time() - llm_t0
         critic_response, drc_thinking = _split_content_and_thinking(critic_raw_response.content)
         critic_response = _strip_thinking_text(critic_response)
-        critic_cmds = extract_cmd_blocks(critic_response)
+        critic_cmds, _ = extract_cmd_blocks(critic_response)
         log_detail(f"LLM responded in {llm_elapsed:.1f}s with {len(critic_cmds)} fix(es)")
         _print_thinking_block("DRC", drc_thinking)
     except Exception as exc:
@@ -279,4 +280,5 @@ def node_drc_critic(state):
         "drc_flags": structured_flags,
         "chat_history": updated_chat_history,
         "drc_retry_count": retry_num + 1,
+        "last_agent": "drc_critic",
     }

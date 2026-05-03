@@ -64,4 +64,6 @@ def node_strategy_selector(state):
         "strategy_result": strategy_text,
         "chat_history": updated_chat_history,
         "placement_mode": placement_mode,
+        "last_agent": "strategy_selector",
+        "pending_cmds": [],
     }

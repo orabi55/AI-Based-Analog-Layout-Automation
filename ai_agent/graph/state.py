@@ -57,6 +57,7 @@ class LayoutState(TypedDict):
     # --- Chat router metadata ---
     intent: str
     router_target: str
+    last_agent: str
 
     # --- Human Approval ---
     approved: bool
@@ -73,3 +74,6 @@ class LayoutState(TypedDict):
 
     # --- Placement goals (user-specified priorities) ---
     placement_goals: Dict[str, Any]    # area/matching/symmetry + max_area_um2
+
+    # --- Agent output cache ---
+    placement_text: str

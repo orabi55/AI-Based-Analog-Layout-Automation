@@ -1,23 +1,6 @@
 ---
-id: proximity_net
 name: Connectivity-Based Proximity Optimization
 description: Keep strongly connected devices close to reduce wire length and parasitics.
-
-trigger:
-  keywords:
-    [
-      "proximity", "net", "routing distance", "connectivity",
-      "wire length", "parasitic", "shared net", "fanout",
-      "minimize routing", "adjacent connection"
-    ]
-
-scope:
-  - full_layout_graph
-  - cross_group_connections_allowed
-
-inputs:
-  - NETLIST_GRAPH (MANDATORY)
-
 ---
 
 ────────────────────────────────────

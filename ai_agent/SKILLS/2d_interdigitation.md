@@ -1,16 +1,6 @@
 ---
-id: 2d_interdigitation
 name: 2D ABBA Interdigitation and 2D Common Centroid
 description: 2D ABBA Interdigitation and 2D Common Centroid
-
-trigger:
-  keywords: ["2d matching", "2d common centroid", "fold", "multi-row interdigitation",
-             "poor utilization", "dummy cells", "aspect ratio", "2d interdigitated"]
-
-scope:
-  - matched_pair_group_only
-  - applied_before_llm_sees_blocks
-
 ---
 
 ────────────────────────────────────

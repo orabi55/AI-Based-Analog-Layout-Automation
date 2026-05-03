@@ -39,6 +39,7 @@ _VALID_CHAT_ROLES = {
     "human", "user", "ai", "assistant", "function", "tool", "system", "developer"
 }
 
+SKILLS_DIR = Path(__file__).resolve().parents[1] / "SKILLS"
 
 def _canonicalize_role(role):
     role_text = str(role or "").strip()
@@ -76,13 +77,13 @@ def _split_content_and_thinking(content):
                 if thinking_text is None:
                     thinking_text = obj.get("text")
                 if thinking_text is None:
-                    thinking_text = json.dumps(obj, ensure_ascii=False)
+                    thinking_text = json.dumps(obj, ensure_ascii=False, default=str)
                 thinking_chunks.append(str(thinking_text))
                 return
             if isinstance(obj.get("text"), str):
                 visible_chunks.append(obj["text"])
                 return
-            visible_chunks.append(json.dumps(obj, ensure_ascii=False))
+            visible_chunks.append(json.dumps(obj, ensure_ascii=False, default=str))
             return
         visible_chunks.append(str(obj))
 
@@ -193,6 +194,60 @@ def _content_to_text(content):
     return _strip_thinking_text(visible_text)
 
 
+def _extract_agent_output_parts(agent_result):
+    """Extract visible response text and thinking text from an agent result payload."""
+    if isinstance(agent_result, dict):
+        messages = agent_result.get("messages", [])
+        if isinstance(messages, list):
+            assistant_messages = []
+            for msg in messages:
+                if isinstance(msg, dict):
+                    role = str(msg.get("role", msg.get("type", ""))).strip().lower()
+                    content = msg.get("content")
+                    additional_kwargs = msg.get("additional_kwargs", {}) or {}
+                    tool_calls = msg.get("tool_calls", []) or []
+                else:
+                    role = str(getattr(msg, "type", getattr(msg, "role", ""))).strip().lower()
+                    content = getattr(msg, "content", None)
+                    additional_kwargs = getattr(msg, "additional_kwargs", {}) or {}
+                    tool_calls = getattr(msg, "tool_calls", []) or []
+
+                if role in ("assistant", "ai"):
+                    assistant_messages.append((content, additional_kwargs, tool_calls))
+
+            for content, additional_kwargs, tool_calls in reversed(assistant_messages):
+                response_text = _strip_thinking_text(_content_to_text(content))
+                thinking_text = ""
+
+                if isinstance(content, str):
+                    response_text, thinking_text = _split_content_and_thinking(content)
+                    response_text = _strip_thinking_text(response_text)
+
+                if not thinking_text and isinstance(additional_kwargs, dict):
+                    if additional_kwargs.get("__gemini_function_call_thought_signatures__"):
+                        thinking_text = (
+                            "Gemini returned internal function-call reasoning in thought signatures."
+                        )
+
+                if response_text or thinking_text or tool_calls:
+                    return response_text or "", thinking_text or ""
+
+            output = agent_result.get("output")
+            if output:
+                return _split_content_and_thinking(output)
+
+    if isinstance(agent_result, str):
+        return _split_content_and_thinking(agent_result)
+
+    return _strip_thinking_text(_content_to_text(agent_result)), ""
+
+
+def _extract_agent_output_content(agent_result):
+    """Extract the final assistant content from a ReAct agent result payload."""
+    response_text, _ = _extract_agent_output_parts(agent_result)
+    return response_text
+
+
 def _invoke_with_retry(messages, selected_model: str, task_weight: str, stage_tag: str):
     max_retries = 1 if task_weight == "light" else 2
     for attempt in range(max_retries + 1):
@@ -247,7 +302,6 @@ def _extract_agent_output_content(agent_result):
             return output
     return agent_result
 
-
 def _invoke_react_agent_with_retry(
     system_prompt: str,
     chat_history,
@@ -255,44 +309,72 @@ def _invoke_react_agent_with_retry(
     selected_model: str,
     task_weight: str,
     stage_tag: str,
-    tools,
 ):
     """Invoke placement agent via ReAct framework with timeout-aware retries."""
+    from langchain.agents import create_agent
+
     max_retries = 1 if task_weight == "light" else 2
+
     for attempt in range(max_retries + 1):
         try:
-            from langchain.agents import create_agent
             llm = get_langchain_llm(selected_model, task_weight=task_weight)
-            react_agent = create_agent(
-                model=llm,
-                tools=list(tools or []),
-                system_prompt=_strip_thinking_text(str(system_prompt)),
+
+            # Wire up SkillMiddleware and extract its tools
+            skill_middleware = SkillMiddleware(SKILLS_DIR)
+            tools = skill_middleware.tools
+
+            # Build the system prompt with skill catalog injected via middleware logic
+            enriched_system_prompt = _strip_thinking_text(str(system_prompt))
+            skills_addendum = (
+                f"\n\n## Available Skills\n\n{skill_middleware.skills_prompt}\n\n"
+                "Before starting each phase of your work, load the relevant skill "
+                "using the load_skill tool. Skills contain expert strategies and "
+                "step-by-step guidelines you should follow. "
+                "Don't skip loading a skill just because the task seems familiar — "
+                "the skill may contain important details you'd otherwise miss.\n\n"
+                "Some skills reference additional files in their directory — "
+                "you can read those with read_file for deeper detail."
             )
-            history_messages = _normalize_chat_history(chat_history)[-8:]
-            input_messages = [
-                {"role": "system", "content": _strip_thinking_text(str(system_prompt))}
+            enriched_system_prompt += skills_addendum
+
+            # Create the ReAct agent runnable with a single system prompt
+            agent_runnable = create_agent(
+                model=llm,
+                tools=tools,
+                system_prompt=enriched_system_prompt,
+            )
+
+            # Normalize and trim history (exclude system messages — already in prompt)
+            history_messages = [
+                msg for msg in _normalize_chat_history(chat_history)[-8:]
+                if msg["role"] != "system"
             ]
-            input_messages.extend(
+
+            messages = [
                 {"role": msg["role"], "content": _strip_thinking_text(msg["content"])}
                 for msg in history_messages
-            )
-            input_messages.append(
-                {"role": "user", "content": _strip_thinking_text(str(user_prompt).strip())}
-            )
+            ]
+            messages.append({
+                "role": "user",
+                "content": _strip_thinking_text(str(user_prompt).strip()),
+            })
+
             try:
-                prompt_text = json.dumps(input_messages, indent=2, ensure_ascii=False, default=str)
+                prompt_text = json.dumps(
+                    {"system": enriched_system_prompt, "messages": messages},
+                    indent=2, ensure_ascii=False, default=str,
+                )
             except Exception:
-                prompt_text = str(input_messages)
+                prompt_text = str(user_prompt)
             vprint(f"[{stage_tag}] ReAct Prompt (attempt {attempt + 1}):\n{prompt_text}")
 
-            result = react_agent.invoke({"messages": input_messages})
-            response_content = _extract_agent_output_content(result)
-            response_text = _content_to_text(response_content) if response_content is not None else str(result)
-            vprint(f"[{stage_tag}] ReAct Response (attempt {attempt + 1}):\n{response_text}")
+            result = agent_runnable.invoke({"messages": messages})
+
             return result
+
         except Exception as exc:
             msg = str(exc).lower()
-            is_timeout = "timed out" in msg or "timeout" in msg or "read operation timed out" in msg
+            is_timeout = any(t in msg for t in ("timed out", "timeout", "read operation timed out"))
             if is_timeout and attempt < max_retries:
                 print(
                     f"[{stage_tag}] ⚠ Timeout from provider; retrying ({attempt + 1}/{max_retries})...",

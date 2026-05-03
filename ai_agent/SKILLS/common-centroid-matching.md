@@ -1,16 +1,6 @@
 ---
-id: common_centroid
 name: Common-Centroid Matching
 description: Place matched devices in a symmetric centroid pattern to cancel gradients.
-
-trigger:
-  mode: CC
-  keywords: ["centroid", "common centroid", "cc", "match"]
-
-scope:
-  - matched_device_set (NOT full row)
-  - all devices within the CC group only
-
 ---
 
 ────────────────────────────────────

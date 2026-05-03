@@ -92,4 +92,5 @@ def node_finger_expansion(state):
         "placement_nodes": physical_nodes,
         "deterministic_snapshot": copy.deepcopy(physical_nodes),
         "placement_quality": quality_report,
+        "last_agent": "finger_expansion",
     }

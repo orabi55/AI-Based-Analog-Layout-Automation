@@ -736,7 +736,6 @@ def build_placement_context_chatbot(
 
     group_nodes = []
     finger_map = {}
-    finger_group_str = ""
     try:
         from ai_agent.placement.finger_grouper import (
             aggregate_to_logical_devices,
@@ -752,8 +751,6 @@ def build_placement_context_chatbot(
         else:
             group_nodes = aggregate_to_logical_devices(active_fingers)
 
-        if finger_map:
-            finger_group_str = build_finger_group_section(finger_map, group_nodes)
     except Exception:
         group_nodes = []
         finger_map = {}
@@ -780,9 +777,6 @@ def build_placement_context_chatbot(
         )
     lines.append("")
 
-    if finger_group_str:
-        lines.append(finger_group_str)
-        lines.append("")
 
     # Use existing geometry for row Y references
     pmos_ys = sorted(set(
@@ -793,7 +787,7 @@ def build_placement_context_chatbot(
         round(n.get("geometry", {}).get("y", 0.0), 6) for n in nodes
         if str(n.get("type", "")).lower().startswith("n")
     ))
-    lines.append("ROW Y-VALUE REFERENCE (copy these exactly into move CMDs):")
+    lines.append("ROW Y-VALUE REFERENCE:")
     for y in pmos_ys:
         row_nodes = [n["id"] for n in nodes
                      if str(n.get("type", "")).lower().startswith("p")
@@ -812,6 +806,24 @@ def build_placement_context_chatbot(
         )
     lines.append("")
 
+    # Show precise positions for every device instance (fingers & multipliers)
+    lines.append("DEVICE POSITIONS (all instances incl. multipliers):")
+    # Sort for deterministic output
+    for n in sorted(nodes, key=lambda x: str(x.get("id", ""))):
+        nid = str(n.get("id", "?"))
+        ntype = str(n.get("type", "")).upper()
+        geo = n.get("geometry", {}) or {}
+        try:
+            x = float(geo.get("x", 0.0))
+        except Exception:
+            x = 0.0
+        try:
+            y = float(geo.get("y", 0.0))
+        except Exception:
+            y = 0.0
+        lines.append(f"  {nid:<30} type={ntype:<6} x={x:.6f} y={y:.6f}")
+    lines.append("")
+
     if constraints_text:
         lines.append("=" * 60)
         lines.append("TOPOLOGY CONSTRAINTS (from Topology Analyst - Stage 1)")
@@ -826,24 +838,14 @@ def build_placement_context_chatbot(
 1. ROW Y VALUES: Use ONLY the values from ROW Y-VALUE REFERENCE above.
    Never put all PMOS in one row and all NMOS in one row when multiple rows exist.
 
-2. DIFF PAIR (ABBA): Place M1 and M2 fingers interleaved: M1a M2a M2b M1b.
-   Both devices must share the same Y row and be horizontally adjacent.
+2. NMOS/PMOS SEPARATION: All NMOS Y values must be strictly less than all PMOS Y values.
 
-3. CURRENT MIRROR: Mref and Mcopy must be adjacent in the same row.
-   If nf differs use common-centroid: Mref Mcopy Mcopy Mref.
+3. NO OVERLAP: Each (x, y) coordinate must be unique. x = slot * 0.294.
 
-4. MATCHED BLOCKS: Any block listed in FIXED MATCHED BLOCKS gets ONE [CMD].
-   Use the block ID as the device name and assign only the origin X.
-   Do NOT emit individual finger CMDs for matched blocks.
-
-5. NMOS/PMOS SEPARATION: All NMOS Y values must be strictly less than all PMOS Y values.
-
-6. NO OVERLAP: Each (x, y) coordinate must be unique. x = slot * 0.294.
-
-7. DEVICE CONSERVATION: Every finger instance in IMMUTABLE TRANSISTORS must appear
+4. DEVICE CONSERVATION: Every finger instance in IMMUTABLE TRANSISTORS must appear
    in exactly one [CMD]. No additions, no deletions.
 
-8. SQUARE ASPECT RATIO: Aim for width ~= height. If >3 NMOS rows are assigned,
+5. SQUARE ASPECT RATIO: Aim for width ~= height. If >3 NMOS rows are assigned,
    keep each row width <= 8um by splitting devices across rows as shown above.
 """)
     lines.append("")

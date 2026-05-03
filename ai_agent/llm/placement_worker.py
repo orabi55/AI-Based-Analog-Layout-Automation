@@ -89,6 +89,7 @@ class PlacementWorker(QObject):
             "selected_model": selected_model,
             "intent": "",
             "router_target": "",
+            "last_agent": "",
             "pending_cmds": [],
             "constraint_text": "",
             "Analysis_result": "",
@@ -109,6 +110,7 @@ class PlacementWorker(QObject):
             "abutment_candidates": abutment_candidates,
             "placement_mode": "auto",   # symmetry_enforcer may upgrade to "two_half"
             "placement_quality": {},        # populated by node_placement_specialist
+            "placement_text": "",
             "placement_goals": layout_context.get("placement_goals", {}),  # user priorities
         }
 
