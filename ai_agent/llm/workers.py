@@ -280,6 +280,7 @@ class OrchestratorWorker(LLMWorker):
                 "mode":            "chat",
                 "intent":          "",
                 "router_target":   "",
+                "last_agent":      initial_state.get("last_agent", ""),
                 "user_message":    user_message,
                 "chat_history":    chat_history,
                 "selected_model":  selected_model,
@@ -308,6 +309,7 @@ class OrchestratorWorker(LLMWorker):
             initial_state.setdefault("Analysis_result", "")
             initial_state.setdefault("deterministic_snapshot", [])
             initial_state.setdefault("original_placement_cmds", [])
+            initial_state.setdefault("placement_text", "")
             initial_state.setdefault("drc_flags", [])
             initial_state.setdefault("drc_pass", False)
             initial_state.setdefault("drc_retry_count", 0)
@@ -362,17 +364,23 @@ class OrchestratorWorker(LLMWorker):
                     vprint(f"[GRAPH]   ⏸ INTERRUPT: type={itype}", flush=True)
 
                     if itype == "visual_review":
-                        placement = interrupt_data.get("placement", [])
-                        if not isinstance(placement, list):
-                            placement = []
-                        routing = interrupt_data.get("routing", {})
-                        if not isinstance(routing, dict):
-                            routing = {}
-                        self.visual_viewer_signal.emit({
-                            "type": "visual_review",
-                            "placement": placement,
-                            "routing": routing,
-                        })
+                        pending_cmds = interrupt_data.get("pending_cmds", [])
+                        if not isinstance(pending_cmds, list):
+                            pending_cmds = []
+
+                        if interrupt_data.get("last_agent") == "topology_analyst": text = interrupt_data.get("Analysis", "")
+                        elif interrupt_data.get("last_agent") == "strategy_selector": text = interrupt_data.get("Strategy", "")
+                        elif interrupt_data.get("last_agent") == "placement_specialist": text = interrupt_data.get("Placement", "")
+                        else: text = ""
+
+                        if text:
+                            self.response_ready.emit(text)
+
+                        if pending_cmds:
+                            self.visual_viewer_signal.emit({
+                                "type": "visual_review",
+                                "pending_cmds": pending_cmds,
+                            })
                         try:
                             from ai_agent.llm.placement_worker import set_last_initial_state
                             snapshot = langgraph_app.get_state(self.thread_config).values
@@ -405,57 +413,6 @@ class OrchestratorWorker(LLMWorker):
             self.error_occurred.emit("Could not import LangGraph app for finalization.")
             return
 
-        final_state = langgraph_app.get_state(self.thread_config).values
-
-        placement_nodes = final_state.get("placement_nodes", [])
-        final_cmds = []
-        for n in placement_nodes:
-            if n.get("is_dummy"):
-                continue
-            try:
-                x = round(float(n["geometry"]["x"]), 3)
-                y = round(float(n["geometry"]["y"]), 3)
-            except (TypeError, KeyError, ValueError) as exc:
-                vprint(f"[FINALIZE] Skipping {n.get('id', '?')}: bad geometry ({exc})", flush=True)
-                continue
-            final_cmds.append({"action": "move", "device": n["id"], "x": x, "y": y})
-
-        pending_cmds = final_state.get("pending_cmds", [])
-        if not final_cmds and pending_cmds:
-            vprint("[FINALIZE] placement_nodes empty — falling back to pending_cmds", flush=True)
-            final_cmds = pending_cmds
-
-        drc_pass    = final_state.get("drc_pass", False)
-        drc_flags   = final_state.get("drc_flags", [])
-        drc_status  = "✅ Pass" if drc_pass else f"⚠ {len(drc_flags)} violation(s)"
-        routing_result  = final_state.get("routing_result", {})
-        routing_score   = routing_result.get("score", "N/A")
-        routing_cost    = routing_result.get("placement_cost", None)
-        constraint_count = len(final_state.get("constraints", []))
-
-        vprint(f"[FINALIZE] Devices placed: {len(final_cmds)}", flush=True)
-        vprint(f"[FINALIZE] DRC: {drc_status}", flush=True)
-        vprint(f"[FINALIZE] Routing Score: {routing_score}", flush=True)
-        if routing_cost is not None:
-            vprint(f"[FINALIZE] Routing Cost: {routing_cost:.2f}", flush=True)
-
-        summary_header = (
-            f"**[Multi-Agent Pipeline Complete]**\n\n"
-            f"• Topology: {constraint_count} constraint lines\n"
-            f"• DRC: {drc_status}\n"
-            f"• Routing Score: {routing_score}"
-            + (f" (cost: {routing_cost:.2f})" if routing_cost is not None else "")
-            + f"\n• Commands: {len(final_cmds)} emitted\n\n"
-        )
-
-        if final_cmds:
-            self.visual_viewer_signal.emit({
-                "type": "final_layout",
-                "placement": final_cmds,
-                "routing": routing_result,
-            })
-
-        self.response_ready.emit(summary_header)
         vprint("[FINALIZE] ✓ Pipeline complete — signals emitted.", flush=True)
 
     @Slot(str)

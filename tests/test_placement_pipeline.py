@@ -300,10 +300,11 @@ class Test09_CMDParsing(unittest.TestCase):
 
     def test_parse_cmd_blocks(self):
         from ai_agent.tools.cmd_parser import extract_cmd_blocks
-        text = '[CMD]{"action":"move","device":"MM1","x":0.5,"y":0.0}[/CMD]'
-        cmds = extract_cmd_blocks(text)
+        text = 'Keep this text. [CMD]{"action":"move","device":"MM1","x":0.5,"y":0.0}[/CMD]'
+        cmds, other_text = extract_cmd_blocks(text)
         self.assertEqual(len(cmds), 1)
         self.assertEqual(cmds[0]["device"], "MM1")
+        self.assertIn("Keep this text.", other_text)
         print(f"  [PASS] CMD parsing: parsed {len(cmds)} block(s)")
 
     def test_apply_cmds(self):

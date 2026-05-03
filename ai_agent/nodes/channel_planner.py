@@ -29,7 +29,7 @@ def node_channel_planner(state: dict) -> dict:
     if not nodes or not channels:
         elapsed = time.time() - t0
         ip_step("5.6/5 Channel Planner", f"skipped (no channels) ({elapsed:.1f}s)")
-        return {"channel_plan": []}
+        return {"channel_plan": [], "last_agent": "channel_planner"}
 
     log_section("Channel Planner")
     
@@ -90,5 +90,6 @@ def node_channel_planner(state: dict) -> dict:
 
     return {
         "placement_nodes": new_nodes,
-        "channel_plan": accumulated_shifts
+        "channel_plan": accumulated_shifts,
+        "last_agent": "channel_planner",
     }

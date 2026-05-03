@@ -83,4 +83,6 @@ def node_topology_analyst(state):
         "constraint_text": constraint_text,
         "Analysis_result": analysis_txt,
         "chat_history": updated_chat_history,
+        "last_agent": "topology_analyst",
+        "pending_cmds": [], 
     }

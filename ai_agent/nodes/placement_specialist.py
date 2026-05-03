@@ -45,22 +45,24 @@ from ai_agent.placement.finger_grouper import aggregate_to_logical_devices, lega
 from ai_agent.tools.cmd_parser import extract_cmd_blocks, apply_cmds_to_nodes
 from ai_agent.tools.overlap_resolver import resolve_overlaps
 from ai_agent.nodes._shared import (
+    SKILLS_DIR,
     _build_llm_messages,
     _invoke_with_retry,
     _invoke_react_agent_with_retry,
+    _extract_agent_output_parts,
     _extract_agent_output_content,
-    _split_content_and_thinking,
     _strip_thinking_text,
-    _print_thinking_block,
     _update_and_save_chat_history,
     ip_step,
 )
 from ai_agent.utils.logging import (
-    log_section, log_detail, log_device_positions, stage_start,
+    log_section, log_detail, log_device_positions, stage_start, vprint,
 )
 from ai_agent.tools.inventory import validate_device_count
 from ai_agent.placement.symmetry import enforce_reflection_symmetry
 from ai_agent.placement.quality_metrics import score_placement
+
+
 
 # ── Module-level singletons ─────────────────────────────────────────────────
 #
@@ -68,7 +70,7 @@ from ai_agent.placement.quality_metrics import score_placement
 # once at import time.  Both nodes share the same prompt and tool list so
 # there is no per-call overhead and no risk of diverging configurations.
 
-_PLACEMENT_SKILL_MIDDLEWARE = SkillMiddleware()
+_PLACEMENT_SKILL_MIDDLEWARE = SkillMiddleware(SKILLS_DIR)
 
 _PLACEMENT_SPECIALIST_AGENT = create_placement_specialist_agent(
     middlewares=[_PLACEMENT_SKILL_MIDDLEWARE]
@@ -76,18 +78,6 @@ _PLACEMENT_SPECIALIST_AGENT = create_placement_specialist_agent(
 # Build augmented prompt and collect tool dicts from all middlewares.
 _PLACEMENT_SYSTEM_PROMPT: str = str(
     _PLACEMENT_SPECIALIST_AGENT.get("system_prompt", PLACEMENT_SPECIALIST_PROMPT)
-)
-_PLACEMENT_TOOLS: list = []
-
-for _mw in _PLACEMENT_SPECIALIST_AGENT.get("middlewares", []):
-    if isinstance(_mw, SkillMiddleware):
-        _PLACEMENT_SYSTEM_PROMPT = _mw.augment_system_prompt(_PLACEMENT_SYSTEM_PROMPT)
-        _PLACEMENT_TOOLS.extend(_mw.tool_dicts)  # plain dicts - ReAct-compatible
-
-log_detail(
-    f"[placement_specialist] SkillMiddleware: "
-    f"{len(_PLACEMENT_SKILL_MIDDLEWARE.registry)} skill(s) registered, "
-    f"{len(_PLACEMENT_TOOLS)} tool(s) available"
 )
 
 
@@ -422,8 +412,8 @@ def node_placement_specialist(state):
 
     # _PLACEMENT_SYSTEM_PROMPT and _PLACEMENT_TOOLS are pre-built at import time.
     log_detail(f"Prompt size: {len(_PLACEMENT_SYSTEM_PROMPT)} chars (augmented)")
-    log_detail(f"Tools available: {[t['name'] for t in _PLACEMENT_TOOLS]}")
 
+    placement_response_text = ""
     placement_text = ""
     stage2_cmds    = []
     try:
@@ -441,18 +431,15 @@ def node_placement_specialist(state):
         )
         llm_elapsed = time.time() - llm_t0
 
-        placement_text, placement_thinking = _split_content_and_thinking(
-            placement_result.content
-        )
-        placement_text = _strip_thinking_text(placement_text)
-        stage2_cmds    = extract_cmd_blocks(placement_text)
+        placement_response_text, _ = _extract_agent_output_parts(placement_result)
+        stage2_cmds, placement_text = extract_cmd_blocks(placement_response_text)
 
         log_detail(f"LLM responded in {llm_elapsed:.1f}s")
         log_detail(f"LLM produced {len(stage2_cmds)} CMD block(s)")
-        _print_thinking_block("PLACEMENT", placement_thinking)
     except Exception as exc:
         log_detail(f"ERROR: LLM failed: {exc}")
-        placement_text = "[PLACEMENT] LLM failed."
+        placement_response_text = "[PLACEMENT] LLM failed."
+        placement_text = placement_response_text
 
     # ── Step 3c: Apply commands ──────────────────────────────────────────────
     log_section("Step 3c: Applying placement commands")
@@ -570,6 +557,8 @@ def node_placement_specialist(state):
         "original_placement_cmds": state.get("pending_cmds", []) + stage2_cmds,
         "chat_history":            updated_chat_history,
         "placement_quality":       quality_report,
+        "placement_text":          placement_text,
+        "last_agent":              "placement_specialist",
     }
 
 
@@ -610,21 +599,9 @@ def node_placement_specialist_chatbot(state):
         terminal_nets=terminal_nets, edges=edges, no_abutment=no_abutment_flag,
     )
 
-    # Lightweight finger grouping for chat path.
-    grp_nodes  = copy.deepcopy(nodes)
-    finger_map = {}
-    try:
-        grouped = aggregate_to_logical_devices(nodes, edges or [])
-        if isinstance(grouped, tuple):
-            grp_nodes, _, finger_map = grouped
-        else:
-            grp_nodes = grouped
-        _sync_group_geometry_from_members(grp_nodes, finger_map)
-        log_detail(
-            f"Finger grouping: {len(nodes)} fingers -> {len(grp_nodes)} logical groups"
-        )
-    except Exception as exc:
-        log_detail(f"WARNING: grouping failed: {exc}")
+    vprint("Placement context")
+    vprint(context_text)
+    vprint("-" * 40)   
 
     # ── Step 3b: Call LLM via ReAct + SkillMiddleware ───────────────────────
     log_section("Step 3b: Calling LLM (ReAct + SkillMiddleware)")
@@ -641,9 +618,7 @@ def node_placement_specialist_chatbot(state):
         node_content="Starting **Placement Specialist**...",
     )
 
-    log_detail(f"Prompt size: {len(_PLACEMENT_SYSTEM_PROMPT)} chars (augmented)")
-    log_detail(f"Tools available: {[t['name'] for t in _PLACEMENT_TOOLS]}")
-
+    placement_response_text = ""
     placement_text = ""
     stage2_cmds    = []
     try:
@@ -655,21 +630,20 @@ def node_placement_specialist_chatbot(state):
             selected_model=selected_model,
             task_weight="heavy",
             stage_tag="PLACEMENT",
-            tools=_PLACEMENT_TOOLS,
         )
-        placement_content = _extract_agent_output_content(placement_result)
+        placement_response_text, thinking = _extract_agent_output_parts(placement_result)
         llm_elapsed = time.time() - llm_t0
 
-        placement_text, placement_thinking = _split_content_and_thinking(placement_content)
-        placement_text = _strip_thinking_text(placement_text)
-        stage2_cmds    = extract_cmd_blocks(placement_text)
+        stage2_cmds, placement_text = extract_cmd_blocks(placement_response_text)
 
         log_detail(f"LLM responded in {llm_elapsed:.1f}s")
         log_detail(f"LLM produced {len(stage2_cmds)} CMD block(s)")
-        _print_thinking_block("PLACEMENT", placement_thinking)
+        log_detail(f"LLM Commands content:\n{stage2_cmds}")
+        log_detail(f"LLM Placement text:\n{placement_text}")
     except Exception as exc:
         log_detail(f"ERROR: LLM failed: {exc}")
-        placement_text = "[PLACEMENT] LLM failed."
+        placement_response_text = "[PLACEMENT] LLM failed."
+        placement_text = placement_response_text
 
     # ── Step 3c: Apply commands ──────────────────────────────────────────────
     log_section("Step 3c: Applying placement commands")
@@ -690,28 +664,8 @@ def node_placement_specialist_chatbot(state):
         node_content=placement_text,
     )
 
-    working_nodes = apply_cmds_to_nodes(grp_nodes, stage2_cmds)
+    working_nodes = apply_cmds_to_nodes(nodes, stage2_cmds)
     working_nodes = enforce_reflection_symmetry(working_nodes)
-
-    # ── Step 3d: Expand to physical fingers ──────────────────────────────────
-    log_section("Step 3d: Expanding to physical fingers")
-    if finger_map:
-        from ai_agent.placement.finger_grouper import expand_to_fingers
-        orig_lookup = {n["id"]: n for n in grp_nodes}
-        log_detail(
-            f"Expanding {len(working_nodes)} groups via finger_map "
-            f"({len(finger_map)} entries)"
-        )
-        working_nodes = expand_to_fingers(
-            working_nodes, finger_map,
-            no_abutment=no_abutment_flag,
-            original_group_nodes=orig_lookup,
-        )
-        log_detail(f"Expanded to {len(working_nodes)} physical devices")
-    else:
-        from ai_agent.placement.finger_grouper import expand_logical_to_fingers
-        working_nodes = expand_logical_to_fingers(working_nodes, nodes)
-        log_detail(f"Legacy expansion -> {len(working_nodes)} devices")
 
     # ── Step 3e: Post-expansion overlap resolution ───────────────────────────
     log_section("Step 3e: Post-expansion overlap resolution")
@@ -744,7 +698,9 @@ def node_placement_specialist_chatbot(state):
 
     return {
         "placement_nodes":         working_nodes,
-        "pending_cmds":            state.get("pending_cmds", []) + stage2_cmds,
-        "original_placement_cmds": state.get("pending_cmds", []) + stage2_cmds,
+        "pending_cmds":            stage2_cmds,
+        "original_placement_cmds": stage2_cmds,
         "chat_history":            updated_chat_history,
+        "placement_text":          placement_text,
+        "last_agent":              "placement_specialist",
     }

@@ -305,7 +305,7 @@ def node_symmetry_enforcer(state: dict) -> dict:
         if sym_priority == "Low":
             vprint("[SYMM] symmetry_priority=Low (user goal) -- passing through")
             ip_step("3.5/5 Symmetry Enforcer", "skip (symmetry_priority=Low)")
-            return {}
+            return {"last_agent": "symmetry_enforcer"}
     # else: goals is None (panel was closed) → run normally
 
     constraint_text = state.get("constraint_text", "")
@@ -318,12 +318,12 @@ def node_symmetry_enforcer(state: dict) -> dict:
     if not sym_info:
         vprint("[SYMM] No [SYMMETRY] block found -- passing through")
         ip_step("3.5/5 Symmetry Enforcer", "skip (no [SYMMETRY] block)")
-        return {}
+        return {"last_agent": "symmetry_enforcer"}
 
     if placement_mode not in ("two_half", "auto"):
         vprint(f"[SYMM] placement_mode={placement_mode} -- passing through")
         ip_step("3.5/5 Symmetry Enforcer", f"skip (mode={placement_mode})")
-        return {}
+        return {"last_agent": "symmetry_enforcer"}
 
     pairs = sym_info.get("pairs", [])
     axis_devices = sym_info.get("axis_devices", [])
@@ -337,7 +337,7 @@ def node_symmetry_enforcer(state: dict) -> dict:
     if not pairs and not axis_devices:
         vprint("[SYMM] Empty [SYMMETRY] block -- passing through")
         ip_step("3.5/5 Symmetry Enforcer", "skip (empty block)")
-        return {}
+        return {"last_agent": "symmetry_enforcer"}
 
     # Apply rigid-body enforcement
     working = copy.deepcopy(placement_nodes) if placement_nodes else copy.deepcopy(original_nodes)
@@ -348,7 +348,7 @@ def node_symmetry_enforcer(state: dict) -> dict:
     if not conservation.get("pass", True):
         vprint("[SYMM] CONSERVATION FAILURE after enforcement -- reverting")
         ip_step("3.5/5 Symmetry Enforcer", "FAILED conservation check -- reverted")
-        return {}
+        return {"last_agent": "symmetry_enforcer"}
 
     # Resolve any overlaps introduced by the translation
     moved_ids = resolve_overlaps(working)
@@ -365,4 +365,5 @@ def node_symmetry_enforcer(state: dict) -> dict:
     return {
         "placement_nodes": working,
         "deterministic_snapshot": copy.deepcopy(working),
+        "last_agent": "symmetry_enforcer",
     }

@@ -33,4 +33,4 @@ def node_save_to_rag(state):
         except Exception as rag_exc:
             print(f"[RAG] Save failed: {rag_exc}")
     """
-    return {}
+    return {"last_agent": "save_to_rag"}

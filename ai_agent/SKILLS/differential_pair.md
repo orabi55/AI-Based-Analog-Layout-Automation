@@ -1,18 +1,6 @@
 ---
-id: differential_pair
 name: Differential Pair Matching
 description: Enforce symmetric placement for explicitly paired differential devices.
-
-trigger:
-  keywords: ["diff pair", "differential pair", "dp", "v+ v-", "in+ in-", "comparator", "opamp input"]
-
-scope:
-  - matched_pair_group_only
-  - requires_explicit_pairing_metadata
-
-inputs:
-  - PAIR_MAPPING (MANDATORY)
-
 ---
 
 ────────────────────────────────────

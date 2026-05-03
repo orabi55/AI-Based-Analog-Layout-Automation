@@ -11,6 +11,7 @@ Functions:
 
 import re
 from ai_agent.llm.factory import get_langchain_llm
+from ai_agent.utils.logging import vprint
 
 # ── LLM Classifier prompt ────────────────────────────────────────
 CLASSIFIER_PROMPT = """\
@@ -63,7 +64,7 @@ def classify_intent(user_message: str, selected_model: str) -> str:
     full_prompt = CLASSIFIER_PROMPT + "\n\n" + user_message
     try:
         llm = get_langchain_llm(selected_model, task_weight="light")
-        print(f"[CLASSIFIER] Requesting Intent Classification from {selected_model}...")
+        vprint(f"[CLASSIFIER] Requesting Intent Classification from {selected_model}...")
         result = llm.invoke(msgs)
         if not result:
             return "topology_analyst"
@@ -76,8 +77,8 @@ def classify_intent(user_message: str, selected_model: str) -> str:
             "routing_previewer": "routing_previewer",
         }
         if label in node_labels:
-            print(f"[CLASSIFIER] LLM -> {label}: '{stripped[:60]}'")
+            vprint(f"[CLASSIFIER] LLM -> {label}: '{stripped[:60]}'")
             return node_labels[label]
     except Exception as exc:
-        print(f"[CLASSIFIER] Failed: {exc} — defaulting to topology analyst")
+        vprint(f"[CLASSIFIER] Failed: {exc} — defaulting to topology analyst")
     return "topology_analyst"

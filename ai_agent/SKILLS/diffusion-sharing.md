@@ -1,24 +1,6 @@
 ---
-id: diffusion_sharing
 name: Diffusion Sharing Optimization
 description: Share diffusion among compatible adjacent devices to reduce area and junction parasitics.
-
-trigger:
-  keywords:
-    [
-      "diffusion sharing", "shared diffusion", "merge fingers",
-      "compact array", "abut devices", "minimize diffusion",
-      "layout density", "area optimization"
-    ]
-
-scope:
-  - intra_group_finger_arrays
-  - same_device_type_clusters
-  - matched_device_sets (CC / IG / MB compatible)
-
-inputs:
-  - DEVICE_GEOMETRY_MODEL (MANDATORY)
-
 ---
 
 ────────────────────────────────────

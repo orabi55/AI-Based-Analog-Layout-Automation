@@ -652,25 +652,6 @@ class ChatPanel(QWidget):
         # If a layout is loaded, always use the Orchestrator — it contains the
         # Classifier Agent which does fine-grained intent routing internally.
         if self._layout_context:
-            if self._awaiting_strategy_resume:
-                self._is_orchestrated = True
-                self._start_thinking()
-                self.request_resume_strategy.emit(text)
-                self._awaiting_strategy_resume = False
-                return
-
-            if self._awaiting_visual_resume:
-                self._is_orchestrated = True
-                viewer_response = {
-                    "approved": self._ai_response_is_affirmative(text),
-                    "edits": [],
-                }
-                if not viewer_response["approved"]:
-                    viewer_response["edits"] = self._infer_commands_from_text(text)
-                self._start_thinking()
-                self.request_resume_viewer.emit(viewer_response)
-                self._awaiting_visual_resume = False
-                return
 
             # Layout loaded → use orchestrator with classifier routing.
             # Set _is_orchestrated = False initially; only abstract intents
@@ -1041,7 +1022,9 @@ class ChatPanel(QWidget):
         display_text = re.sub(pattern, '', text, flags=re.DOTALL | re.IGNORECASE)
         
         # Use orchestrator's hardened parser to harvest robust command dicts
-        commands = extract_cmd_blocks(text)
+        commands, other_text = extract_cmd_blocks(text)
+        if other_text:
+            display_text = other_text
         return display_text, commands
 
     def _on_llm_error(self, error_text):
@@ -1073,9 +1056,9 @@ class ChatPanel(QWidget):
         if isinstance(payload, dict):
             if isinstance(payload.get("commands"), list):
                 cmd_list = [c for c in payload.get("commands", []) if isinstance(c, dict)]
-            elif isinstance(payload.get("placement"), list):
+            elif isinstance(payload.get("pending_cmds"), list):
                 # Backward-compatible path used by existing worker payloads.
-                cmd_list = [c for c in payload.get("placement", []) if isinstance(c, dict)]
+                cmd_list = [c for c in payload.get("pending_cmds", []) if isinstance(c, dict)]
             elif payload.get("action"):
                 cmd_list = [payload]
 

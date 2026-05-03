@@ -1,27 +1,6 @@
 ---
-id: matched_environment
 name: Matched Environment Consistency
 description: Ensure matched devices see the same local environment and edge effects.
-
-trigger:
-  keywords:
-    [
-      "matching environment", "layout environment", "mismatch",
-      "systematic mismatch", "local variation", "edge effects",
-      "thermal gradient", "stress gradient", "lithography variation",
-      "environmental symmetry"
-    ]
-
-scope:
-  - matched_device_sets
-  - CC_groups
-  - MB_pairs
-  - DP_pairs
-  - high_precision_analog_blocks
-
-inputs:
-  - ENVIRONMENTAL_MODEL (MANDATORY)
-
 ---
 
 ────────────────────────────────────

@@ -40,4 +40,4 @@ def node_routing_previewer(state: dict) -> dict:
 
     routing_legacy = report.to_legacy_dict()
     routing_legacy["log_text"] = report.format_log()
-    return {"routing_result": routing_legacy}
+    return {"routing_result": routing_legacy, "last_agent": "routing_previewer"}
