@@ -114,6 +114,8 @@ class LayoutEditorTab(QWidget):
         # ── Hook up schematic signals ──────────────────────────────
         self.schematic_panel.highlight_device.connect(self.editor.highlight_device)
         self.schematic_panel.highlight_net.connect(self.editor.highlight_net_by_name)
+        self.schematic_panel.ai_layout_started.connect(self._on_schematic_ai_started)
+        self.schematic_panel.ai_layout_finished.connect(self._on_schematic_ai_finished)
 
         # ── Right-side vertical splitter ───────────────────────────
         self._left_splitter = QSplitter(Qt.Orientation.Vertical)
@@ -1262,7 +1264,7 @@ class LayoutEditorTab(QWidget):
         self._import_worker.start()
 
     def _on_import_completed(self, data, sp_path):
-        self.overlay.hide_overlay()
+        # Do NOT hide overlay here; let schematic_panel hide it after AI layout finishes.
         base_name = os.path.splitext(os.path.basename(sp_path))[0]
         sp_dir = os.path.dirname(os.path.abspath(sp_path))
         out_path = os.path.join(sp_dir, f"{base_name}_graph.json")
@@ -1461,6 +1463,14 @@ class LayoutEditorTab(QWidget):
             )
 
         self.chat_panel._append_message("AI", msg, "#e8f4fd", "#1a1a2e")
+
+    def _on_schematic_ai_started(self):
+        """Update overlay text when the AI schematic generation kicks off."""
+        self.overlay.show_message("Generating schematic layout with AI...")
+
+    def _on_schematic_ai_finished(self):
+        """Hide the overlay once the AI schematic layout has finished drawing."""
+        self.overlay.hide_overlay()
 
     def _on_ai_placement_error(self, err_msg):
         self.overlay.hide_overlay()
