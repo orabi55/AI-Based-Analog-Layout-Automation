@@ -571,7 +571,7 @@ class LayoutEditorTab(QWidget):
         self.klayout_panel.set_oas_path(oas_path)
         self.klayout_panel.refresh_preview(oas_path if oas_path else None)
 
-    def _refresh_panels(self, compact=False):
+    def _refresh_panels(self, compact=False, force_schematic_ai=False):
         if not self._original_data:
             return
         edges = self._original_data.get("edges")
@@ -597,7 +597,7 @@ class LayoutEditorTab(QWidget):
         self.editor.set_blocks(blocks)
         # ── Feed schematic panel with the same data ─────────────────
         self.schematic_panel.set_editor(self.editor)
-        self.schematic_panel.load(self.nodes, self._terminal_nets)
+        self.schematic_panel.load(self.nodes, self._terminal_nets, force_ai=force_schematic_ai)
         self.chat_panel.set_layout_context(
             self.nodes, self._original_data.get("edges"), self._terminal_nets,
         )
@@ -1282,7 +1282,7 @@ class LayoutEditorTab(QWidget):
             logging.warning("Failed to compress graph data, using full format", exc_info=True)
             compressed_path = out_path
             reduction = 0
-        self._load_from_data_dict(data, out_path, False)
+        self._load_from_data_dict(data, out_path, compact=False, force_schematic_ai=True)
         self._sync_klayout_source(explicit_oas=self._pending_oas_path, source_path=sp_path)
         self._pending_oas_path = None
         num_nodes = len(data.get("nodes", []))
@@ -1917,14 +1917,14 @@ class LayoutEditorTab(QWidget):
     # =================================================================
     #  Load / Save / Export
     # =================================================================
-    def _load_from_data_dict(self, data, file_path, compact=False):
+    def _load_from_data_dict(self, data, file_path, compact=False, force_schematic_ai=False):
         self._push_undo()
         self._original_data = data
         self.nodes = data["nodes"]
         self._terminal_nets = data.get("terminal_nets", {})
         self._routing_result = data.get("routing_result", {})
         self._current_file = file_path
-        self._refresh_panels(compact=compact)
+        self._refresh_panels(compact=compact, force_schematic_ai=force_schematic_ai)
         self._sync_klayout_source(source_path=file_path)
         self.title_changed.emit(os.path.basename(file_path))
         QTimer.singleShot(100, self.editor.fit_to_view)

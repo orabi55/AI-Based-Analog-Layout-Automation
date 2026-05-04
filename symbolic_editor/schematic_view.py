@@ -376,9 +376,18 @@ class SchematicCanvas(QGraphicsView):
         self._ai_worker = None
         self._ai_devs: list[dict] = []
         self._ai_tnets: dict = {}
+        self._last_ai_result: dict | None = None
 
     # ── Public build ─────────────────────────────────────────────────
-    def build_schematic(self, nodes: list[dict], terminal_nets: dict):
+    def build_schematic(self, nodes: list[dict], terminal_nets: dict, force_ai: bool = False):
+        if not force_ai and self._last_ai_result:
+            # We have a cached AI layout; use it immediately instead of re-generating
+            devs, _ = self._get_schematic_data(nodes, terminal_nets)
+            self._ai_devs = devs
+            self._ai_tnets = terminal_nets
+            self._apply_ai_layout(self._last_ai_result)
+            return
+
         self._sc.clear()
         self._mos_items.clear()
         self._net_labels.clear()
@@ -469,19 +478,8 @@ class SchematicCanvas(QGraphicsView):
         self.ai_layout_started.emit()
         QTimer.singleShot(200, self._start_ai_refresh)
 
-    def _start_ai_refresh(self):
-        """Launch Gemini AI layout in a background thread (non-blocking)."""
-        # Cancel any previous in-flight AI call
-        if self._ai_thread and self._ai_thread.isRunning():
-            self._ai_thread.quit()
-            self._ai_thread.wait(500)
-
-        nodes = self._last_nodes
-        tnets = self._last_tnets
-        if not nodes:
-            return
-
-        # Resolve logical devs + groups the same way _build_layout does
+    def _get_schematic_data(self, nodes: list[dict], tnets: dict):
+        """Helper to group fingers into logical devices and detect topology groups."""
         try:
             from schematic_layout import detect_groups
         except ImportError:
@@ -507,12 +505,26 @@ class SchematicCanvas(QGraphicsView):
 
         devs = list(logical_devs.values())
         if not devs:
-            return
+            return [], []
 
         groups = detect_groups(devs, tnets)
+        return devs, groups
 
-        self._ai_devs = devs
-        self._ai_tnets = tnets
+    def _start_ai_refresh(self):
+        """Launch Gemini AI layout in a background thread (non-blocking)."""
+        # Cancel any previous in-flight AI call
+        if self._ai_thread and self._ai_thread.isRunning():
+            self._ai_thread.quit()
+            self._ai_thread.wait(500)
+
+        nodes = self._last_nodes
+        tnets = self._last_tnets
+        if not nodes:
+            return
+
+        devs, groups = self._get_schematic_data(nodes, tnets)
+        if not devs:
+            return
 
         self._ai_devs = devs
         self._ai_tnets = tnets
@@ -548,6 +560,8 @@ class SchematicCanvas(QGraphicsView):
         """
         if result is None:
             return  # AI failed — keep deterministic layout
+            
+        self._last_ai_result = result  # Cache for subsequent refreshes
 
         positions = result.get("positions", {})
         
@@ -946,10 +960,10 @@ class SchematicPanel(QFrame):
 
     def set_editor(self, editor):  self._editor = editor
 
-    def load(self, nodes, terminal_nets):
+    def load(self, nodes, terminal_nets, force_ai=False):
         self._nodes = nodes or []
         self._tnets = terminal_nets or {}
-        self.canvas.build_schematic(self._nodes, self._tnets)
+        self.canvas.build_schematic(self._nodes, self._tnets, force_ai=force_ai)
 
     def refresh(self):
         self.canvas.build_schematic(self._nodes, self._tnets)
