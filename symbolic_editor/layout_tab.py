@@ -2291,43 +2291,65 @@ class LayoutEditorTab(QWidget):
 
             elif action in {"add_dummy", "add_dummies", "dummy"}:
                 dev_type = str(cmd.get("type", "nmos")).strip().lower()
-                count = int(cmd.get("count", 1))
                 if dev_type not in ("nmos", "pmos"):
                     self.chat_panel._append_message("AI", f"Invalid dummy type: {dev_type}.", "#fde8e8", "#a00")
                     return
+
+                if "x" not in cmd or "y" not in cmd:
+                    self.chat_panel._append_message(
+                        "AI",
+                        "add_dummy requires x and y coordinates.",
+                        "#fde8e8",
+                        "#a00",
+                    )
+                    return
+
+                try:
+                    target_x = float(cmd.get("x"))
+                    target_y = float(cmd.get("y"))
+                except (TypeError, ValueError):
+                    self.chat_panel._append_message(
+                        "AI",
+                        "add_dummy requires numeric x and y coordinates.",
+                        "#fde8e8",
+                        "#a00",
+                    )
+                    return
+
+                template = next((n for n in self.nodes if str(n.get("type", "")).strip().lower() == dev_type), None)
+                if not template:
+                    self.chat_panel._append_message("AI", f"No {dev_type} template.", "#fde8e8", "#a00")
+                    return
+
                 self._sync_node_positions()
                 if not _skip_undo:
                     self._push_undo()
-                added = []
-                for _ in range(count):
-                    template = next((n for n in self.nodes if str(n.get("type", "")).strip().lower() == dev_type), None)
-                    if not template:
-                        self.chat_panel._append_message("AI", f"No {dev_type} template.", "#fde8e8", "#a00")
-                        return
-                    tgeo = template["geometry"]
-                    w = tgeo.get("width", 1) * self.editor.scale_factor
-                    h = tgeo.get("height", 0.5) * self.editor.scale_factor
-                    row_y = None
-                    for it in self.editor.device_items.values():
-                        if getattr(it, "device_type", None) == dev_type:
-                            row_y = self.editor._snap_row(it.pos().y()); break
-                    if row_y is None:
-                        row_y = 0
-                    side = str(cmd.get("side", "left")).strip().lower()
-                    if side not in {"left", "right"}:
-                        side = "left"
-                    target_x = self._row_edge_target_x(row_y, w, side, dev_type)
-                    candidate = self._legalize_dummy_candidate(
-                        {"type": dev_type, "x": target_x, "y": row_y, "width": w, "height": h},
-                        side=side,
-                    )
-                    dummy = self._build_dummy_node(candidate)
-                    self.nodes.append(dummy)
-                    self._original_data["nodes"] = self.nodes
-                    added.append(dummy["id"])
-                    self._refresh_panels(compact=False)
-                    self._sync_node_positions()
-                self.chat_panel._append_message("AI", f"✅ Added {count} {dev_type} dummy(s): {', '.join(added)}", "#e8f4fd", "#1a1a2e")
+
+                tgeo = template["geometry"]
+                electrical = copy.deepcopy(template.get("electrical", {"l": 1.4e-08, "nf": 1, "nfin": 1}))
+                dummy = {
+                    "id": self._next_dummy_id(dev_type),
+                    "type": dev_type,
+                    "is_dummy": True,
+                    "electrical": electrical,
+                    "geometry": {
+                        "x": target_x,
+                        "y": target_y,
+                        "width": float(tgeo.get("width", 1)),
+                        "height": float(tgeo.get("height", 0.5)),
+                        "orientation": "R0",
+                    },
+                }
+                self.nodes.append(dummy)
+                self._original_data["nodes"] = self.nodes
+                self._refresh_panels(compact=False)
+                self._sync_node_positions()
+                self.chat_panel._append_message(
+                    "AI",
+                    f"✅ Added {dev_type} dummy {dummy['id']} at x={target_x}, y={target_y}",
+                    "#e8f4fd",
+                    "#1a1a2e",
+                )
 
             elif action == "net_priority":
                 net = cmd.get("net", "")

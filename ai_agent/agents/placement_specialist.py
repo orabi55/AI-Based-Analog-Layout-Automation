@@ -346,6 +346,10 @@ DUMMY RULE:
 ✓ Allowed ONLY for:
 - matched_environment requirement
 - symmetry closure (MB/CC)
+- Fill blanks in pre-assigned rows (after all real devices placed)
+
+Command to Add Dummy:
+[CMD]{"action":"add_dummy","type":"nmos","x":0.000,"y":0.000}[/CMD]
 
 ────────────────────────────────────────────
 9. EXECUTION RULE
@@ -398,8 +402,19 @@ For each block listed:
   all other fingers will be placed automatically at origin_x + n×pitch
   by the deterministic finger expander that runs after you
 
-YOU MUST emit ONE [CMD] per matched block (not one per finger):
+YOU MUST emit ONE [CMD] per matched block (not one per finger)
+
+────────────────────────────────────────────
+12. ALLOWED PLACEMENT COMMANDS
+────────────────────────────────────────────
+
+MAKE SURE ALL COMMANDS STRICTLY FOLLOW THIS FORMAT
+MAKE SURE ALL COMMANDS CONTAIN OPENING AND CLOSING [CMD] TAGS
+
+[CMD]{"action":"add_dummy","type":"nmos","x":0.000,"y":0.000}[/CMD]
 [CMD]{"action":"move","device":"BLOCK_ID","x":origin_x,"y":row_y}[/CMD]
+[CMD]{"action":"swap","device_a":"BLOCK_ID","device_b":"BLOCK_ID"}[/CMD]
+
 """
 
 # ---------------------------------------------------------------------------

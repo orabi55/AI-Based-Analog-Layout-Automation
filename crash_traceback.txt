@@ -1,5 +1,11 @@
 Traceback (most recent call last):
-  File "c:\Users\DELL G3\Desktop\GP\Automation\new\AI-Based-Analog-Layout-Automation\symbolic_editor\schematic_view.py", line 475, in _start_ai_refresh
-    if self._ai_thread and self._ai_thread.isRunning():
-                           ^^^^^^^^^^^^^^^^^^^^^^^^^
-AttributeError: 'Thread' object has no attribute 'isRunning'
+  File "C:\Users\youss\University\GP\Automation Phase\Code\AI-Based-Analog-Layout-Automation\symbolic_editor\editor_view.py", line 1837, in _on_selection_changed
+    self.clear_highlighted_net()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\youss\University\GP\Automation Phase\Code\AI-Based-Analog-Layout-Automation\symbolic_editor\editor_view.py", line 432, in clear_highlighted_net
+    group.clear_highlighted_net()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\youss\University\GP\Automation Phase\Code\AI-Based-Analog-Layout-Automation\symbolic_editor\hierarchy_group_item.py", line 115, in clear_highlighted_net
+    self.update()
+    ~~~~~~~~~~~^^
+RuntimeError: Internal C++ object (HierarchyGroupItem) already deleted.
