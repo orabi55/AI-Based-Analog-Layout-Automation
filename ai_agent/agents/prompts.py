@@ -232,7 +232,7 @@ def build_codegen_prompt(layout_context: dict | None) -> str:
         "[CMD]{\"action\":\"move\",\"device\":\"MM3\",\"x\":1.176,\"y\":0.0}[/CMD]\n"
         "[CMD]{\"action\":\"move_row\",\"type\":\"pmos\",\"y\":1.336}[/CMD]\n"
         "[CMD]{\"action\":\"abut\",\"device_a\":\"MM6\",\"device_b\":\"MM29\"}[/CMD]\n"
-        "[CMD]{\"action\":\"add_dummy\",\"type\":\"nmos\",\"count\":2,\"side\":\"left\"}[/CMD]"
+        "[CMD]{\"action\":\"add_dummy\",\"type\":\"nmos\",\"x\":0.0,\"y\":0.0}[/CMD]"
     )
 
     prompt = (
@@ -260,7 +260,7 @@ def build_codegen_prompt(layout_context: dict | None) -> str:
         "GENERAL RULES:\n"
         "- Use full device IDs (MM28 not 28).\n"
         "- Multiple [CMD] blocks are OK.\n"
-        "- add_dummy: type=nmos|pmos, count defaults to 1, side=left|right.\n"
+        "- add_dummy: type=nmos|pmos, x and y are required exact coordinates.\n"
         "- move_row: type=pmos|nmos, y=new Y for ALL devices of that type.\n"
         "- Prefer 'swap' over 'move' when rearranging two devices.\n"
         "- Write the [CMD] block FIRST, then 1-2 sentences confirming.\n"

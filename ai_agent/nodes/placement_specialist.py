@@ -631,6 +631,8 @@ def node_placement_specialist_chatbot(state):
             task_weight="heavy",
             stage_tag="PLACEMENT",
         )
+        vprint("Raw LLM output:")
+        vprint(placement_result)
         placement_response_text, thinking = _extract_agent_output_parts(placement_result)
         llm_elapsed = time.time() - llm_t0
 
