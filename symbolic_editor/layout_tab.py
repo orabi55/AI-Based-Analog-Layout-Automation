@@ -94,6 +94,10 @@ class LayoutEditorTab(QWidget):
         self._colorize_mode = False
         self._close_row_gap = False
         self._row_gap_value = 0.0
+        # One-shot trigger: chat net-priority annotations apply to the next
+        # AI initial-placement run only, then auto-reset to preserve baseline
+        # behavior for general runs.
+        self._apply_chat_net_priority_next_run = False
 
         # Load placement data
         self._load_data(placement_file)
@@ -1386,6 +1390,53 @@ class LayoutEditorTab(QWidget):
                 nets.append(net_stripped)
         return sorted(nets)
 
+    def _critical_nets_from_routing_annotations(self) -> dict | None:
+        """Convert chat net-priority annotations into critical_nets config.
+
+        Expected source shape:
+            self._routing_annotations = {
+                "VOUTP": {"priority": "high"},
+                "VOUTN": {"priority": "medium"},
+                ...
+            }
+
+        Returns:
+            {"priority": "Low|Medium|High", "nets": [..]} or None.
+        """
+        ann = getattr(self, "_routing_annotations", None) or {}
+        if not isinstance(ann, dict):
+            return None
+
+        level_to_weight = {"low": 0, "medium": 5, "high": 10}
+        weight_to_level = {0: "Low", 5: "Medium", 10: "High"}
+
+        nets: list[str] = []
+        max_weight = 0
+        seen: set[str] = set()
+
+        for net_name, cfg in ann.items():
+            if not isinstance(net_name, str):
+                continue
+            net = net_name.strip()
+            if not net:
+                continue
+            if not isinstance(cfg, dict):
+                continue
+            prio = str(cfg.get("priority", "low")).strip().lower()
+            weight = level_to_weight.get(prio, 0)
+            if weight <= 0:
+                continue
+            key = net.lower()
+            if key not in seen:
+                seen.add(key)
+                nets.append(net)
+            if weight > max_weight:
+                max_weight = weight
+
+        if not nets or max_weight <= 0:
+            return None
+        return {"priority": weight_to_level[max_weight], "nets": nets}
+
     def do_ai_placement(self):
         if not self.nodes:
             self.chat_panel._append_message("AI", "No layout loaded. Import a netlist first (Ctrl+I).", "#fde8e8", "#a00")
@@ -1432,9 +1483,45 @@ class LayoutEditorTab(QWidget):
         data["no_abutment"] = not abutment_enabled
         # Pass placement goals + critical nets into pipeline JSON
         goals = dialog.get_goals() or {}
-        crit  = dialog.get_critical_nets()          # None when panel collapsed
-        if crit and crit.get("nets"):               # only add when nets actually selected
-            goals["critical_nets"] = crit
+        crit_dialog = dialog.get_critical_nets()          # None when panel collapsed
+        use_chat_priority = bool(getattr(self, "_apply_chat_net_priority_next_run", False))
+        crit_from_chat = (
+            self._critical_nets_from_routing_annotations()
+            if use_chat_priority else None
+        )
+        # One-shot consumption: if chat-triggered once, reset immediately so
+        # future general runs stay byte-identical unless user triggers again.
+        self._apply_chat_net_priority_next_run = False
+
+        # Merge dialog critical nets with chat net-priority annotations.
+        # Dialog selection wins for ordering; priority uses the stronger level.
+        merged_crit = None
+        if crit_dialog and crit_dialog.get("nets"):
+            merged_crit = {
+                "priority": crit_dialog.get("priority", "Low"),
+                "nets": list(crit_dialog.get("nets") or []),
+            }
+        if crit_from_chat and crit_from_chat.get("nets"):
+            if merged_crit is None:
+                merged_crit = crit_from_chat
+            else:
+                p_rank = {"Low": 0, "Medium": 5, "High": 10}
+                merged_priority = (
+                    merged_crit.get("priority", "Low")
+                    if p_rank.get(merged_crit.get("priority", "Low"), 0)
+                    >= p_rank.get(crit_from_chat.get("priority", "Low"), 0)
+                    else crit_from_chat.get("priority", "Low")
+                )
+                seen = {str(n).strip().lower() for n in merged_crit.get("nets", [])}
+                for n in crit_from_chat.get("nets", []):
+                    nn = str(n).strip()
+                    if nn and nn.lower() not in seen:
+                        merged_crit["nets"].append(nn)
+                        seen.add(nn.lower())
+                merged_crit["priority"] = merged_priority
+
+        if merged_crit and merged_crit.get("nets"):
+            goals["critical_nets"] = merged_crit
         data["placement_goals"] = goals or None
         self._last_placement_goals = data["placement_goals"]
         abut_label = "with abutment" if abutment_enabled else "no abutment"
@@ -2444,6 +2531,9 @@ class LayoutEditorTab(QWidget):
                 if not hasattr(self, "_routing_annotations"):
                     self._routing_annotations = {}
                 self._routing_annotations.setdefault(net, {})["priority"] = priority
+                # Arm one-shot trigger so next AI initial-placement run uses
+                # the chat priority annotation as critical-net input.
+                self._apply_chat_net_priority_next_run = True
                 self.chat_panel._append_message("AI", f"📡 Net **{net}** → **{priority}** priority.", "#e8f4fd", "#1a1a2e")
                 if hasattr(self.editor, "highlight_net_by_name"):
                     self.editor.highlight_net_by_name(net, "#e74c3c" if priority == "high" else "#3498db")
