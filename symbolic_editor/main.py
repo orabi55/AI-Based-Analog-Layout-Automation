@@ -60,9 +60,9 @@ from PySide6.QtGui import (
     QIcon,
 )
 
-from .layout_tab import LayoutEditorTab
-from .view_toggle import SegmentedToggle
-from .icons import (
+from symbolic_editor.layout_tab import LayoutEditorTab
+from symbolic_editor.view_toggle import SegmentedToggle
+from symbolic_editor.icons import (
     icon_undo,
     icon_redo,
     icon_fit_view,
@@ -87,8 +87,7 @@ from .icons import (
     icon_schematic,
     icon_route,
 )
-from .widgets.welcome_screen import WelcomeScreen
-
+from symbolic_editor.widgets.welcome_screen import WelcomeScreen
 
 # =====================================================================
 #  MainWindow — Tab Manager
