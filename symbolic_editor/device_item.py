@@ -65,6 +65,13 @@ class DeviceItem(QGraphicsRectItem):
         self._drag_axis = None  # "x", "y", or None (unset during drag)
         self._drag_initial_pos = QPointF()  # position when drag starts
         self._is_directly_dragged = False  # True only for the item being directly dragged
+        
+        # ── Movement step size ──
+        self._movement_step = 1  # Move in steps of 1 unit for smallest possible discrete movement
+        
+        # ── Smooth movement during drag ──
+        self._smooth_interpolation = 0.25  # Smoothing factor (0.0-1.0, lower = smoother)
+        self._last_smooth_pos = QPointF()  # Last position for interpolation
 
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
@@ -459,81 +466,12 @@ class DeviceItem(QGraphicsRectItem):
         dx = mouse_delta.x()
         dy = mouse_delta.y()
 
-        # 1. Enforce strict Orthogonal (XY) movement
-        if self._drag_axis is None:
-            if abs(dx) > abs(dy) + 2:
-                self._drag_axis = "x"
-            elif abs(dy) > abs(dx) + 2:
-                self._drag_axis = "y"
-            else:
-                return
-
-        if self._drag_axis == "x":
-            dy = 0
-        elif self._drag_axis == "y":
-            dx = 0
-
+        # Move freely in both X and Y directions following the mouse
         proposed_pos = self._drag_initial_pos + QPointF(dx, dy)
-        
-        # Initial grid snapping
-        if self._snap_grid_x and self._snap_grid_y:
-            snap_x = round(proposed_pos.x() / self._snap_grid_x) * self._snap_grid_x
-            snap_y = round(proposed_pos.y() / self._snap_grid_y) * self._snap_grid_y
-            proposed_pos = QPointF(snap_x, snap_y)
-            
         actual_delta = proposed_pos - self._drag_initial_pos
 
-        # 2. Continuous Sweep Collision & Perfect Edge Snapping
+        # 3. Apply uniform group movement (instant, no lag)
         moving_group = getattr(self, '_moving_items', [self])
-        obstacles = getattr(self, '_cached_obstacles', [])
-
-        if self._drag_axis == "y":
-            for item in moving_group:
-                start_rect = item.rect().translated(item._drag_initial_pos)
-                start_test = start_rect.adjusted(0.1, 0, -0.1, 0)
-                for obs in obstacles:
-                    obs_rect = obs.rect().translated(obs.pos())
-                    obs_test = obs_rect.adjusted(0.1, 0, -0.1, 0)
-                    
-                    # Ignore if not in the same vertical lane
-                    if start_test.right() <= obs_test.left() or start_test.left() >= obs_test.right():
-                        continue
-                        
-                    if actual_delta.y() > 0: # Moving down
-                        if obs_rect.top() >= start_rect.bottom() - 0.1:
-                            dist = obs_rect.top() - start_rect.bottom()
-                            if dist < actual_delta.y():
-                                actual_delta.setY(dist)
-                    elif actual_delta.y() < 0: # Moving up
-                        if obs_rect.bottom() <= start_rect.top() + 0.1:
-                            dist = obs_rect.bottom() - start_rect.top()
-                            if dist > actual_delta.y():
-                                actual_delta.setY(dist)
-
-        elif self._drag_axis == "x":
-            for item in moving_group:
-                start_rect = item.rect().translated(item._drag_initial_pos)
-                start_test = start_rect.adjusted(0, 0.1, 0, -0.1)
-                for obs in obstacles:
-                    obs_rect = obs.rect().translated(obs.pos())
-                    obs_test = obs_rect.adjusted(0, 0.1, 0, -0.1)
-                    
-                    # Ignore if not in the same horizontal lane
-                    if start_test.bottom() <= obs_test.top() or start_test.top() >= obs_test.bottom():
-                        continue
-                        
-                    if actual_delta.x() > 0: # Moving right
-                        if obs_rect.left() >= start_rect.right() - 0.1:
-                            dist = obs_rect.left() - start_rect.right()
-                            if dist < actual_delta.x():
-                                actual_delta.setX(dist)
-                    elif actual_delta.x() < 0: # Moving left
-                        if obs_rect.right() <= start_rect.left() + 0.1:
-                            dist = obs_rect.right() - start_rect.left()
-                            if dist > actual_delta.x():
-                                actual_delta.setX(dist)
-
-        # 3. Apply uniform group movement
         for item in moving_group:
             new_pos = item._drag_initial_pos + actual_delta
             item._propagating_move = True  # Flag to bypass redundant snapping in itemChange
@@ -544,7 +482,7 @@ class DeviceItem(QGraphicsRectItem):
         if getattr(self, '_drag_active', False):
             self._drag_active = False
             self.signals.drag_finished.emit()
-            
+
         # Reset state parameters
         self._drag_axis = None
         self._is_directly_dragged = False
@@ -700,7 +638,19 @@ class DeviceItem(QGraphicsRectItem):
 
         # S/D identity per column (before flip)
         def _is_source_col(col):
-            return (col % 2 == 0) ^ self._flip_h
+            return (col % 2 == 0)
+
+        # Helpers for mirrored label placement after unflipping text
+        def _flip_rect(rect):
+            x = rect.x()
+            y = rect.y()
+            width = rect.width()
+            height = rect.height()
+            if self._flip_h:
+                x = 2*cx - (x + width)
+            if self._flip_v:
+                y = 2*cy - (y + height)
+            return QRectF(x, y, width, height)
 
         # ── Draw filled sections (with flip transform) ─────────────
         painter.save()
@@ -767,7 +717,19 @@ class DeviceItem(QGraphicsRectItem):
                         painter.setFont(net_font)
                         fm = painter.fontMetrics()
 
-                    painter.translate(col_center)
+                    label_center = col_center
+                    painter.save()
+                    if self._flip_h or self._flip_v:
+                        label_center = QPointF(
+                            2*cx - col_center.x() if self._flip_h else col_center.x(),
+                            2*cy - col_center.y() if self._flip_v else col_center.y(),
+                        )
+                        painter.translate(cx, cy)
+                        painter.scale(-1.0 if self._flip_h else 1.0,
+                                       -1.0 if self._flip_v else 1.0)
+                        painter.translate(-cx, -cy)
+
+                    painter.translate(label_center)
                     painter.rotate(-90)
                     
                     # Full column rect for alignment
@@ -834,7 +796,18 @@ class DeviceItem(QGraphicsRectItem):
                             painter.setFont(net_font)
                             fm = painter.fontMetrics()
 
-                        painter.translate(gate_center)
+                        label_center = gate_center
+                        if self._flip_h or self._flip_v:
+                            label_center = QPointF(
+                                2*cx - gate_center.x() if self._flip_h else gate_center.x(),
+                                2*cy - gate_center.y() if self._flip_v else gate_center.y(),
+                            )
+                            painter.translate(cx, cy)
+                            painter.scale(-1.0 if self._flip_h else 1.0,
+                                           -1.0 if self._flip_v else 1.0)
+                            painter.translate(-cx, -cy)
+
+                        painter.translate(label_center)
                         painter.rotate(-90)
                         rect_lbl = QRectF(-h*0.45, -gate_w/2, h*0.9, gate_w)
                         
@@ -909,14 +882,79 @@ class DeviceItem(QGraphicsRectItem):
         gate_font_size = max(4, min(9,  int(min(gate_w * 0.50, h * 0.22))))
         name_font_size = max(6, min(13, int(w * 0.09)))
 
+        painter.restore() # ── End of flipped device body (Balanced) ──────────
+
+        # ── Device name — pill badge in upper portion ────────────────
+        display_name = self.device_name
+        if self._is_dummy:
+            parts = self.device_name.split("_")
+            for j, p in enumerate(parts):
+                if p.isdigit():
+                    display_name = f"D{p}"
+                    break
+            else:
+                display_name = "D"
+        else:
+            if "_" in display_name:
+                display_name = display_name.split("_")[0]
+
+        max_name_w = w * 0.85 - 8
+        name_font = QFont("Segoe UI", name_font_size, QFont.Weight.Bold)
+        painter.setFont(name_font)
+        fm = painter.fontMetrics()
+        while name_font_size > 4 and fm.horizontalAdvance(display_name) > max_name_w:
+            name_font_size -= 1
+            name_font = QFont("Segoe UI", name_font_size, QFont.Weight.Bold)
+            painter.setFont(name_font)
+            fm = painter.fontMetrics()
+        text_w = fm.horizontalAdvance(display_name) + 8
+        text_h = fm.height() + 4
+        pill_w = min(text_w, w * 0.85)
+        pill_h = min(text_h, h * 0.32)
+        pill_rect = QRectF(x0 + (w - pill_w) / 2.0,
+                           y0 + h * 0.08,
+                           pill_w,
+                           pill_h)
+        if self._flip_h or self._flip_v:
+            pill_rect = _flip_rect(pill_rect)
+
+        pill_bg = QColor(0, 0, 0, 70) if not self._is_dummy else QColor(255, 255, 255, 70)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(pill_bg))
+        pill_r = min(pill_h / 2.0, 6)
+        painter.drawRoundedRect(pill_rect, pill_r, pill_r)
+
+        painter.setPen(self._name_color)
+        painter.drawText(pill_rect,
+                         Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
+                         display_name)
+
+        # ── Type badge (N / P) bottom of G column ────────────────────
+        type_label = "N" if self.device_type == "nmos" else "P"
+        if self._is_dummy:
+            type_label = "D"
+
+        badge_h = h * 0.22
+        badge_font = QFont("Segoe UI", max(4, int(badge_h * 0.6)), QFont.Weight.Bold)
+        painter.setFont(badge_font)
+        cursor_x = x0 + sd_w
+        for _ in range(num_fingers):
+            type_rect = QRectF(cursor_x, y0 + h - badge_h - 2, gate_w, badge_h)
+            if self._flip_h or self._flip_v:
+                type_rect = _flip_rect(type_rect)
+            painter.setPen(self._terminal_label_color)
+            painter.drawText(type_rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter, type_label)
+            cursor_x += gate_w + sd_w
+
         # ── S / D labels on each diffusion column ───────────────────
         sd_font = QFont("Segoe UI", sd_font_size, QFont.Weight.DemiBold)
         painter.setFont(sd_font)
-
         cursor_x = x0
         for i in range(num_sd):
             label = "S" if _is_source_col(i) else "D"
             col_rect = QRectF(cursor_x, y0, sd_w, h)
+            if self._flip_h or self._flip_v:
+                col_rect = _flip_rect(col_rect)
             painter.setPen(QColor(self._label_color.red(), self._label_color.green(),
                                   self._label_color.blue(), 200))
             painter.drawText(col_rect.adjusted(0, 0, 0, -2),
@@ -931,81 +969,15 @@ class DeviceItem(QGraphicsRectItem):
             g_font = QFont("Segoe UI", gate_font_size, QFont.Weight.DemiBold)
             painter.setFont(g_font)
             painter.setPen(self._terminal_label_color)
-
             cursor_x = x0 + sd_w
             for _ in range(num_fingers):
                 gate_col_rect = QRectF(cursor_x, y0, gate_w, h)
+                if self._flip_h or self._flip_v:
+                    gate_col_rect = _flip_rect(gate_col_rect)
                 painter.drawText(gate_col_rect,
                                  Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
                                  "G")
                 cursor_x += gate_w + sd_w
-
-        # ── Device name — pill badge in upper portion ────────────────
-        # Compute display name (shorten FILLER_DUMMY_N_type to DUM_N)
-        display_name = self.device_name
-        if self._is_dummy:
-            parts = self.device_name.split("_")
-            # FILLER_DUMMY_3_nmos -> D3
-            for j, p in enumerate(parts):
-                if p.isdigit():
-                    display_name = f"D{p}"
-                    break
-            else:
-                display_name = "D"
-        else:
-            # Strip finger suffix (e.g. MM5_m1 -> MM5)
-            if "_" in display_name:
-                display_name = display_name.split("_")[0]
-
-        # Auto-shrink font to fit name inside the device
-        max_name_w = w * 0.85 - 8
-        name_font = QFont("Segoe UI", name_font_size, QFont.Weight.Bold)
-        painter.setFont(name_font)
-        fm = painter.fontMetrics()
-        while name_font_size > 4 and fm.horizontalAdvance(display_name) > max_name_w:
-            name_font_size -= 1
-            name_font = QFont("Segoe UI", name_font_size, QFont.Weight.Bold)
-            painter.setFont(name_font)
-            fm = painter.fontMetrics()
-        text_w = fm.horizontalAdvance(display_name) + 8
-        text_h = fm.height() + 4
-        pill_w = min(text_w, w * 0.85)
-        pill_h = min(text_h, h * 0.32)
-        pill_x = x0 + (w - pill_w) / 2.0
-        pill_y = y0 + h * 0.08
-
-        # Semi-transparent pill background
-        pill_bg = QColor(0, 0, 0, 70) if not self._is_dummy else QColor(255, 255, 255, 70)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QBrush(pill_bg))
-        pill_r = min(pill_h / 2.0, 6)
-        painter.drawRoundedRect(QRectF(pill_x, pill_y, pill_w, pill_h), pill_r, pill_r)
-
-        # Name text
-        painter.setPen(self._name_color)
-        painter.drawText(QRectF(pill_x, pill_y, pill_w, pill_h),
-                         Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
-                         display_name)
-
-        # ── Type badge (N / P) bottom of G column ────────────────────
-        type_label = "N" if self.device_type == "nmos" else "P"
-        if self._is_dummy:
-            type_label = "D"
-            
-        badge_h = h * 0.22
-        badge_font = QFont("Segoe UI", max(4, int(badge_h * 0.6)), QFont.Weight.Bold)
-        painter.setFont(badge_font)
-        
-        # We don't draw a background box for the type, just the text
-        # in the G column bottom to match the user request.
-        cursor_x = x0 + sd_w
-        for _ in range(num_fingers):
-            type_rect = QRectF(cursor_x, y0 + h - badge_h - 2, gate_w, badge_h)
-            painter.setPen(self._terminal_label_color)
-            painter.drawText(type_rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter, type_label)
-            cursor_x += gate_w + sd_w
-
-        painter.restore() # ── End of flipped device body (Balanced) ──────────
 
         # ── Manual abutment state (amber solid stripe) ────────────────────
         if self._manual_abut_left or self._manual_abut_right:

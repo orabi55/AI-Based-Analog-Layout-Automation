@@ -60,9 +60,9 @@ from PySide6.QtGui import (
     QIcon,
 )
 
-from layout_tab import LayoutEditorTab
-from view_toggle import SegmentedToggle
-from icons import (
+from .layout_tab import LayoutEditorTab
+from .view_toggle import SegmentedToggle
+from .icons import (
     icon_undo,
     icon_redo,
     icon_fit_view,
@@ -87,7 +87,7 @@ from icons import (
     icon_schematic,
     icon_route,
 )
-from widgets.welcome_screen import WelcomeScreen
+from .widgets.welcome_screen import WelcomeScreen
 
 
 # =====================================================================

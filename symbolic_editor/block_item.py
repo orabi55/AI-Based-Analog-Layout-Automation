@@ -34,6 +34,7 @@ class BlockItem(QGraphicsRectItem):
         # Position at exact top-left of the union — flush alignment
         self.setPos(union.x(), union.y())
         
+        
         self.inst_name = inst_name
         self.subckt = subckt
         self.signals = BlockSignals()

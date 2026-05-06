@@ -138,7 +138,6 @@ class PropertiesPanel(QWidget):
 
     def _make_field(self, value):
         field = QLineEdit("" if value is None else str(value))
-        field.setReadOnly(True)
         field.setStyleSheet(self._field_style())
         return field
 
