@@ -113,6 +113,9 @@ class PlacementWorker(QObject):
             "placement_text": "",
             "placement_goals": layout_context.get("placement_goals", {}),  # user priorities
         }
+        print(f"[DIAG-WORKER] placement_goals in initial_state = {initial_state['placement_goals']}")
+        print(f"[DIAG-WORKER] layout_context keys = {list(layout_context.keys())[:15]}")
+        print(f"[DIAG-WORKER] layout_context placement_goals = {layout_context.get('placement_goals')}")
 
         try:
             from langchain_core.runnables import RunnableConfig
@@ -231,7 +234,11 @@ class PlacementWorker(QObject):
         utilization = f"{(active_area_sum / area) * 100:.1f}%" if area > 0 else "?"
 
         from ai_agent.utils.logging import pipeline_end
-        benchmarks_text = pipeline_end({
+        _bench_goals = final_state.get("placement_goals") or {}
+        _bench_crit  = _bench_goals.get("critical_nets") or {}
+        _bench_crit_nets = _bench_crit.get("nets") or []
+        _bench_crit_prio = _bench_crit.get("priority", "Low")
+        _bench_dict: dict = {
             "drc_status": drc_status,
             "n_placed": len(placement_nodes),
             "pmos_nmos_sep": "✓ OK" if drc_pass else "Check editor",
@@ -241,8 +248,14 @@ class PlacementWorker(QObject):
             "area": f"{area:.3f} um²",
             "utilization": utilization,
             "quality": final_state.get("placement_quality", {}),
-            "placement_goals": final_state.get("placement_goals", {}),
-        })
+            "placement_goals": _bench_goals,
+        }
+        if _bench_crit_nets and _bench_crit_prio != "Low":
+            _bench_dict["critical_nets"] = (
+                f"{', '.join(_bench_crit_nets)} (priority={_bench_crit_prio})"
+            )
+        benchmarks_text = pipeline_end(_bench_dict)
+
 
         routing_text = final_state.get("routing_result", {}).get("log_text", "")
         print(f"[PlacementWorker] Benchmark text length: {len(benchmarks_text)}")

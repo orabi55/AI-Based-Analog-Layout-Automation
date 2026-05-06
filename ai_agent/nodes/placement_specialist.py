@@ -32,6 +32,7 @@ placement_nodes, pending_cmds, original_placement_cmds, chat_history
 """
 
 import copy
+import re as _re_mod
 import time
 
 from ai_agent.agents.placement_specialist import (
@@ -244,6 +245,21 @@ def _goals_to_prompt(goals: dict) -> str:
             f"  Max area          : {max_area} um2  "
             f"-> The total bounding-box area MUST NOT exceed this value."
         )
+
+    # Critical-net clustering directive for the LLM
+    crit_cfg = goals.get("critical_nets") or {}
+    crit_nets = crit_cfg.get("nets") or []
+    crit_priority = crit_cfg.get("priority", "Low")
+    if crit_nets and crit_priority != "Low":
+        nets_str = ", ".join(crit_nets)
+        lines.append(f"  Critical nets     : {nets_str}  priority={crit_priority}")
+        lines.append(
+            "  -> CRITICAL NET CLUSTERING (OVERRIDE): Place matched blocks that "
+            "carry devices on these nets ADJACENT to each other within each row. "
+            "Minimise the horizontal (X) spread of these nets. "
+            "This overrides the default block ordering."
+        )
+
     lines += ["=" * 62, ""]
     return "\n".join(lines) + "\n"
 
@@ -295,7 +311,193 @@ def _sync_group_geometry_from_members(group_nodes, finger_map):
         if orientation:
             group_geo["orientation"] = orientation
 
+def _chain_key(node: dict) -> str:
+    """Determine which chain (matched block / device) a finger belongs to."""
+    block_id = node.get("_block_id")
+    if block_id:
+        return block_id
+    nid = node.get("id", "")
+    m = _re_mod.match(r'^(.+?)(?:_[mf]\d+|_\d+)$', nid)
+    return m.group(1) if m else nid
+
+
+def _cluster_critical_nets_post_expansion(
+    nodes: list,
+    terminal_nets: dict | None,
+    placement_goals: dict | None,
+) -> list:
+    """Post-expansion critical-net clustering (Step 3e.5).
+
+    Operates on **physical finger nodes** after expand_to_fingers and
+    resolve_overlaps have finalized positions.  This is the LAST pass that
+    touches X coordinates before DRC, so its output actually survives.
+
+    Algorithm
+    ---------
+    1. Find all finger IDs connected to each critical net via terminal_nets.
+    2. Identify which *chains* (matched blocks or single devices) carry at
+       least one critical-net finger.
+    3. Per row:
+       a. Reorder chains so critical-net chains are contiguous in the centre.
+       b. Re-place all chains left-to-right preserving intra-chain spacing.
+    4. Align critical-net cluster centres across rows (vertical alignment)
+       so cross-row wires are as short as possible.
+
+    Gated: returns nodes unchanged when the feature is OFF.
+    """
+    try:
+        from ai_agent.placement.critical_nets import get_user_critical_nets
+    except ImportError:
+        return nodes
+
+    _fake = {"placement_goals": placement_goals or {}}
+    crit_nets, weight = get_user_critical_nets(_fake)
+    print(f"[DIAG-CLUSTER] crit_nets={crit_nets}  weight={weight}  placement_goals={placement_goals}")
+    if not crit_nets or weight == 0:
+        print("[DIAG-CLUSTER] EARLY EXIT: feature OFF")
+        return nodes  # feature OFF — byte-identical path
+
+    if not terminal_nets:
+        print("[DIAG-CLUSTER] EARLY EXIT: no terminal_nets")
+        return nodes
+
+    # ── 1. Find finger IDs on critical nets ──────────────────────────────
+    crit_lower = {n.lower() for n in crit_nets}
+    critical_finger_ids: set[str] = set()
+    for fid, pins in terminal_nets.items():
+        if not isinstance(pins, dict):
+            continue
+        for pin_net in pins.values():
+            if isinstance(pin_net, str) and pin_net.strip().lower() in crit_lower:
+                critical_finger_ids.add(fid)
+                break
+    print(f"[DIAG-CLUSTER] critical_finger_ids ({len(critical_finger_ids)}): {sorted(critical_finger_ids)[:20]}")
+    print(f"[DIAG-CLUSTER] terminal_nets keys sample: {sorted(terminal_nets.keys())[:10]}")
+    print(f"[DIAG-CLUSTER] node IDs sample: {[n.get('id','?') for n in nodes[:10]]}")
+    if not critical_finger_ids:
+        print("[DIAG-CLUSTER] EARLY EXIT: no critical fingers found")
+        return nodes
+
+    # ── 2. Group nodes by row (Y, type) ──────────────────────────────────
+    STD_PITCH = 0.294
+    row_buckets: dict[tuple, list[dict]] = {}
+    for n in nodes:
+        geo = n.get("geometry") or {}
+        y = round(float(geo.get("y", 0.0)), 3)
+        ntype = str(n.get("type", "nmos")).lower()
+        row_buckets.setdefault((y, ntype), []).append(n)
+
+    # ── 3. Per-row chain reordering ──────────────────────────────────────
+    #   Track the centre-X of the critical cluster in each row so we can
+    #   align them across rows afterwards.
+    critical_cluster_info: list[tuple] = []  # (row_key, centre_x, half_width)
+
+    for row_key, row_nodes in row_buckets.items():
+        # --- build chains ------------------------------------------------
+        chains: dict[str, list[dict]] = {}
+        for n in row_nodes:
+            ck = _chain_key(n)
+            chains.setdefault(ck, []).append(n)
+        for ck in chains:
+            chains[ck].sort(key=lambda n: float((n.get("geometry") or {}).get("x", 0.0)))
+
+        # --- classify chains as critical / non-critical ------------------
+        critical_chain_keys: set[str] = set()
+        for ck, chain_nodes in chains.items():
+            if any(n.get("id", "") in critical_finger_ids for n in chain_nodes):
+                critical_chain_keys.add(ck)
+        print(f"[DIAG-CLUSTER] row={row_key} chains={list(chains.keys())} critical={critical_chain_keys}")
+        if not critical_chain_keys:
+            continue  # nothing to do in this row
+
+        # --- compute chain envelopes (origin_x, total_width) -------------
+        def _envelope(chain_nodes):
+            xs = [float((n.get("geometry") or {}).get("x", 0.0)) for n in chain_nodes]
+            ws = [float((n.get("geometry") or {}).get("width", STD_PITCH)) for n in chain_nodes]
+            min_x = min(xs)
+            max_x_end = max(x + w for x, w in zip(xs, ws))
+            return min_x, max_x_end - min_x
+
+        envelopes = {ck: _envelope(cn) for ck, cn in chains.items()}
+
+        # --- sort chains by current X ------------------------------------
+        sorted_keys = sorted(chains.keys(), key=lambda ck: envelopes[ck][0])
+
+        crit_keys = [ck for ck in sorted_keys if ck in critical_chain_keys]
+        non_crit_keys = [ck for ck in sorted_keys if ck not in critical_chain_keys]
+
+        # Split non-critical chains into left-flank and right-flank.
+        # Prefer putting half on each side so critical chains stay centred.
+        n_left = len(non_crit_keys) // 2
+        left_keys = non_crit_keys[:n_left]
+        right_keys = non_crit_keys[n_left:]
+
+        new_order = left_keys + crit_keys + right_keys
+        print(f"[DIAG-CLUSTER] row={row_key} sorted_keys={sorted_keys} new_order={new_order} crit={crit_keys} non_crit={non_crit_keys}")
+
+        # --- re-place chains left-to-right --------------------------------
+        # Start from the leftmost position in the row.
+        row_min_x = min(envelopes[ck][0] for ck in sorted_keys)
+        cursor = row_min_x
+
+        for ck in new_order:
+            chain_nodes = chains[ck]
+            old_origin = envelopes[ck][0]
+            shift = cursor - old_origin
+            if abs(shift) > 1e-6:
+                for n in chain_nodes:
+                    geo = n.setdefault("geometry", {})
+                    geo["x"] = round(float(geo.get("x", 0.0)) + shift, 6)
+            # advance cursor past this chain + inter-chain gap
+            chain_width = envelopes[ck][1]
+            cursor = round(cursor + chain_width + STD_PITCH, 6)
+
+        # --- record critical cluster centre for cross-row alignment ------
+        crit_xs = []
+        crit_ws = []
+        for ck in crit_keys:
+            for n in chains[ck]:
+                geo = n.get("geometry") or {}
+                crit_xs.append(float(geo.get("x", 0.0)))
+                crit_ws.append(float(geo.get("width", STD_PITCH)))
+        if crit_xs:
+            crit_min = min(crit_xs)
+            crit_max = max(x + w for x, w in zip(crit_xs, crit_ws))
+            centre = (crit_min + crit_max) / 2.0
+            half_w = (crit_max - crit_min) / 2.0
+            critical_cluster_info.append((row_key, centre, half_w))
+
+        vprint(
+            f"[critical_nets_cluster] row={row_key} "
+            f"reordered: {' | '.join(new_order)}  "
+            f"(critical: {', '.join(crit_keys)})"
+        )
+
+    # ── 4. Cross-row vertical alignment ──────────────────────────────────
+    if weight >= 5 and len(critical_cluster_info) > 1:
+        centres = [c for _, c, _ in critical_cluster_info]
+        median_centre = sorted(centres)[len(centres) // 2]
+
+        for row_key, centre, _hw in critical_cluster_info:
+            shift = median_centre - centre
+            if abs(shift) < 1e-4:
+                continue
+            # Shift ALL nodes in this row so relative chain positions stay valid
+            for n in row_buckets[row_key]:
+                geo = n.setdefault("geometry", {})
+                geo["x"] = round(float(geo.get("x", 0.0)) + shift, 6)
+
+        vprint(
+            f"[critical_nets_cluster] cross-row alignment: "
+            f"median_centre={median_centre:.4f}  "
+            f"rows_aligned={len(critical_cluster_info)}"
+        )
+
+    return nodes
+
+
 def node_placement_specialist(state):
+
     """Primary placement node.
 
     Uses ``_compute_matching_and_rows`` from the placement agent module to
@@ -463,6 +665,8 @@ def node_placement_specialist(state):
     working_nodes = apply_cmds_to_nodes(grp_nodes, stage2_cmds)
     working_nodes = enforce_reflection_symmetry(working_nodes)
 
+
+
     # ── Step 3d: Expand to physical fingers ──────────────────────────────────
     log_section("Step 3d: Expanding to physical fingers")
     if finger_map:
@@ -497,6 +701,25 @@ def node_placement_specialist(state):
     # previously anchored inside ABBA blocks may end up at isolated Y coords.
     # Move any such device to the nearest valid active-device row.
     working_nodes = _snap_orphan_dummies(working_nodes)
+
+    # ── Step 3e.5: Post-expansion critical-nets clustering ────────────────
+    # Reorder chains (matched blocks) within each row so that chains sharing
+    # a user-selected critical net are adjacent in the centre, then align
+    # cluster centres across rows for minimal cross-row HPWL.
+    # Gated: completely skipped when feature is off (byte-identical path).
+    log_section("Step 3e.5: Critical-nets post-expansion clustering")
+    _pre_cluster = copy.deepcopy(working_nodes) if vprint else None
+    working_nodes = _cluster_critical_nets_post_expansion(
+        working_nodes, terminal_nets, state.get("placement_goals")
+    )
+    _goals_cfg = (state.get("placement_goals") or {}).get("critical_nets") or {}
+    if _goals_cfg.get("nets") and _goals_cfg.get("priority", "Low") != "Low":
+        log_detail(
+            f"Critical nets active: {_goals_cfg.get('nets')} "
+            f"priority={_goals_cfg.get('priority')}"
+        )
+    else:
+        log_detail("Critical nets: OFF (skipped)")
 
     # ── Step 3f: Validate device conservation ────────────────────────────
     log_section("Step 3f: Device conservation check")

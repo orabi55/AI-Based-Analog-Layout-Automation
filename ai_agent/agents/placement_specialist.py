@@ -299,6 +299,18 @@ CONNECTIVITY:
 FAIL → ✗ INVALID ONLY
 
 ────────────────────────────────────────────
+6b. PARASITIC-CRITICAL NETS
+────────────────────────────────────────────
+
+For each net in [CRITICAL_NETS]:
+  • Place ALL its devices in the smallest possible bounding box.
+  • Same-type devices on the net → same row, abutted (no FILLER between).
+  • Cross-type devices on the net → vertically aligned.
+  • This rule MAY relax slots 7-10. It MUST NOT relax slots 1-6.
+Higher 'weight' = more aggressive clustering.
+If the block is ABSENT or empty, IGNORE these instructions completely.
+
+────────────────────────────────────────────
 7. OUTPUT FORMAT
 ────────────────────────────────────────────
 
@@ -1098,5 +1110,49 @@ def build_placement_context(
    must be placed on the SAME SIDE of the layout (same column region), not randomly.
 """)
     lines.append("")
+
+    # ── [CRITICAL_NETS] block (only when user selected nets with weight > 0) ──
+    try:
+        from ai_agent.placement.critical_nets import (
+            get_user_critical_nets,
+            devices_for_critical_nets,
+        )
+        _fake_state = {"placement_goals": placement_goals or {}}
+        _crit_nets, _crit_weight = get_user_critical_nets(_fake_state)
+        if _crit_nets:
+            # Build logical-device mapping from finger_map (post-aggregation IDs)
+            _dev_map = devices_for_critical_nets(
+                terminal_nets or {}, _crit_nets
+            )
+            # Also look up logical IDs from the finger_map keys
+            _logical_ids_by_finger: dict = {}
+            for _gid, _fingers in finger_map.items():
+                for _f in _fingers:
+                    _logical_ids_by_finger[_f.get("id", "")] = _gid
+
+            block_lines = [f"[CRITICAL_NETS] weight={_crit_weight}"]
+            for _net in _crit_nets:
+                _devs = _dev_map.get(_net, [])
+                # Resolve finger IDs → logical group IDs
+                _logical = sorted({
+                    _logical_ids_by_finger.get(d, d) for d in _devs
+                })
+                if not _logical:
+                    continue
+                _span = round(0.294 * max(2, len(_logical)), 3)
+                block_lines.append(
+                    f"net={_net} devices=[{','.join(_logical)}] "
+                    f"span_um_target={_span}"
+                )
+            block_lines.append("[/CRITICAL_NETS]")
+
+            if len(block_lines) > 2:  # header + at least one net line + footer
+                lines.append("=" * 60)
+                lines.append("PARASITIC-CRITICAL NETS (user-selected — cluster tightly)")
+                lines.append("=" * 60)
+                lines.extend(block_lines)
+                lines.append("")
+    except Exception:
+        pass  # never crash the context builder
 
     return "\n".join(lines)

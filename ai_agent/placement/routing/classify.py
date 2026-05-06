@@ -78,6 +78,23 @@ class NetClassifier:
 _DEFAULT_CLASSIFIER = NetClassifier()
 
 
-def classify_net(net_name: str) -> Criticality:
-    """Classify a single net name using the default classifier."""
+def classify_net(
+    net_name: str,
+    *,
+    force_critical: "set[str] | None" = None,
+) -> Criticality:
+    """Classify a single net name using the default classifier.
+
+    Args:
+        net_name:       The net name to classify.
+        force_critical: Optional set of net names that must be returned as
+                        ``"critical"`` regardless of the regex patterns.
+                        When *None* (default) behaviour is identical to before
+                        this argument was added — fully backward-compatible.
+
+    Returns:
+        One of ``"power"``, ``"critical"``, ``"bias"``, or ``"signal"``.
+    """
+    if force_critical and net_name in force_critical:
+        return "critical"
     return _DEFAULT_CLASSIFIER.classify(net_name)

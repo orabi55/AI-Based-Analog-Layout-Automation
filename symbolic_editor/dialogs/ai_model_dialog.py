@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve
 from PySide6.QtGui import QFont
 from symbolic_editor.dialogs.placement_goals_widget import PlacementGoalsWidget
+from symbolic_editor.dialogs.critical_nets_widget import CriticalNetsWidget
 
 
 # ---------------------------------------------------------------------------
@@ -107,10 +108,113 @@ class _CollapsibleGoals(QWidget):
 
 
 # ---------------------------------------------------------------------------
+# Collapsible Critical Nets Section
+# ---------------------------------------------------------------------------
+class _CollapsibleCriticalNets(QWidget):
+    """
+    Toggle-header + animated body that hides/shows the CriticalNetsWidget.
+
+    When collapsed (default) → get_critical_nets() returns None → the pipeline
+    runs without any critical-net overrides (byte-identical output).
+    When expanded → get_critical_nets() returns the user-configured dict.
+    """
+
+    def __init__(self, available_nets=None, parent=None):
+        super().__init__(parent)
+        self._expanded = False
+
+        root = QVBoxLayout(self)
+        root.setSpacing(0)
+        root.setContentsMargins(0, 0, 0, 0)
+
+        # ── Toggle header row ─────────────────────────────────────────────
+        header = QWidget()
+        header.setCursor(Qt.CursorShape.PointingHandCursor)
+        header.setStyleSheet("""
+            QWidget {
+                background: #1a2535;
+                border: 1px solid #4a6fa5;
+                border-radius: 6px;
+            }
+            QWidget:hover {
+                background: #1e2f45;
+                border-color: #5ba0cc;
+            }
+        """)
+        h_lay = QHBoxLayout(header)
+        h_lay.setContentsMargins(10, 7, 10, 7)
+        h_lay.setSpacing(8)
+
+        icon_lbl = QLabel("⚡")
+        icon_lbl.setStyleSheet(
+            "color: #f0b429; font-size: 13pt; background: transparent; border: none;"
+        )
+        h_lay.addWidget(icon_lbl)
+
+        text_lbl = QLabel(
+            "Critical Signal Nets  "
+            "<span style='color:#6a7a90;font-size:8pt;'>"
+            "(optional — click to select nets for parasitic minimisation)</span>"
+        )
+        text_lbl.setStyleSheet(
+            "color: #88c0d0; font-size: 9pt; font-weight: bold; "
+            "background: transparent; border: none;"
+        )
+        text_lbl.setOpenExternalLinks(False)
+        h_lay.addWidget(text_lbl, 1)
+
+        self._arrow = QLabel("▶")
+        self._arrow.setStyleSheet(
+            "color: #6a7a90; font-size: 9pt; background: transparent; border: none;"
+        )
+        h_lay.addWidget(self._arrow)
+
+        root.addWidget(header)
+
+        # ── Body (collapsible) ────────────────────────────────────────────
+        self._body = QWidget()
+        self._body.setVisible(False)
+        self._body.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        body_lay = QVBoxLayout(self._body)
+        body_lay.setContentsMargins(0, 6, 0, 0)
+        body_lay.setSpacing(0)
+
+        self.critical_nets_widget = CriticalNetsWidget()
+        if available_nets:
+            self.critical_nets_widget.set_available_nets(available_nets)
+        body_lay.addWidget(self.critical_nets_widget)
+        root.addWidget(self._body)
+
+        # ── Click to toggle ───────────────────────────────────────────────
+        header.mousePressEvent = lambda _e: self._toggle()
+
+    # -- public API ─────────────────────────────────────────────────────────
+
+    def get_critical_nets(self):
+        """Return critical nets dict when expanded, None when collapsed."""
+        if not self._expanded:
+            return None
+        return self.critical_nets_widget.get_critical_nets()
+
+    def set_available_nets(self, nets):
+        """Update the available net list (call before showing the dialog)."""
+        self.critical_nets_widget.set_available_nets(nets)
+
+    # -- private ────────────────────────────────────────────────────────────
+
+    def _toggle(self):
+        self._expanded = not self._expanded
+        self._body.setVisible(self._expanded)
+        self._arrow.setText("▼" if self._expanded else "▶")
+        if self.window():
+            self.window().adjustSize()
+
+
+# ---------------------------------------------------------------------------
 # Main Dialog
 # ---------------------------------------------------------------------------
 class AIModelSelectionDialog(QDialog):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, *, available_nets=None):
         super().__init__(parent)
         self.setWindowTitle("Select AI Model")
         self.setMinimumSize(480, 420)
@@ -297,6 +401,12 @@ class AIModelSelectionDialog(QDialog):
         self._goals_section = _CollapsibleGoals()
         main_layout.addWidget(self._goals_section)
 
+        # ── Collapsible Critical Signal Nets (sibling, NOT nested) ───────
+        self._critical_nets_section = _CollapsibleCriticalNets(
+            available_nets=available_nets
+        )
+        main_layout.addWidget(self._critical_nets_section)
+
         main_layout.addStretch()
 
         # ── Buttons ──────────────────────────────────────────
@@ -371,6 +481,16 @@ class AIModelSelectionDialog(QDialog):
         collapsed.  None means: run with original pipeline defaults.
         """
         return self._goals_section.get_goals()
+
+    def get_critical_nets(self):
+        """
+        Return the critical nets dict when the ⚡ panel is open, or None when
+        collapsed.  None means the feature is off — pipeline runs unchanged.
+
+        Returns:
+            ``{"priority": str, "nets": [str, ...]}`` or None.
+        """
+        return self._critical_nets_section.get_critical_nets()
 
     def apply_api_keys(self):
         gemini_key = self.gemini_api_key.text().strip().strip('\'"')

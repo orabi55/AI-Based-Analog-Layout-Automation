@@ -23,7 +23,20 @@ def node_routing_previewer(state: dict) -> dict:
     edges         = state.get("edges", [])
     terminal_nets = state.get("terminal_nets", {})
 
-    report = build_routing_report(nodes, edges or [], terminal_nets or {})
+    # ── Critical-nets override (user-selected via ⚡ panel) ─────────────────
+    # When the panel is collapsed or priority=Low the set is None → no override.
+    goals    = state.get("placement_goals") or {}
+    crit_cfg = goals.get("critical_nets") or {}
+    _crit_list = crit_cfg.get("nets") or []
+    _priority   = crit_cfg.get("priority", "Low")
+    from ai_agent.placement.critical_nets import PRIORITY_WEIGHTS
+    _weight = PRIORITY_WEIGHTS.get(_priority, 0)
+    user_critical: "set | None" = set(_crit_list) if (_crit_list and _weight > 0) else None
+
+    report = build_routing_report(
+        nodes, edges or [], terminal_nets or {},
+        user_critical_nets=user_critical,
+    )
 
     # ── Structured terminal log ───────────────────────────────────────────────
     log_section("Routing Pre-Viewer")
@@ -41,3 +54,4 @@ def node_routing_previewer(state: dict) -> dict:
     routing_legacy = report.to_legacy_dict()
     routing_legacy["log_text"] = report.format_log()
     return {"routing_result": routing_legacy, "last_agent": "routing_previewer"}
+
