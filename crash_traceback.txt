@@ -1,11 +1,9 @@
 Traceback (most recent call last):
-  File "C:\Users\youss\University\GP\Automation Phase\Code\AI-Based-Analog-Layout-Automation\symbolic_editor\editor_view.py", line 1837, in _on_selection_changed
-    self.clear_highlighted_net()
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^
-  File "C:\Users\youss\University\GP\Automation Phase\Code\AI-Based-Analog-Layout-Automation\symbolic_editor\editor_view.py", line 432, in clear_highlighted_net
-    group.clear_highlighted_net()
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
-  File "C:\Users\youss\University\GP\Automation Phase\Code\AI-Based-Analog-Layout-Automation\symbolic_editor\hierarchy_group_item.py", line 115, in clear_highlighted_net
-    self.update()
-    ~~~~~~~~~~~^^
-RuntimeError: Internal C++ object (HierarchyGroupItem) already deleted.
+  File "C:\Users\Amal\Desktop\GP_2026\AI-Based-Analog-Layout-Automation\symbolic_editor\main.py", line 389, in _on_load_example
+    tab = self._new_tab()
+  File "C:\Users\Amal\Desktop\GP_2026\AI-Based-Analog-Layout-Automation\symbolic_editor\main.py", line 299, in _new_tab
+    tab = LayoutEditorTab(placement_file, parent=self._tab_widget)
+  File "C:\Users\Amal\Desktop\GP_2026\AI-Based-Analog-Layout-Automation\symbolic_editor\layout_tab.py", line 108, in __init__
+    self.schematic_panel = SchematicPanel(self)
+                           ^^^^^^^^^^^^^^
+NameError: name 'SchematicPanel' is not defined

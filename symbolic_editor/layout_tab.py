@@ -37,6 +37,7 @@ try:
     from .editor_view import SymbolicEditor, DeleteGroupCommand
     from .klayout_panel import KLayoutPanel
     from .properties_panel import PropertiesPanel
+    from .schematic_view import SchematicPanel
     from .view_toggle import SegmentedToggle
     from .widgets.generic_worker import GenericWorker
     from .widgets.loading_overlay import LoadingOverlay
@@ -276,6 +277,10 @@ class LayoutEditorTab(QWidget):
         self._shortcut_outline_view.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
         self._shortcut_outline_view.activated.connect(self.editor.ascend_all_hierarchy)
 
+        self._shortcut_show_props = QShortcut(QKeySequence("Q"), self._workspace_shell)
+        self._shortcut_show_props.setContext(Qt.ShortcutContext.ApplicationShortcut)
+        self._shortcut_show_props.activated.connect(self._show_selected_device_properties)
+
     # ── Public convenience properties ────────────────────────────
     @property
     def current_file(self):
@@ -438,6 +443,28 @@ class LayoutEditorTab(QWidget):
                 logging.debug("Ctrl+D hierarchy descend failed", exc_info=True)
         if event.key() == Qt.Key.Key_M and not event.modifiers():
             self._toggle_move_mode()
+            event.accept()
+            return
+        if event.key() == Qt.Key.Key_Q and not event.modifiers():
+            selected_ids = self.editor.selected_device_ids() if self.editor else []
+            if len(selected_ids) == 1:
+                self._show_device_properties(selected_ids[0])
+                self.properties_panel.setVisible(True)
+                self.properties_panel.setFocus(Qt.FocusReason.OtherFocusReason)
+            elif len(selected_ids) == 0:
+                self.chat_panel._append_message(
+                    "AI",
+                    "Select one device first to show its properties (Q).",
+                    "#fde8e8",
+                    "#a00",
+                )
+            else:
+                self.chat_panel._append_message(
+                    "AI",
+                    "Select a single device to open properties (Q).",
+                    "#fde8e8",
+                    "#a00",
+                )
             event.accept()
             return
         super().keyPressEvent(event)
@@ -626,6 +653,29 @@ class LayoutEditorTab(QWidget):
             terminal_nets=self._terminal_nets,
             block_data=block_data,
         )
+
+    def _show_selected_device_properties(self):
+        selected_ids = self.editor.selected_device_ids() if self.editor else []
+        if len(selected_ids) == 1:
+            self._left_splitter.setVisible(True)
+            self._tree_reopen_strip.setVisible(False)
+            self._show_device_properties(selected_ids[0])
+            self.properties_panel.setVisible(True)
+            self.properties_panel.setFocus(Qt.FocusReason.OtherFocusReason)
+        elif len(selected_ids) == 0:
+            self.chat_panel._append_message(
+                "AI",
+                "Select one device first to show its properties (Q).",
+                "#fde8e8",
+                "#a00",
+            )
+        else:
+            self.chat_panel._append_message(
+                "AI",
+                "Select a single device to open properties (Q).",
+                "#fde8e8",
+                "#a00",
+            )
 
     def _sync_properties_from_selection(self):
         selected_ids = self.editor.selected_device_ids()
