@@ -171,9 +171,20 @@ def build_report(
     nodes: list,
     edges: Optional[list] = None,
     terminal_nets: Optional[dict] = None,
+    *,
+    user_critical_nets: Optional[set] = None,
 ) -> RoutingReport:
     """
     Build a complete RoutingReport from placement data.
+
+    Args:
+        nodes:             physical placement node list
+        edges:             edge dicts with 'net', 'source', 'target'
+        terminal_nets:     {dev_id: {'D':net, 'G':net, 'S':net}}
+        user_critical_nets: optional set of net names that the user has
+                            explicitly marked as critical via the UI.  These
+                            override the regex classifier so they always receive
+                            the 10x HPWL² weight.  Default None = no override.
 
     This is the single entry point for the routing previewer node.
     """
@@ -183,8 +194,11 @@ def build_report(
     # 2. Manhattan HPWL per net
     hpwl_map: Dict[str, NetHPWL] = compute_all_hpwl(net_map)
 
-    # 3. Net criticality
-    criticalities = {net: classify_net(net) for net in hpwl_map}
+    # 3. Net criticality (user-selected nets are forced to "critical")
+    criticalities = {
+        net: classify_net(net, force_critical=user_critical_nets)
+        for net in hpwl_map
+    }
 
     # 4. NetReport list
     net_reports: List[NetReport] = []

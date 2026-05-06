@@ -1303,11 +1303,44 @@ class LayoutEditorTab(QWidget):
     # =================================================================
     #  Run AI Initial Placement
     # =================================================================
+    def _collect_available_nets(self) -> list:
+        """Return sorted unique non-supply net names from self._terminal_nets.
+
+        Iterates every device's pin→net mapping, drops supply rail names
+        (case-insensitive), deduplicates, and returns a sorted list suitable
+        for populating the Critical Nets widget.
+        """
+        try:
+            from ai_agent.placement.critical_nets import SUPPLY_NETS
+        except ImportError:
+            _SUPPLY = frozenset({"vdd", "vss", "gnd", "vcc", "vee", "avdd", "avss"})
+            SUPPLY_NETS = _SUPPLY  # type: ignore[assignment]
+
+        seen: set[str] = set()
+        nets: list[str] = []
+        for pin_map in (self._terminal_nets or {}).values():
+            if not isinstance(pin_map, dict):
+                continue
+            for net_name in pin_map.values():
+                if not isinstance(net_name, str):
+                    continue
+                net_stripped = net_name.strip()
+                if not net_stripped:
+                    continue
+                if net_stripped.lower() in SUPPLY_NETS:
+                    continue
+                key = net_stripped.lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+                nets.append(net_stripped)
+        return sorted(nets)
+
     def do_ai_placement(self):
         if not self.nodes:
             self.chat_panel._append_message("AI", "No layout loaded. Import a netlist first (Ctrl+I).", "#fde8e8", "#a00")
             return
-        dialog = AIModelSelectionDialog(self)
+        dialog = AIModelSelectionDialog(self, available_nets=self._collect_available_nets())
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         model_choice = dialog.get_selected_model()
@@ -1347,8 +1380,12 @@ class LayoutEditorTab(QWidget):
         else:
             data["abutment_candidates"] = []
         data["no_abutment"] = not abutment_enabled
-        # Pass placement goals into pipeline JSON
-        data["placement_goals"] = dialog.get_goals()
+        # Pass placement goals + critical nets into pipeline JSON
+        goals = dialog.get_goals() or {}
+        crit  = dialog.get_critical_nets()          # None when panel collapsed
+        if crit and crit.get("nets"):               # only add when nets actually selected
+            goals["critical_nets"] = crit
+        data["placement_goals"] = goals or None
         self._last_placement_goals = data["placement_goals"]
         abut_label = "with abutment" if abutment_enabled else "no abutment"
         pipeline_label = "LangGraph"

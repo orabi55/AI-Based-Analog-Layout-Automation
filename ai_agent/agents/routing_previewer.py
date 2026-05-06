@@ -26,6 +26,8 @@ def build_routing_report(
     nodes: list,
     edges: list | None = None,
     terminal_nets: dict | None = None,
+    *,
+    user_critical_nets: set | None = None,
 ) -> RoutingReport:
     """
     Build a full RoutingReport from placement data.
@@ -40,14 +42,19 @@ def build_routing_report(
       - Quadratic weighted cost — all terms in consistent units
 
     Args:
-        nodes:         physical placement node list
-        edges:         edge dicts with 'net', 'source', 'target'
-        terminal_nets: {dev_id: {'D':net, 'G':net, 'S':net}}
+        nodes:              physical placement node list
+        edges:              edge dicts with 'net', 'source', 'target'
+        terminal_nets:      {dev_id: {'D':net, 'G':net, 'S':net}}
+        user_critical_nets: optional set of net names forced to criticality
+                            ``"critical"`` (10× HPWL² weight) regardless of
+                            the regex classifier.  Default None = no override
+                            (backward-compatible).
 
     Returns:
         RoutingReport dataclass
     """
-    return build_report(nodes, edges, terminal_nets)
+    return build_report(nodes, edges, terminal_nets,
+                        user_critical_nets=user_critical_nets)
 
 
 def score_routing(

@@ -103,7 +103,9 @@ def node_drc_critic(state):
     active_nodes_for_context = [n for n in nodes if not _is_dummy_node(n)]
     logical_nodes = aggregate_to_logical_devices(active_nodes_for_context)
     current_placement_context = build_placement_context(
-        logical_nodes, constraint_text, terminal_nets=terminal_nets, edges=edges,
+        logical_nodes, constraint_text,
+        terminal_nets=terminal_nets, edges=edges,
+        placement_goals=state.get("placement_goals"),
     )
     critic_user = (
         f"User request: {user_message}\n\n"
