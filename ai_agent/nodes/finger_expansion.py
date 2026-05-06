@@ -62,6 +62,22 @@ def node_finger_expansion(state):
         log_detail("No overlaps detected")
     physical_nodes = legalize_vertical_rows(physical_nodes)
 
+    # Re-apply critical signal-flow optimization AFTER deterministic row
+    # legalization.  This keeps the critical-net path effective while the
+    # off-path remains unchanged.
+    try:
+        from ai_agent.placement.critical_signal_flow import optimize_critical_signal_flow
+        terminal_nets = state.get("terminal_nets", {}) or {}
+        placement_goals = state.get("placement_goals")
+        before_signal_flow = copy.deepcopy(physical_nodes)
+        physical_nodes = optimize_critical_signal_flow(
+            physical_nodes, terminal_nets, placement_goals
+        )
+        if physical_nodes != before_signal_flow:
+            log_detail("Applied late critical signal-flow optimization")
+    except Exception as _crit_exc:
+        log_detail(f"Critical signal-flow optimization skipped: {_crit_exc}")
+
     # Integrity check
     log_section("Finger integrity validation")
     integrity = validate_finger_integrity(original_nodes, physical_nodes)

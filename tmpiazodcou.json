@@ -7320,5 +7320,13 @@
   },
   "abutment_candidates": [],
   "no_abutment": true,
-  "placement_goals": null
+  "placement_goals": {
+    "critical_nets": {
+      "priority": "High",
+      "nets": [
+        "VOUTN",
+        "VOUTP"
+      ]
+    }
+  }
 }

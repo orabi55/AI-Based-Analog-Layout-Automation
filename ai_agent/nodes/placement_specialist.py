@@ -350,6 +350,10 @@ def _cluster_critical_nets_post_expansion(
     except ImportError:
         return nodes
 
+    # Snapshot for quality-guard rollback if critical clustering harms
+    # global routing quality disproportionately.
+    original_nodes = copy.deepcopy(nodes)
+
     _fake = {"placement_goals": placement_goals or {}}
     crit_nets, weight = get_user_critical_nets(_fake)
     print(f"[DIAG-CLUSTER] crit_nets={crit_nets}  weight={weight}  placement_goals={placement_goals}")
@@ -361,22 +365,75 @@ def _cluster_critical_nets_post_expansion(
         print("[DIAG-CLUSTER] EARLY EXIT: no terminal_nets")
         return nodes
 
-    # ── 1. Find finger IDs on critical nets ──────────────────────────────
+    # ── 1. Find IDs on critical nets ─────────────────────────────────────
+    # terminal_nets is often keyed by logical IDs (e.g. MM1) while nodes are
+    # physical fingers (e.g. MM1_m2_f3). Build both:
+    #   - critical_finger_ids  : exact keys found in terminal_nets
+    #   - critical_logical_ids : logical parent IDs inferred from those keys
     crit_lower = {n.lower() for n in crit_nets}
     critical_finger_ids: set[str] = set()
+    critical_logical_ids: set[str] = set()
+
+    def _logical_candidates(dev_id: str) -> set[str]:
+        did = str(dev_id or "")
+        out = {did}
+        # Common physical suffix forms:
+        #   MM1_m2_f3 -> MM1_m2 -> MM1
+        #   MM1_f3    -> MM1
+        #   MM1_m2    -> MM1
+        #   MM1_2     -> MM1
+        m = _re_mod.match(r"^(.+)_m\d+_f\d+$", did)
+        if m:
+            out.add(m.group(1))
+            out.add(_re_mod.sub(r"_m\d+$", "", m.group(1)))
+            return {x for x in out if x}
+        out.add(_re_mod.sub(r"_f\d+$", "", did))
+        out.add(_re_mod.sub(r"_m\d+$", "", did))
+        out.add(_re_mod.sub(r"_\d+$", "", did))
+        return {x for x in out if x}
+
     for fid, pins in terminal_nets.items():
         if not isinstance(pins, dict):
             continue
         for pin_net in pins.values():
             if isinstance(pin_net, str) and pin_net.strip().lower() in crit_lower:
                 critical_finger_ids.add(fid)
+                critical_logical_ids.update(_logical_candidates(fid))
                 break
     print(f"[DIAG-CLUSTER] critical_finger_ids ({len(critical_finger_ids)}): {sorted(critical_finger_ids)[:20]}")
+    print(f"[DIAG-CLUSTER] critical_logical_ids ({len(critical_logical_ids)}): {sorted(critical_logical_ids)[:20]}")
     print(f"[DIAG-CLUSTER] terminal_nets keys sample: {sorted(terminal_nets.keys())[:10]}")
     print(f"[DIAG-CLUSTER] node IDs sample: {[n.get('id','?') for n in nodes[:10]]}")
-    if not critical_finger_ids:
-        print("[DIAG-CLUSTER] EARLY EXIT: no critical fingers found")
+    if not critical_finger_ids and not critical_logical_ids:
+        print("[DIAG-CLUSTER] EARLY EXIT: no critical ids found")
         return nodes
+
+    # Build logical-id -> connected net set and per-net fanout to detect
+    # high-fanout "anchor" chains (e.g., CLK/tail chain) that should stay
+    # near their original X to avoid global routing collapse.
+    logical_net_map: dict[str, set[str]] = {}
+    net_fanout: dict[str, int] = {}
+    for did, pins in terminal_nets.items():
+        if not isinstance(pins, dict):
+            continue
+        did_cands = _logical_candidates(str(did))
+        for net_name in pins.values():
+            if not isinstance(net_name, str):
+                continue
+            nn = net_name.strip()
+            if not nn:
+                continue
+            nl = nn.lower()
+            net_fanout[nl] = net_fanout.get(nl, 0) + 1
+            for lc in did_cands:
+                logical_net_map.setdefault(lc, set()).add(nl)
+
+    supply_like = {"vdd", "vss", "gnd", "vcc", "vee", "avdd", "avss"}
+    hot_nets = {
+        n for n, deg in net_fanout.items()
+        if deg >= 8 and n not in crit_lower and n not in supply_like
+    }
+    print(f"[DIAG-CLUSTER] hot_nets={sorted(hot_nets)}")
 
     # ── 2. Group nodes by row (Y, type) ──────────────────────────────────
     STD_PITCH = 0.294
@@ -391,6 +448,7 @@ def _cluster_critical_nets_post_expansion(
     #   Track the centre-X of the critical cluster in each row so we can
     #   align them across rows afterwards.
     critical_cluster_info: list[tuple] = []  # (row_key, centre_x, half_width)
+    protected_rows: set[tuple] = set()
 
     for row_key, row_nodes in row_buckets.items():
         # --- build chains ------------------------------------------------
@@ -404,7 +462,18 @@ def _cluster_critical_nets_post_expansion(
         # --- classify chains as critical / non-critical ------------------
         critical_chain_keys: set[str] = set()
         for ck, chain_nodes in chains.items():
-            if any(n.get("id", "") in critical_finger_ids for n in chain_nodes):
+            is_critical = False
+            for n in chain_nodes:
+                nid = str(n.get("id", ""))
+                if nid in critical_finger_ids:
+                    is_critical = True
+                    break
+                cands = _logical_candidates(nid)
+                cands.add(str(ck))
+                if cands & critical_logical_ids:
+                    is_critical = True
+                    break
+            if is_critical:
                 critical_chain_keys.add(ck)
         print(f"[DIAG-CLUSTER] row={row_key} chains={list(chains.keys())} critical={critical_chain_keys}")
         if not critical_chain_keys:
@@ -426,31 +495,100 @@ def _cluster_critical_nets_post_expansion(
         crit_keys = [ck for ck in sorted_keys if ck in critical_chain_keys]
         non_crit_keys = [ck for ck in sorted_keys if ck not in critical_chain_keys]
 
+        # Detect a protected non-critical anchor chain (high-fanout net
+        # connectivity such as CLK). We keep its X nearly fixed.
+        protected_noncrit: list[str] = []
+        for ck in non_crit_keys:
+            chain_nets: set[str] = set()
+            for n in chains[ck]:
+                nid = str(n.get("id", ""))
+                cands = _logical_candidates(nid)
+                cands.add(str(ck))
+                for c in cands:
+                    chain_nets |= logical_net_map.get(c, set())
+            if chain_nets & hot_nets:
+                protected_noncrit.append(ck)
+
+        anchor_key = None
+        if protected_noncrit:
+            anchor_key = min(protected_noncrit, key=lambda k: envelopes[k][0])
+            protected_rows.add(row_key)
+        print(f"[DIAG-CLUSTER] row={row_key} protected_noncrit={protected_noncrit} anchor={anchor_key}")
+
         # Split non-critical chains into left-flank and right-flank.
         # Prefer putting half on each side so critical chains stay centred.
-        n_left = len(non_crit_keys) // 2
-        left_keys = non_crit_keys[:n_left]
-        right_keys = non_crit_keys[n_left:]
-
-        new_order = left_keys + crit_keys + right_keys
+        if anchor_key and anchor_key in non_crit_keys:
+            rest = [k for k in non_crit_keys if k != anchor_key]
+            anchor_x = envelopes[anchor_key][0]
+            left_keys = [k for k in rest if envelopes[k][0] < anchor_x]
+            right_keys = [k for k in rest if envelopes[k][0] >= anchor_x]
+            # Keep critical chains adjacent to the protected anchor so we
+            # tighten target nets without dragging the anchor chain itself.
+            new_order = left_keys + crit_keys + [anchor_key] + right_keys
+        else:
+            n_left = len(non_crit_keys) // 2
+            left_keys = non_crit_keys[:n_left]
+            right_keys = non_crit_keys[n_left:]
+            new_order = left_keys + crit_keys + right_keys
         print(f"[DIAG-CLUSTER] row={row_key} sorted_keys={sorted_keys} new_order={new_order} crit={crit_keys} non_crit={non_crit_keys}")
 
-        # --- re-place chains left-to-right --------------------------------
-        # Start from the leftmost position in the row.
-        row_min_x = min(envelopes[ck][0] for ck in sorted_keys)
-        cursor = row_min_x
+        # --- re-place chains -----------------------------------------------
+        if anchor_key and anchor_key in new_order:
+            # Keep anchor X fixed; place left and right sides relative to it.
+            a_idx = new_order.index(anchor_key)
+            left_part = new_order[:a_idx]
+            right_part = new_order[a_idx + 1:]
+            anchor_origin = envelopes[anchor_key][0]
+            anchor_width = envelopes[anchor_key][1]
 
-        for ck in new_order:
-            chain_nodes = chains[ck]
-            old_origin = envelopes[ck][0]
-            shift = cursor - old_origin
-            if abs(shift) > 1e-6:
-                for n in chain_nodes:
-                    geo = n.setdefault("geometry", {})
-                    geo["x"] = round(float(geo.get("x", 0.0)) + shift, 6)
-            # advance cursor past this chain + inter-chain gap
-            chain_width = envelopes[ck][1]
-            cursor = round(cursor + chain_width + STD_PITCH, 6)
+            # Anchor remains at original origin
+            for n in chains[anchor_key]:
+                geo = n.setdefault("geometry", {})
+                geo["x"] = round(float(geo.get("x", 0.0)), 6)
+
+            # Left side (place outward from anchor)
+            cursor_left = round(anchor_origin - STD_PITCH, 6)
+            for ck in reversed(left_part):
+                chain_nodes = chains[ck]
+                old_origin = envelopes[ck][0]
+                chain_width = envelopes[ck][1]
+                new_origin = round(cursor_left - chain_width, 6)
+                shift = new_origin - old_origin
+                if abs(shift) > 1e-6:
+                    for n in chain_nodes:
+                        geo = n.setdefault("geometry", {})
+                        geo["x"] = round(float(geo.get("x", 0.0)) + shift, 6)
+                cursor_left = round(new_origin - STD_PITCH, 6)
+
+            # Right side
+            cursor_right = round(anchor_origin + anchor_width + STD_PITCH, 6)
+            for ck in right_part:
+                chain_nodes = chains[ck]
+                old_origin = envelopes[ck][0]
+                chain_width = envelopes[ck][1]
+                new_origin = cursor_right
+                shift = new_origin - old_origin
+                if abs(shift) > 1e-6:
+                    for n in chain_nodes:
+                        geo = n.setdefault("geometry", {})
+                        geo["x"] = round(float(geo.get("x", 0.0)) + shift, 6)
+                cursor_right = round(new_origin + chain_width + STD_PITCH, 6)
+        else:
+            # Start from the leftmost position in the row.
+            row_min_x = min(envelopes[ck][0] for ck in sorted_keys)
+            cursor = row_min_x
+
+            for ck in new_order:
+                chain_nodes = chains[ck]
+                old_origin = envelopes[ck][0]
+                shift = cursor - old_origin
+                if abs(shift) > 1e-6:
+                    for n in chain_nodes:
+                        geo = n.setdefault("geometry", {})
+                        geo["x"] = round(float(geo.get("x", 0.0)) + shift, 6)
+                # advance cursor past this chain + inter-chain gap
+                chain_width = envelopes[ck][1]
+                cursor = round(cursor + chain_width + STD_PITCH, 6)
 
         # --- record critical cluster centre for cross-row alignment ------
         crit_xs = []
@@ -479,6 +617,10 @@ def _cluster_critical_nets_post_expansion(
         median_centre = sorted(centres)[len(centres) // 2]
 
         for row_key, centre, _hw in critical_cluster_info:
+            if row_key in protected_rows:
+                # Preserve protected-anchor rows (e.g., CLK-heavy rows) to
+                # prevent collateral degradation in non-target nets.
+                continue
             shift = median_centre - centre
             if abs(shift) < 1e-4:
                 continue
@@ -492,6 +634,89 @@ def _cluster_critical_nets_post_expansion(
             f"median_centre={median_centre:.4f}  "
             f"rows_aligned={len(critical_cluster_info)}"
         )
+
+    # ── 5. Quality guard (multi-objective accept/reject) ─────────────────
+    # Accept critical-net reshaping only when it does not degrade global
+    # routing quality beyond a bounded margin.  If it over-optimises VOUT*
+    # while blowing up CLK/net2 HPWL, roll back to original nodes.
+    try:
+        from ai_agent.agents.routing_previewer import build_routing_report
+
+        crit_set = set(crit_nets)
+        crit_lower2 = {n.lower() for n in crit_nets}
+
+        before = build_routing_report(
+            original_nodes, [], terminal_nets or {}, user_critical_nets=crit_set
+        )
+        after = build_routing_report(
+            nodes, [], terminal_nets or {}, user_critical_nets=crit_set
+        )
+
+        def _crit_hpwl(rep) -> float:
+            return sum(
+                float(n.hpwl)
+                for n in getattr(rep, "nets", [])
+                if str(getattr(n, "name", "")).lower() in crit_lower2
+            )
+
+        before_crit = _crit_hpwl(before)
+        after_crit = _crit_hpwl(after)
+
+        before_cost = float(getattr(before, "weighted_cost", 0.0))
+        after_cost = float(getattr(after, "weighted_cost", 0.0))
+
+        before_cross = int(getattr(before, "estimated_crossings", 0))
+        after_cross = int(getattr(after, "estimated_crossings", 0))
+
+        # Priority-aware tolerances: High allows a little more tradeoff.
+        if weight >= 10:  # High
+            max_cost_regress = 0.10   # +10%
+            max_cross_regress = 3     # +3 crossings
+            min_crit_improve = 0.10   # -10% critical HPWL
+        elif weight >= 5:  # Medium
+            max_cost_regress = 0.06
+            max_cross_regress = 2
+            min_crit_improve = 0.06
+        else:
+            max_cost_regress = 0.03
+            max_cross_regress = 1
+            min_crit_improve = 0.03
+
+        crit_improve_ratio = (
+            (before_crit - after_crit) / max(before_crit, 1e-9)
+            if before_crit > 1e-9 else 0.0
+        )
+        cost_regress_ratio = (
+            (after_cost - before_cost) / max(before_cost, 1e-9)
+            if before_cost > 1e-9 else 0.0
+        )
+        cross_regress = after_cross - before_cross
+
+        # Always accept if global quality is not worse.
+        global_not_worse = (
+            after_cost <= before_cost + 1e-9 and
+            after_cross <= before_cross
+        )
+
+        # Otherwise require meaningful critical improvement with bounded damage.
+        bounded_tradeoff = (
+            crit_improve_ratio >= min_crit_improve and
+            cost_regress_ratio <= max_cost_regress and
+            cross_regress <= max_cross_regress
+        )
+
+        if not (global_not_worse or bounded_tradeoff):
+            vprint(
+                "[critical_nets_cluster] rollback: "
+                f"crit_hpwl {before_crit:.3f}->{after_crit:.3f} "
+                f"(improve={crit_improve_ratio:.1%}), "
+                f"cost {before_cost:.1f}->{after_cost:.1f} "
+                f"(regress={cost_regress_ratio:.1%}), "
+                f"cross {before_cross}->{after_cross}"
+            )
+            return original_nodes
+    except Exception as _guard_exc:
+        vprint(f"[critical_nets_cluster] quality-guard skipped: {_guard_exc}")
 
     return nodes
 
@@ -702,14 +927,13 @@ def node_placement_specialist(state):
     # Move any such device to the nearest valid active-device row.
     working_nodes = _snap_orphan_dummies(working_nodes)
 
-    # ── Step 3e.5: Post-expansion critical-nets clustering ────────────────
-    # Reorder chains (matched blocks) within each row so that chains sharing
-    # a user-selected critical net are adjacent in the centre, then align
-    # cluster centres across rows for minimal cross-row HPWL.
+    # ── Step 3e.5: Critical-net signal-flow optimization ─────────────────
+    # Move whole rows only, so row internals and matching stay untouched.
     # Gated: completely skipped when feature is off (byte-identical path).
-    log_section("Step 3e.5: Critical-nets post-expansion clustering")
-    _pre_cluster = copy.deepcopy(working_nodes) if vprint else None
-    working_nodes = _cluster_critical_nets_post_expansion(
+    log_section("Step 3e.5: Critical-net signal-flow optimization")
+    from ai_agent.placement.critical_signal_flow import optimize_critical_signal_flow
+    before_signal_flow = copy.deepcopy(working_nodes)
+    working_nodes = optimize_critical_signal_flow(
         working_nodes, terminal_nets, state.get("placement_goals")
     )
     _goals_cfg = (state.get("placement_goals") or {}).get("critical_nets") or {}
@@ -718,6 +942,8 @@ def node_placement_specialist(state):
             f"Critical nets active: {_goals_cfg.get('nets')} "
             f"priority={_goals_cfg.get('priority')}"
         )
+        if working_nodes != before_signal_flow:
+            log_detail("Critical signal-flow row order accepted")
     else:
         log_detail("Critical nets: OFF (skipped)")
 

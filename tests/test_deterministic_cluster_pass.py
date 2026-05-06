@@ -136,6 +136,40 @@ class TestChainReordering:
         # B should be between A and C
         assert a_x < b_x < c_x, f"Expected A < B < C, got A={a_x}, B={b_x}, C={c_x}"
 
+    def test_logical_terminal_nets_keys_map_to_finger_nodes(self):
+        """terminal_nets keyed by logical IDs (MMx) must still classify
+        physical fingers (MMx_mY_fZ) as critical.
+        """
+        from ai_agent.nodes.placement_specialist import _cluster_critical_nets_post_expansion
+
+        nodes = [
+            _make_node("MM1_m1_f1", "nmos", 0.0, 0.0, block_id="MM1_block"),
+            _make_node("MM1_m1_f2", "nmos", 0.294, 0.0, block_id="MM1_block"),
+            _make_node("MM2_m1_f1", "nmos", 0.882, 0.0, block_id="MM2_block"),
+            _make_node("MM2_m1_f2", "nmos", 1.176, 0.0, block_id="MM2_block"),
+            _make_node("MM3_m1_f1", "nmos", 1.764, 0.0, block_id="MM3_block"),
+            _make_node("MM3_m1_f2", "nmos", 2.058, 0.0, block_id="MM3_block"),
+        ]
+
+        # Critical net is only provided at logical parent ID level.
+        tn = {
+            "MM1": {"D": "VX", "G": "VIN", "S": "VSS"},
+            "MM2": {"D": "VOUTP", "G": "VBN", "S": "VSS"},
+            "MM3": {"D": "VY", "G": "VBP", "S": "VDD"},
+        }
+        goals = {"critical_nets": {"priority": "High", "nets": ["VOUTP"]}}
+
+        result = _cluster_critical_nets_post_expansion(nodes, tn, goals)
+        by_id = {n["id"]: n for n in result}
+
+        mm2_x = by_id["MM2_m1_f1"]["geometry"]["x"]
+        mm1_x = by_id["MM1_m1_f1"]["geometry"]["x"]
+        mm3_x = by_id["MM3_m1_f1"]["geometry"]["x"]
+        assert mm1_x < mm2_x < mm3_x, (
+            f"Expected MM1 < MM2 < MM3 with MM2 centered, got "
+            f"MM1={mm1_x}, MM2={mm2_x}, MM3={mm3_x}"
+        )
+
 
 class TestCrossRowAlignment:
     """Critical clusters should be X-aligned across rows."""
