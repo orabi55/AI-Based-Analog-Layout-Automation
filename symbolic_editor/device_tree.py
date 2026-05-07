@@ -231,11 +231,13 @@ class DeviceTreePanel(QWidget):
         # Check if the clicked item is a Group header
         if role == "__group_header__": # Use your specific group role key
             menu = QMenu()
-            delete_action = menu.addAction("Delete Group")
+            delete_action = menu.addAction("Ungroup")
             action = menu.exec(self.tree.viewport().mapToGlobal(position))
             
             if action == delete_action:
-                group_id = item.text(0)
+                group_id = item.data(0, Qt.ItemDataRole.UserRole + 3)
+                if not group_id:
+                    group_id = item.text(0).split("|", 1)[0].strip()
                 self.group_delete_requested.emit(group_id)
 
     def _switch_tab(self, tab_name):
@@ -425,6 +427,8 @@ class DeviceTreePanel(QWidget):
                 group_item = QTreeWidgetItem(custom_root, [f"{name}  |  {len(dev_ids)} devices"])
                 group_item.setFont(0, QFont("Segoe UI", 10, QFont.Weight.DemiBold))
                 group_item.setForeground(0, QColor("#f0d07a"))
+                group_item.setData(0, Qt.ItemDataRole.UserRole, "__group_header__")
+                group_item.setData(0, Qt.ItemDataRole.UserRole + 3, name)
                 if icon_group:
                     group_item.setIcon(0, icon_group())
                 for dev_id in sorted(dev_ids):

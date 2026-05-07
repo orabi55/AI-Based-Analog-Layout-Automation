@@ -1,0 +1,651 @@
+{
+    "version": "2.0",
+    "device_types": {
+        "pmos": {
+            "y_row": 0.668,
+            "default_width": 0.294,
+            "default_height": 0.818
+        },
+        "nmos": {
+            "y_row": 0.0,
+            "default_width": 0.294,
+            "default_height": 0.668
+        },
+        "res": {
+            "y_row": 1.63,
+            "default_width": 0.294,
+            "default_height": 0.1
+        },
+        "cap": {
+            "y_row": 1.63,
+            "default_width": 0.294,
+            "default_height": 0.668
+        }
+    },
+    "devices": {
+        "XI1_MM7": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 5.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "VIN2b",
+                "G": "VIN2",
+                "S": "VDD"
+            },
+            "block": {
+                "instance": "XI1",
+                "subckt": "Inverter"
+            }
+        },
+        "XI1_MM8": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 5.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "VIN2b",
+                "G": "VIN2",
+                "S": "VSS"
+            },
+            "block": {
+                "instance": "XI1",
+                "subckt": "Inverter"
+            }
+        },
+        "XI0_MM7": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 5.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "VIN1b",
+                "G": "VIN1",
+                "S": "VDD"
+            },
+            "block": {
+                "instance": "XI0",
+                "subckt": "Inverter"
+            }
+        },
+        "XI0_MM8": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 5.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "VIN1b",
+                "G": "VIN1",
+                "S": "VSS"
+            },
+            "block": {
+                "instance": "XI0",
+                "subckt": "Inverter"
+            }
+        },
+        "XI3_MM28": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "XI3_Bb",
+                "G": "VIN2b",
+                "S": "VSS"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
+            }
+        },
+        "XI3_MM5": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "XI3_PDN",
+                "G": "XI3_Bb",
+                "S": "VSS"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
+            }
+        },
+        "XI3_MM4": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "XI3_PDN",
+                "G": "VIN1b",
+                "S": "VSS"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
+            }
+        },
+        "XI3_MM3": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "VOUT2",
+                "G": "VIN2b",
+                "S": "XI3_PDN"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
+            }
+        },
+        "XI3_MM2": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "VOUT2",
+                "G": "XI3_Ab",
+                "S": "XI3_PDN"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
+            }
+        },
+        "XI3_MM25": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "XI3_Ab",
+                "G": "VIN1b",
+                "S": "VSS"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
+            }
+        },
+        "XI3_MM29": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "XI3_Bb",
+                "G": "VIN2b",
+                "S": "VDD"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
+            }
+        },
+        "XI3_MM9": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "XI3_PUN",
+                "G": "XI3_Ab",
+                "S": "VDD"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
+            }
+        },
+        "XI3_MM8": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "XI3_PUN",
+                "G": "XI3_Bb",
+                "S": "VDD"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
+            }
+        },
+        "XI3_MM7": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "VOUT2",
+                "G": "VIN2b",
+                "S": "XI3_PUN"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
+            }
+        },
+        "XI3_MM6": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "VOUT2",
+                "G": "VIN1b",
+                "S": "XI3_PUN"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
+            }
+        },
+        "XI3_MM24": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "XI3_Ab",
+                "G": "VIN1b",
+                "S": "VDD"
+            },
+            "block": {
+                "instance": "XI3",
+                "subckt": "Xor"
+            }
+        },
+        "XI2_MM28": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "XI2_Bb",
+                "G": "VIN2b",
+                "S": "VSS"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        "XI2_MM5": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "XI2_PDN",
+                "G": "XI2_Bb",
+                "S": "VSS"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        "XI2_MM4": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "XI2_PDN",
+                "G": "VIN1b",
+                "S": "VSS"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        "XI2_MM3": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "VOUT1",
+                "G": "VIN2b",
+                "S": "XI2_PDN"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        "XI2_MM2": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "VOUT1",
+                "G": "XI2_Ab",
+                "S": "XI2_PDN"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        "XI2_MM25": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "XI2_Ab",
+                "G": "VIN1b",
+                "S": "VSS"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        "XI2_MM29": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "XI2_Bb",
+                "G": "VIN2b",
+                "S": "VDD"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        "XI2_MM9": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "XI2_PUN",
+                "G": "XI2_Ab",
+                "S": "VDD"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        "XI2_MM8": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "XI2_PUN",
+                "G": "XI2_Bb",
+                "S": "VDD"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        "XI2_MM7": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "VOUT1",
+                "G": "VIN2b",
+                "S": "XI2_PUN"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        "XI2_MM6": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "VOUT1",
+                "G": "VIN1b",
+                "S": "XI2_PUN"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        },
+        "XI2_MM24": {
+            "type": "pmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 4.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "XI2_Ab",
+                "G": "VIN1b",
+                "S": "VDD"
+            },
+            "block": {
+                "instance": "XI2",
+                "subckt": "Xor"
+            }
+        }
+    },
+    "connectivity": {
+        "nets": {
+            "VIN2": [
+                "XI1_MM7",
+                "XI1_MM8"
+            ],
+            "VIN2b": [
+                "XI1_MM7",
+                "XI1_MM8",
+                "XI2_MM28",
+                "XI2_MM29",
+                "XI2_MM3",
+                "XI2_MM7",
+                "XI3_MM28",
+                "XI3_MM29",
+                "XI3_MM3",
+                "XI3_MM7"
+            ],
+            "VIN1": [
+                "XI0_MM7",
+                "XI0_MM8"
+            ],
+            "VIN1b": [
+                "XI0_MM7",
+                "XI0_MM8",
+                "XI2_MM24",
+                "XI2_MM25",
+                "XI2_MM4",
+                "XI2_MM6",
+                "XI3_MM24",
+                "XI3_MM25",
+                "XI3_MM4",
+                "XI3_MM6"
+            ],
+            "XI3_Bb": [
+                "XI3_MM28",
+                "XI3_MM29",
+                "XI3_MM5",
+                "XI3_MM8"
+            ],
+            "XI3_PDN": [
+                "XI3_MM2",
+                "XI3_MM3",
+                "XI3_MM4",
+                "XI3_MM5"
+            ],
+            "VOUT2": [
+                "XI3_MM2",
+                "XI3_MM3",
+                "XI3_MM6",
+                "XI3_MM7"
+            ],
+            "XI3_Ab": [
+                "XI3_MM2",
+                "XI3_MM24",
+                "XI3_MM25",
+                "XI3_MM9"
+            ],
+            "XI3_PUN": [
+                "XI3_MM6",
+                "XI3_MM7",
+                "XI3_MM8",
+                "XI3_MM9"
+            ],
+            "XI2_Bb": [
+                "XI2_MM28",
+                "XI2_MM29",
+                "XI2_MM5",
+                "XI2_MM8"
+            ],
+            "XI2_PDN": [
+                "XI2_MM2",
+                "XI2_MM3",
+                "XI2_MM4",
+                "XI2_MM5"
+            ],
+            "VOUT1": [
+                "XI2_MM2",
+                "XI2_MM3",
+                "XI2_MM6",
+                "XI2_MM7"
+            ],
+            "XI2_Ab": [
+                "XI2_MM2",
+                "XI2_MM24",
+                "XI2_MM25",
+                "XI2_MM9"
+            ],
+            "XI2_PUN": [
+                "XI2_MM6",
+                "XI2_MM7",
+                "XI2_MM8",
+                "XI2_MM9"
+            ]
+        }
+    },
+    "drc_rules": {
+        "fin_pitch": 0.014,
+        "row_pitch": 0.668,
+        "device_pitch": 0.294,
+        "abut_pitch": 0.07
+    },
+    "blocks": {
+        "XI1": {
+            "subckt": "Inverter",
+            "devices": [
+                "XI1_MM7",
+                "XI1_MM8"
+            ]
+        },
+        "XI0": {
+            "subckt": "Inverter",
+            "devices": [
+                "XI0_MM7",
+                "XI0_MM8"
+            ]
+        },
+        "XI3": {
+            "subckt": "Xor",
+            "devices": [
+                "XI3_MM28_f1",
+                "XI3_MM28_f2",
+                "XI3_MM5_f1",
+                "XI3_MM5_f2",
+                "XI3_MM4_f1",
+                "XI3_MM4_f2",
+                "XI3_MM3_f1",
+                "XI3_MM3_f2",
+                "XI3_MM2_f1",
+                "XI3_MM2_f2",
+                "XI3_MM25_f1",
+                "XI3_MM25_f2",
+                "XI3_MM29_f1",
+                "XI3_MM29_f2",
+                "XI3_MM9_f1",
+                "XI3_MM9_f2",
+                "XI3_MM8_f1",
+                "XI3_MM8_f2",
+                "XI3_MM7_f1",
+                "XI3_MM7_f2",
+                "XI3_MM6_f1",
+                "XI3_MM6_f2",
+                "XI3_MM24_f1",
+                "XI3_MM24_f2"
+            ]
+        },
+        "XI2": {
+            "subckt": "Xor",
+            "devices": [
+                "XI2_MM28_f1",
+                "XI2_MM28_f2",
+                "XI2_MM5_f1",
+                "XI2_MM5_f2",
+                "XI2_MM4_f1",
+                "XI2_MM4_f2",
+                "XI2_MM3_f1",
+                "XI2_MM3_f2",
+                "XI2_MM2_f1",
+                "XI2_MM2_f2",
+                "XI2_MM25_f1",
+                "XI2_MM25_f2",
+                "XI2_MM29_f1",
+                "XI2_MM29_f2",
+                "XI2_MM9_f1",
+                "XI2_MM9_f2",
+                "XI2_MM8_f1",
+                "XI2_MM8_f2",
+                "XI2_MM7_f1",
+                "XI2_MM7_f2",
+                "XI2_MM6_f1",
+                "XI2_MM6_f2",
+                "XI2_MM24_f1",
+                "XI2_MM24_f2"
+            ]
+        }
+    }
+}
