@@ -15,7 +15,12 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from ai_agent.agents.classifier import classify_intent
 from ai_agent.graph.state import LayoutState
-from ai_agent.graph.edges import route_after_drc, route_after_human, route_by_mode
+from ai_agent.graph.edges import (
+    route_after_drc,
+    route_after_human,
+    route_by_mode,
+    route_after_session_chat,
+)
 from ai_agent.utils.logging import vprint
 from ai_agent.nodes import (
     node_topology_analyst,
@@ -28,6 +33,9 @@ from ai_agent.nodes import (
     node_routing_previewer,
     node_human_viewer,
     node_save_to_rag,
+    node_session_chat,
+    node_session_finalizer,
+    node_command_validator,
 )
 
 
@@ -166,7 +174,83 @@ def build_chat_graph():
 
     return builder.compile(checkpointer=memory), memory
 
+def build_session_chat_graph():
+    """Build the session chatbot LangGraph with two-tier routing.
 
-# Backward compatibility: module-level app for legacy imports
+    Graph shape::
+
+        START
+          → node_session_chat
+          → conditional route_after_session_chat
+
+        answer_only / clarify → node_session_finalizer → END
+        command_edit          → node_command_validator → node_human_viewer → END
+        need_topology         → node_topology_analyst  → node_session_finalizer → END
+        need_strategy         → node_strategy_selector → node_session_finalizer → END
+        need_placement        → node_placement_specialist → node_command_validator → node_human_viewer → END
+        need_drc              → node_drc_critic         → node_session_finalizer → END
+        need_routing          → node_routing_previewer  → node_session_finalizer → END
+    """
+    memory = MemorySaver()
+    builder = StateGraph(LayoutState)
+
+    # ── Register nodes ──
+    builder.add_node("node_session_chat",          node_session_chat)
+    builder.add_node("node_session_finalizer",     node_session_finalizer)
+    builder.add_node("node_command_validator",     node_command_validator)
+    builder.add_node("node_topology_analyst",      node_topology_analyst)
+    builder.add_node("node_strategy_selector",     node_strategy_selector)
+    builder.add_node("node_placement_specialist",  node_placement_specialist)
+    builder.add_node("node_drc_critic",            node_drc_critic)
+    builder.add_node("node_routing_previewer",     node_routing_previewer)
+    builder.add_node("node_human_viewer",          node_human_viewer)
+
+    # ── Entry ──
+    builder.add_edge(START, "node_session_chat")
+
+    # ── Conditional fan-out after session chat ──
+    builder.add_conditional_edges(
+        "node_session_chat",
+        route_after_session_chat,
+        {
+            "node_session_finalizer":    "node_session_finalizer",
+            "node_command_validator":    "node_command_validator",
+            "node_topology_analyst":     "node_topology_analyst",
+            "node_strategy_selector":    "node_strategy_selector",
+            "node_placement_specialist": "node_placement_specialist",
+            "node_drc_critic":           "node_drc_critic",
+            "node_routing_previewer":    "node_routing_previewer",
+        },
+    )
+
+    # ── answer_only / clarify → finalizer → END ──
+    builder.add_edge("node_session_finalizer", END)
+
+    # ── command_edit → validator → human viewer → END ──
+    builder.add_edge("node_command_validator", "node_human_viewer")
+    builder.add_edge("node_human_viewer", END)
+
+    # ── Specialist → finalizer → END ──
+    builder.add_edge("node_topology_analyst",     "node_session_finalizer")
+    builder.add_edge("node_strategy_selector",    "node_session_finalizer")
+    builder.add_edge("node_drc_critic",           "node_session_finalizer")
+    builder.add_edge("node_routing_previewer",    "node_session_finalizer")
+
+    # ── Placement specialist → validator → human viewer → END ──
+    builder.add_edge("node_placement_specialist", "node_command_validator")
+
+    return builder.compile(checkpointer=memory), memory
+
+
+# ── Module-level exports (backward compatibility) ─────────────────────────
+# All three graph builders and their compiled apps are exported at module
+# level so that existing code using ``from ai_agent.graph.builder import app``
+# continues to work without changes.
+#
+#   app              — initial full-placement pipeline   (mode="initial")
+#   chat_app         — legacy chatbot graph              (mode="legacy_chat")
+#   session_chat_app — new session chatbot with routing  (mode="chat")
+#
 app, _memory = build_layout_graph()
 chat_app, _chat_memory = build_chat_graph()
+session_chat_app, _session_chat_memory = build_session_chat_graph()

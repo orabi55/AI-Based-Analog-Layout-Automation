@@ -194,7 +194,11 @@ def node_drc_critic(state):
     # Symmetry mirror guard: if a move cmd targets one side of a [SYMMETRY] pair,
     # inject a mirrored delta for the partner so symmetry is preserved through DRC fixes.
     if sym_pair_map:
-        node_x_map: dict = {str(n.get("id", "")): float(n.get("geometry", {}).get("x", 0.0))
+        node_x_map: dict = {str(n.get("id", "") or n.get("device_id", "") or n.get("name", "")):
+                            float(n.get("geometry", {}).get("x", 0.0))
+                            for n in snapshot if n.get("geometry")}
+        node_y_map: dict = {str(n.get("id", "") or n.get("device_id", "") or n.get("name", "")):
+                            float(n.get("geometry", {}).get("y", 0.0))
                             for n in snapshot if n.get("geometry")}
         extra_cmds = []
         touched_by_guard = set()
@@ -221,7 +225,7 @@ def node_drc_critic(state):
                 "action": "move",
                 "device": partner_id,
                 "x": partner_new_x,
-                "y": cmd.get("y", node_x_map.get(partner_id, 0.0)),
+                "y": cmd.get("y", node_y_map.get(partner_id, 0.0)),
             })
             touched_by_guard.add(dev_id)
             touched_by_guard.add(partner_id)
@@ -275,6 +279,27 @@ def node_drc_critic(state):
         retries_left = max(0, 2 - retry_num)
         ip_step("5/5 DRC Critic", f"attempt {retry_num + 1}, fail ({retries_left} left), {remaining} violations ({elapsed:.1f}s)")
 
+    # ── Build assistant_text for chat visibility ─────────────────────────
+    if final_drc["pass"]:
+        _assistant_text = "DRC check passed — no violations found."
+    else:
+        _n_violations = len(final_drc.get("violations", []))
+        _flag_lines = []
+        for v in structured_flags[:10]:
+            desc = (
+                v.get("description")
+                or v.get("message")
+                or v.get("value")
+                or str(v)
+            )
+            _flag_lines.append(f"- {desc}")
+        if len(structured_flags) > 10:
+            _flag_lines.append(f"- … and {len(structured_flags) - 10} more.")
+        _assistant_text = (
+            f"DRC check found {_n_violations} violation(s):\n"
+            + "\n".join(_flag_lines)
+        )
+
     return {
         "placement_nodes": fixed_nodes,
         "pending_cmds": accumulated_cmds,
@@ -283,4 +308,5 @@ def node_drc_critic(state):
         "chat_history": updated_chat_history,
         "drc_retry_count": retry_num + 1,
         "last_agent": "drc_critic",
+        "assistant_text": _assistant_text,
     }

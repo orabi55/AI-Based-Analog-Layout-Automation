@@ -15,6 +15,9 @@ from ai_agent.nodes.drc_critic import node_drc_critic
 from ai_agent.nodes.routing_previewer import node_routing_previewer
 from ai_agent.nodes.human_viewer import node_human_viewer
 from ai_agent.nodes.save_to_rag import node_save_to_rag
+from ai_agent.nodes.session_chat import node_session_chat
+from ai_agent.nodes.session_finalizer import node_session_finalizer
+from ai_agent.nodes.command_validator import node_command_validator
 
 __all__ = [
     "node_topology_analyst",
@@ -27,4 +30,7 @@ __all__ = [
     "node_routing_previewer",
     "node_human_viewer",
     "node_save_to_rag",
+    "node_session_chat",
+    "node_session_finalizer",
+    "node_command_validator",
 ]

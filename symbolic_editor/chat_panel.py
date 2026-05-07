@@ -6,10 +6,17 @@ QThread via ``OrchestratorWorker`` (multi-agent) or ``LLMWorker``
 (single-agent fallback); the ChatPanel communicates with them
 exclusively through Qt Signals/Slots.
 
-Keyword routing:
-  Words like "optimize", "improve", "auto-place", "fix drc", "reduce"
-  trigger the 4-stage OrchestratorWorker pipeline.
-  All other queries use the standard single-agent LLMWorker path.
+Routing strategy:
+  When a layout is loaded, **all** user messages are dispatched to the
+  ``OrchestratorWorker`` which invokes the session chatbot graph.
+  The session chatbot performs two-tier routing internally:
+    1. Deterministic keyword rules (fast, zero-LLM)
+    2. LLM-backed classifier (for ambiguous queries)
+  The resulting ``session_route`` determines which specialist node runs
+  (DRC, routing, topology, strategy, placement, or answer-only/clarify).
+
+  When **no layout** is loaded, messages use the single-agent LLMWorker
+  path for general-purpose chat.
 """
 
 import os
@@ -45,7 +52,10 @@ except ImportError:
     from icons import icon_panel_toggle
 
 # ---------------------------------------------------------------------------
-# Keywords that trigger the multi-agent Orchestrator pipeline
+# Legacy keyword list (kept for backward compatibility but the session
+# chatbot's deterministic rule_route() now handles routing internally).
+# These are only used to switch the GUI thinking animation to pipeline
+# stage labels when the user's intent is obviously a full-pipeline run.
 # ---------------------------------------------------------------------------
 _ORCHESTRATOR_KEYWORDS = re.compile(
     r"\b("
@@ -102,23 +112,30 @@ class ChatInputEdit(QTextEdit):
 # Chat Panel Widget (Right Panel)
 # -------------------------------------------------
 class ChatPanel(QWidget):
-    """Chat panel for interacting with the LLM.
+    """Chat panel for interacting with the AI assistant.
+
+    Dispatch logic:
+    - **Layout loaded** → all messages go to ``OrchestratorWorker`` which
+      invokes the session chatbot graph.  The session chatbot handles
+      intent classification, specialist routing, and response synthesis
+      internally.  Results appear as ``assistant_text`` in the chat.
+    - **No layout** → single-agent ``LLMWorker`` path for general chat.
 
     Signals:
         command_requested(dict): emitted when the AI response contains
             a [CMD]...[/CMD] block that was successfully parsed.
         request_inference(str, list): single-agent path — dispatches to
-            LLM worker thread for normal chat.
-        request_orchestrated(str, str): multi-agent path — dispatches to
-            OrchestratorWorker with (user_message, layout_context_json).
+            LLM worker thread for normal chat (no layout context).
+        request_orchestrated(str, str): session chatbot path — dispatches
+            to OrchestratorWorker with (user_message, layout_context_json).
     """
 
     command_requested = Signal(dict)  # emits parsed command dicts
     toggle_requested = Signal()        # emitted when the user clicks the panel-toggle button
 
-    # Single-agent path (normal chat)
+    # Single-agent path (no layout loaded — general chat)
     request_inference = Signal(str, list, str)
-    # Multi-agent path (orchestrator pipeline)
+    # Session chatbot path (layout loaded — routes via session_chat_graph)
     request_orchestrated = Signal(str, str, list, str)
     # Resume paths for LangGraph interrupts
     request_resume_strategy = Signal(str)
@@ -636,21 +653,21 @@ class ChatPanel(QWidget):
         self._chat_history.append({"role": "user", "content": text})
         self.input_field.clear()
 
-        # --- Route to orchestrator or single-agent ----------------------
-        # If we have a pending topology, ANY message goes to the Orchestrator
-        # to resume the pipeline, regardless of keywords.
-        # If a layout is loaded, always use the Orchestrator — it contains the
-        # Classifier Agent which does fine-grained intent routing internally.
+        # --- Route to session chatbot or single-agent --------------------
+        # If a layout is loaded, always use the OrchestratorWorker which
+        # invokes the session chatbot graph.  The session chatbot handles
+        # routing internally (answer_only, command_edit, need_drc, etc.).
+        # Without a layout, fall back to the single-agent LLM path.
         if self._layout_context:
 
-            # Layout loaded → use orchestrator with classifier routing.
-            # Set _is_orchestrated = False initially; only abstract intents
-            # trigger the pipeline stage animation. The classifier runs
-            # server-side and routes to chat/question/concrete/abstract.
+            # Layout loaded → session chatbot graph handles all routing.
+            # _is_orchestrated starts False; the intent_classified signal
+            # sets it to True for abstract/pipeline intents to activate
+            # the stage animation.
             self._is_orchestrated = False
             self._call_orchestrator(text)
         else:
-            # No layout loaded → single-agent mode
+            # No layout loaded → single-agent general chat
             self._is_orchestrated = False
             self._call_llm(text)
 
@@ -670,15 +687,19 @@ class ChatPanel(QWidget):
     def _on_intent_classified(self, intent: str):
         """Switch the thinking animation based on the classified intent.
 
-        For 'abstract' intents, activate the 4-stage pipeline animation.
-        For chat/question/concrete, keep the simple 'Thinking...' dots.
+        Handles two kinds of signals:
+        - Legacy ``'abstract'`` intent → activates the 4-stage pipeline animation.
+        - Session route strings (``'need_drc'``, ``'command_edit'``, …) →
+          shows a concise status label (e.g. "🔍 Checking DRC…").
+        - Everything else keeps the simple 'Thinking…' dots.
         """
+        from ai_agent.llm.workers import SESSION_ROUTE_LABELS
+
         if intent == "abstract":
-            # Switch to pipeline stage animation
+            # Switch to pipeline stage animation (legacy initial-placement path)
             self._is_orchestrated = True
             self._stop_thinking()
             self._remove_last_message()
-            # Restart with pipeline stage labels
             self._thinking_dots = 0
             self._thinking_stage = 0
             label = _ORCHESTRATOR_STAGES[0][1]
@@ -686,6 +707,14 @@ class ChatPanel(QWidget):
             self._thinking_timer = QTimer(self)
             self._thinking_timer.timeout.connect(self._animate_thinking)
             self._thinking_timer.start(3800)
+
+        elif intent in SESSION_ROUTE_LABELS:
+            # Session chatbot route — show a concise status label
+            route_label = SESSION_ROUTE_LABELS[intent]
+            self._stop_thinking()
+            self._remove_last_message()
+            self._append_bubble("ai", f"⏳ {route_label}…")
+            # No timer-based animation needed — specialist will respond shortly
 
     # keep backward-compat for external callers (main.py uses this)
     def _append_message(self, sender, text, bg_color, text_color):
@@ -750,7 +779,13 @@ class ChatPanel(QWidget):
     # LLM dispatch helpers
     # -----------------------------------------
     def _call_orchestrator(self, user_message):
-        """Serialize layout context and dispatch to OrchestratorWorker."""
+        """Serialize layout context and dispatch to the session chatbot graph.
+
+        The OrchestratorWorker invokes the ``session_chat_app`` LangGraph
+        which performs two-tier routing (deterministic rules → LLM classifier)
+        and routes to the appropriate specialist (DRC, routing, topology,
+        strategy, placement, or answer-only/clarify).
+        """
         self._start_thinking()
         ctx = self._layout_context or {}
         try:
@@ -781,7 +816,11 @@ class ChatPanel(QWidget):
         )
 
     def _call_llm(self, user_message):
-        """Build prompts and dispatch the request to the single-agent worker thread."""
+        """Build prompts and dispatch to the single-agent worker thread.
+
+        This path is used when no layout is loaded — the LLM handles
+        general-purpose chat without layout-aware routing.
+        """
         self._start_thinking()
 
         system_prompt = build_system_prompt(self._layout_context)

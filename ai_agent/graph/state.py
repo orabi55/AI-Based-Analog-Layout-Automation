@@ -7,7 +7,7 @@ Functions:
 - None (Defines LayoutState TypedDict)
 """
 
-from typing import TypedDict, List, Dict, Any, Literal
+from typing import TypedDict, List, Dict, Any, Literal, Optional
 
 
 class LayoutState(TypedDict):
@@ -77,3 +77,31 @@ class LayoutState(TypedDict):
 
     # --- Agent output cache ---
     placement_text: str
+
+    # ── Session chatbot state fields ──────────────────────────────────────────
+    # Compact record of what initial-placement agents decided (topology,
+    # strategy, placement list, routing, DRC pass/flags).
+    initial_agent_trace: Optional[Dict[str, Any]]
+
+    # Final text to display in the chat UI after any node finishes.
+    assistant_text: Optional[str]
+
+    # Strict route chosen by the session chatbot (see VALID_SESSION_ROUTES).
+    session_route: Optional[str]
+
+    # Confidence score for the chosen route, in the range [0.0, 1.0].
+    route_confidence: Optional[float]
+
+    # True when the session chatbot decides to delegate to a specialist agent.
+    requires_specialist: bool
+
+    # Which specialist to call: one of the five agent names or None.
+    # Valid values: "topology_analyst", "strategy_selector",
+    #               "placement_specialist", "drc_critic", "routing_previewer".
+    specialist_target: Optional[str]
+
+    # Short human-readable reason explaining the routing/specialist decision.
+    session_reason: Optional[str]
+
+    # Raw commands produced by the session chatbot, before validation.
+    session_commands: Optional[List[Dict[str, Any]]]

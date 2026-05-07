@@ -34,6 +34,8 @@ import os
 import uuid
 from typing import cast
 
+from ai_agent.graph.state_utils import build_initial_agent_trace  # noqa: F401 (re-exported)
+
 from PySide6.QtCore import QObject, Signal, Slot
 
 
@@ -185,6 +187,12 @@ class PlacementWorker(QObject):
             snapshot = copy.deepcopy(final_state)
         except Exception:
             snapshot = dict(final_state) if isinstance(final_state, dict) else None
+
+        # Embed a compact agent trace so chat mode can read it without
+        # re-running the pipeline.
+        if isinstance(snapshot, dict):
+            snapshot["initial_agent_trace"] = build_initial_agent_trace(snapshot)
+
         self._last_initial_state = snapshot
         PlacementWorker._last_initial_state = snapshot
         placement_nodes = final_state.get("placement_nodes", [])
@@ -282,7 +290,13 @@ class PlacementWorker(QObject):
 
 
 def get_last_initial_state():
-    """Return the most recent initial-placement graph state snapshot, if any."""
+    """Return the most recent initial-placement graph state snapshot, if any.
+
+    The returned dict (when not None) always contains an
+    ``initial_agent_trace`` key that was computed by
+    :func:`build_initial_agent_trace` immediately after the pipeline
+    finished, so chat-mode workers can access it without recomputing.
+    """
     return PlacementWorker._last_initial_state
 
 

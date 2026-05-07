@@ -1,7 +1,6 @@
-"""
-Graph Routing Logic
+"""Graph Routing Logic
 ==================
-Defines the conditional routing logic for navigating between nodes in the 
+Defines the conditional routing logic for navigating between nodes in the
 LangGraph state machine.
 
 Functions:
@@ -14,6 +13,10 @@ Functions:
 - route_by_mode: Directs the entry point based on the execution mode.
   - Inputs: state (LayoutState)
   - Outputs: name of the first operational node.
+- route_after_session_chat: Routes based on the normalised session_route set by
+  node_session_chat.  Maps each route to the appropriate specialist or finalizer.
+  - Inputs: state (LayoutState)
+  - Outputs: name of the next node.
 """
 
 from ai_agent.graph.state import LayoutState
@@ -47,3 +50,37 @@ def route_by_mode(state: LayoutState):
     if mode == "initial":
         return "full_pipeline"
     return "interactive"
+
+
+# ---------------------------------------------------------------------------
+# Session chat routing
+# ---------------------------------------------------------------------------
+
+#: Maps each session_route value to the downstream node name.
+_SESSION_ROUTE_MAP: dict[str, str] = {
+    "answer_only":    "node_session_finalizer",
+    "clarify":        "node_session_finalizer",
+    "command_edit":   "node_command_validator",
+    "need_topology":  "node_topology_analyst",
+    "need_strategy":  "node_strategy_selector",
+    "need_placement": "node_placement_specialist",
+    "need_drc":       "node_drc_critic",
+    "need_routing":   "node_routing_previewer",
+}
+
+#: Safe default when the route is unknown or missing.
+_SESSION_FALLBACK_NODE = "node_session_finalizer"
+
+
+def route_after_session_chat(state: LayoutState) -> str:
+    """Deterministic edge after node_session_chat.
+
+    Routes **only** on the normalised ``session_route`` that was set by the
+    session chat node.  No user-message inspection, no LLM calls.
+
+    Unknown or ``None`` routes are sent to ``node_session_finalizer`` so the
+    user receives a safe reply rather than hitting a dead-end.
+    """
+    route = state.get("session_route")
+    target = _SESSION_ROUTE_MAP.get(route, _SESSION_FALLBACK_NODE)
+    return target

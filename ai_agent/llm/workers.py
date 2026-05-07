@@ -208,6 +208,147 @@ class LLMWorker(QObject):
 
 
 # -----------------------------------------------------------------
+# extract_assistant_text  (testable helper)
+# -----------------------------------------------------------------
+
+def extract_assistant_text(state: dict) -> str:
+    """Extract a user-facing response from a graph state snapshot.
+
+    Priority:
+    1. ``assistant_text`` — set by session_finalizer, session_chat, or
+       specialist nodes that already produce readable text.
+    2. Route-specific fallbacks for DRC, routing, topology, strategy.
+    3. Empty string (caller decides what to do).
+
+    The worker uses this so it **never** needs to understand specialist
+    internals — it simply reads the already-standardised field.
+    """
+    text = str(state.get("assistant_text") or "").strip()
+    if text:
+        return text
+
+    # Fallback: DRC
+    if state.get("drc_pass") is True:
+        return "DRC check passed — no violations found."
+    drc_flags = state.get("drc_flags")
+    if isinstance(drc_flags, list) and drc_flags:
+        n = len(drc_flags)
+        return f"DRC check found {n} violation(s)."
+
+    # Fallback: routing
+    routing = state.get("routing_result")
+    if isinstance(routing, dict):
+        rt = routing.get("log_text") or routing.get("summary")
+        if rt:
+            return str(rt)
+
+    # Fallback: topology / strategy
+    for key in ("Analysis_result", "strategy_result"):
+        val = state.get(key)
+        if val and isinstance(val, str) and val.strip():
+            return val.strip()[:2000]
+
+    return ""
+
+
+# -----------------------------------------------------------------
+# Session-route extraction from graph streaming events
+# -----------------------------------------------------------------
+
+#: Human-friendly labels shown in the chat panel while routing runs.
+SESSION_ROUTE_LABELS: dict[str, str] = {
+    "answer_only":   "Answering",
+    "command_edit":   "Preparing edit",
+    "need_drc":       "Checking DRC",
+    "need_routing":   "Previewing routing",
+    "need_strategy":  "Checking strategy",
+    "need_topology":  "Analyzing topology",
+    "need_placement": "Computing placement",
+    "clarify":        "Clarifying",
+}
+
+
+def extract_session_route_from_event(event: dict) -> str | None:
+    """Extract ``session_route`` from a LangGraph streaming event.
+
+    The streaming mode ``"updates"`` produces dicts keyed by node name.
+    This function checks for the ``node_session_chat`` key and reads
+    the ``session_route`` from its output.
+
+    Returns:
+        The route string (e.g. ``"need_drc"``) or ``None`` if the event
+        does not contain a session route.
+    """
+    if not isinstance(event, dict):
+        return None
+    for node_name in ("node_session_chat", "session_chat"):
+        node_output = event.get(node_name)
+        if isinstance(node_output, dict):
+            route = node_output.get("session_route")
+            if route and isinstance(route, str):
+                return route
+    return None
+
+
+# -----------------------------------------------------------------
+# Graph-app selector  (testable helper used by _stream_graph)
+# -----------------------------------------------------------------
+
+def select_graph_app(mode: str | None, *, is_resume: bool = False):
+    """Return the correct compiled LangGraph app for the given execution mode.
+
+    Backward-compatibility routing table::
+
+        mode             Graph app              Use case
+        ─────────────────────────────────────────────────────────────────
+        "chat"           session_chat_app       New session chatbot (default
+                                                for layout-aware chat)
+        "legacy_chat"    chat_app               Old chatbot graph (kept for
+                                                backward compatibility)
+        "initial"        app                    Full initial-placement pipeline
+        None / unknown   app                    Preserves previous default
+
+    The old ``build_chat_graph()`` and its ``chat_app`` export remain
+    fully functional.  To invoke them, pass ``mode="legacy_chat"``.
+
+    Args:
+        mode:      ``"initial"``, ``"chat"``, or ``"legacy_chat"``.
+        is_resume: True when resuming from an interrupt (Command(resume=…)).
+
+    Returns:
+        A compiled LangGraph ``CompiledStateGraph``.
+    """
+    from ai_agent.graph.builder import (
+        app            as initial_graph_app,
+        chat_app       as legacy_chat_app,
+        session_chat_app,
+    )
+
+    if mode == "chat":
+        return session_chat_app
+    if mode == "legacy_chat":
+        return legacy_chat_app
+    # Default: initial graph (preserves pre-session-chatbot behavior)
+    return initial_graph_app
+
+
+def _graph_app_label(graph_app) -> str:
+    """Human-readable label for a compiled graph app (for logging)."""
+    from ai_agent.graph.builder import (
+        app            as initial_graph_app,
+        chat_app       as legacy_chat_app,
+        session_chat_app,
+    )
+    if graph_app is session_chat_app:
+        return "session_chat_app"
+    if graph_app is legacy_chat_app:
+        return "legacy_chat_app"
+    if graph_app is initial_graph_app:
+        return "initial_graph_app"
+    return "unknown_graph_app"
+
+
+# -----------------------------------------------------------------
 # OrchestratorWorker — LangGraph multi-agent pipeline driver
 # -----------------------------------------------------------------
 class OrchestratorWorker(LLMWorker):
@@ -226,6 +367,7 @@ class OrchestratorWorker(LLMWorker):
 
     def __init__(self):
         super().__init__()
+        self._active_graph_app = None   # set by _stream_graph, reused on resume
         try:
             from langchain_core.runnables import RunnableConfig
             self.thread_config = cast(RunnableConfig, {
@@ -276,14 +418,32 @@ class OrchestratorWorker(LLMWorker):
             last_state = get_last_initial_state()
             initial_state = copy.deepcopy(last_state) if isinstance(last_state, dict) else {}
 
+            from ai_agent.graph.state_utils import build_initial_agent_trace
+
+            # Resolve the agent trace: prefer the one already embedded in
+            # the snapshot; fall back to computing it on-the-fly; or
+            # use an empty dict so the graph never crashes.
+            _existing_trace = initial_state.get("initial_agent_trace")
+            if not _existing_trace and initial_state:
+                _existing_trace = build_initial_agent_trace(initial_state)
+
             initial_state.update({
-                "mode":            "chat",
-                "intent":          "",
-                "router_target":   "",
-                "last_agent":      initial_state.get("last_agent", ""),
-                "user_message":    user_message,
-                "chat_history":    chat_history,
-                "selected_model":  selected_model,
+                "mode":                "chat",
+                "intent":              "",
+                "router_target":       "",
+                "last_agent":          initial_state.get("last_agent", ""),
+                "user_message":        user_message,
+                "chat_history":        chat_history,
+                "selected_model":      selected_model,
+                "initial_agent_trace": _existing_trace or {},
+                # ── Session chatbot fields (Tasks 5-8) ────────────────
+                "assistant_text":      None,
+                "session_route":       None,
+                "route_confidence":    None,
+                "session_reason":      None,
+                "requires_specialist": False,
+                "specialist_target":   None,
+                "session_commands":    None,
             })
 
             if isinstance(layout_context.get("nodes"), list):
@@ -344,19 +504,27 @@ class OrchestratorWorker(LLMWorker):
 
     def _stream_graph(self, input_data):
         try:
-            from ai_agent.graph.builder import app as initial_graph_app
-            from ai_agent.graph.builder import chat_app as chat_graph_app
             from langgraph.types import Command
 
-            langgraph_app = chat_graph_app if isinstance(input_data, dict) and input_data.get("mode") == "chat" else initial_graph_app
+            langgraph_app = self._resolve_graph_app(input_data)
+            vprint(f"[GRAPH] Using {_graph_app_label(langgraph_app)}", flush=True)
 
             vprint(f"\n[GRAPH] ▶ Streaming LangGraph...", flush=True)
             interrupted = False
             event_count = 0
+            emitted_route = False
             for event in langgraph_app.stream(input_data, self.thread_config, stream_mode="updates"):
                 event_count += 1
                 event_keys = list(event.keys())
                 vprint(f"[GRAPH]   Event #{event_count}: {event_keys}", flush=True)
+
+                # Emit session route signal once (for UI animation)
+                if not emitted_route:
+                    _route = extract_session_route_from_event(event)
+                    if _route:
+                        vprint(f"[GRAPH]   📡 session_route={_route}", flush=True)
+                        self.intent_classified.emit(_route)
+                        emitted_route = True
 
                 if "__interrupt__" in event:
                     interrupt_data = event["__interrupt__"][0].value
@@ -368,10 +536,25 @@ class OrchestratorWorker(LLMWorker):
                         if not isinstance(pending_cmds, list):
                             pending_cmds = []
 
-                        if interrupt_data.get("last_agent") == "topology_analyst": text = interrupt_data.get("Analysis", "")
-                        elif interrupt_data.get("last_agent") == "strategy_selector": text = interrupt_data.get("Strategy", "")
-                        elif interrupt_data.get("last_agent") == "placement_specialist": text = interrupt_data.get("Placement", "")
-                        else: text = ""
+                        # Prefer assistant_text from the graph state
+                        try:
+                            _snap = langgraph_app.get_state(self.thread_config).values
+                            text = extract_assistant_text(_snap)
+                        except Exception:
+                            text = ""
+
+                        # Legacy fallback: agent-specific payload keys
+                        if not text:
+                            last = interrupt_data.get("last_agent", "")
+                            text = (
+                                interrupt_data.get("Analysis", "")
+                                if last == "topology_analyst"
+                                else interrupt_data.get("Strategy", "")
+                                if last == "strategy_selector"
+                                else interrupt_data.get("Placement", "")
+                                if last == "placement_specialist"
+                                else ""
+                            )
 
                         if text:
                             self.response_ready.emit(text)
@@ -388,7 +571,7 @@ class OrchestratorWorker(LLMWorker):
                             vprint("[GRAPH]   ✓ Saved state after visual review", flush=True)
                         except Exception as exc:
                             vprint(f"[GRAPH]   ✗ Failed to save state: {exc}", flush=True)
-                        self._finalize_pipeline()
+                        self._finalize_pipeline(langgraph_app)
                         interrupted = True
                         return
 
@@ -397,23 +580,61 @@ class OrchestratorWorker(LLMWorker):
 
             vprint(f"[GRAPH] ✓ Stream complete ({event_count} events)", flush=True)
             if not interrupted:
-                self._finalize_pipeline()
+                self._finalize_pipeline(langgraph_app)
 
         except Exception as e:
             vprint(f"[GRAPH] ✗ Error: {e}", flush=True)
             self.error_occurred.emit(f"Graph Execution Error: {str(e)}")
 
-    def _finalize_pipeline(self):
+    def _finalize_pipeline(self, langgraph_app=None):
         vprint("\n" + "═"*60, flush=True)
         vprint("  PIPELINE FINALIZATION", flush=True)
         vprint("═"*60, flush=True)
-        try:
-            from ai_agent.graph.builder import app as langgraph_app
-        except ImportError:
-            self.error_occurred.emit("Could not import LangGraph app for finalization.")
-            return
+
+        if self._active_graph_app is None:
+            vprint("[FINALIZE] ⚠ No active graph app stored.", flush=True)
+
+        # Emit assistant_text from the final graph state
+        _app = langgraph_app or self._active_graph_app
+        if _app is not None:
+            try:
+                final_state = _app.get_state(self.thread_config).values
+                text = extract_assistant_text(final_state)
+                if text:
+                    vprint(f"[FINALIZE] Emitting assistant_text ({len(text)} chars)", flush=True)
+                    self.response_ready.emit(text)
+            except Exception as exc:
+                vprint(f"[FINALIZE] ⚠ Could not read state: {exc}", flush=True)
 
         vprint("[FINALIZE] ✓ Pipeline complete — signals emitted.", flush=True)
+
+    # ── Graph-app resolution (instance method) ────────────────────
+
+    def _resolve_graph_app(self, input_data):
+        """Pick the right graph app and store it for later resume calls.
+
+        * **Initial invoke** (``input_data`` is a ``dict``): select the graph
+          app via :func:`select_graph_app`, store it in ``_active_graph_app``.
+        * **Resume** (``input_data`` is a ``Command``): reuse the previously
+          stored ``_active_graph_app``.  Falls back to the initial graph
+          app if nothing was stored (should not happen in normal flow).
+        """
+        from langgraph.types import Command
+
+        if isinstance(input_data, Command):
+            if self._active_graph_app is not None:
+                return self._active_graph_app
+            vprint(
+                "[GRAPH] ⚠ Resume without stored active graph — "
+                "falling back to select_graph_app(None)",
+                flush=True,
+            )
+            self._active_graph_app = select_graph_app(None)
+            return self._active_graph_app
+
+        mode = input_data.get("mode") if isinstance(input_data, dict) else None
+        self._active_graph_app = select_graph_app(mode)
+        return self._active_graph_app
 
     @Slot(str)
     def resume_with_strategy(self, user_choice: str):
