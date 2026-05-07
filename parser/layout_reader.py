@@ -34,8 +34,31 @@ def _is_capacitor_cell(cell_name):
             name_lower.startswith("cap_"))
 
 
+def _is_dummy_cell(cell_name):
+    """Check if a cell name is a layout dummy/filler device."""
+    name_lower = cell_name.lower()
+    return (
+        "dummy" in name_lower
+        or name_lower.startswith(("dmy", "dum_"))
+        or name_lower.startswith(("filler_dummy", "edge_dummy"))
+    )
+
+
+def _dummy_device_type(cell_name, params=None):
+    """Infer whether a dummy reference should behave like NMOS or PMOS."""
+    params = params or {}
+    tokens = " ".join(str(v).lower() for v in [cell_name, *params.values()])
+    if any(key in tokens for key in ("pfet", "pmos", "pch", "pmos")):
+        return "pmos"
+    if any(key in tokens for key in ("nfet", "nmos", "nch")):
+        return "nmos"
+    return "nmos"
+
+
 def _is_via_or_utility(cell_name):
     """Check if a cell name is a VIA or other non-transistor utility cell."""
+    if _is_dummy_cell(cell_name):
+        return False
     name_lower = cell_name.lower()
     return ("via" in name_lower or "stdvia" in name_lower or
             "fill" in name_lower or "tap" in name_lower or
@@ -185,7 +208,9 @@ def _walk_layout_references(
             width = 0
             height = 0
 
-        if _is_transistor_cell(cell_name):
+        is_dummy = _is_dummy_cell(cell_name)
+
+        if is_dummy or _is_transistor_cell(cell_name):
             params = _parse_pcell_params(ref_cell, ref)
             entry = {
                 "cell": cell_name,
@@ -199,6 +224,9 @@ def _walk_layout_references(
                 "abut_left": params.get("leftAbut") == "1",
                 "abut_right": params.get("rightAbut") == "1",
             }
+            if is_dummy:
+                entry["is_dummy"] = True
+                entry["dummy_type"] = _dummy_device_type(cell_name, params)
         elif _is_resistor_cell(cell_name) or _is_capacitor_cell(cell_name):
             passive_type = "res" if _is_resistor_cell(cell_name) else "cap"
             params = _parse_pcell_params(ref_cell, ref)
@@ -279,7 +307,9 @@ def _extract_recursive(cell, lib, offset_x=0.0, offset_y=0.0,
         abs_x = offset_x + rx
         abs_y = offset_y + ry
 
-        if _is_transistor_cell(cell_name):
+        is_dummy = _is_dummy_cell(cell_name)
+
+        if is_dummy or _is_transistor_cell(cell_name):
             # Leaf transistor PCell — record it
             orientation = _orientation_from_ref_transform(rotation, mirrored)
 
@@ -293,7 +323,7 @@ def _extract_recursive(cell, lib, offset_x=0.0, offset_y=0.0,
                 height = 0
 
             params = _parse_pcell_params(ref_cell, ref)
-            devices.append({
+            entry = {
                 "cell": cell_name,
                 "x": abs_x,
                 "y": abs_y,
@@ -304,7 +334,11 @@ def _extract_recursive(cell, lib, offset_x=0.0, offset_y=0.0,
                 "params": params,
                 "abut_left":  params.get("leftAbut") == "1",
                 "abut_right": params.get("rightAbut") == "1",
-            })
+            }
+            if is_dummy:
+                entry["is_dummy"] = True
+                entry["dummy_type"] = _dummy_device_type(cell_name, params)
+            devices.append(entry)
 
         elif _is_resistor_cell(cell_name) or _is_capacitor_cell(cell_name):
             # Passive PCell — record it with passive_type tag
@@ -371,7 +405,8 @@ def extract_layout_instances(layout_file):
     top_cell = lib.top_level()[0]
 
     def _is_known_device(cell_name):
-        return (_is_transistor_cell(cell_name) or
+        return (_is_dummy_cell(cell_name) or
+                _is_transistor_cell(cell_name) or
                 _is_resistor_cell(cell_name) or
                 _is_capacitor_cell(cell_name))
 

@@ -27,6 +27,9 @@ def split_layout_by_type(layout_devices):
     groups = {dtype: [] for dtype in _DEVICE_TYPES}
 
     for idx, dev in enumerate(layout_devices):
+        if dev.get("is_dummy"):
+            continue
+
         cell = str(dev.get("cell", "")).lower()
         ptype = dev.get("passive_type", "")
 
