@@ -51,11 +51,17 @@ from parser.device_matcher import match_devices
 # ------------------------------------------------------------------
 _ORIENT_TO_GDSTK = {
     "R0":        (0,   False),
-    "R0_FH":     (0,   True),
-    "R0_FV":     (180, True),
+    # gdstk/GDS x_reflection is an MX transform (mirror about the X axis).
+    # Symbolic FH means left/right mirror, so it maps to MY: MX + R180.
+    "R0_FH":     (180, True),
+    "R0_FV":     (0,   True),
     "R0_FH_FV":  (180, False),
+    "FH":        (180, True),
+    "FV":        (0,   True),
     "MX":        (0,   True),
     "MY":        (180, True),
+    "MXR90":     (90,  True),
+    "MXR270":    (270, True),
     "R90":       (90,  False),
     "R180":      (180, False),
     "R270":      (270, False),
@@ -63,7 +69,7 @@ _ORIENT_TO_GDSTK = {
 
 
 def _orient_to_gdstk(orient_str):
-    orient_str = (orient_str or "R0").strip()
+    orient_str = (orient_str or "R0").strip().upper()
     deg, mirror = _ORIENT_TO_GDSTK.get(orient_str, (0, False))
     return math.radians(deg), mirror
 

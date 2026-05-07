@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QMenu,
     QColorDialog,
 )
-from PySide6.QtGui import QBrush, QPen, QColor, QFont, QPainter, QLinearGradient
+from PySide6.QtGui import QBrush, QPen, QColor, QFont, QPainter, QLinearGradient, QPainterPath
 from PySide6.QtCore import Qt, QRectF, QObject, Signal, QPointF
 
 
@@ -14,6 +14,7 @@ class DeviceSignals(QObject):
     """Helper QObject so DeviceItem (a QGraphicsRectItem) can emit signals."""
     drag_started = Signal()   # emitted when user begins dragging
     drag_finished = Signal()  # emitted when user releases after drag
+    position_changed = Signal()  # emitted after the item position changes
 
 
 class DeviceItem(QGraphicsRectItem):
@@ -261,6 +262,33 @@ class DeviceItem(QGraphicsRectItem):
             painter.setPen(Qt.PenStyle.NoPen)
             painter.drawRect(rect)
 
+    def _draw_r0_notch(self, painter, rect):
+        """Draw a small top-edge notch when the device is in canonical R0."""
+        if self._is_dummy or self._flip_h or self._flip_v:
+            return
+        x0, y0 = rect.x(), rect.y()
+        w, h = rect.width(), rect.height()
+        notch_w = max(7.0, min(14.0, w * 0.14))
+        notch_d = max(4.0, min(8.0, h * 0.08))
+        notch_x = x0 + max(notch_w * 0.75, w * 0.14)
+
+        path = QPainterPath()
+        path.moveTo(notch_x - notch_w / 2.0, y0 + 1.0)
+        path.lineTo(notch_x, y0 + notch_d)
+        path.lineTo(notch_x + notch_w / 2.0, y0 + 1.0)
+        path.closeSubpath()
+
+        fill = QColor("#0b0f16")
+        fill.setAlpha(170)
+        edge = QColor("#f8fafc")
+        edge.setAlpha(210)
+        pen = QPen(edge, 1.2, Qt.PenStyle.SolidLine,
+                   Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+        pen.setCosmetic(True)
+        painter.setBrush(QBrush(fill))
+        painter.setPen(pen)
+        painter.drawPath(path)
+
     def _get_net_color(self, net_name):
         """Return a consistent unique QColor for a given net name."""
         if not net_name or net_name == "?":
@@ -359,6 +387,8 @@ class DeviceItem(QGraphicsRectItem):
         if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
             if self._original_z is not None:
                 self.setZValue(self._original_z)
+            if hasattr(self, "signals"):
+                self.signals.position_changed.emit()
         
         return super().itemChange(change, value)
 
@@ -537,6 +567,7 @@ class DeviceItem(QGraphicsRectItem):
                         painter.drawText(rect_lbl, Qt.AlignmentFlag.AlignCenter, lbl)
                         painter.restore()
 
+            self._draw_r0_notch(painter, rect)
             return
 
         w    = rect.width()
@@ -805,6 +836,8 @@ class DeviceItem(QGraphicsRectItem):
         painter.restore() # ── End of flipped device body (Balanced) ──────────
 
         # ── Device name — pill badge in upper portion ────────────────
+        self._draw_r0_notch(painter, rect)
+
         display_name = self.device_name
         if self._is_dummy:
             parts = self.device_name.split("_")

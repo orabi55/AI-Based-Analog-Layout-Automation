@@ -27,6 +27,34 @@ def _log(msg: str):
     from ai_agent.utils.logging import vprint
     vprint(f"[CMD] {msg}")
 
+
+def _canonical_orientation(orient: str) -> str:
+    token = str(orient or "R0").strip().upper()
+    if token in {"MY", "R0_FH", "FH", "MXR180"}:
+        return "R0_FH"
+    if token in {"MX", "R0_FV", "FV", "MXR0"}:
+        return "R0_FV"
+    if token in {"R180", "R0_FH_FV", "FH_FV", "FV_FH"}:
+        return "R0_FH_FV"
+    return "R0"
+
+
+def _flip_orientation(orient: str, axis: str) -> str:
+    token = _canonical_orientation(orient)
+    if axis == "v":
+        return {
+            "R0": "R0_FV",
+            "R0_FV": "R0",
+            "R0_FH": "R0_FH_FV",
+            "R0_FH_FV": "R0_FH",
+        }.get(token, token)
+    return {
+        "R0": "R0_FH",
+        "R0_FH": "R0",
+        "R0_FV": "R0_FH_FV",
+        "R0_FH_FV": "R0_FV",
+    }.get(token, token)
+
 def _device_is_nmos(node: dict) -> bool:
     dev_type = str(node.get("type", "")).lower()
     if dev_type.startswith("p"):
@@ -180,9 +208,9 @@ def apply_cmds_to_nodes(nodes: List[dict], cmds: List[dict]) -> List[dict]:
         elif action in ('flip', 'flip_h', 'flip_v'):
             dev_id = cmd.get('device', cmd.get('id'))
             if dev_id in id_map:
-                cur      = id_map[dev_id]['geometry'].get('orientation', 'R0')
-                flip_map = {'R0': 'R0_FH', 'R0_FH': 'R0', 'R0_FV': 'R0_FH_FV', 'R0_FH_FV': 'R0_FV'}
-                id_map[dev_id]['geometry']['orientation'] = flip_map.get(cur, cur)
+                cur = id_map[dev_id]['geometry'].get('orientation', 'R0')
+                axis = 'v' if action == 'flip_v' else 'h'
+                id_map[dev_id]['geometry']['orientation'] = _flip_orientation(cur, axis)
 
         elif action == 'delete':
             dev_id = cmd.get('device', cmd.get('id'))
