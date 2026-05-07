@@ -36,7 +36,7 @@ from PySide6.QtWidgets import (
     QMenu,
     QColorDialog,
 )
-from PySide6.QtCore import Qt, Signal, QPointF
+from PySide6.QtCore import Qt, Signal, QPointF, QTimer
 from PySide6.QtGui import QPainter, QPen, QPainterPath, QColor, QBrush, QAction, QKeySequence
 
 try:
@@ -153,6 +153,8 @@ class SymbolicEditor(QGraphicsView):
         # Zoom parameters
         self.zoom_factor = 1.15
         self._zoom_level = 1.0
+        self._min_zoom = 0.15
+        self._max_zoom = 8.0
         self.scale_factor = 80
 
         # Device items lookup by id
@@ -225,6 +227,11 @@ class SymbolicEditor(QGraphicsView):
         # Hierarchy group items (arrays, multipliers, fingers)
         self._hierarchy_groups = []  # list of top-level HierarchyGroupItem
         self._hierarchy_visible = True  # whether hierarchy groups are shown
+        self._refreshing_block_overlays = False
+        self._overlay_refresh_timer = QTimer(self)
+        self._overlay_refresh_timer.setSingleShot(True)
+        self._overlay_refresh_timer.setInterval(80)
+        self._overlay_refresh_timer.timeout.connect(self._refresh_block_overlays)
 
         # Moving groups only mode
         self._moving_groups_only = False  # when True, moving a device moves its entire group
@@ -442,17 +449,30 @@ class SymbolicEditor(QGraphicsView):
         return QPointF(self._snap_value(x), self._snap_row(y))
 
     def _on_scene_changed(self, _regions):
-        """Keep occupancy guides and block overlays fresh when devices move/add/remove."""
+        """Keep occupancy guides fresh while avoiding heavy live redraws."""
         self.resetCachedContent()
-        
-        # In Transistor view, we redraw overlays around the individual devices
-        if self._view_level == "transistor" and self._block_overlays_visible and self._blocks:
+
+        if (
+            not self._refreshing_block_overlays
+            and self._view_level == "transistor"
+            and self._block_overlays_visible
+            and self._blocks
+        ):
+            self._overlay_refresh_timer.start()
+
+    def _refresh_block_overlays(self):
+        if not (
+            self._view_level == "transistor"
+            and self._block_overlays_visible
+            and self._blocks
+        ):
+            return
+        self._refreshing_block_overlays = True
+        try:
             self._clear_block_overlays()
             self._draw_block_overlays()
-            
-        # Optional: could update block item sizes here too, but they maintain size during move
-
-
+        finally:
+            self._refreshing_block_overlays = False
     def _compute_dummy_candidate(self, scene_pos, snap_to_free=True):
         """Build a preview candidate aligned to nearest NMOS/PMOS row.
 
@@ -633,31 +653,25 @@ class SymbolicEditor(QGraphicsView):
         if widths:
             min_w = min(widths)
             col_gap = 0.0
-            # Use a finer grid: half of the minimum device width
-            self._snap_grid = max(1.0, (min_w + col_gap) / 2.0)
+            self._snap_grid = max(1.0, min_w + col_gap)
         if heights:
             max_h = max(heights)
-            if self._custom_row_gap is not None:
-                row_gap = self._custom_row_gap
-            else:
-                row_gap = max(24.0, max_h * 0.55)
+            row_gap = 0.0
             self._row_pitch = max(1.0, max_h + row_gap)
 
         if compact:
             # Grid-snap mode: apply snap grid to items and compact rows.
             for item in self.device_items.values():
-                item.set_snap_grid(self._snap_grid, self._snap_grid)
+                item.set_snap_grid(self._snap_grid, self._row_pitch)
             for item in self.device_items.values():
                 item.setPos(self._snap_point(item.pos().x(), item.pos().y()))
             self._compact_rows_abutted()
         else:
             # Exact-coordinate mode (OAS import / AI placement):
-            # Do NOT apply snap grid to items so itemChange never rounds
-            # the original layout coordinates during subsequent operations.
-            # Snap grid is still stored for UI helpers (row/col display etc.)
-            # but items stay free until the user explicitly drags them.
+            # Preserve loaded coordinates, then use the same drag snap behavior
+            # as regular canvas movement once the user interacts with an item.
             for item in self.device_items.values():
-                item.set_snap_grid(None, None)   # disable per-item snapping
+                item.set_snap_grid(self._snap_grid, self._row_pitch)
             self._skip_compaction = True          # skip the set_terminal_nets compaction
 
         # Practically unlimited canvas.
@@ -1237,22 +1251,36 @@ class SymbolicEditor(QGraphicsView):
         return row
 
     def _compact_rows_abutted(self, row_keys=None):
-        """Pack row devices edge-to-edge to emulate abutted placement rows."""
+        """Pack row devices and collapse occupied rows onto touching tracks."""
         rows = {}
         for item in self.device_items.values():
             row_y = self._snap_row(item.pos().y())
             key = (getattr(item, "device_type", ""), row_y)
-            if row_keys is not None and key not in row_keys:
-                continue
             rows.setdefault(key, []).append(item)
 
-        for (_, row_y), items in rows.items():
+        if not rows:
+            return
+
+        occupied_rows = sorted({row_y for _, row_y in rows.keys()})
+        row_y_map = {
+            row_y: index * self._row_pitch
+            for index, row_y in enumerate(occupied_rows)
+        }
+
+        for key, items in rows.items():
             if not items:
                 continue
+            _, row_y = key
+            target_row_y = row_y_map[row_y]
+            if row_keys is not None and key not in row_keys:
+                for it in items:
+                    it.setPos(it.pos().x(), target_row_y)
+                continue
+
             ordered = self._order_row_items(items)
             x_cursor = self._snap_value(min(it.pos().x() for it in ordered))
             for i, it in enumerate(ordered):
-                it.setPos(x_cursor, row_y)
+                it.setPos(x_cursor, target_row_y)
                 
                 # Default: move by full width
                 next_step = it.rect().width()
@@ -1261,7 +1289,9 @@ class SymbolicEditor(QGraphicsView):
                 # use the validator's expected 0.070um spacing.
                 if i < len(ordered) - 1:
                     next_it = ordered[i+1]
-                    if it.get_abut_right() and next_it.get_abut_left():
+                    abut_right = getattr(it, "get_abut_right", lambda: False)()
+                    abut_left = getattr(next_it, "get_abut_left", lambda: False)()
+                    if abut_right and abut_left:
                         # 0.070um is the magic "overlap" pitch for shared diffusion in the AI validator
                         next_step = 0.070 * self.scale_factor
                 
@@ -1364,12 +1394,16 @@ class SymbolicEditor(QGraphicsView):
         self.resetCachedContent()
 
     def set_custom_row_gap(self, gap_px):
-        """Override the automatic row gap.
-
-        Args:
-            gap_px: gap in scene pixels between rows, or None for auto.
-        """
-        self._custom_row_gap = float(gap_px) if gap_px is not None else None
+        """Keep symbolic rows abutted; ignore custom row-gap requests."""
+        self._custom_row_gap = 0.0
+        if self.device_items:
+            heights = [item.rect().height() for item in self.device_items.values()]
+            if heights:
+                self._row_pitch = max(1.0, max(heights))
+            for item in self.device_items.values():
+                item.set_snap_grid(self._snap_grid, self._row_pitch)
+            self._compact_rows_abutted()
+            self.resetCachedContent()
 
     def get_row_col(self, dev_id):
         item = self.device_items.get(dev_id)
@@ -1409,7 +1443,7 @@ class SymbolicEditor(QGraphicsView):
         span = max(1, int(math.ceil(item.rect().width() / self._snap_grid)))
         return start, start + span - 1, span
 
-    def resolve_overlaps(self, anchor_ids=None):
+    def resolve_overlaps(self, anchor_ids=None, compact=True):
         """Resolve overlaps locally around anchors so unaffected devices stay put."""
         anchors = set(anchor_ids or [])
         rows = {}
@@ -1454,7 +1488,8 @@ class SymbolicEditor(QGraphicsView):
                         if other not in seen:
                             queue.append(other)
                 seen.add(current)
-        self._compact_rows_abutted()
+        if compact:
+            self._compact_rows_abutted()
 
     def set_edges(self, edges):
         """Store edge data and build connectivity lookup."""
@@ -1656,6 +1691,7 @@ class SymbolicEditor(QGraphicsView):
     def _show_connections(self, dev_id):
         """Draw curved lines from dev_id terminals to connected device terminals."""
         self.clear_highlighted_net()
+        self._reset_dimming()
         self._clear_connections()
         connections = self._conn_map.get(dev_id, [])
         if not connections:
@@ -1680,11 +1716,11 @@ class SymbolicEditor(QGraphicsView):
                 )
         finally:
             self.scene.blockSignals(False)
+        self.scene.update()
 
     def _show_net_connections(self, dev_id, net_name):
-        """Highlight a selected net while keeping other nets dimmed for context."""
-        self._clear_connections()
-        self.set_highlighted_net(net_name)
+        """Highlight and route a selected net from tree/schematic interactions."""
+        self.highlight_net_by_name(net_name)
 
     def highlight_net_by_name(self, net_name: str, color=None):
         """Highlight a net across the layout and draw dotted flight lines (ratsnest).
@@ -1737,6 +1773,32 @@ class SymbolicEditor(QGraphicsView):
         # Apply focus dimming to non-connected devices
         self._apply_dimming_for_selection(connected_items)
 
+        wire_color = QColor(color) if color else QColor("#00e5ff")
+        wire_color.setAlpha(220)
+        drawn_any = False
+        edge_index = 0
+
+        self.scene.blockSignals(True)
+        try:
+            for src, tgt, edge_net in self._iter_drawable_edges():
+                if str(edge_net).strip().upper() != net_up:
+                    continue
+                if self._add_connection_line(
+                    src, tgt, edge_net, edge_index,
+                    wire_color, 2.0,
+                    style=Qt.PenStyle.SolidLine,
+                    alpha=230,
+                    z=20,
+                ):
+                    drawn_any = True
+                    edge_index += 1
+        finally:
+            self.scene.blockSignals(False)
+
+        if drawn_any:
+            self.scene.update()
+            return
+
         if len(anchor_points) < 2:
             return  # nothing to connect
 
@@ -1745,8 +1807,7 @@ class SymbolicEditor(QGraphicsView):
         anchor_points.sort(key=lambda p: p.x())
 
         # Bright cyan dotted lines — clearly visible on the dark layout background
-        flight_color = QColor("#00e5ff")
-        flight_color.setAlpha(220)
+        flight_color = wire_color
         pen = QPen(flight_color, 1.8, Qt.PenStyle.DotLine,
                    Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
         pen.setCosmetic(True)
@@ -1831,16 +1892,15 @@ class SymbolicEditor(QGraphicsView):
             self._clear_connections()
             self._reset_dimming()
             return
-        
-        # Clear any lingering net highlights — transistor and net highlights are mutually exclusive
-        self._clear_connections()
+
+        # Clear any lingering net highlights; selected devices keep full opacity.
         self.clear_highlighted_net()
+        self._reset_dimming()
         
         # Emit the signal for the first selectable device
         dev_id = selected[0].device_name
         self.device_clicked.emit(dev_id)
-        # Apply dimming to all non-selected devices
-        self._apply_dimming_for_selection(selected)
+        self._show_connections(dev_id)
 
     def _apply_dimming_for_selection(self, selected_items):
         """Dim all devices EXCEPT the selected ones to create a 'Focus Mode'."""
@@ -1923,8 +1983,11 @@ class SymbolicEditor(QGraphicsView):
                         matched_items.append(fitem)
 
         self.scene.blockSignals(False)
-        # Apply focus dimming to non-matched devices
-        self._apply_dimming_for_selection(matched_items)
+        self._reset_dimming()
+        self.clear_highlighted_net()
+        self._clear_connections()
+        if matched_items:
+            self._show_connections(matched_items[0].device_name)
         # Trigger visual repaint
         self.scene.update()
 
@@ -2186,62 +2249,108 @@ class SymbolicEditor(QGraphicsView):
     # Background Grid
     # -------------------------------------------------
     def drawBackground(self, painter: QPainter, rect):
-        """Draw row track bands — occupied and virtual (empty) rows."""
+        """Draw a compact cached canvas panel around the active layout."""
         super().drawBackground(painter, rect)
 
-        # Draw a beautiful infinite cartesian grid
-        left = int(math.floor(rect.left()))
-        right = int(math.ceil(rect.right()))
-        top = int(math.floor(rect.top()))
-        bottom = int(math.ceil(rect.bottom()))
+        has_devices = bool(self.device_items)
+        has_virtual = self._virtual_row_count > 0 or self._virtual_col_count > 0
+        if not has_devices and not has_virtual:
+            return
 
-        first_left = left - (left % self._grid_size)
-        first_top = top - (top % self._grid_size)
+        if has_devices:
+            all_items = list(self.device_items.values())
+            ref_min_x = min(it.pos().x() for it in all_items)
+            ref_max_x = max(it.pos().x() + it.rect().width() for it in all_items)
+            ref_min_y = min(self._snap_row(it.pos().y()) for it in all_items)
+            ref_max_y = max(
+                self._snap_row(it.pos().y()) + it.rect().height()
+                for it in all_items
+            )
+        else:
+            ref_min_x = 0.0
+            ref_max_x = 0.0
+            ref_min_y = 0.0
+            ref_max_y = self._row_pitch
 
-        lines_minor = []
-        lines_major = []
-        
-        from PySide6.QtCore import QLineF
-        for x in range(first_left, right, self._grid_size):
-            if x % (self._grid_size * 5) == 0:
-                lines_major.append(QLineF(x, top, x, bottom))
-            else:
-                lines_minor.append(QLineF(x, top, x, bottom))
-                
-        for y in range(first_top, bottom, self._grid_size):
-            if y % (self._grid_size * 5) == 0:
-                lines_major.append(QLineF(left, y, right, y))
-            else:
-                lines_minor.append(QLineF(left, y, right, y))
-                
-        # Draw minor grid lines
-        painter.setPen(QPen(self._grid_color, 1.0))
-        painter.drawLines(lines_minor)
-        
-        # Draw major grid lines
-        painter.setPen(QPen(self._grid_color_major, 1.2))
-        painter.drawLines(lines_major)
+        virtual_right_x = (
+            ref_min_x + self._virtual_col_count * self._snap_grid
+            if self._virtual_col_count > 0
+            else ref_max_x
+        )
+        virtual_bottom_y = (
+            ref_min_y + self._virtual_row_count * self._row_pitch
+            if self._virtual_row_count > 0
+            else ref_max_y
+        )
+
+        global_left = ref_min_x
+        global_right = max(ref_max_x, virtual_right_x)
+        global_top = ref_min_y
+        global_bottom = max(ref_max_y, virtual_bottom_y)
+
+        pad_x = 16.0
+        pad_y = 10.0
+        panel_x = global_left - pad_x
+        panel_w = (global_right - global_left) + (pad_x * 2)
+        panel_y = global_top - pad_y
+        panel_h = (global_bottom - global_top) + (pad_y * 2)
+
+        if (
+            panel_x > rect.right()
+            or panel_x + panel_w < rect.left()
+            or panel_y > rect.bottom()
+            or panel_y + panel_h < rect.top()
+        ):
+            return
+
+        painter.setPen(QPen(QColor("#2d3548"), 1.0))
+        painter.setBrush(QBrush(QColor("#151c28")))
+        painter.drawRoundedRect(panel_x, panel_y, panel_w, panel_h, 4.0, 4.0)
 
     # -------------------------------------------------
     # Zoom with Mouse Wheel
     # -------------------------------------------------
     def wheelEvent(self, event):
-        if event.angleDelta().y() > 0:
-            self.scale(self.zoom_factor, self.zoom_factor)
-        else:
-            self.scale(1 / self.zoom_factor, 1 / self.zoom_factor)
-        self._zoom_level = self.transform().m11()
+        delta = event.angleDelta().y()
+        if delta == 0:
+            delta = event.pixelDelta().y()
+        if delta == 0:
+            event.ignore()
+            return
+
+        if event.inverted():
+            delta = -delta
+
+        zoom_step = float(delta) / 120.0
+        self._apply_zoom_factor(self.zoom_factor ** zoom_step)
+        event.accept()
+
+    def _apply_zoom_factor(self, factor):
+        """Apply zoom with hard limits so trackpads stay controllable."""
+        current = self.transform().m11()
+        if current <= 0:
+            return
+
+        target = current * factor
+        if target < self._min_zoom:
+            factor = self._min_zoom / current
+            target = self._min_zoom
+        elif target > self._max_zoom:
+            factor = self._max_zoom / current
+            target = self._max_zoom
+
+        if abs(factor - 1.0) < 1e-12:
+            return
+
+        self.scale(factor, factor)
+        self._zoom_level = target
         self.resetCachedContent()
 
     def zoom_in(self):
-        self.scale(self.zoom_factor, self.zoom_factor)
-        self._zoom_level = self.transform().m11()
-        self.resetCachedContent()
+        self._apply_zoom_factor(self.zoom_factor)
 
     def zoom_out(self):
-        self.scale(1 / self.zoom_factor, 1 / self.zoom_factor)
-        self._zoom_level = self.transform().m11()
-        self.resetCachedContent()
+        self._apply_zoom_factor(1 / self.zoom_factor)
 
     def zoom_reset(self):
         self.resetTransform()
@@ -2254,6 +2363,12 @@ class SymbolicEditor(QGraphicsView):
     def mousePressEvent(self, event):
         self.setFocus(Qt.FocusReason.MouseFocusReason)
         self.viewport().setFocus(Qt.FocusReason.MouseFocusReason)
+        if event.button() == Qt.MouseButton.LeftButton and self.itemAt(event.pos()) is None:
+            self.scene.clearSelection()
+            self._clear_connections()
+            self.clear_highlighted_net()
+            self._reset_dimming()
+            self.scene.update()
         if self._dummy_mode and event.button() == Qt.MouseButton.LeftButton:
             scene_pos = self.mapToScene(event.pos())
             if self._commit_dummy_at(scene_pos):

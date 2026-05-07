@@ -84,6 +84,7 @@ from symbolic_editor.icons import (
     icon_abutment,
     icon_ai_placement,
     icon_colorize,
+    icon_group,
     icon_schematic,
     icon_route,
 )
@@ -604,12 +605,12 @@ class MainWindow(QMainWindow):
         tb.setAllowedAreas(Qt.ToolBarArea.LeftToolBarArea)
         tb.setOrientation(Qt.Orientation.Vertical)
         tb.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
-        tb.setIconSize(QSize(16, 16))
+        tb.setIconSize(QSize(15, 15))
         tb.setStyleSheet(
-            "QToolBar { background-color: #121419; border-right: 1px solid #2a2f38; spacing: 3px; padding: 5px 4px; }"
-            "QToolBar::separator { background-color: #303642; height: 1px; margin: 4px 4px; }"
+            "QToolBar { background-color: #121419; border-right: 1px solid #2a2f38; spacing: 1px; padding: 3px 3px; }"
+            "QToolBar::separator { background-color: #303642; height: 1px; margin: 2px 3px; }"
             "QToolButton { background: transparent; border: 1px solid transparent; border-radius: 6px; "
-            "padding: 3px; color: #d8dde6; min-width: 24px; min-height: 24px; }"
+            "padding: 2px; color: #d8dde6; min-width: 21px; min-height: 21px; }"
             "QToolButton:hover { background-color: #22262e; border-color: #3a424e; }"
             "QToolButton:pressed { background-color: #2b313b; }"
             "QToolButton:checked { background-color: #243546; border-color: #5aa9e6; }"
@@ -699,7 +700,7 @@ class MainWindow(QMainWindow):
         self._act_colorize.toggled.connect(self._on_toggle_colorize)
         tb.addAction(self._act_colorize)
 
-        self._act_moving_groups = QAction("Moving Groups Only", self)
+        self._act_moving_groups = QAction(icon_group(), "Moving Groups Only", self)
         self._act_moving_groups.setCheckable(True)
         self._act_moving_groups.setToolTip("When enabled, dragging a device moves its entire group")
         self._act_moving_groups.toggled.connect(self._on_toggle_moving_groups)
@@ -710,7 +711,7 @@ class MainWindow(QMainWindow):
         self._tb_act_ai.triggered.connect(lambda: self._fwd("do_ai_placement"))
         tb.addAction(self._tb_act_ai)
 
-        self._tb_act_compare = QAction("↔ Before/After", self)
+        self._tb_act_compare = QAction(icon_swap(), "Before/After", self)
         self._tb_act_compare.setToolTip(
             "Toggle between layout before and after symmetry enhancement"
         )
