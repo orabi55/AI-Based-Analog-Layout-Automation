@@ -13,7 +13,7 @@ Z-value is set BELOW DeviceItems so device drag events are not blocked.
 
 from PySide6.QtWidgets import QGraphicsRectItem, QGraphicsItem
 from PySide6.QtGui import QBrush, QPen, QColor, QFont, QPainter
-from PySide6.QtCore import Qt, QRectF, QObject, Signal
+from PySide6.QtCore import Qt, QRectF, QObject, Signal, QPointF
 
 
 class HierarchyGroupSignals(QObject):
@@ -77,6 +77,9 @@ class HierarchyGroupItem(QGraphicsRectItem):
         self._net_names = {}       # {"D": "VDD", "G": "clk", "S": "VSS"}
         self._net_color_seed = 0
         self._highlighted_net = None
+        self._updating_geometry = False
+        self._snap_grid_x = None
+        self._snap_grid_y = None
 
         # Build a flat list of ALL descendant device items (recursive)
         self._all_descendant_devices = self._collect_all_descendant_devices()
@@ -166,7 +169,7 @@ class HierarchyGroupItem(QGraphicsRectItem):
             # Show child groups if they exist, otherwise show devices
             if self._child_groups:
                 for child in self._child_groups:
-                    child.setVisible(True)
+                    child._update_child_visibility()
             else:
                 for dev in self._device_items:
                     dev.setVisible(True)
@@ -176,6 +179,8 @@ class HierarchyGroupItem(QGraphicsRectItem):
             # Hide child groups and devices
             for child in self._child_groups:
                 child.setVisible(False)
+                for dev in child._all_descendant_devices:
+                    dev.setVisible(False)
             for dev in self._device_items:
                 # CRITICAL: Do NOT change device position when hiding!
                 # Just change visibility flag - position must stay intact
@@ -208,13 +213,63 @@ class HierarchyGroupItem(QGraphicsRectItem):
         # Update visibility based on current descent state
         self._update_child_visibility()
 
+    def set_snap_grid(self, grid_x, grid_y=None):
+        """Use the same movement grid as DeviceItem while dragging red groups."""
+        self._snap_grid_x = float(grid_x) if grid_x else None
+        self._snap_grid_y = float(grid_y) if grid_y else self._snap_grid_x
+        for child in self._child_groups:
+            if hasattr(child, "set_snap_grid"):
+                child.set_snap_grid(grid_x, grid_y)
+
+    def update_geometry(self):
+        """Recompute this group's rectangle from child groups/devices."""
+        for child in self._child_groups:
+            child.update_geometry()
+
+        items = self._child_groups if self._child_groups else self._device_items
+        if not items:
+            return
+
+        union = items[0].sceneBoundingRect()
+        for item in items[1:]:
+            union = union.united(item.sceneBoundingRect())
+
+        if union.isNull():
+            return
+
+        self._updating_geometry = True
+        try:
+            self.setRect(0, 0, union.width(), union.height())
+            self.setPos(union.x(), union.y())
+            self._last_pos = self.pos()
+            self._drag_start_pos = self.pos()
+            self._header_height = min(20.0, union.height() * 0.35)
+            if self._header_height < 12:
+                self._header_height = 12
+            self._all_descendant_devices = self._collect_all_descendant_devices()
+            self._update_child_visibility()
+        finally:
+            self._updating_geometry = False
+
     def _is_in_header(self, pos):
         """Check if a local position is in the header bar."""
         return pos.y() <= self._header_height
 
     def itemChange(self, change, value):
+        if (
+            change == QGraphicsItem.GraphicsItemChange.ItemPositionChange
+            and not self._updating_geometry
+            and self._snap_grid_x
+            and self._snap_grid_y
+        ):
+            x = round(value.x() / self._snap_grid_x) * self._snap_grid_x
+            y = round(value.y() / self._snap_grid_y) * self._snap_grid_y
+            return QPointF(x, y)
         if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
             new_pos = self.pos()
+            if self._updating_geometry:
+                self._last_pos = new_pos
+                return super().itemChange(change, value)
             delta = new_pos - self._last_pos
             if not delta.isNull():
                 for dev in self._device_items:

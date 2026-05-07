@@ -7,6 +7,7 @@ grid-snapped editing.
 import math
 import logging
 import os
+import copy
 from PySide6.QtGui import QUndoCommand
 from typing import List, Dict
 
@@ -58,8 +59,10 @@ from PySide6.QtWidgets import (
     QGraphicsSimpleTextItem,
     QMenu,
     QColorDialog,
+    QInputDialog,
+    QLineEdit,
 )
-from PySide6.QtCore import Qt, Signal, QPointF, QTimer
+from PySide6.QtCore import Qt, Signal, QPointF, QTimer, QRectF
 from PySide6.QtGui import QPainter, QPen, QPainterPath, QColor, QBrush, QAction, QKeySequence
 
 try:
@@ -147,6 +150,9 @@ class SymbolicEditor(QGraphicsView):
 
     device_clicked = Signal(str)
     dummy_toggle_requested = Signal()
+    cancel_tools_requested = Signal()
+    hierarchy_drag_started = Signal(object)
+    hierarchy_drag_finished = Signal(object)
     drag_finished = Signal()
     hierarchy_changed = Signal()  # Emitted when groups are created or deleted
     abutment_changed = Signal()
@@ -251,6 +257,8 @@ class SymbolicEditor(QGraphicsView):
         # Hierarchy group items (arrays, multipliers, fingers)
         self._hierarchy_groups = []  # list of top-level HierarchyGroupItem
         self._hierarchy_visible = True  # whether hierarchy groups are shown
+        self._hierarchy_view_mode = "symbolic"
+        self._custom_group_specs = []
         self._rebuilding_scene = False
         self._refreshing_block_overlays = False
         self._overlay_refresh_timer = QTimer(self)
@@ -565,7 +573,7 @@ class SymbolicEditor(QGraphicsView):
 
     def _on_scene_changed(self, _regions):
         """Keep occupancy guides fresh while avoiding heavy live redraws."""
-        self.resetCachedContent()
+        self._invalidate_layout_background()
 
         if (
             not self._refreshing_block_overlays
@@ -588,13 +596,25 @@ class SymbolicEditor(QGraphicsView):
             self._draw_block_overlays()
         finally:
             self._refreshing_block_overlays = False
+
+    def _invalidate_layout_background(self):
+        """Force the cached layout panel to redraw around current item bounds."""
+        self.resetCachedContent()
+        try:
+            self.invalidateScene(
+                self.scene.sceneRect(),
+                QGraphicsScene.SceneLayer.BackgroundLayer,
+            )
+        except Exception:
+            logging.debug("Background cache invalidation failed", exc_info=True)
+        self.viewport().update()
     def _compute_dummy_candidate(self, scene_pos, snap_to_free=True):
-        """Build a preview candidate aligned to nearest NMOS/PMOS row.
+        """Build a dummy candidate centered under the cursor.
 
         Args:
             scene_pos: cursor position in scene coordinates.
-            snap_to_free: if True, snap x to nearest free slot;
-                          if False, follow cursor x exactly (for preview).
+            snap_to_free: if True, move to the nearest free slot.
+                          if False, keep the cursor-snapped position.
         """
         type_items = {"nmos": [], "pmos": []}
         for item in self.device_items.values():
@@ -616,16 +636,19 @@ class SymbolicEditor(QGraphicsView):
         ref_item = type_items[target_type][0]
         width = ref_item.rect().width()
         height = ref_item.rect().height()
+        cursor_x = self._snap_value(scene_pos.x() - (width / 2.0))
+        cursor_y = self._snap_row(scene_pos.y() - (height / 2.0))
         if snap_to_free:
             x = self.find_nearest_free_x(
-                row_y=target_y,
+                row_y=cursor_y,
                 width=width,
-                target_x=self._snap_value(scene_pos.x()),
+                target_x=cursor_x,
                 exclude_id=None,
             )
+            y = cursor_y
         else:
-            x = self._snap_value(scene_pos.x())
-        y = self._snap_row(target_y)
+            x = cursor_x
+            y = cursor_y
         return {
             "type": str(target_type).lower(),
             "x": x,
@@ -644,7 +667,7 @@ class SymbolicEditor(QGraphicsView):
             self._dummy_preview = None
 
     def _update_dummy_preview(self, scene_pos):
-        # The preview follows the cursor position (not snapped to a free slot)
+        # The preview uses the same cursor-snapped position that click placement uses.
         candidate = self._compute_dummy_candidate(scene_pos, snap_to_free=False)
         if not candidate:
             self._clear_dummy_preview()
@@ -674,20 +697,30 @@ class SymbolicEditor(QGraphicsView):
             self._dummy_preview.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
             self.scene.addItem(self._dummy_preview)
         else:
-            # Update type colours if we crossed a row boundary
             if getattr(self._dummy_preview, 'device_type', '') != candidate["type"]:
-                self._clear_dummy_preview()
-                self._update_dummy_preview(scene_pos)
-                return
+                self._dummy_preview.device_type = candidate["type"]
+                if hasattr(self._dummy_preview, "_apply_default_palette"):
+                    self._dummy_preview._apply_default_palette()
+            if (
+                abs(self._dummy_preview.rect().width() - candidate["width"]) > 1e-6
+                or abs(self._dummy_preview.rect().height() - candidate["height"]) > 1e-6
+            ):
+                self._dummy_preview.setRect(
+                    0,
+                    0,
+                    candidate["width"],
+                    candidate["height"],
+                )
 
         self._dummy_preview.setPos(candidate["x"], candidate["y"])
 
     def _commit_dummy_at(self, scene_pos):
         if not self._dummy_place_callback:
             return False
-        candidate = self._compute_dummy_candidate(scene_pos)
+        candidate = self._compute_dummy_candidate(scene_pos, snap_to_free=False)
         if not candidate:
             return False
+        candidate["preserve_position"] = True
         self._dummy_place_callback(candidate)
         return True
 
@@ -787,6 +820,8 @@ class SymbolicEditor(QGraphicsView):
             for item in self.device_items.values():
                 item.set_snap_grid(self._snap_grid, self._row_pitch)
             self._skip_compaction = True          # skip the set_terminal_nets compaction
+
+        self.refresh_hierarchy_group_geometry()
 
         # Practically unlimited canvas.
         self.scene.setSceneRect(-1000000, -1000000, 2000000, 2000000)
@@ -947,6 +982,7 @@ class SymbolicEditor(QGraphicsView):
                             child_name, bucket_items, child_hi,
                             color=fill, border_color=border,
                         )
+                        self._wire_custom_group_signals(child_group)
                         # Don't manually set visibility - will be managed by parent's _update_child_visibility()
                         self.scene.addItem(child_group)
                         child_groups.append(child_group)
@@ -964,10 +1000,7 @@ class SymbolicEditor(QGraphicsView):
                 if child_groups:
                     group_item.set_child_groups(child_groups)
 
-                # Wire up signals
-                group_item.signals.drag_finished.connect(lambda g=group_item: self._on_hierarchy_drag_finished(g))
-                group_item.signals.descend_requested.connect(self._on_hierarchy_descend)
-                group_item.signals.ascend_requested.connect(self._on_hierarchy_ascend)
+                self._wire_custom_group_signals(group_item)
 
                 self.scene.addItem(group_item)
                 self._hierarchy_groups.append(group_item)
@@ -1007,10 +1040,7 @@ class SymbolicEditor(QGraphicsView):
                     f"[HIERARCHY] Created group for {dev_id}: _is_descended={group_item._is_descended}, device visible={item.isVisible()}"
                 )
                 
-                # Wire up signals
-                group_item.signals.drag_finished.connect(lambda g=group_item: self._on_hierarchy_drag_finished(g))
-                group_item.signals.descend_requested.connect(self._on_hierarchy_descend)
-                group_item.signals.ascend_requested.connect(self._on_hierarchy_ascend)
+                self._wire_custom_group_signals(group_item)
                 
                 self.scene.addItem(group_item)
                 self._hierarchy_groups.append(group_item)
@@ -1027,6 +1057,7 @@ class SymbolicEditor(QGraphicsView):
 
         # ── Pass 2: Matched Group Rigid-Body Locking ──────────────────────
         self._wire_matched_group_locking(parent_groups, nodes)
+        self._apply_hierarchy_view_mode()
 
     def _wire_matched_group_locking(self, parent_groups, raw_nodes):
         """Detect matched device groups and merge their sibling lists.
@@ -1140,6 +1171,158 @@ class SymbolicEditor(QGraphicsView):
     def _on_hierarchy_ascend(self, group):
         pass
 
+    def _apply_hierarchy_view_mode(self):
+        self.refresh_hierarchy_group_geometry()
+        groups = self._iter_live_hierarchy_groups()
+        if self._hierarchy_view_mode == "detailed":
+            for group in groups:
+                if not group._is_descended:
+                    group.descend()
+        else:
+            for group in groups:
+                if group._is_descended:
+                    group.ascend()
+
+    def set_hierarchy_view_mode(self, mode):
+        if mode not in {"symbolic", "detailed"}:
+            return
+        self._hierarchy_view_mode = mode
+        self._apply_hierarchy_view_mode()
+
+    def show_symbolic_hierarchy(self):
+        self.set_hierarchy_view_mode("symbolic")
+
+    def show_detailed_hierarchy(self):
+        self.set_hierarchy_view_mode("detailed")
+
+    def find_group_by_name(self, group_name):
+        for group in self._iter_live_hierarchy_groups():
+            if getattr(group, "_parent_name", None) == group_name:
+                return group
+        return None
+
+    def _owning_top_hierarchy_group(self, device_item):
+        for group in self._iter_live_hierarchy_groups():
+            if group._parent_name.startswith("GROUP_"):
+                continue
+            if device_item in getattr(group, "_all_descendant_devices", []):
+                return group
+        return None
+
+    def _wire_custom_group_signals(self, group_item):
+        if hasattr(group_item, "set_snap_grid"):
+            group_item.set_snap_grid(self._snap_grid, self._row_pitch)
+        group_item.signals.drag_started.connect(
+            lambda g=group_item: self._on_hierarchy_drag_started(g)
+        )
+        group_item.signals.drag_finished.connect(
+            lambda g=group_item: self._on_hierarchy_drag_finished(g)
+        )
+        group_item.signals.position_changed.connect(
+            lambda _changed=None, g=group_item: self._on_hierarchy_position_changed(g)
+        )
+        group_item.signals.descend_requested.connect(self._on_hierarchy_descend)
+        group_item.signals.ascend_requested.connect(self._on_hierarchy_ascend)
+
+    def refresh_hierarchy_group_geometry(self):
+        for group in self._iter_live_hierarchy_groups():
+            try:
+                if hasattr(group, "set_snap_grid"):
+                    group.set_snap_grid(self._snap_grid, self._row_pitch)
+                group.update_geometry()
+            except RuntimeError:
+                logging.debug("Skipped deleted hierarchy group geometry refresh", exc_info=True)
+        self._invalidate_layout_background()
+        self.scene.update()
+
+    def _on_hierarchy_position_changed(self, _group):
+        if getattr(self, "_rebuilding_scene", False):
+            return
+        self._invalidate_layout_background()
+        self.scene.update()
+
+    def _on_hierarchy_drag_started(self, group):
+        try:
+            self.hierarchy_drag_started.emit(group)
+        except Exception:
+            logging.warning("Failed to emit hierarchy drag_started signal", exc_info=True)
+
+    def _make_custom_group_item(self, group_name, device_items):
+        child_groups = []
+        direct_items = []
+        seen_groups = set()
+        for item in device_items:
+            owning_group = self._owning_top_hierarchy_group(item)
+            if owning_group is not None:
+                key = id(owning_group)
+                if key not in seen_groups:
+                    child_groups.append(owning_group)
+                    seen_groups.add(key)
+            else:
+                direct_items.append(item)
+
+        visual_items = child_groups or direct_items
+        if len(visual_items) < 2 and not child_groups:
+            return None
+        union = QRectF()
+        if visual_items:
+            union = visual_items[0].sceneBoundingRect()
+            for item in visual_items[1:]:
+                union = union.united(item.sceneBoundingRect())
+
+        hierarchy_info = {"m": 1, "nf": len(device_items), "is_array": False}
+        fill_color = QColor(100, 80, 40, 50)
+        border_color = QColor(220, 160, 80, 200)
+        group_item = HierarchyGroupItem(
+            group_name,
+            [] if child_groups else direct_items,
+            hierarchy_info,
+            color=fill_color,
+            border_color=border_color,
+        )
+        group_item._is_custom_group = True
+        if child_groups and not union.isNull():
+            group_item.setRect(0, 0, union.width(), union.height())
+            group_item.setPos(union.x(), union.y())
+            group_item._last_pos = group_item.pos()
+            group_item._drag_start_pos = group_item.pos()
+            group_item._header_height = min(20.0, union.height() * 0.35)
+            if group_item._header_height < 12:
+                group_item._header_height = 12
+        if child_groups:
+            group_item.set_child_groups(child_groups)
+        self._wire_custom_group_signals(group_item)
+        return group_item
+
+    def set_custom_groups(self, groups):
+        self._custom_group_specs = copy.deepcopy(groups or [])
+
+    def apply_custom_groups(self, groups=None):
+        if groups is not None:
+            self.set_custom_groups(groups)
+
+        for spec in self._custom_group_specs:
+            name = str(spec.get("name", "")).strip()
+            dev_ids = list(spec.get("devices", []))
+            if not name or len(dev_ids) < 2:
+                continue
+            device_items = [
+                self.device_items[dev_id]
+                for dev_id in dev_ids
+                if dev_id in self.device_items
+            ]
+            if len(device_items) < 2:
+                continue
+            if self.find_group_by_name(name) is not None:
+                continue
+            group_item = self._make_custom_group_item(name, device_items)
+            if group_item is None:
+                continue
+            self.scene.addItem(group_item)
+            self._hierarchy_groups.append(group_item)
+
+        self._apply_hierarchy_view_mode()
+
     def can_select_device(self, device_item):
         """Check if a device item can be selected based on hierarchy state.
         
@@ -1229,6 +1412,7 @@ class SymbolicEditor(QGraphicsView):
 
     def ascend_all_hierarchy(self):
         """Ascend from all descended hierarchy groups (Symbolic View)."""
+        self._hierarchy_view_mode = "symbolic"
         try:
             for group in self._iter_live_hierarchy_groups():
                 if group._is_descended:
@@ -1238,6 +1422,7 @@ class SymbolicEditor(QGraphicsView):
 
     def descend_all_hierarchy(self):
         """Descend into all hierarchy groups (Transistor Level View)."""
+        self._hierarchy_view_mode = "detailed"
         try:
             for group in self._iter_live_hierarchy_groups():
                 if not group._is_descended:
@@ -1248,7 +1433,7 @@ class SymbolicEditor(QGraphicsView):
     def _sync_hierarchy_to_nodes(self, group):
         """Update node data when a hierarchy group is moved."""
         try:
-            self.drag_finished.emit()
+            self.hierarchy_drag_finished.emit(group)
         except Exception:
             logging.warning("Failed to emit hierarchy drag_finished signal", exc_info=True)
 
@@ -1491,7 +1676,7 @@ class SymbolicEditor(QGraphicsView):
         """Set virtual grid extents; empty bands are drawn for extra rows/cols."""
         self._virtual_row_count = max(0, int(row_count))
         self._virtual_col_count = max(0, int(col_count))
-        self.resetCachedContent()
+        self._invalidate_layout_background()
 
     def set_custom_row_gap(self, gap_px):
         """Keep symbolic rows abutted; ignore custom row-gap requests."""
@@ -1503,7 +1688,8 @@ class SymbolicEditor(QGraphicsView):
             for item in self.device_items.values():
                 item.set_snap_grid(self._snap_grid, self._row_pitch)
             self._compact_rows_abutted()
-            self.resetCachedContent()
+            self.refresh_hierarchy_group_geometry()
+            self._invalidate_layout_background()
 
     def get_row_col(self, dev_id):
         item = self.device_items.get(dev_id)
@@ -1623,7 +1809,8 @@ class SymbolicEditor(QGraphicsView):
             return
         if self.device_items:
             self._compact_rows_abutted()
-            self.resetCachedContent()
+            self.refresh_hierarchy_group_geometry()
+            self._invalidate_layout_background()
 
     # ------------------------------------------------------------------
     # Abutment candidate highlighting
@@ -2107,15 +2294,9 @@ class SymbolicEditor(QGraphicsView):
             event.accept()
             return
         if event.key() == Qt.Key.Key_Escape:
-            # Ascend from any descended hierarchy groups
-            try:
-                for g in self._iter_live_hierarchy_groups():
-                    if g._is_descended:
-                        g.ascend()
-                        event.accept()
-                        return
-            except Exception:
-                logging.debug("Escape key hierarchy ascend failed", exc_info=True)
+            self.cancel_tools_requested.emit()
+            event.accept()
+            return
         elif event.key() == Qt.Key.Key_D and bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier):
             # Ctrl+D - descend into hierarchy
             try:
@@ -2584,6 +2765,9 @@ class SymbolicEditor(QGraphicsView):
 
         # Handle group context menu
         if target_group is not None:
+            if not target_group.isSelected():
+                self.scene.clearSelection()
+                target_group.setSelected(True)
             self._show_group_context_menu(target_group, event.globalPos())
             return
         
@@ -2727,33 +2911,22 @@ class SymbolicEditor(QGraphicsView):
             group_num = len(existing_custom_groups) + 1
             group_name = f"GROUP_{group_num}"
             
-            # Build hierarchy info
-            hierarchy_info = {
-                "m": 1,
-                "nf": len(device_items),
-                "is_array": False,
-            }
-            
-            # Use a distinctive color for custom groups (e.g., golden/amber)
-            fill_color = QColor(100, 80, 40, 50)
-            border_color = QColor(220, 160, 80, 200)
-            
-            # Create the group
-            group_item = HierarchyGroupItem(
-                group_name, device_items, hierarchy_info,
-                color=fill_color, border_color=border_color,
-            )
-            
-            # Wire up signals
-            group_item.signals.drag_finished.connect(
-                lambda g=group_item: self._on_hierarchy_drag_finished(g)
-            )
-            group_item.signals.descend_requested.connect(self._on_hierarchy_descend)
-            group_item.signals.ascend_requested.connect(self._on_hierarchy_ascend)
+            group_item = self._make_custom_group_item(group_name, device_items)
+            if group_item is None:
+                return
             
             # Add to scene and tracking list
             self.scene.addItem(group_item)
             self._hierarchy_groups.append(group_item)
+            self._custom_group_specs.append({
+                "name": group_name,
+                "devices": [
+                    getattr(item, "device_name", "")
+                    for item in device_items
+                    if getattr(item, "device_name", "")
+                ],
+            })
+            self._apply_hierarchy_view_mode()
             
             # Clear selection and select the new group
             self.scene.clearSelection()
@@ -2767,28 +2940,98 @@ class SymbolicEditor(QGraphicsView):
         except Exception as e:
             logging.error(f"Failed to create custom group: {e}", exc_info=True)
     
+    def _is_custom_group_item(self, group_item: HierarchyGroupItem):
+        name = str(getattr(group_item, "_parent_name", ""))
+        return bool(getattr(group_item, "_is_custom_group", False)) or name.startswith("GROUP_")
+
+    def _custom_group_device_ids(self, group_item: HierarchyGroupItem):
+        dev_item_to_id = {v: k for k, v in self.device_items.items()}
+        ids = []
+        for dev_item in getattr(group_item, "_all_descendant_devices", []):
+            dev_id = dev_item_to_id.get(dev_item)
+            if dev_id and dev_id not in ids:
+                ids.append(dev_id)
+        return ids
+
+    def _rename_group(self, group_item: HierarchyGroupItem):
+        """Rename a user-created group without touching its devices."""
+        if not self._is_custom_group_item(group_item):
+            return
+
+        old_name = str(getattr(group_item, "_parent_name", "")).strip()
+        new_name, accepted = QInputDialog.getText(
+            self,
+            "Rename Group",
+            "Group name:",
+            QLineEdit.EchoMode.Normal,
+            old_name,
+        )
+        if not accepted:
+            return
+
+        new_name = str(new_name).strip()
+        if not new_name or new_name == old_name:
+            return
+
+        existing = {
+            str(getattr(group, "_parent_name", "")).strip()
+            for group in self._iter_live_hierarchy_groups()
+            if group is not group_item and self._is_custom_group_item(group)
+        }
+        if new_name in existing:
+            logging.warning("Skipped group rename to duplicate name '%s'", new_name)
+            return
+
+        group_item._parent_name = new_name
+        updated = False
+        for spec in self._custom_group_specs:
+            if spec.get("name") == old_name:
+                spec["name"] = new_name
+                updated = True
+        if not updated:
+            self._custom_group_specs.append({
+                "name": new_name,
+                "devices": self._custom_group_device_ids(group_item),
+            })
+
+        group_item.update()
+        self.scene.update()
+        self.viewport().update()
+        self._notify_hierarchy_changed()
+
     def _delete_group(self, group_item: HierarchyGroupItem):
-        """Delete a group and ungroup its devices.
-        
-        Args:
-            group_item: The HierarchyGroupItem to delete
-        """
+        """Ungroup a user-created group without deleting its devices."""
         self._iter_live_hierarchy_groups()
         if group_item not in self._hierarchy_groups:
             return
+        if not self._is_custom_group_item(group_item):
+            return
         
         try:
-            # Remove from scene and tracking list
-            self.scene.removeItem(group_item)
-            self._hierarchy_groups.remove(group_item)
-            
-            logging.info(f"Deleted group '{group_item._parent_name}'")
-            
-            # Trigger hierarchy update in layout_tab
+            group_name = str(getattr(group_item, "_parent_name", ""))
+            for child in list(getattr(group_item, "_child_groups", [])):
+                child._parent_group = None
+                try:
+                    child._update_child_visibility()
+                except RuntimeError:
+                    pass
+
+            if group_item.scene() is self.scene:
+                self.scene.removeItem(group_item)
+            if group_item in self._hierarchy_groups:
+                self._hierarchy_groups.remove(group_item)
+            self._custom_group_specs = [
+                spec for spec in self._custom_group_specs
+                if spec.get("name") != group_name
+            ]
+
+            logging.info(f"Ungrouped '{group_name}'")
+            self._apply_hierarchy_view_mode()
+            self.refresh_hierarchy_group_geometry()
             self._notify_hierarchy_changed()
             
         except Exception as e:
-            logging.error(f"Failed to delete group: {e}", exc_info=True)
+            logging.error(f"Failed to ungroup: {e}", exc_info=True)
     
     def _notify_hierarchy_changed(self):
         """Notify parent (layout_tab) that hierarchy has changed and needs refresh."""
@@ -2829,14 +3072,27 @@ class SymbolicEditor(QGraphicsView):
         menu.addAction(title_act)
         menu.addSeparator()
         
-        # Delete group option
-        act_delete = QAction("Delete Group", self)
-        act_delete.setToolTip("Delete this group (devices will be ungrouped)")
-        menu.addAction(act_delete)
+        is_custom_group = self._is_custom_group_item(group_item)
+
+        act_rename = None
+        act_ungroup = None
+        if is_custom_group:
+            act_rename = QAction("Rename Group", self)
+            menu.addAction(act_rename)
+
+            act_ungroup = QAction("Ungroup", self)
+            act_ungroup.setToolTip("Remove this group wrapper and keep all devices")
+            menu.addAction(act_ungroup)
+        else:
+            info_act = QAction("Built-in hierarchy group", self)
+            info_act.setEnabled(False)
+            menu.addAction(info_act)
         
         chosen = menu.exec(global_pos)
         
-        if chosen == act_delete:
+        if act_rename is not None and chosen == act_rename:
+            self._rename_group(group_item)
+        elif act_ungroup is not None and chosen == act_ungroup:
             self._delete_group(group_item)
 
     # -------------------------------------------------

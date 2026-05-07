@@ -38,6 +38,7 @@ try:
     from .chat_panel import ChatPanel
     from .device_tree import DeviceTreePanel
     from .editor_view import SymbolicEditor, DeleteGroupCommand
+    from .hierarchy_group_item import HierarchyGroupItem
     from .klayout_panel import KLayoutPanel
     from .properties_panel import PropertiesPanel
     from .schematic_view import SchematicPanel
@@ -51,6 +52,7 @@ except ImportError:
     from chat_panel import ChatPanel
     from device_tree import DeviceTreePanel
     from editor_view import SymbolicEditor, DeleteGroupCommand
+    from hierarchy_group_item import HierarchyGroupItem
     from klayout_panel import KLayoutPanel
     from properties_panel import PropertiesPanel
     from schematic_view import SchematicPanel
@@ -90,6 +92,7 @@ class LayoutEditorTab(QWidget):
         self._original_data = None
         self.nodes = []
         self._matched_groups = []
+        self._custom_groups = []
 
         # Mode flags (toolbar communicates via setters)
         self._dummy_mode = False
@@ -269,6 +272,9 @@ class LayoutEditorTab(QWidget):
         self.editor.device_clicked.connect(self.device_tree.highlight_device)
         self.editor.dummy_toggle_requested.connect(self._toggle_dummy_shortcut)
         self.editor.drag_finished.connect(self._on_device_drag_end)
+        self.editor.hierarchy_drag_started.connect(self._on_hierarchy_drag_start)
+        self.editor.hierarchy_drag_finished.connect(self._on_hierarchy_drag_end)
+        self.editor.cancel_tools_requested.connect(self._cancel_active_tools)
         self.editor.device_clicked.connect(self._on_canvas_device_clicked)
         self.editor.hierarchy_changed.connect(self._on_hierarchy_changed)
         self.editor.abutment_changed.connect(
@@ -319,11 +325,11 @@ class LayoutEditorTab(QWidget):
 
         self._shortcut_detailed_view = QShortcut(QKeySequence("Shift+F"), self._workspace_shell)
         self._shortcut_detailed_view.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-        self._shortcut_detailed_view.activated.connect(self.editor.descend_all_hierarchy)
+        self._shortcut_detailed_view.activated.connect(self.editor.show_detailed_hierarchy)
 
         self._shortcut_outline_view = QShortcut(QKeySequence("Ctrl+F"), self._workspace_shell)
         self._shortcut_outline_view.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-        self._shortcut_outline_view.activated.connect(self.editor.ascend_all_hierarchy)
+        self._shortcut_outline_view.activated.connect(self.editor.show_symbolic_hierarchy)
 
         self._shortcut_show_props = QShortcut(QKeySequence("Q"), self._workspace_shell)
         self._shortcut_show_props.setContext(Qt.ShortcutContext.ApplicationShortcut)
@@ -499,26 +505,58 @@ class LayoutEditorTab(QWidget):
     # =================================================================
     #  Key press – Esc / D / M
     # =================================================================
+    def _set_main_action_checked(self, action_name, checked):
+        action = getattr(self.window(), action_name, None)
+        if action is None or not action.isCheckable():
+            return
+        was_blocked = action.blockSignals(True)
+        try:
+            action.setChecked(bool(checked))
+        finally:
+            action.blockSignals(was_blocked)
+
+    def _cancel_active_tools(self):
+        released = False
+        dummy_action = getattr(self.window(), "_act_add_dummy", None)
+        if self._dummy_mode or (dummy_action is not None and dummy_action.isChecked()):
+            self._dummy_mode = False
+            self.editor.set_dummy_mode(False)
+            self._set_main_action_checked("_act_add_dummy", False)
+            released = True
+
+        if getattr(self, "_move_mode", False):
+            self._exit_move_mode()
+            released = True
+
+        abut_action = getattr(self.window(), "_act_abutment", None)
+        if getattr(self, "_abutment_mode", False) or (
+            abut_action is not None and abut_action.isChecked()
+        ):
+            self.set_abutment_mode(False)
+            self._set_main_action_checked("_act_abutment", False)
+            released = True
+
+        route_action = getattr(self.window(), "_tb_act_route", None)
+        if route_action is not None and route_action.isChecked():
+            self._set_main_action_checked("_tb_act_route", False)
+            self._on_toggle_route(False)
+            released = True
+
+        try:
+            if self.editor and self.editor.scene.selectedItems():
+                self.editor.scene.clearSelection()
+                self._on_editor_selection_changed()
+                released = True
+        except RuntimeError:
+            pass
+
+        return released
+
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Escape:
-            released = False
-            if self._dummy_mode:
-                self._dummy_mode = False
-                self.editor.set_dummy_mode(False)
-                released = True
-            if getattr(self, "_move_mode", False):
-                self._exit_move_mode()
-                released = True
-            try:
-                if self.editor and self.editor.scene.selectedItems():
-                    self.editor.scene.clearSelection()
-                    self._on_editor_selection_changed()
-                    released = True
-            except RuntimeError:
-                pass
-            if released:
-                event.accept()
-                return
+            self._cancel_active_tools()
+            event.accept()
+            return
         if event.key() == Qt.Key.Key_D and not event.modifiers():
             self._toggle_dummy_shortcut()
             event.accept()
@@ -637,6 +675,7 @@ class LayoutEditorTab(QWidget):
             raise ValueError("JSON must contain 'nodes' key")
         self._original_data = data
         self.nodes = data["nodes"]
+        self._custom_groups = copy.deepcopy(data.get("custom_groups", []))
         self._terminal_nets = self._parse_spice_terminals(filepath)
 
     @staticmethod
@@ -867,6 +906,7 @@ class LayoutEditorTab(QWidget):
         self.device_tree.set_terminal_nets(self._terminal_nets)
         self.device_tree.load_devices(self.nodes, blocks=blocks)
         self.editor.load_placement(self.nodes, compact=compact)
+        self.editor.apply_custom_groups(self._custom_groups)
         self.editor.set_edges(edges)
         self.editor.set_terminal_nets(self._terminal_nets)
         self.editor.set_blocks(blocks)
@@ -1024,6 +1064,8 @@ class LayoutEditorTab(QWidget):
             output["edges"] = self._original_data["edges"]
         if hasattr(self, "_routing_annotations") and self._routing_annotations:
             output["routing_annotations"] = copy.deepcopy(self._routing_annotations)
+        if self._custom_groups:
+            output["custom_groups"] = copy.deepcopy(self._custom_groups)
         return output
 
     def _push_undo(self):
@@ -1071,7 +1113,7 @@ class LayoutEditorTab(QWidget):
         moving = set(drag_items)
         stationary = [
             item for item in self.editor.device_items.values()
-            if item not in moving and item.isVisible()
+            if item not in moving
         ]
         for moving_item in drag_items:
             moving_rect = moving_item.sceneBoundingRect()
@@ -1130,6 +1172,69 @@ class LayoutEditorTab(QWidget):
         self._drag_start_positions = {}
         self._sync_node_positions()
         self._update_grid_counts()
+        self.editor.refresh_hierarchy_group_geometry()
+
+    def _hierarchy_drag_items(self, group):
+        groups = []
+        try:
+            groups = [
+                item for item in self.editor.scene.selectedItems()
+                if isinstance(item, HierarchyGroupItem)
+            ]
+        except RuntimeError:
+            groups = []
+        if group is not None and group not in groups:
+            groups.append(group)
+
+        drag_items = []
+        seen = set()
+        for grp in groups:
+            try:
+                descendants = grp.get_all_descendant_devices()
+            except RuntimeError:
+                continue
+            for item in descendants:
+                key = id(item)
+                if key in seen:
+                    continue
+                if hasattr(item, "device_name") and hasattr(item, "setPos"):
+                    drag_items.append(item)
+                    seen.add(key)
+        return drag_items
+
+    def _on_hierarchy_drag_start(self, group):
+        drag_items = self._hierarchy_drag_items(group)
+        if not drag_items:
+            return
+        delta = QPointF()
+        try:
+            delta = group.pos() - group._drag_start_pos
+        except RuntimeError:
+            delta = QPointF()
+        self._drag_start_positions = {
+            item: QPointF(item.pos() - delta)
+            for item in drag_items
+        }
+        self._sync_node_positions()
+        self._push_undo()
+
+    def _on_hierarchy_drag_end(self, group):
+        if getattr(self.editor, "_rebuilding_scene", False):
+            self._drag_start_positions = {}
+            return
+
+        positions = getattr(self, "_drag_start_positions", {})
+        drag_items = list(positions.keys())
+        if positions and self._drag_overlaps_stationary_items(drag_items):
+            self._restore_drag_start_positions()
+            if self._undo_stack:
+                self._undo_stack.pop()
+                self._update_undo_redo_state()
+
+        self._drag_start_positions = {}
+        self._sync_node_positions()
+        self._update_grid_counts()
+        self.editor.refresh_hierarchy_group_geometry()
 
     def _on_hierarchy_changed(self):
         """Refresh the device tree when hierarchy groups are created or deleted."""
@@ -1144,8 +1249,7 @@ class LayoutEditorTab(QWidget):
                 )
                 for g in groups:
                     name = getattr(g, '_parent_name', '')
-                    # Treat only user-created groups (named GROUP_*) as custom
-                    if not name.startswith('GROUP_'):
+                    if not getattr(g, '_is_custom_group', False) and not name.startswith('GROUP_'):
                         continue
                     dev_ids = []
                     for dev_item in getattr(g, '_all_descendant_devices', []):
@@ -1156,6 +1260,10 @@ class LayoutEditorTab(QWidget):
                         custom_groups.append({'name': name, 'devices': dev_ids})
             except Exception:
                 custom_groups = []
+
+            self._custom_groups = custom_groups
+            if self._original_data is not None:
+                self._original_data["custom_groups"] = copy.deepcopy(custom_groups)
 
             # Provide custom groups to the device tree and reload
             try:
@@ -1190,22 +1298,12 @@ class LayoutEditorTab(QWidget):
         # Find the group item in the editor by name
         group_item = self.editor.find_group_by_name(group_name)
         if group_item:
-            # Create the command and push it to the stack
-            command = DeleteGroupCommand(self.editor, group_item)
-            self.undo_stack.push(command)
+            self.editor._delete_group(group_item)
+
     def _handle_group_delete(self, group_name):
-        # 1. Find the group in the editor
-        target_group = None
-        for group in self.editor.custom_groups:
-            if group._parent_name == group_name:
-                target_group = group
-                break
-        
+        target_group = self.editor.find_group_by_name(group_name)
         if target_group:
-            # 2. Push the command to the undo stack
-            from .editor_view import DeleteGroupCommand # Import here to avoid circularity
-            command = DeleteGroupCommand(self.editor, target_group)
-            self.undo_stack.push(command)
+            self.editor._delete_group(target_group)
     # =================================================================
     #  Select All / Swap / Merge / Flip / Delete
     # =================================================================
@@ -1605,6 +1703,9 @@ class LayoutEditorTab(QWidget):
         candidate["type"] = dev_type
         candidate["y"] = self.editor._snap_row(candidate["y"])
         candidate["x"] = self.editor._snap_value(candidate["x"])
+        preserve_position = bool(candidate.get("preserve_position")) and side is None
+        if preserve_position:
+            return candidate
 
         col_capacity = self._dummy_col_capacity()
         if col_capacity is not None:
@@ -2517,6 +2618,7 @@ class LayoutEditorTab(QWidget):
         self._push_undo()
         self._original_data = data
         self.nodes = data["nodes"]
+        self._custom_groups = copy.deepcopy(data.get("custom_groups", []))
         self._terminal_nets = data.get("terminal_nets", {})
         self._routing_result = data.get("routing_result", {})
         self._current_file = file_path
