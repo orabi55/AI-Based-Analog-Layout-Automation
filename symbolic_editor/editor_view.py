@@ -10,6 +10,11 @@ import os
 from PySide6.QtGui import QUndoCommand
 from typing import List, Dict
 
+try:
+    import shiboken6
+except Exception:
+    shiboken6 = None
+
 
 def _ip_ui_quiet() -> bool:
     """True while initial placement runs with step-only console mode."""
@@ -25,6 +30,24 @@ def _dev_diag_print(*args, **kwargs) -> None:
         return
     kwargs.setdefault("flush", True)
     print(*args, **kwargs)
+
+
+def _qt_object_is_valid(obj) -> bool:
+    """Return False when a PySide wrapper points at a deleted C++ object."""
+    if obj is None:
+        return False
+    if shiboken6 is not None:
+        try:
+            return bool(shiboken6.isValid(obj))
+        except RuntimeError:
+            return False
+    try:
+        obj.scene()
+        return True
+    except RuntimeError:
+        return False
+    except Exception:
+        return True
 
 from PySide6.QtWidgets import (
     QGraphicsView,
@@ -126,6 +149,7 @@ class SymbolicEditor(QGraphicsView):
     dummy_toggle_requested = Signal()
     drag_finished = Signal()
     hierarchy_changed = Signal()  # Emitted when groups are created or deleted
+    abutment_changed = Signal()
 
     def __init__(self):
         super().__init__()
@@ -227,6 +251,7 @@ class SymbolicEditor(QGraphicsView):
         # Hierarchy group items (arrays, multipliers, fingers)
         self._hierarchy_groups = []  # list of top-level HierarchyGroupItem
         self._hierarchy_visible = True  # whether hierarchy groups are shown
+        self._rebuilding_scene = False
         self._refreshing_block_overlays = False
         self._overlay_refresh_timer = QTimer(self)
         self._overlay_refresh_timer.setSingleShot(True)
@@ -360,6 +385,87 @@ class SymbolicEditor(QGraphicsView):
                 return nets
         return {}
 
+    @staticmethod
+    def _restore_item_orientation(item, orient):
+        """Apply saved/imported orientation using symbolic flip semantics."""
+        token = str(orient or "R0").strip().upper()
+        if hasattr(item, "set_flip_h"):
+            item.set_flip_h(False)
+        if hasattr(item, "set_flip_v"):
+            item.set_flip_v(False)
+
+        horizontal_tokens = {"R0_FH", "FH", "MY", "MXR180"}
+        vertical_tokens = {"R0_FV", "FV", "MX", "MXR0"}
+        both_tokens = {"R180", "R0_FH_FV", "FH_FV", "FV_FH"}
+
+        if token in both_tokens:
+            if hasattr(item, "set_flip_h"):
+                item.set_flip_h(True)
+            if hasattr(item, "set_flip_v"):
+                item.set_flip_v(True)
+        elif token in horizontal_tokens:
+            if hasattr(item, "set_flip_h"):
+                item.set_flip_h(True)
+        elif token in vertical_tokens:
+            if hasattr(item, "set_flip_v"):
+                item.set_flip_v(True)
+
+    def _disconnect_hierarchy_group(self, group):
+        signals = getattr(group, "signals", None)
+        if signals is None:
+            return
+        for name in (
+            "drag_started",
+            "drag_finished",
+            "position_changed",
+            "descend_requested",
+            "ascend_requested",
+        ):
+            signal = getattr(signals, name, None)
+            if signal is None:
+                continue
+            try:
+                signal.disconnect()
+            except (RuntimeError, TypeError):
+                pass
+
+    def _clear_hierarchy_groups(self, remove_from_scene=True):
+        for group in list(getattr(self, "_hierarchy_groups", [])):
+            if not _qt_object_is_valid(group):
+                continue
+            try:
+                self._disconnect_hierarchy_group(group)
+                for child in list(getattr(group, "_child_groups", [])):
+                    if _qt_object_is_valid(child):
+                        self._disconnect_hierarchy_group(child)
+                        if remove_from_scene and child.scene() is self.scene:
+                            self.scene.removeItem(child)
+                if remove_from_scene and group.scene() is self.scene:
+                    self.scene.removeItem(group)
+            except RuntimeError:
+                logging.debug("Failed to clear hierarchy group", exc_info=True)
+        self._hierarchy_groups.clear()
+
+    def _iter_live_hierarchy_groups(self):
+        live = []
+        for group in list(getattr(self, "_hierarchy_groups", [])):
+            if _qt_object_is_valid(group):
+                live.append(group)
+            else:
+                logging.debug("Pruned deleted HierarchyGroupItem reference")
+        if len(live) != len(getattr(self, "_hierarchy_groups", [])):
+            self._hierarchy_groups = live
+        return list(live)
+
+    def _iter_live_child_groups(self, group):
+        live = []
+        for child in list(getattr(group, "_child_groups", [])):
+            if _qt_object_is_valid(child):
+                live.append(child)
+        if len(live) != len(getattr(group, "_child_groups", [])):
+            group._child_groups = live
+        return live
+
     def set_net_labels_visible(self, visible: bool):
         """Toggle net name labels on all device terminals.
 
@@ -379,21 +485,24 @@ class SymbolicEditor(QGraphicsView):
                     item.clear_net_labels()
 
         # Also toggle on hierarchy group items (symbolic view)
-        for group in self._hierarchy_groups:
-            if visible:
-                # Look up nets from the parent name or first child device
-                parent_name = group._parent_name
-                nets = self._terminal_nets_for_device(parent_name)
-                if not nets and group._device_items:
-                    # Try the first child device's name
-                    first_child = group._device_items[0]
-                    nets = self._terminal_nets_for_device(
-                        getattr(first_child, 'device_name', ''))
-                if hasattr(group, 'set_net_labels'):
-                    group.set_net_labels(nets, self._color_seed)
-            else:
-                if hasattr(group, 'clear_net_labels'):
-                    group.clear_net_labels()
+        for group in self._iter_live_hierarchy_groups():
+            try:
+                if visible:
+                    # Look up nets from the parent name or first child device
+                    parent_name = group._parent_name
+                    nets = self._terminal_nets_for_device(parent_name)
+                    if not nets and group._device_items:
+                        # Try the first child device's name
+                        first_child = group._device_items[0]
+                        nets = self._terminal_nets_for_device(
+                            getattr(first_child, 'device_name', ''))
+                    if hasattr(group, 'set_net_labels'):
+                        group.set_net_labels(nets, self._color_seed)
+                else:
+                    if hasattr(group, 'clear_net_labels'):
+                        group.clear_net_labels()
+            except RuntimeError:
+                logging.debug("Skipped deleted hierarchy group net-label update", exc_info=True)
 
         self.viewport().update()
 
@@ -414,18 +523,21 @@ class SymbolicEditor(QGraphicsView):
             if hasattr(item, "set_highlighted_net"):
                 item.set_highlighted_net(net_name)
 
-        for group in self._hierarchy_groups:
-            parent_name = group._parent_name
-            nets = self._terminal_nets_for_device(parent_name)
-            if not nets and group._device_items:
-                first_child = group._device_items[0]
-                nets = self._terminal_nets_for_device(
-                    getattr(first_child, "device_name", "")
-                )
-            if hasattr(group, "set_net_labels"):
-                group.set_net_labels(nets, self._color_seed)
-            if hasattr(group, "set_highlighted_net"):
-                group.set_highlighted_net(net_name)
+        for group in self._iter_live_hierarchy_groups():
+            try:
+                parent_name = group._parent_name
+                nets = self._terminal_nets_for_device(parent_name)
+                if not nets and group._device_items:
+                    first_child = group._device_items[0]
+                    nets = self._terminal_nets_for_device(
+                        getattr(first_child, "device_name", "")
+                    )
+                if hasattr(group, "set_net_labels"):
+                    group.set_net_labels(nets, self._color_seed)
+                if hasattr(group, "set_highlighted_net"):
+                    group.set_highlighted_net(net_name)
+            except RuntimeError:
+                logging.debug("Skipped deleted hierarchy group net highlight", exc_info=True)
 
         self.viewport().update()
 
@@ -434,9 +546,12 @@ class SymbolicEditor(QGraphicsView):
         for item in self.device_items.values():
             if hasattr(item, "clear_highlighted_net"):
                 item.clear_highlighted_net()
-        for group in self._hierarchy_groups:
-            if hasattr(group, "clear_highlighted_net"):
-                group.clear_highlighted_net()
+        for group in self._iter_live_hierarchy_groups():
+            try:
+                if hasattr(group, "clear_highlighted_net"):
+                    group.clear_highlighted_net()
+            except RuntimeError:
+                logging.debug("Skipped deleted hierarchy group highlight clear", exc_info=True)
         self.viewport().update()
 
     def _snap_value(self, value):
@@ -580,6 +695,13 @@ class SymbolicEditor(QGraphicsView):
     # Load AI JSON Placement
     # -------------------------------------------------
     def load_placement(self, nodes, compact=False):
+        self._rebuilding_scene = True
+        try:
+            self._load_placement_impl(nodes, compact=compact)
+        finally:
+            self._rebuilding_scene = False
+
+    def _load_placement_impl(self, nodes, compact=False):
         """Load placement from a list of node dicts.
 
         Args:
@@ -589,6 +711,7 @@ class SymbolicEditor(QGraphicsView):
                      (e.g. after an OAS import or AI swap/move command).
         """
         self._clear_dummy_preview()
+        self._clear_hierarchy_groups(remove_from_scene=True)
         self.scene.clear()
         self.device_items.clear()
 
@@ -631,16 +754,7 @@ class SymbolicEditor(QGraphicsView):
                 if abut:
                     item.set_abut_left(abut.get("abut_left", False))
                     item.set_abut_right(abut.get("abut_right", False))
-
-                # Restore orientation (flip)
-                orient = geom.get("orientation", "R0")
-                if orient in ("R180", "R0_FH_FV"):
-                    item.set_flip_h(True)
-                    item.set_flip_v(True)
-                elif "FH" in orient or orient == "MX":
-                    item.set_flip_h(True)
-                elif "FV" in orient or orient == "MY":
-                    item.set_flip_v(True)
+            self._restore_item_orientation(item, geom.get("orientation", "R0"))
 
             self.scene.addItem(item)
             self.device_items[node.get("id", "unknown")] = item
@@ -699,23 +813,9 @@ class SymbolicEditor(QGraphicsView):
         Only creates groups for devices with m>1, nf>1, or array suffix.
         Single devices are not grouped.
         """
-        # ── Deduplication guard: skip if nodes haven't changed ────────
-        import hashlib
-        ids_hash = hashlib.md5(
-            "|".join(sorted(n.get("id", "") for n in nodes)).encode()
-        ).hexdigest()
-        if hasattr(self, '_hierarchy_hash') and self._hierarchy_hash == ids_hash:
-            _dev_diag_print("[HIERARCHY] Skipped — nodes unchanged since last build")
-            return
-        self._hierarchy_hash = ids_hash
-
-        # Clear old groups
-        for g in self._hierarchy_groups:
-            try:
-                self.scene.removeItem(g)
-            except RuntimeError:
-                logging.debug("Failed to remove hierarchy group from scene", exc_info=True)
-        self._hierarchy_groups.clear()
+        # Undo/redo can reload identical ids with newly-created Qt items, so
+        # hierarchy groups must always be rebuilt instead of hash-skipped.
+        self._clear_hierarchy_groups(remove_from_scene=True)
 
         # ── Step 1: Group devices by parent ──────────────────────────────
         parent_groups = {}  # parent_name -> list of (node, device_item)
@@ -1052,7 +1152,7 @@ class SymbolicEditor(QGraphicsView):
                 return False
             
             # Find if this device belongs to any hierarchy group
-            for group in self._hierarchy_groups:
+            for group in self._iter_live_hierarchy_groups():
                 # If this group is visible and NOT descended, block ALL its descendants
                 if group.isVisible() and not group._is_descended:
                     # Check if device is in this group's descendants
@@ -1105,7 +1205,7 @@ class SymbolicEditor(QGraphicsView):
             device_item = selected[0]
             
             # Find its hierarchy group
-            for group in self._hierarchy_groups:
+            for group in self._iter_live_hierarchy_groups():
                 if device_item in group._all_descendant_devices:
                     # Found the owning group
                     if not group._is_descended:
@@ -1120,7 +1220,7 @@ class SymbolicEditor(QGraphicsView):
         """Descend into the currently selected hierarchy group."""
         try:
             # Find which hierarchy group is selected
-            for group in self._hierarchy_groups:
+            for group in self._iter_live_hierarchy_groups():
                 if group.isSelected() and not group._is_descended:
                     group.descend()
                     return
@@ -1130,7 +1230,7 @@ class SymbolicEditor(QGraphicsView):
     def ascend_all_hierarchy(self):
         """Ascend from all descended hierarchy groups (Symbolic View)."""
         try:
-            for group in self._hierarchy_groups:
+            for group in self._iter_live_hierarchy_groups():
                 if group._is_descended:
                     group.ascend()
         except Exception:
@@ -1139,7 +1239,7 @@ class SymbolicEditor(QGraphicsView):
     def descend_all_hierarchy(self):
         """Descend into all hierarchy groups (Transistor Level View)."""
         try:
-            for group in self._hierarchy_groups:
+            for group in self._iter_live_hierarchy_groups():
                 if not group._is_descended:
                     group.descend()
         except Exception:
@@ -1690,6 +1790,8 @@ class SymbolicEditor(QGraphicsView):
 
     def _show_connections(self, dev_id):
         """Draw curved lines from dev_id terminals to connected device terminals."""
+        if getattr(self, "_rebuilding_scene", False):
+            return
         self.clear_highlighted_net()
         self._reset_dimming()
         self._clear_connections()
@@ -1858,6 +1960,9 @@ class SymbolicEditor(QGraphicsView):
         Also enforces hierarchy selection rules - devices cannot be selected
         if their parent hierarchy group is not descended.
         """
+        if getattr(self, "_rebuilding_scene", False):
+            return
+
         # Prevent recursive selection updates
         if getattr(self, '_selection_updating', False):
             return
@@ -1925,10 +2030,10 @@ class SymbolicEditor(QGraphicsView):
         rects = [item.sceneBoundingRect() for item in self.device_items.values()]
         # Also include hierarchy group bounding rects
         try:
-            for g in self._hierarchy_groups:
+            for g in self._iter_live_hierarchy_groups():
                 if g.isVisible():
                     rects.append(g.sceneBoundingRect())
-                for child in g._child_groups:
+                for child in self._iter_live_child_groups(g):
                     if child.isVisible():
                         rects.append(child.sceneBoundingRect())
         except Exception:
@@ -2004,7 +2109,7 @@ class SymbolicEditor(QGraphicsView):
         if event.key() == Qt.Key.Key_Escape:
             # Ascend from any descended hierarchy groups
             try:
-                for g in self._hierarchy_groups:
+                for g in self._iter_live_hierarchy_groups():
                     if g._is_descended:
                         g.ascend()
                         event.accept()
@@ -2363,7 +2468,11 @@ class SymbolicEditor(QGraphicsView):
     def mousePressEvent(self, event):
         self.setFocus(Qt.FocusReason.MouseFocusReason)
         self.viewport().setFocus(Qt.FocusReason.MouseFocusReason)
-        if event.button() == Qt.MouseButton.LeftButton and self.itemAt(event.pos()) is None:
+        if (
+            event.button() == Qt.MouseButton.LeftButton
+            and self.itemAt(event.pos()) is None
+            and not getattr(self, "_rebuilding_scene", False)
+        ):
             self.scene.clearSelection()
             self._clear_connections()
             self.clear_highlighted_net()
@@ -2571,11 +2680,14 @@ class SymbolicEditor(QGraphicsView):
             self._create_custom_group(selected_devices)
         elif chosen == act_left:
             target_item.toggle_abut_left()
+            self.abutment_changed.emit()
         elif chosen == act_right:
             target_item.toggle_abut_right()
+            self.abutment_changed.emit()
         elif chosen == act_clear:
             target_item.set_abut_left(False)
             target_item.set_abut_right(False)
+            self.abutment_changed.emit()
         elif chosen == act_change_color:
             color = QColorDialog.getColor(target_item._source_color)
             if color.isValid():
@@ -2609,7 +2721,7 @@ class SymbolicEditor(QGraphicsView):
         try:
             # Generate a unique group name
             existing_custom_groups = [
-                g._parent_name for g in self._hierarchy_groups 
+                g._parent_name for g in self._iter_live_hierarchy_groups()
                 if g._parent_name.startswith("GROUP_")
             ]
             group_num = len(existing_custom_groups) + 1
@@ -2661,6 +2773,7 @@ class SymbolicEditor(QGraphicsView):
         Args:
             group_item: The HierarchyGroupItem to delete
         """
+        self._iter_live_hierarchy_groups()
         if group_item not in self._hierarchy_groups:
             return
         

@@ -134,7 +134,7 @@ class KLayoutPanel(QWidget):
 
         # Placeholder text (shown via a simple text item)
         self._placeholder = self._gfx_scene.addText(
-            "No layout rendered yet.\nUse Export to OAS, then Refresh."
+            "No layout rendered yet.\nLoad a design with OAS/SP files."
         )
         self._placeholder.setDefaultTextColor(Qt.GlobalColor.darkGray)
 
@@ -182,6 +182,10 @@ class KLayoutPanel(QWidget):
         else:
             self._status.setText("")
 
+    def set_status_text(self, text):
+        """Update the preview status bar without changing the loaded file."""
+        self._status.setText(text or "")
+
     def fit_to_view(self):
         """Fit the KLayout preview image to the viewport."""
         self._gfx_view.fit_to_view()
@@ -195,7 +199,7 @@ class KLayoutPanel(QWidget):
             self._gfx_scene.clear()
             self._pixmap_item = None
             self._placeholder = self._gfx_scene.addText(
-                "No OAS file available.\nExport to OAS first (File > Export to OAS)."
+                "No OAS file available.\nLoad a design with OAS/SP files."
             )
             self._placeholder.setDefaultTextColor(Qt.GlobalColor.darkGray)
             self._status.setText("No file")

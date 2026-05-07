@@ -15,6 +15,7 @@ import copy
 import glob
 import re
 import logging
+import tempfile
 
 from PySide6.QtWidgets import (
     QSplitter,
@@ -107,6 +108,15 @@ class LayoutEditorTab(QWidget):
         self._workspace_mode = "symbolic"
         self._both_workspace_sizes = [860, 480]
         self._pending_oas_path = None
+        self._klayout_source_oas_path = None
+        self._klayout_source_sp_path = None
+        self._klayout_live_output_path = None
+        self._klayout_live_worker = None
+        self._klayout_live_pending = False
+        self._klayout_live_generation = 0
+        self._klayout_live_timer = QTimer(self)
+        self._klayout_live_timer.setSingleShot(True)
+        self._klayout_live_timer.timeout.connect(self._run_live_klayout_update)
 
         # ── Create panels ──────────────────────────────────────────
         self.device_tree = DeviceTreePanel()
@@ -261,6 +271,9 @@ class LayoutEditorTab(QWidget):
         self.editor.drag_finished.connect(self._on_device_drag_end)
         self.editor.device_clicked.connect(self._on_canvas_device_clicked)
         self.editor.hierarchy_changed.connect(self._on_hierarchy_changed)
+        self.editor.abutment_changed.connect(
+            lambda: self._schedule_live_klayout_update(delay_ms=100)
+        )
         self.editor.scene.selectionChanged.connect(self._on_editor_selection_changed)
 
         # AI command execution (batch for single undo)
@@ -278,6 +291,9 @@ class LayoutEditorTab(QWidget):
         self.device_tree.net_view_toggled.connect(self.editor.set_net_labels_visible)
         self.device_tree.net_colorize_toggled.connect(self.editor.set_net_colorize_enabled)
         self.chat_panel.toggle_requested.connect(self._toggle_chat_panel)
+        self.klayout_panel.refresh_requested.connect(
+            lambda: self._schedule_live_klayout_update(delay_ms=0, force=True)
+        )
 
         # Loading overlay (per-tab)
         self.overlay = LoadingOverlay(self)
@@ -464,6 +480,7 @@ class LayoutEditorTab(QWidget):
             # Auto-fit KLayout preview after the splitter finishes resizing
             from PySide6.QtCore import QTimer
             QTimer.singleShot(100, self.klayout_panel.fit_to_view)
+            self._schedule_live_klayout_update(delay_ms=0, force=True)
         self.workspace_mode_changed.emit(mode)
 
     def workspace_mode(self):
@@ -643,15 +660,191 @@ class LayoutEditorTab(QWidget):
                 logging.debug("Failed to parse SPICE terminal nets", exc_info=True)
         return terminal_nets
 
+    @staticmethod
+    def _preferred_oas_file(oas_files):
+        if not oas_files:
+            return None
+        base_files = [
+            path for path in oas_files
+            if "_updated" not in os.path.basename(path).lower()
+            and "_live" not in os.path.basename(path).lower()
+        ]
+        return (base_files or oas_files)[0]
+
+    @staticmethod
+    def _preferred_sp_file(sp_files, source_path=None):
+        if not sp_files:
+            return None
+        if source_path:
+            source_base = os.path.splitext(os.path.basename(source_path))[0]
+            for suffix in ("_graph_compressed", "_graph"):
+                if source_base.endswith(suffix):
+                    source_base = source_base[:-len(suffix)]
+            preferred = source_base.lower()
+            for path in sp_files:
+                if os.path.splitext(os.path.basename(path))[0].lower() == preferred:
+                    return path
+        return sp_files[0]
+
     def _sync_klayout_source(self, explicit_oas=None, source_path=None):
         oas_path = explicit_oas
-        if not oas_path and source_path:
+        sp_path = None
+
+        if source_path and os.path.isfile(source_path):
+            if source_path.lower().endswith(".sp"):
+                sp_path = source_path
             source_dir = os.path.dirname(os.path.abspath(source_path))
-            oas_files = sorted(glob.glob(os.path.join(source_dir, "*.oas")))
-            if oas_files:
-                oas_path = oas_files[0]
-        self.klayout_panel.set_oas_path(oas_path)
-        self.klayout_panel.refresh_preview(oas_path if oas_path else None)
+            if not oas_path:
+                oas_files = sorted(
+                    glob.glob(os.path.join(source_dir, "*.oas"))
+                    + glob.glob(os.path.join(source_dir, "*.gds"))
+                )
+                oas_path = self._preferred_oas_file(oas_files)
+            sp_files = sorted(glob.glob(os.path.join(source_dir, "*.sp")))
+            sp_path = sp_path or self._preferred_sp_file(sp_files, source_path)
+
+        self._klayout_source_oas_path = oas_path if oas_path and os.path.isfile(oas_path) else None
+        self._klayout_source_sp_path = sp_path if sp_path and os.path.isfile(sp_path) else None
+        self._klayout_live_output_path = None
+        self._klayout_live_generation += 1
+
+        self.klayout_panel.set_oas_path(self._klayout_source_oas_path)
+        self.klayout_panel.refresh_preview(
+            self._klayout_source_oas_path if self._klayout_source_oas_path else None
+        )
+        self._schedule_live_klayout_update(delay_ms=0, force=True)
+
+    def _make_live_klayout_output_path(self):
+        if self._klayout_live_output_path:
+            return self._klayout_live_output_path
+        source = self._klayout_source_oas_path
+        if not source:
+            return None
+        base, ext = os.path.splitext(os.path.basename(source))
+        ext = ext or ".oas"
+        safe_base = re.sub(r"[^A-Za-z0-9_.-]+", "_", base).strip("._") or "layout"
+        out_dir = os.path.join(tempfile.gettempdir(), "symbolic_editor_klayout")
+        os.makedirs(out_dir, exist_ok=True)
+        self._klayout_live_output_path = os.path.join(
+            out_dir, f"{safe_base}_{id(self):x}_live{ext}"
+        )
+        return self._klayout_live_output_path
+
+    def _schedule_live_klayout_update(self, delay_ms=650, force=False):
+        if not self.nodes or not self._klayout_source_oas_path or not self._klayout_source_sp_path:
+            return
+        if not force and self._workspace_mode == "symbolic" and not self.klayout_panel.isVisible():
+            return
+        self._klayout_live_timer.start(max(0, int(delay_ms)))
+
+    def _collect_live_klayout_nodes(self):
+        self._sync_node_positions(schedule_live=False)
+        nodes = copy.deepcopy(self.nodes)
+        try:
+            abut_states = self.editor.get_device_abutment_states()
+        except Exception:
+            abut_states = {}
+        for node in nodes:
+            dev_id = node.get("id")
+            if dev_id in abut_states:
+                node["abutment"] = abut_states[dev_id]
+            else:
+                node.pop("abutment", None)
+        return nodes
+
+    @staticmethod
+    def _write_live_klayout_file(oas_path, sp_path, nodes, output_path):
+        from export.oas_writer import update_oas_placement
+
+        return update_oas_placement(
+            oas_path=oas_path,
+            sp_path=sp_path,
+            nodes=nodes,
+            output_path=output_path,
+        )
+
+    def _run_live_klayout_update(self):
+        if not self._klayout_source_oas_path or not self._klayout_source_sp_path:
+            return
+        if getattr(self.editor, "_rebuilding_scene", False):
+            self._schedule_live_klayout_update(delay_ms=250, force=True)
+            return
+        if self._klayout_live_worker and self._klayout_live_worker.isRunning():
+            self._klayout_live_pending = True
+            return
+
+        output_path = self._make_live_klayout_output_path()
+        if not output_path:
+            return
+
+        try:
+            nodes = self._collect_live_klayout_nodes()
+        except Exception as exc:
+            logging.debug("Failed to collect live KLayout nodes", exc_info=True)
+            if hasattr(self.klayout_panel, "set_status_text"):
+                self.klayout_panel.set_status_text(f"Live preview sync failed: {exc}")
+            return
+
+        if hasattr(self.klayout_panel, "set_status_text"):
+            self.klayout_panel.set_status_text("Updating live KLayout preview...")
+
+        self._klayout_live_generation += 1
+        generation = self._klayout_live_generation
+        worker = GenericWorker(
+            self._write_live_klayout_file,
+            self._klayout_source_oas_path,
+            self._klayout_source_sp_path,
+            nodes,
+            output_path,
+        )
+        worker._live_generation = generation
+        self._klayout_live_worker = worker
+        worker.finished.connect(self._on_live_klayout_ready)
+        worker.error.connect(self._on_live_klayout_error)
+        worker.start()
+
+    def _on_live_klayout_ready(self, output_path):
+        worker = self.sender()
+        if getattr(worker, "_live_generation", None) != self._klayout_live_generation:
+            if worker is self._klayout_live_worker:
+                self._klayout_live_worker = None
+            if worker is not None:
+                worker.deleteLater()
+            if self._klayout_live_pending:
+                self._klayout_live_pending = False
+                self._schedule_live_klayout_update(delay_ms=50, force=True)
+            return
+        if worker is self._klayout_live_worker:
+            self._klayout_live_worker = None
+        if output_path and os.path.isfile(output_path):
+            self.klayout_panel.refresh_preview(output_path)
+        if worker is not None:
+            worker.deleteLater()
+        if self._klayout_live_pending:
+            self._klayout_live_pending = False
+            self._schedule_live_klayout_update(delay_ms=50, force=True)
+
+    def _on_live_klayout_error(self, err_msg):
+        worker = self.sender()
+        if getattr(worker, "_live_generation", None) != self._klayout_live_generation:
+            if worker is self._klayout_live_worker:
+                self._klayout_live_worker = None
+            if worker is not None:
+                worker.deleteLater()
+            if self._klayout_live_pending:
+                self._klayout_live_pending = False
+                self._schedule_live_klayout_update(delay_ms=250, force=True)
+            return
+        if worker is self._klayout_live_worker:
+            self._klayout_live_worker = None
+        if hasattr(self.klayout_panel, "set_status_text"):
+            self.klayout_panel.set_status_text(f"Live preview error: {err_msg}")
+        logging.debug("Live KLayout preview update failed: %s", err_msg)
+        if worker is not None:
+            worker.deleteLater()
+        if self._klayout_live_pending:
+            self._klayout_live_pending = False
+            self._schedule_live_klayout_update(delay_ms=250, force=True)
 
     def _refresh_panels(self, compact=False, force_schematic_ai=False):
         if not self._original_data:
@@ -690,8 +883,13 @@ class LayoutEditorTab(QWidget):
             item.signals.drag_finished.connect(
                 lambda item=item: self._on_device_drag_end(item)
             )
+            if hasattr(item.signals, "position_changed"):
+                item.signals.position_changed.connect(
+                    lambda: self._schedule_live_klayout_update()
+                )
         self._update_grid_counts()
         self._on_editor_selection_changed()
+        self._schedule_live_klayout_update()
 
     # =================================================================
     #  Selection / grid helpers
@@ -909,6 +1107,10 @@ class LayoutEditorTab(QWidget):
         self._push_undo()
 
     def _on_device_drag_end(self, dragged_item=None):
+        if getattr(self.editor, "_rebuilding_scene", False):
+            self._drag_start_positions = {}
+            return
+
         positions = getattr(self, "_drag_start_positions", {})
         drag_items = list(positions.keys())
 
@@ -920,7 +1122,10 @@ class LayoutEditorTab(QWidget):
 
         selected_ids = self.editor.selected_device_ids()
         if selected_ids and selected_ids[0] in self.editor.device_items:
-            self.editor._show_connections(selected_ids[0])
+            try:
+                self.editor._show_connections(selected_ids[0])
+            except RuntimeError:
+                logging.debug("Skipped routing redraw for deleted selected item", exc_info=True)
 
         self._drag_start_positions = {}
         self._sync_node_positions()
@@ -933,7 +1138,11 @@ class LayoutEditorTab(QWidget):
             custom_groups = []
             try:
                 dev_item_to_id = {v: k for k, v in self.editor.device_items.items()}
-                for g in getattr(self.editor, '_hierarchy_groups', []):
+                iter_groups = getattr(self.editor, "_iter_live_hierarchy_groups", None)
+                groups = iter_groups() if callable(iter_groups) else list(
+                    getattr(self.editor, '_hierarchy_groups', [])
+                )
+                for g in groups:
                     name = getattr(g, '_parent_name', '')
                     # Treat only user-created groups (named GROUP_*) as custom
                     if not name.startswith('GROUP_'):
@@ -1084,6 +1293,7 @@ class LayoutEditorTab(QWidget):
                 self.editor.scene.removeItem(item)
         self.device_tree.load_devices(self.nodes)
         self._update_undo_redo_state()
+        self._schedule_live_klayout_update(delay_ms=100)
 
     # =================================================================
     #  Match Devices
@@ -2366,11 +2576,24 @@ class LayoutEditorTab(QWidget):
     def _expand_all_for_export(self):
         saved = {}
         try:
-            for group in self.editor._hierarchy_groups:
-                saved[group] = (group._is_descended, [(c, c._is_descended) for c in group._child_groups])
+            iter_groups = getattr(self.editor, "_iter_live_hierarchy_groups", None)
+            groups = iter_groups() if callable(iter_groups) else list(
+                getattr(self.editor, "_hierarchy_groups", [])
+            )
+            iter_children = getattr(self.editor, "_iter_live_child_groups", None)
+            for group in groups:
+                children = (
+                    iter_children(group)
+                    if callable(iter_children)
+                    else list(getattr(group, "_child_groups", []))
+                )
+                saved[group] = (
+                    group._is_descended,
+                    [(c, c._is_descended) for c in children],
+                )
                 if not group._is_descended:
                     group.descend()
-                    for child in group._child_groups:
+                    for child in children:
                         if not child._is_descended and child._device_items:
                             child.descend()
         except Exception as e:
@@ -2380,6 +2603,10 @@ class LayoutEditorTab(QWidget):
     def _restore_hierarchy_state(self, saved):
         try:
             for group, state in saved.items():
+                try:
+                    group.scene()
+                except RuntimeError:
+                    continue
                 if isinstance(state, tuple):
                     parent_desc, child_states = state
                 else:
@@ -2390,6 +2617,10 @@ class LayoutEditorTab(QWidget):
                     group.ascend()
                 if isinstance(state, tuple):
                     for child, child_desc in child_states:
+                        try:
+                            child.scene()
+                        except RuntimeError:
+                            continue
                         if child_desc and not child._is_descended:
                             child.descend()
                         elif not child_desc and child._is_descended:
@@ -2715,7 +2946,7 @@ class LayoutEditorTab(QWidget):
     # =================================================================
     #  Sync node positions
     # =================================================================
-    def _sync_node_positions(self):
+    def _sync_node_positions(self, schedule_live=True):
         if not self.nodes:
             edges = self._original_data.get("edges", []) if self._original_data else []
             self.chat_panel.set_layout_context([], edges, self._terminal_nets)
@@ -2745,3 +2976,5 @@ class LayoutEditorTab(QWidget):
         )
         self._update_grid_counts()
         self._on_editor_selection_changed()
+        if schedule_live:
+            self._schedule_live_klayout_update()

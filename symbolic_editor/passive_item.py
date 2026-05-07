@@ -20,6 +20,7 @@ class DeviceSignals(QObject):
     """Helper QObject so passive items can emit signals."""
     drag_started = Signal()
     drag_finished = Signal()
+    position_changed = Signal()
 
 
 class _PassiveBase(QGraphicsRectItem):
@@ -76,6 +77,9 @@ class _PassiveBase(QGraphicsRectItem):
             x = round(value.x() / self._snap_grid_x) * self._snap_grid_x
             y = round(value.y() / self._snap_grid_y) * self._snap_grid_y
             return QPointF(x, y)
+        if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
+            if hasattr(self, "signals"):
+                self.signals.position_changed.emit()
         return super().itemChange(change, value)
 
     # ── Drag tracking ────────────────────────────────────────────────

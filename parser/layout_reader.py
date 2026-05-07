@@ -84,18 +84,24 @@ def _parse_pcell_params(*objs):
     return params
 
 
+def _orientation_from_ref_transform(rotation, mirrored):
+    """Return the KLayout-style orientation for a gdstk reference transform."""
+    deg = round(math.degrees(rotation or 0.0)) % 360
+    if not mirrored:
+        return f"R{deg}"
+    if deg == 0:
+        return "MX"
+    if deg == 180:
+        return "MY"
+    return f"MXR{deg}"
+
+
 def _ref_origin_rotation(ref):
-    """Extract origin, rotation, and orientation string from a reference."""
+    """Extract origin, rotation, mirror flag, and orientation string."""
     x, y = ref.origin
     rotation = ref.rotation if ref.rotation else 0
-    mirrored = ref.x_reflection
-
-    if mirrored:
-        orientation = "MX"
-    else:
-        deg = round(math.degrees(rotation)) % 360
-        orientation = f"R{deg}"
-
+    mirrored = bool(ref.x_reflection)
+    orientation = _orientation_from_ref_transform(rotation, mirrored)
     return x, y, rotation, mirrored, orientation
 
 
@@ -187,7 +193,7 @@ def _walk_layout_references(
                 "y": abs_y,
                 "width": width,
                 "height": height,
-                "orientation": orientation if not mirrored else "MX",
+                "orientation": orientation,
                 "hier_prefix": prefix,
                 "params": params,
                 "abut_left": params.get("leftAbut") == "1",
@@ -202,7 +208,7 @@ def _walk_layout_references(
                 "y": abs_y,
                 "width": width,
                 "height": height,
-                "orientation": orientation if not mirrored else "MX",
+                "orientation": orientation,
                 "hier_prefix": prefix,
                 "passive_type": passive_type,
                 "params": params,
@@ -275,11 +281,7 @@ def _extract_recursive(cell, lib, offset_x=0.0, offset_y=0.0,
 
         if _is_transistor_cell(cell_name):
             # Leaf transistor PCell — record it
-            if mirrored:
-                orientation = "MX"
-            else:
-                deg = round(math.degrees(rotation)) % 360
-                orientation = f"R{deg}"
+            orientation = _orientation_from_ref_transform(rotation, mirrored)
 
             bbox = ref_cell.bounding_box() if hasattr(ref_cell, 'bounding_box') else None
             if bbox is not None:
@@ -307,11 +309,7 @@ def _extract_recursive(cell, lib, offset_x=0.0, offset_y=0.0,
         elif _is_resistor_cell(cell_name) or _is_capacitor_cell(cell_name):
             # Passive PCell — record it with passive_type tag
             passive_type = "res" if _is_resistor_cell(cell_name) else "cap"
-            if mirrored:
-                orientation = "MX"
-            else:
-                deg = round(math.degrees(rotation)) % 360
-                orientation = f"R{deg}"
+            orientation = _orientation_from_ref_transform(rotation, mirrored)
 
             bbox = ref_cell.bounding_box() if hasattr(ref_cell, 'bounding_box') else None
             if bbox is not None:
@@ -395,11 +393,7 @@ def extract_layout_instances(layout_file):
             rotation = ref.rotation if ref.rotation else 0
             mirrored = ref.x_reflection
 
-            if mirrored:
-                orientation = "MX"
-            else:
-                deg = round(math.degrees(rotation)) % 360
-                orientation = f"R{deg}"
+            orientation = _orientation_from_ref_transform(rotation, mirrored)
 
             ref_cell = ref.cell if hasattr(ref.cell, 'bounding_box') else None
             bbox = ref_cell.bounding_box() if ref_cell else None
