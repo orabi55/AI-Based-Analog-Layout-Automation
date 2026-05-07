@@ -956,7 +956,7 @@ class SchematicPanel(QFrame):
         vl.setContentsMargins(0, 0, 0, 0); vl.setSpacing(0)
         vl.addWidget(header); vl.addWidget(self.canvas, 1); vl.addWidget(hint)
         apply_style(self, "background:#0d1117; border-left:1px solid #2d3548;")
-        self.setMinimumWidth(280)
+        self.setMinimumWidth(220)
 
     def set_editor(self, editor):  self._editor = editor
 

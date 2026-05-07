@@ -27,8 +27,10 @@ from PySide6.QtWidgets import (
     QDialog,
     QMessageBox,
     QFrame,
+    QPushButton,
+    QStackedWidget,
 )
-from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtCore import Qt, QTimer, Signal, QPointF
 from PySide6.QtGui import QColor, QKeySequence, QShortcut
 
 try:
@@ -116,6 +118,32 @@ class LayoutEditorTab(QWidget):
         self._workspace_toggle = SegmentedToggle()
         self._workspace_toggle.mode_changed.connect(self.set_workspace_mode)
 
+        self._sidebar_shell = QFrame()
+        sidebar_layout = QVBoxLayout(self._sidebar_shell)
+        sidebar_layout.setContentsMargins(0, 0, 0, 0)
+        sidebar_layout.setSpacing(0)
+
+        sidebar_tabs = QFrame()
+        sidebar_tabs.setFixedHeight(38)
+        sidebar_tabs.setStyleSheet(
+            "background-color:#121821; border-bottom:1px solid #2d3548;"
+        )
+        sidebar_tab_layout = QHBoxLayout(sidebar_tabs)
+        sidebar_tab_layout.setContentsMargins(6, 4, 6, 4)
+        sidebar_tab_layout.setSpacing(4)
+
+        self._hierarchy_tab_btn = self._make_sidebar_tab_button("Hierarchy", 0)
+        self._properties_tab_btn = self._make_sidebar_tab_button("Properties", 1)
+        sidebar_tab_layout.addWidget(self._hierarchy_tab_btn)
+        sidebar_tab_layout.addWidget(self._properties_tab_btn)
+
+        self._sidebar_stack = QStackedWidget()
+        self._sidebar_stack.addWidget(self.device_tree)
+        self._sidebar_stack.addWidget(self.properties_panel)
+        sidebar_layout.addWidget(sidebar_tabs)
+        sidebar_layout.addWidget(self._sidebar_stack, 1)
+        self._show_sidebar_panel(0)
+
         # ── Hook up schematic signals ──────────────────────────────
         self.schematic_panel.highlight_device.connect(self.editor.highlight_device)
         self.schematic_panel.highlight_net.connect(self.editor.highlight_net_by_name)
@@ -124,12 +152,12 @@ class LayoutEditorTab(QWidget):
 
         # ── Right-side vertical splitter ───────────────────────────
         self._left_splitter = QSplitter(Qt.Orientation.Vertical)
-        self._left_splitter.addWidget(self.device_tree)
+        self._left_splitter.addWidget(self._sidebar_shell)
         self._left_splitter.addWidget(self.schematic_panel)
-        self._left_splitter.addWidget(self.properties_panel)
-        self._left_splitter.setStretchFactor(0, 1)
+        self._left_splitter.setStretchFactor(0, 2)
         self._left_splitter.setStretchFactor(1, 1)
-        self._left_splitter.setSizes([460, 360])
+        self._left_splitter.setChildrenCollapsible(False)
+        self._left_splitter.setSizes([390, 230])
         self._left_splitter.setStyleSheet(
             "QSplitter::handle { background-color: #2d3548; height: 2px; }"
             "QSplitter::handle:hover { background-color: #4a90d9; }"
@@ -184,9 +212,9 @@ class LayoutEditorTab(QWidget):
         self._splitter.setStretchFactor(0, 0)
         self._splitter.setStretchFactor(1, 1)
         self._splitter.setStretchFactor(2, 0)
-        self._splitter.setSizes([320, 980, 340])
-        self._sidebar_default_width = 320
-        self._chat_default_width = 340
+        self._splitter.setSizes([240, 1060, 320])
+        self._sidebar_default_width = 240
+        self._chat_default_width = 320
 
         # ── Collapsed-panel reopen strips ─────────────────────────
         self._tree_reopen_strip = self._make_reopen_strip(">", "Show Hierarchy Sidebar")
@@ -217,7 +245,7 @@ class LayoutEditorTab(QWidget):
         main_layout.addWidget(container)
 
         # Populate panels
-        self._refresh_panels()
+        self._refresh_panels(compact=True)
         self._init_workspace_shortcuts()
 
         # Fit view after initial load
@@ -307,6 +335,47 @@ class LayoutEditorTab(QWidget):
             return len(self.editor.selected_device_ids())
         except (AttributeError, RuntimeError):
             return 0
+
+    # =================================================================
+    #  Left sidebar stack
+    # =================================================================
+    def _make_sidebar_tab_button(self, text, index):
+        btn = QPushButton(text)
+        btn.setCheckable(True)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.setStyleSheet(
+            """
+            QPushButton {
+                background: transparent;
+                color: #8795a8;
+                border: 1px solid transparent;
+                border-radius: 5px;
+                padding: 5px 8px;
+                font-family: 'Segoe UI';
+                font-size: 9pt;
+                font-weight: 700;
+            }
+            QPushButton:hover {
+                background-color: #1d2531;
+                color: #cbd7e6;
+            }
+            QPushButton:checked {
+                background-color: #26364a;
+                border-color: #4a90d9;
+                color: #ffffff;
+            }
+            """
+        )
+        btn.clicked.connect(lambda _checked=False, i=index: self._show_sidebar_panel(i))
+        return btn
+
+    def _show_sidebar_panel(self, index):
+        if hasattr(self, "_sidebar_stack"):
+            self._sidebar_stack.setCurrentIndex(index)
+        if hasattr(self, "_hierarchy_tab_btn"):
+            self._hierarchy_tab_btn.setChecked(index == 0)
+        if hasattr(self, "_properties_tab_btn"):
+            self._properties_tab_btn.setChecked(index == 1)
 
     # =================================================================
     #  Panel collapse / expand
@@ -450,25 +519,7 @@ class LayoutEditorTab(QWidget):
             event.accept()
             return
         if event.key() == Qt.Key.Key_Q and not event.modifiers():
-            selected_ids = self.editor.selected_device_ids() if self.editor else []
-            if len(selected_ids) == 1:
-                self._show_device_properties(selected_ids[0])
-                self.properties_panel.setVisible(True)
-                self.properties_panel.setFocus(Qt.FocusReason.OtherFocusReason)
-            elif len(selected_ids) == 0:
-                self.chat_panel._append_message(
-                    "AI",
-                    "Select one device first to show its properties (Q).",
-                    "#fde8e8",
-                    "#a00",
-                )
-            else:
-                self.chat_panel._append_message(
-                    "AI",
-                    "Select a single device to open properties (Q).",
-                    "#fde8e8",
-                    "#a00",
-                )
+            self._show_selected_device_properties()
             event.accept()
             return
         super().keyPressEvent(event)
@@ -633,8 +684,12 @@ class LayoutEditorTab(QWidget):
             self.nodes, self._original_data.get("edges"), self._terminal_nets,
         )
         for item in self.editor.device_items.values():
-            item.signals.drag_started.connect(self._on_device_drag_start)
-            item.signals.drag_finished.connect(self._on_device_drag_end)
+            item.signals.drag_started.connect(
+                lambda item=item: self._on_device_drag_start(item)
+            )
+            item.signals.drag_finished.connect(
+                lambda item=item: self._on_device_drag_end(item)
+            )
         self._update_grid_counts()
         self._on_editor_selection_changed()
 
@@ -664,7 +719,7 @@ class LayoutEditorTab(QWidget):
             self._left_splitter.setVisible(True)
             self._tree_reopen_strip.setVisible(False)
             self._show_device_properties(selected_ids[0])
-            self.properties_panel.setVisible(True)
+            self._show_sidebar_panel(1)
             self.properties_panel.setFocus(Qt.FocusReason.OtherFocusReason)
         elif len(selected_ids) == 0:
             self.chat_panel._append_message(
@@ -702,9 +757,11 @@ class LayoutEditorTab(QWidget):
         self.properties_panel.show_block_properties(block_id, block_data)
 
     def _on_connection_selected(self, dev_id, net_name, _other):
-        self.editor.highlight_device(dev_id)
+        if net_name and net_name != "?":
+            self.editor.highlight_net_by_name(net_name)
+        else:
+            self.editor.highlight_device(dev_id)
         self._show_device_properties(dev_id)
-        self.editor._show_net_connections(dev_id, net_name)
 
     def _on_canvas_device_clicked(self, dev_id):
         self._show_device_properties(dev_id)
@@ -781,18 +838,93 @@ class LayoutEditorTab(QWidget):
     def _update_undo_redo_state(self):
         self.undo_state_changed.emit(bool(self._undo_stack), bool(self._redo_stack))
 
-    def _on_device_drag_start(self):
+    def _drag_items(self, dragged_item=None):
         try:
-            for it in self.editor.scene.selectedItems():
+            items = [
+                it for it in self.editor.scene.selectedItems()
+                if hasattr(it, "device_name") and hasattr(it, "setPos")
+            ]
+        except RuntimeError:
+            items = []
+        if dragged_item is not None and dragged_item not in items:
+            items.append(dragged_item)
+        return items
+
+    def _capture_drag_start_positions(self, dragged_item, items):
+        positions = {}
+        delta = QPointF()
+        if dragged_item is not None and hasattr(dragged_item, "_drag_start_pos"):
+            delta = dragged_item.pos() - dragged_item._drag_start_pos
+
+        for item in items:
+            if item is dragged_item and hasattr(item, "_drag_start_pos"):
+                start_pos = item._drag_start_pos
+            else:
+                start_pos = item.pos() - delta
+            positions[item] = QPointF(start_pos)
+        self._drag_start_positions = positions
+
+    @staticmethod
+    def _rects_overlap(a, b, epsilon=0.5):
+        intersection = a.intersected(b)
+        return intersection.width() > epsilon and intersection.height() > epsilon
+
+    def _drag_overlaps_stationary_items(self, drag_items):
+        moving = set(drag_items)
+        stationary = [
+            item for item in self.editor.device_items.values()
+            if item not in moving and item.isVisible()
+        ]
+        for moving_item in drag_items:
+            moving_rect = moving_item.sceneBoundingRect()
+            for other in stationary:
+                if self._rects_overlap(moving_rect, other.sceneBoundingRect()):
+                    return True
+        return False
+
+    def _restore_drag_start_positions(self):
+        positions = getattr(self, "_drag_start_positions", {})
+        if not positions:
+            return
+        self.editor.scene.blockSignals(True)
+        try:
+            for item, pos in positions.items():
+                try:
+                    item.setPos(pos)
+                except RuntimeError:
+                    pass
+        finally:
+            self.editor.scene.blockSignals(False)
+
+    def _on_device_drag_start(self, dragged_item=None):
+        drag_items = self._drag_items(dragged_item)
+        self._capture_drag_start_positions(dragged_item, drag_items)
+        try:
+            for it in drag_items:
                 if hasattr(it, "set_snap_grid"):
-                    it.set_snap_grid(self.editor._snap_grid, self.editor._snap_grid)
+                    it.set_snap_grid(self.editor._snap_grid, self.editor._row_pitch)
         except RuntimeError:
             pass
         self._sync_node_positions()
         self._push_undo()
 
-    def _on_device_drag_end(self):
+    def _on_device_drag_end(self, dragged_item=None):
+        positions = getattr(self, "_drag_start_positions", {})
+        drag_items = list(positions.keys())
+
+        if positions and self._drag_overlaps_stationary_items(drag_items):
+            self._restore_drag_start_positions()
+            if self._undo_stack:
+                self._undo_stack.pop()
+                self._update_undo_redo_state()
+
+        selected_ids = self.editor.selected_device_ids()
+        if selected_ids and selected_ids[0] in self.editor.device_items:
+            self.editor._show_connections(selected_ids[0])
+
+        self._drag_start_positions = {}
         self._sync_node_positions()
+        self._update_grid_counts()
 
     def _on_hierarchy_changed(self):
         """Refresh the device tree when hierarchy groups are created or deleted."""
@@ -832,7 +964,7 @@ class LayoutEditorTab(QWidget):
         self._redo_stack.append(copy.deepcopy(self.nodes))
         self.nodes = self._undo_stack.pop()
         self._original_data["nodes"] = self.nodes
-        self._refresh_panels()
+        self._refresh_panels(compact=True)
         self._update_undo_redo_state()
 
     def do_redo(self):

@@ -345,21 +345,15 @@ class DeviceItem(QGraphicsRectItem):
         self.update()
 
     def itemChange(self, change, value):
-        """
-        Snap dragged positions to grid.
-        """
-        if change == QGraphicsItem.GraphicsItemChange.ItemPositionChange:
-            # Bypass double-snapping if custom drag engine is currently steering the item
-            if getattr(self, '_drag_active', False) or getattr(self, '_propagating_move', False):
-                return super().itemChange(change, value)
-                
-            # Only apply snapping if enabled
-            if self._snap_grid_x and self._snap_grid_y:
-                new_pos = value
-                # Apply grid snapping
-                x = round(new_pos.x() / self._snap_grid_x) * self._snap_grid_x
-                y = round(new_pos.y() / self._snap_grid_y) * self._snap_grid_y
-                return QPointF(x, y)
+        """Snap dragged positions to grid so devices never float between tracks."""
+        if (
+            change == QGraphicsItem.GraphicsItemChange.ItemPositionChange
+            and self._snap_grid_x
+            and self._snap_grid_y
+        ):
+            x = round(value.x() / self._snap_grid_x) * self._snap_grid_x
+            y = round(value.y() / self._snap_grid_y) * self._snap_grid_y
+            return QPointF(x, y)
         
         # Preserve Z-order when item moves
         if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
@@ -388,98 +382,24 @@ class DeviceItem(QGraphicsRectItem):
         return any(s.isSelected() for s in self._sibling_group)
 
     # --------------------------------------------------
-    # Drag tracking and collision handling
+    # Drag tracking
     # --------------------------------------------------
     def mousePressEvent(self, event):
-        # Let Qt handle standard selection first so we can accurately capture selected items
-        super().mousePressEvent(event)
-        
         if event.button() == Qt.MouseButton.LeftButton:
-            self._drag_start_scene_pos = event.scenePos()
-            self._drag_axis = None
-            self._is_directly_dragged = True
+            self._drag_start_pos = self.pos()
             self._drag_active = False
             self._original_z = self.zValue()  # Preserve Z order
 
-            # Check if "moving groups only" is enabled
-            moving_groups_only = False
-            editor = None
-            if self.scene():
-                # Try to get the editor from the scene
-                scene = self.scene()
-                if hasattr(scene, '_editor') and hasattr(scene._editor, '_moving_groups_only'):
-                    moving_groups_only = scene._editor._moving_groups_only
-                    editor = scene._editor
-
-            # Identify all moving items (the selected group)
-            self._moving_items = []
-            group_devices = []  # devices in the same group
-            
-            if self.scene():
-                if moving_groups_only:
-                    # Try to find all devices in the same group
-                    # First, check _sibling_group (for hierarchical devices)
-                    if self._sibling_group:
-                        group_devices = list(self._sibling_group)
-                    # Otherwise, check if device is in a HierarchyGroupItem
-                    elif editor:
-                        for group in editor._hierarchy_groups:
-                            if self in group._all_descendant_devices:
-                                group_devices = list(group._all_descendant_devices)
-                                break
-                    
-                    # If we found group devices, move them all
-                    if group_devices:
-                        for item in group_devices:
-                            item._drag_initial_pos = item.pos()
-                            self._moving_items.append(item)
-                            item.setSelected(True)  # Select all group members
-                
-                # If not in moving_groups_only mode or no group found, use normal selection
-                if not self._moving_items:
-                    for item in self.scene().selectedItems():
-                        if isinstance(item, DeviceItem):
-                            item._drag_initial_pos = item.pos()
-                            self._moving_items.append(item)
-                        
-            # Ensure the primary dragged item itself is always included
-            if self not in self._moving_items:
-                self._drag_initial_pos = self.pos()
-                self._moving_items.append(self)
-            
-            # Cache obstacles once at drag start instead of recalculating on every mouseMoveEvent
-            self._cached_obstacles = []
-            if self.scene():
-                for it in self.scene().items():
-                    if isinstance(it, DeviceItem) and it not in self._moving_items:
-                        self._cached_obstacles.append(it)
+        super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
-        if not getattr(self, '_is_directly_dragged', False):
-            return
-
-        if not self._drag_active:
+        super().mouseMoveEvent(event)
+        if not self._drag_active and self.pos() != self._drag_start_pos:
             self._drag_active = True
             self.signals.drag_started.emit()
 
-        mouse_delta = event.scenePos() - self._drag_start_scene_pos
-        dx = mouse_delta.x()
-        dy = mouse_delta.y()
-
-        # Move freely in both X and Y directions following the mouse
-        proposed_pos = self._drag_initial_pos + QPointF(dx, dy)
-        actual_delta = proposed_pos - self._drag_initial_pos
-
-        # 3. Apply uniform group movement (instant, no lag)
-        moving_group = getattr(self, '_moving_items', [self])
-        for item in moving_group:
-            new_pos = item._drag_initial_pos + actual_delta
-            item._propagating_move = True  # Flag to bypass redundant snapping in itemChange
-            item.setPos(new_pos)
-            item._propagating_move = False
-
     def mouseReleaseEvent(self, event):
-        if getattr(self, '_drag_active', False):
+        if self._drag_active:
             self._drag_active = False
             self.signals.drag_finished.emit()
 
@@ -915,8 +835,6 @@ class DeviceItem(QGraphicsRectItem):
                            y0 + h * 0.08,
                            pill_w,
                            pill_h)
-        if self._flip_h or self._flip_v:
-            pill_rect = _flip_rect(pill_rect)
 
         pill_bg = QColor(0, 0, 0, 70) if not self._is_dummy else QColor(255, 255, 255, 70)
         painter.setPen(Qt.PenStyle.NoPen)

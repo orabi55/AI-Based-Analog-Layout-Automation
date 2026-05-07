@@ -54,6 +54,7 @@ class DeviceTreePanel(QWidget):
         self.tree.customContextMenuRequested.connect(self._show_context_menu)
 
     def _init_ui(self):
+        self.setMinimumWidth(220)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -65,7 +66,7 @@ class DeviceTreePanel(QWidget):
             "border-bottom: 1px solid #2d3548;"
         )
         header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(12, 0, 12, 0)
+        header_layout.setContentsMargins(10, 0, 8, 0)
 
         title = QLabel("Design Hierarchy")
         title.setFont(QFont("Segoe UI", 11, QFont.Weight.DemiBold))
@@ -107,8 +108,8 @@ class DeviceTreePanel(QWidget):
             "background-color: #151a23; border-bottom: 1px solid #2d3548;"
         )
         tab_layout = QHBoxLayout(tab_bar)
-        tab_layout.setContentsMargins(8, 4, 8, 4)
-        tab_layout.setSpacing(4)
+        tab_layout.setContentsMargins(6, 4, 6, 4)
+        tab_layout.setSpacing(3)
 
         tab_style = """
         QPushButton {
@@ -116,7 +117,7 @@ class DeviceTreePanel(QWidget):
             color: #808896;
             border: none;
             border-radius: 6px;
-            padding: 6px 16px;
+            padding: 6px 10px;
             font-family: 'Segoe UI';
             font-size: 10pt;
             font-weight: 600;

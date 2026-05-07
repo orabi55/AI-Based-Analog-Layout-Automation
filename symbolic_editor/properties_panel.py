@@ -29,6 +29,7 @@ class PropertiesPanel(QWidget):
         self._init_ui()
 
     def _init_ui(self):
+        self.setMinimumWidth(220)
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
