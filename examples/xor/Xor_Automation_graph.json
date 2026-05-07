@@ -20,7 +20,9 @@
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
-            }
+            },
+            "layout_index": 4,
+            "layout_cell": "nfet_pcell_87be"
         },
         {
             "id": "MM5",
@@ -42,7 +44,9 @@
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
-            }
+            },
+            "layout_index": 5,
+            "layout_cell": "nfet_pcell_87be"
         },
         {
             "id": "MM4",
@@ -64,7 +68,9 @@
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
-            }
+            },
+            "layout_index": 3,
+            "layout_cell": "nfet_pcell_87be"
         },
         {
             "id": "MM3",
@@ -86,7 +92,9 @@
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
-            }
+            },
+            "layout_index": 1,
+            "layout_cell": "nfet_pcell_87be"
         },
         {
             "id": "MM2",
@@ -108,7 +116,9 @@
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
-            }
+            },
+            "layout_index": 0,
+            "layout_cell": "nfet_pcell_87be"
         },
         {
             "id": "MM25",
@@ -130,7 +140,9 @@
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
-            }
+            },
+            "layout_index": 2,
+            "layout_cell": "nfet_pcell_87be"
         },
         {
             "id": "MM29",
@@ -152,7 +164,9 @@
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
-            }
+            },
+            "layout_index": 9,
+            "layout_cell": "pfet_pcell_d69f"
         },
         {
             "id": "MM9",
@@ -174,7 +188,9 @@
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
-            }
+            },
+            "layout_index": 8,
+            "layout_cell": "pfet_pcell_d69f"
         },
         {
             "id": "MM8",
@@ -196,7 +212,9 @@
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
-            }
+            },
+            "layout_index": 11,
+            "layout_cell": "pfet_pcell_d69f"
         },
         {
             "id": "MM7",
@@ -218,7 +236,9 @@
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
-            }
+            },
+            "layout_index": 7,
+            "layout_cell": "pfet_pcell_d69f"
         },
         {
             "id": "MM6",
@@ -240,7 +260,9 @@
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
-            }
+            },
+            "layout_index": 6,
+            "layout_cell": "pfet_pcell_d69f"
         },
         {
             "id": "MM24",
@@ -262,7 +284,9 @@
                 "width": 0.294,
                 "height": 0.6680000000000001,
                 "orientation": "R0"
-            }
+            },
+            "layout_index": 10,
+            "layout_cell": "pfet_pcell_d69f"
         }
     ],
     "edges": [

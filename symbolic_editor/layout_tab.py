@@ -1557,13 +1557,20 @@ class LayoutEditorTab(QWidget):
         y = -candidate["y"] / self.editor.scale_factor
         width = candidate["width"] / self.editor.scale_factor
         height = candidate["height"] / self.editor.scale_factor
-        return {
+        dummy = {
             "id": self._next_dummy_id(dev_type),
             "type": dev_type,
             "is_dummy": True,
+            "dummy_source": "user",
             "electrical": electrical,
             "geometry": {"x": x, "y": y, "width": width, "height": height, "orientation": "R0"},
         }
+        if template:
+            if template.get("layout_index") is not None:
+                dummy["template_layout_index"] = template.get("layout_index")
+            if template.get("layout_cell"):
+                dummy["layout_cell"] = template.get("layout_cell")
+        return dummy
 
     def _dummy_row_step(self, dev_type):
         """Return the next same-type dummy row step in scene coordinates."""
@@ -1800,10 +1807,12 @@ class LayoutEditorTab(QWidget):
         # ── Strip dummies from previous runs ────────────────────────────
         # On re-run, old filler/edge dummies would pollute the pipeline's
         # device count, row-width balancing, and footprint calculations.
-        # Keep ONLY real (non-dummy) devices; the pipeline creates new
-        # dummies as needed.
+        # Keep imported layout dummies: they are physical devices that must
+        # round-trip through the parser/export/live-preview path.
         def _is_dummy(n):
             if not isinstance(n, dict):
+                return False
+            if n.get("dummy_source") == "layout":
                 return False
             if n.get("is_dummy"):
                 return True
@@ -2087,6 +2096,29 @@ class LayoutEditorTab(QWidget):
         nodes = []
         terminal_nets = {}
         node_by_name = {}
+        mapped_layout_indices = set(
+            idx for idx in device_mapping.values() if idx is not None
+        )
+
+        def _layout_dummy_type(inst):
+            dtype = str(inst.get("dummy_type") or "").strip().lower()
+            if dtype in ("nmos", "pmos"):
+                return dtype
+            cell = str(inst.get("cell", "")).lower()
+            if any(token in cell for token in ("pfet", "pmos", "pch")):
+                return "pmos"
+            return "nmos"
+
+        def _unique_dummy_id(base):
+            used = {n.get("id", "") for n in nodes}
+            used.update(netlist.devices.keys())
+            candidate = base
+            i = 1
+            while candidate in used:
+                i += 1
+                candidate = f"{base}_{i}"
+            return candidate
+
         for dev_name, dev in netlist.devices.items():
             dev_type = dev.type
             is_passive = dev_type in ("res", "cap")
@@ -2132,6 +2164,10 @@ class LayoutEditorTab(QWidget):
             else:
                 geom = {"x": 0.0, "y": 0.0, "width": PITCH_UM, "height": ROW_HEIGHT_UM, "orientation": "R0"}
             node_dict = {"id": dev_name, "type": dev_type, "electrical": electrical, "geometry": geom}
+            if layout_idx is not None:
+                node_dict["layout_index"] = layout_idx
+                if layout_idx < len(layout_instances):
+                    node_dict["layout_cell"] = layout_instances[layout_idx].get("cell")
             if abut_info:
                 node_dict["abutment"] = abut_info
             block_info = block_map.get(dev_name)
@@ -2148,6 +2184,50 @@ class LayoutEditorTab(QWidget):
                     terminal_nets[dev_name] = {"1": dev.pins.get("1", ""), "2": dev.pins.get("2", "")}
                 else:
                     terminal_nets[dev_name] = {"D": dev.pins.get("D", ""), "G": dev.pins.get("G", ""), "S": dev.pins.get("S", "")}
+
+        for layout_idx, inst in enumerate(layout_instances):
+            if not inst.get("is_dummy") or layout_idx in mapped_layout_indices:
+                continue
+            dev_type = _layout_dummy_type(inst)
+            prefix = "DUMMYP" if dev_type == "pmos" else "DUMMYN"
+            dev_id = _unique_dummy_id(f"{prefix}{layout_idx + 1}")
+            geom = {
+                "x": inst.get("x", 0.0),
+                "y": inst.get("y", 0.0),
+                "width": inst.get("width", PITCH_UM),
+                "height": inst.get("height", ROW_HEIGHT_UM),
+                "orientation": inst.get("orientation", "R0"),
+            }
+            params = inst.get("params", {}) or {}
+            electrical = {
+                "l": params.get("l", 1.4e-08),
+                "nf": params.get("nf", 1),
+                "nfin": params.get("nfin", 1),
+                "w": params.get("w", 0),
+                "parent": None,
+                "m": params.get("m", 1),
+                "multiplier_index": None,
+                "finger_index": None,
+                "array_index": None,
+            }
+            node_dict = {
+                "id": dev_id,
+                "type": dev_type,
+                "is_dummy": True,
+                "dummy_source": "layout",
+                "layout_index": layout_idx,
+                "layout_cell": inst.get("cell"),
+                "electrical": electrical,
+                "geometry": geom,
+            }
+            if abutment_enabled and (inst.get("abut_left") or inst.get("abut_right")):
+                node_dict["abutment"] = {
+                    "abut_left": bool(inst.get("abut_left")),
+                    "abut_right": bool(inst.get("abut_right")),
+                }
+            nodes.append(node_dict)
+            node_by_name[dev_id] = node_dict
+
         # Fan-out shared layout instances
         layout_to_node_names = {}
         for dev_name, layout_idx in device_mapping.items():
@@ -2868,6 +2948,7 @@ class LayoutEditorTab(QWidget):
                     "id": self._next_dummy_id(dev_type),
                     "type": dev_type,
                     "is_dummy": True,
+                    "dummy_source": "user",
                     "electrical": electrical,
                     "geometry": {
                         "x": target_x,
@@ -2877,6 +2958,10 @@ class LayoutEditorTab(QWidget):
                         "orientation": "R0",
                     },
                 }
+                if template.get("layout_index") is not None:
+                    dummy["template_layout_index"] = template.get("layout_index")
+                if template.get("layout_cell"):
+                    dummy["layout_cell"] = template.get("layout_cell")
                 self.nodes.append(dummy)
                 self._original_data["nodes"] = self.nodes
                 self._refresh_panels(compact=False)

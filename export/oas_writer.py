@@ -243,12 +243,23 @@ def _is_transistor_cell(cell_name):
     return ("nfet" in name_lower or "pfet" in name_lower or
             "nmos" in name_lower or "pmos" in name_lower)
 
+def _is_dummy_cell(cell_name):
+    name_lower = cell_name.lower()
+    return (
+        "dummy" in name_lower
+        or name_lower.startswith(("dmy", "dum_"))
+        or name_lower.startswith(("filler_dummy", "edge_dummy"))
+    )
+
 def _is_known_device(cell_name):
-    return (_is_transistor_cell(cell_name) or
+    return (_is_dummy_cell(cell_name) or
+            _is_transistor_cell(cell_name) or
             _is_resistor_cell(cell_name) or
             _is_capacitor_cell(cell_name))
 
 def _is_via_or_utility(cell_name):
+    if _is_dummy_cell(cell_name):
+        return False
     name_lower = cell_name.lower()
     return ("via" in name_lower or "stdvia" in name_lower or
             "fill" in name_lower or "tap" in name_lower or
@@ -327,12 +338,24 @@ def update_oas_placement(oas_path, sp_path, nodes, output_path,
     layout_devices = extract_layout_instances_from_library(lib, include_references=True)
     netlist        = read_netlist(sp_path)
     mapping        = match_devices(netlist, layout_devices)
-    node_by_id     = {n["id"]: n for n in nodes if not n.get("is_dummy")}
+    node_by_id     = {n["id"]: n for n in nodes}
 
     # ── Apply updates ─────────────────────────────────────────────────────
     # Spatial matching to map netlist devices to references
     layout_to_nodes = defaultdict(list)
+    explicit_layout_node_ids = set()
+    for node in nodes:
+        try:
+            layout_idx = int(node.get("layout_index"))
+        except (TypeError, ValueError):
+            continue
+        if 0 <= layout_idx < len(layout_devices):
+            layout_to_nodes[layout_idx].append(node)
+            explicit_layout_node_ids.add(node.get("id"))
+
     for dev_id, layout_idx in mapping.items():
+        if dev_id in explicit_layout_node_ids:
+            continue
         node = node_by_id.get(dev_id)
         if node is not None:
             layout_to_nodes[layout_idx].append(node)
@@ -346,6 +369,60 @@ def update_oas_placement(oas_path, sp_path, nodes, output_path,
             node.get("id", ""),
         )
 
+    def _node_is_dummy(node):
+        node_id = str(node.get("id", "")).upper()
+        return bool(node.get("is_dummy")) or node_id.startswith(
+            ("DUMMY", "FILLER_DUMMY", "EDGE_DUMMY")
+        )
+
+    def _layout_entry_type(entry):
+        if entry.get("passive_type") in ("res", "cap"):
+            return entry.get("passive_type")
+        dtype = str(entry.get("dummy_type") or entry.get("type") or "").lower()
+        if dtype in ("nmos", "pmos"):
+            return dtype
+        cell = str(entry.get("cell", "")).lower()
+        if any(token in cell for token in ("pfet", "pmos", "pch")):
+            return "pmos"
+        if any(token in cell for token in ("nfet", "nmos", "nch")):
+            return "nmos"
+        return None
+
+    def _node_type(node):
+        dtype = str(node.get("type") or "").strip().lower()
+        return dtype if dtype in ("nmos", "pmos", "res", "cap") else None
+
+    template_refs_by_type = {}
+    dummy_template_refs_by_type = {}
+    for idx, entry in enumerate(layout_devices):
+        ref = entry.get("reference")
+        if ref is None:
+            continue
+        dtype = _layout_entry_type(entry)
+        if not dtype:
+            continue
+        if entry.get("is_dummy"):
+            dummy_template_refs_by_type.setdefault(dtype, ref)
+        else:
+            template_refs_by_type.setdefault(dtype, ref)
+
+    def _template_ref_for_dummy_node(node):
+        try:
+            template_idx = int(node.get("template_layout_index"))
+        except (TypeError, ValueError):
+            template_idx = None
+        if template_idx is not None and 0 <= template_idx < len(layout_devices):
+            ref = layout_devices[template_idx].get("reference")
+            if ref is not None:
+                return ref
+
+        dtype = _node_type(node)
+        if not dtype:
+            return None
+        return dummy_template_refs_by_type.get(dtype) or template_refs_by_type.get(dtype)
+
+    primary_node_by_layout_idx = {}
+
     for layout_idx, group_nodes in layout_to_nodes.items():
         if layout_idx >= len(layout_devices):
             continue
@@ -357,6 +434,7 @@ def update_oas_placement(oas_path, sp_path, nodes, output_path,
 
         group_nodes = sorted(group_nodes, key=_node_sort_key)
         node = group_nodes[0]
+        primary_node_by_layout_idx[layout_idx] = node
         geom = dict(node.get("geometry", {}))
         if len(group_nodes) > 1:
             geom["x"] = min(n.get("geometry", {}).get("x", geom.get("x", 0)) for n in group_nodes)
@@ -424,6 +502,45 @@ def update_oas_placement(oas_path, sp_path, nodes, output_path,
 
 
     # ── Write output ──────────────────────────────────────────────────────
+    placed_node_ids = {
+        node.get("id")
+        for group_nodes in layout_to_nodes.values()
+        for node in group_nodes
+    }
+    for node in nodes:
+        if not _node_is_dummy(node) or node.get("id") in placed_node_ids:
+            continue
+        try:
+            layout_idx = int(node.get("layout_index"))
+        except (TypeError, ValueError):
+            layout_idx = None
+        if layout_idx is not None and 0 <= layout_idx < len(layout_devices):
+            continue
+
+        template_ref = _template_ref_for_dummy_node(node)
+        if template_ref is None:
+            continue
+
+        geom = dict(node.get("geometry", {}))
+        rot_rad, x_mirror = _orient_to_gdstk(geom.get("orientation", "R0"))
+        dummy_ref = gdstk.Reference(
+            template_ref.cell,
+            (geom.get("x", 0), geom.get("y", 0)),
+            rot_rad,
+            template_ref.magnification,
+            x_mirror,
+        )
+        for prop in getattr(template_ref, "properties", []) or []:
+            try:
+                dummy_ref.set_property(prop[0], prop[1:])
+            except Exception:
+                pass
+        try:
+            dummy_ref.set_property("symbolic_dummy", [str(node.get("id", ""))])
+        except Exception:
+            pass
+        top_cell.add(dummy_ref)
+
     if output_format is None:
         ext = os.path.splitext(output_path)[1].lower()
         output_format = "gds" if ext == ".gds" else "oas"
@@ -482,15 +599,18 @@ def update_oas_placement(oas_path, sp_path, nodes, output_path,
         this_dev_id = "UNK"
         this_al = False
         this_ar = False
-        for d_id, l_idx in mapping.items():
-            if l_idx == i:
-                this_dev_id = d_id
-                node = node_by_id.get(d_id)
-                if node:
-                    abut = node.get("abutment")
-                    this_al = bool(abut.get("abut_left", False)) if abut else False
-                    this_ar = bool(abut.get("abut_right", False)) if abut else False
-                break
+        node = primary_node_by_layout_idx.get(i)
+        if node is None:
+            for d_id, l_idx in mapping.items():
+                if l_idx == i:
+                    this_dev_id = d_id
+                    node = node_by_id.get(d_id)
+                    break
+        if node:
+            this_dev_id = node.get("id", this_dev_id)
+            abut = node.get("abutment")
+            this_al = bool(abut.get("abut_left", False)) if abut else False
+            this_ar = bool(abut.get("abut_right", False)) if abut else False
 
         if not target_cell:
             orig_variant = next((c for c in lib.cells if c.name == target_name), None)
