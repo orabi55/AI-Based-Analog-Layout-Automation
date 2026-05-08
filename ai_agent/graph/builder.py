@@ -24,6 +24,8 @@ from ai_agent.graph.edges import (
     route_after_session_chat,
     route_after_command_validator,
     route_after_session_drc,
+    route_after_layout_session_agent,
+    route_after_deterministic_tool_runner,
 )
 from ai_agent.utils.logging import vprint
 from ai_agent.nodes import (
@@ -42,6 +44,9 @@ from ai_agent.nodes import (
     node_command_validator,
     node_drc_checker,
 )
+from ai_agent.nodes.layout_session_agent import node_layout_session_agent
+from ai_agent.nodes.deterministic_tool_runner import node_deterministic_tool_runner
+from ai_agent.nodes.session_synthesizer import node_session_synthesizer
 
 
 def _route_after_router(state: LayoutState):
@@ -307,15 +312,150 @@ def build_session_chat_graph():
     return builder.compile(checkpointer=memory), memory
 
 
+def build_layout_session_graph():
+    """Build the AI-first layout session LangGraph (``chat_v2``).
+
+    This graph replaces the deterministic keyword router with an AI-first
+    agent that understands natural language and delegates to deterministic
+    tools, command validators, and specialist agents.
+
+    Graph shape::
+
+        START
+          → node_layout_session_agent
+          → conditional route_after_layout_session_agent
+
+        answer / clarify
+          → node_session_finalizer → END
+
+        call_deterministic_tool
+          → node_deterministic_tool_runner
+          → conditional route_after_deterministic_tool_runner
+              propose_commands → node_command_validator → viewer/finalizer
+              otherwise        → node_session_finalizer → END
+
+        propose_commands
+          → node_command_validator
+          → conditional route_after_command_validator
+              valid   → node_human_viewer → END
+              invalid → node_session_finalizer → END
+
+        call_specialist (topology_analyst)
+          → node_topology_analyst → node_session_synthesizer → END
+
+        call_specialist (strategy_selector)
+          → node_strategy_selector → node_session_synthesizer → END
+
+        call_specialist (placement_specialist)
+          → node_placement_specialist → node_command_validator → viewer/finalizer
+
+        check_drc
+          → node_drc_checker → node_session_synthesizer → END
+
+        fix_drc
+          → node_drc_critic
+          → conditional route_after_session_drc
+              commands → node_command_validator → viewer/finalizer
+              no cmds  → node_session_finalizer → END
+
+        check_routing / optimize_routing
+          → node_routing_previewer → node_session_synthesizer → END
+    """
+    memory = MemorySaver()
+    builder = StateGraph(LayoutState)
+
+    # ── Register nodes ──
+    builder.add_node("node_layout_session_agent",    node_layout_session_agent)
+    builder.add_node("node_deterministic_tool_runner", node_deterministic_tool_runner)
+    builder.add_node("node_session_synthesizer",     node_session_synthesizer)
+    builder.add_node("node_session_finalizer",       node_session_finalizer)
+    builder.add_node("node_command_validator",       node_command_validator)
+    builder.add_node("node_topology_analyst",        node_topology_analyst)
+    builder.add_node("node_strategy_selector",       node_strategy_selector)
+    builder.add_node("node_placement_specialist",    node_placement_specialist)
+    builder.add_node("node_drc_critic",              node_drc_critic)
+    builder.add_node("node_drc_checker",             node_drc_checker)
+    builder.add_node("node_routing_previewer",       node_routing_previewer)
+    builder.add_node("node_human_viewer",            node_human_viewer)
+
+    # ── Entry ──
+    builder.add_edge(START, "node_layout_session_agent")
+
+    # ── Conditional fan-out after layout session agent ──
+    builder.add_conditional_edges(
+        "node_layout_session_agent",
+        route_after_layout_session_agent,
+        {
+            "node_session_finalizer":       "node_session_finalizer",
+            "node_deterministic_tool_runner": "node_deterministic_tool_runner",
+            "node_command_validator":        "node_command_validator",
+            "node_topology_analyst":         "node_topology_analyst",
+            "node_strategy_selector":        "node_strategy_selector",
+            "node_placement_specialist":     "node_placement_specialist",
+            "node_drc_checker":              "node_drc_checker",
+            "node_drc_critic":               "node_drc_critic",
+            "node_routing_previewer":        "node_routing_previewer",
+        },
+    )
+
+    # ── answer / clarify → finalizer → END ──
+    builder.add_edge("node_session_finalizer", END)
+
+    # ── call_deterministic_tool → tool runner → conditional ──
+    builder.add_conditional_edges(
+        "node_deterministic_tool_runner",
+        route_after_deterministic_tool_runner,
+        {
+            "node_command_validator":  "node_command_validator",
+            "node_session_finalizer": "node_session_finalizer",
+        },
+    )
+
+    # ── propose_commands → validator → conditional → viewer / finalizer ──
+    builder.add_conditional_edges(
+        "node_command_validator",
+        route_after_command_validator,
+        {
+            "node_human_viewer":      "node_human_viewer",
+            "node_session_finalizer": "node_session_finalizer",
+        },
+    )
+    builder.add_edge("node_human_viewer", END)
+
+    # ── Specialist → synthesizer → END ──
+    builder.add_edge("node_topology_analyst",  "node_session_synthesizer")
+    builder.add_edge("node_strategy_selector", "node_session_synthesizer")
+    builder.add_edge("node_drc_checker",       "node_session_synthesizer")
+    builder.add_edge("node_routing_previewer", "node_session_synthesizer")
+    builder.add_edge("node_session_synthesizer", END)
+
+    # ── fix_drc → drc_critic → conditional → validator/viewer or finalizer ──
+    builder.add_conditional_edges(
+        "node_drc_critic",
+        route_after_session_drc,
+        {
+            "node_command_validator":  "node_command_validator",
+            "node_session_finalizer": "node_session_finalizer",
+        },
+    )
+
+    # ── Placement specialist → validator → viewer/finalizer ──
+    builder.add_edge("node_placement_specialist", "node_command_validator")
+
+    return builder.compile(checkpointer=memory), memory
+
+
 # ── Module-level exports (backward compatibility) ─────────────────────────
-# All three graph builders and their compiled apps are exported at module
+# All four graph builders and their compiled apps are exported at module
 # level so that existing code using ``from ai_agent.graph.builder import app``
 # continues to work without changes.
 #
-#   app              — initial full-placement pipeline   (mode="initial")
-#   chat_app         — legacy chatbot graph              (mode="legacy_chat")
-#   session_chat_app — new session chatbot with routing  (mode="chat")
+#   app                  — initial full-placement pipeline   (mode="initial")
+#   chat_app             — legacy chatbot graph              (mode="legacy_chat")
+#   session_chat_app     — session chatbot with routing      (mode="chat")
+#   layout_session_app   — AI-first session agent            (mode="chat_v2")
 #
 app, _memory = build_layout_graph()
 chat_app, _chat_memory = build_chat_graph()
 session_chat_app, _session_chat_memory = build_session_chat_graph()
+layout_session_app, _layout_session_memory = build_layout_session_graph()

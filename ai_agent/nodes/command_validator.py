@@ -116,6 +116,16 @@ def _validate_action(cmd: dict) -> str | None:
     return None
 
 
+def _normalize_action_alias(cmd: dict) -> dict:
+    """Normalize parser aliases to GUI canonical actions."""
+    action = str(cmd.get("action", "")).lower().strip()
+    if action == "add dummy":
+        normalized = dict(cmd)
+        normalized["action"] = "add_dummy"
+        return normalized
+    return cmd
+
+
 def _validate_device_refs(cmd: dict, known_ids: set[str]) -> str | None:
     """Return an error string if any referenced device is unknown, else None."""
     refs = _extract_device_ids(cmd)
@@ -461,6 +471,8 @@ def node_command_validator(state: dict) -> dict:
     warnings: list[str] = []
 
     for i, cmd in enumerate(commands):
+        if isinstance(cmd, dict):
+            cmd = _normalize_action_alias(cmd)
         # --- Action check ---------------------------------------------------
         action_err = _validate_action(cmd)
         if action_err:
@@ -549,6 +561,7 @@ def node_command_validator(state: dict) -> dict:
             + " ".join(errors[:3])
         )
         update["session_route"] = "clarify"
+        update["layout_session_decision"] = "clarify"
     else:
         # command_edit route but no commands at all
         route = state.get("session_route")
@@ -558,6 +571,7 @@ def node_command_validator(state: dict) -> dict:
                 "Please specify the device and the action you'd like."
             )
             update["session_route"] = "clarify"
+            update["layout_session_decision"] = "clarify"
         else:
             update["assistant_text"] = state.get("assistant_text") or "Done."
 

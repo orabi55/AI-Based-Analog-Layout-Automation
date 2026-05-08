@@ -304,6 +304,28 @@ SESSION_ROUTE_LABELS: dict[str, str] = {
     "clarify":        "Clarifying",
 }
 
+#: Human-friendly labels for the AI-first layout session agent decisions.
+LAYOUT_SESSION_DECISION_LABELS: dict[str, str] = {
+    "answer":                   "Answering",
+    "clarify":                  "Clarifying",
+    "call_deterministic_tool":  "Checking deterministic tools",
+    "propose_commands":         "Preparing edit",
+    "call_specialist":          "Consulting specialist",
+    "check_drc":                "Checking DRC",
+    "fix_drc":                  "Fixing DRC",
+    "check_routing":            "Checking routing",
+    "optimize_routing":         "Optimizing routing",
+}
+
+
+def get_chat_mode_from_env() -> str:
+    """Return safe chat mode from ANALOG_LAYOUT_CHAT_MODE env var."""
+    raw = os.getenv("ANALOG_LAYOUT_CHAT_MODE", "chat")
+    mode = str(raw or "").strip()
+    if mode in {"chat", "chat_v2", "legacy_chat"}:
+        return mode
+    return "chat"
+
 
 def extract_session_route_from_event(event: dict) -> str | None:
     """Extract ``session_route`` from a LangGraph streaming event.
@@ -327,6 +349,26 @@ def extract_session_route_from_event(event: dict) -> str | None:
     return None
 
 
+def extract_layout_session_decision_from_event(event: dict) -> str | None:
+    """Extract ``layout_session_decision`` from a LangGraph streaming event.
+
+    For the ``chat_v2`` graph, the layout session agent node emits the
+    decision in its output.  This function reads it so the GUI can show
+    a progress label.
+
+    Returns:
+        The decision string (e.g. ``"check_drc"``) or ``None``.
+    """
+    if not isinstance(event, dict):
+        return None
+    node_output = event.get("node_layout_session_agent")
+    if isinstance(node_output, dict):
+        decision = node_output.get("layout_session_decision")
+        if decision and isinstance(decision, str):
+            return decision
+    return None
+
+
 # -----------------------------------------------------------------
 # Graph-app selector  (testable helper used by _stream_graph)
 # -----------------------------------------------------------------
@@ -334,23 +376,18 @@ def extract_session_route_from_event(event: dict) -> str | None:
 def select_graph_app(mode: str | None, *, is_resume: bool = False):
     """Return the correct compiled LangGraph app for the given execution mode.
 
-    Backward-compatibility routing table::
+    Routing table::
 
-        mode             Graph app              Use case
-        ─────────────────────────────────────────────────────────────────
-        "chat"           session_chat_app       New session chatbot (default
-                                                for layout-aware chat)
-        "legacy_chat"    chat_app               Old chatbot graph (kept for
-                                                backward compatibility)
-        "initial"        app                    Full initial-placement pipeline
-        None / unknown   app                    Preserves previous default
-
-    The old ``build_chat_graph()`` and its ``chat_app`` export remain
-    fully functional.  To invoke them, pass ``mode="legacy_chat"``.
+        "chat"                session_chat_app       Deterministic-first session
+        "chat_v2"             layout_session_app     AI-first session agent
+        "session_chat_legacy" session_chat_app       Explicit alias for legacy
+        "legacy_chat"         chat_app               Old chatbot graph
+        "initial"             app                    Full initial-placement pipeline
+        None / unknown        app                    Preserves previous default
 
     Args:
-        mode:      ``"initial"``, ``"chat"``, or ``"legacy_chat"``.
-        is_resume: True when resuming from an interrupt (Command(resume=…)).
+        mode:      Execution mode string.
+        is_resume: True when resuming from an interrupt.
 
     Returns:
         A compiled LangGraph ``CompiledStateGraph``.
@@ -359,9 +396,14 @@ def select_graph_app(mode: str | None, *, is_resume: bool = False):
         app            as initial_graph_app,
         chat_app       as legacy_chat_app,
         session_chat_app,
+        layout_session_app,
     )
 
+    if mode == "chat_v2":
+        return layout_session_app
     if mode == "chat":
+        return session_chat_app
+    if mode == "session_chat_legacy":
         return session_chat_app
     if mode == "legacy_chat":
         return legacy_chat_app
@@ -375,7 +417,10 @@ def _graph_app_label(graph_app) -> str:
         app            as initial_graph_app,
         chat_app       as legacy_chat_app,
         session_chat_app,
+        layout_session_app,
     )
+    if graph_app is layout_session_app:
+        return "layout_session_app"
     if graph_app is session_chat_app:
         return "session_chat_app"
     if graph_app is legacy_chat_app:
@@ -466,7 +511,7 @@ class OrchestratorWorker(LLMWorker):
                 _existing_trace = build_initial_agent_trace(initial_state)
 
             initial_state.update({
-                "mode":                "chat",
+                "mode":                get_chat_mode_from_env(),
                 "intent":              "",
                 "router_target":       "",
                 "last_agent":          initial_state.get("last_agent", ""),
@@ -562,12 +607,14 @@ class OrchestratorWorker(LLMWorker):
                 event_keys = list(event.keys())
                 vprint(f"[GRAPH]   Event #{event_count}: {event_keys}", flush=True)
 
-                # Emit session route signal once (for UI animation)
+                # Emit route/decision signal once (for UI animation)
                 if not emitted_route:
                     _route = extract_session_route_from_event(event)
-                    if _route:
-                        vprint(f"[GRAPH]   📡 session_route={_route}", flush=True)
-                        self.intent_classified.emit(_route)
+                    _layout_decision = extract_layout_session_decision_from_event(event)
+                    emitted_value = _route or _layout_decision
+                    if emitted_value:
+                        vprint(f"[GRAPH]   📡 route={emitted_value}", flush=True)
+                        self.intent_classified.emit(emitted_value)
                         emitted_route = True
 
                 if "__interrupt__" in event:

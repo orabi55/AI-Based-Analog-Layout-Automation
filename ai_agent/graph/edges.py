@@ -129,9 +129,80 @@ def route_after_session_drc(state: LayoutState) -> str:
     Otherwise, go straight to the session finalizer for a summary.
     """
     route = state.get("session_route")
+    layout_decision = state.get("layout_session_decision")
     pending_cmds = state.get("pending_cmds") or []
 
-    if route == "fix_drc" and pending_cmds:
+    if (route == "fix_drc" or layout_decision == "fix_drc") and pending_cmds:
         return "node_command_validator"
 
     return "node_session_finalizer"
+
+
+# ---------------------------------------------------------------------------
+# Layout session agent routing (chat_v2)
+# ---------------------------------------------------------------------------
+
+def route_after_layout_session_agent(state: LayoutState) -> str:
+    """Conditional edge after node_layout_session_agent.
+
+    Maps the ``layout_session_decision`` to the next downstream node.
+    For ``call_specialist``, a secondary lookup on
+    ``layout_session_specialist`` determines the specific specialist node.
+
+    Unknown decisions are sent to ``node_session_finalizer`` as a
+    safe fallback.
+    """
+    decision = state.get("layout_session_decision")
+
+    if decision in {"answer", "clarify"}:
+        return "node_session_finalizer"
+
+    if decision == "call_deterministic_tool":
+        return "node_deterministic_tool_runner"
+
+    if decision == "propose_commands":
+        return "node_command_validator"
+
+    if decision == "check_drc":
+        return "node_drc_checker"
+
+    if decision == "fix_drc":
+        return "node_drc_critic"
+
+    if decision == "check_routing":
+        return "node_routing_previewer"
+
+    if decision == "optimize_routing":
+        return "node_routing_previewer"
+
+    if decision == "call_specialist":
+        specialist = state.get("layout_session_specialist")
+        if specialist == "topology_analyst":
+            return "node_topology_analyst"
+        if specialist == "strategy_selector":
+            return "node_strategy_selector"
+        if specialist == "placement_specialist":
+            return "node_placement_specialist"
+        if specialist == "drc_critic":
+            return "node_drc_critic"
+        if specialist == "routing_previewer":
+            return "node_routing_previewer"
+
+    # Unknown decision — safe fallback
+    return "node_session_finalizer"
+
+
+def route_after_deterministic_tool_runner(state: LayoutState) -> str:
+    """Conditional edge after node_deterministic_tool_runner.
+
+    If the tool runner produced commands (decision is ``propose_commands``
+    and ``pending_cmds`` is non-empty), route to command validation.
+    Otherwise, go to the session finalizer for feedback.
+    """
+    decision = state.get("layout_session_decision")
+
+    if decision == "propose_commands" and state.get("pending_cmds"):
+        return "node_command_validator"
+
+    return "node_session_finalizer"
+

@@ -1,10 +1,32 @@
 from pathlib import Path
-from langchain.agents.middleware import AgentMiddleware, ModelRequest, ModelResponse
-from langchain.messages import SystemMessage
-from typing import Callable
+from typing import Callable, Any
 
 import yaml
-from langchain.tools import tool
+
+try:
+    from langchain.agents.middleware import AgentMiddleware, ModelRequest, ModelResponse
+    from langchain.messages import SystemMessage
+    from langchain.tools import tool
+    _LANGCHAIN_AVAILABLE = True
+except Exception:  # pragma: no cover - optional dependency
+    _LANGCHAIN_AVAILABLE = False
+
+    class AgentMiddleware:  # type: ignore[no-redef]
+        """Fallback base class when langchain middleware is unavailable."""
+
+    class ModelRequest:  # type: ignore[no-redef]
+        """Fallback request type placeholder."""
+
+    class ModelResponse:  # type: ignore[no-redef]
+        """Fallback response type placeholder."""
+
+    class SystemMessage:  # type: ignore[no-redef]
+        def __init__(self, content: Any):
+            self.content = content
+
+    def tool(fn):  # type: ignore[no-redef]
+        """Fallback no-op decorator used when langchain is unavailable."""
+        return fn
 
 class SkillMiddleware(AgentMiddleware):
     """Middleware that discovers skills on the filesystem and provides
@@ -16,7 +38,8 @@ class SkillMiddleware(AgentMiddleware):
     """
 
     def __init__(self, skills_dir: str | Path):
-        super().__init__()
+        if _LANGCHAIN_AVAILABLE:
+            super().__init__()
         self.skills_dir = Path(skills_dir)
         self.registry = self._scan_skills()
         self.skills_prompt = self._build_catalog()
@@ -80,6 +103,9 @@ class SkillMiddleware(AgentMiddleware):
         handler: Callable[[ModelRequest], ModelResponse],
     ) -> ModelResponse:
         """Inject skill catalog into system prompt before every model call."""
+        if not _LANGCHAIN_AVAILABLE:  # pragma: no cover - fallback path
+            return handler(request)
+
         skills_addendum = (
             f"\n\n## Available Skills\n\n{self.skills_prompt}\n\n"
             "Before starting each phase of your work, load the relevant skill "

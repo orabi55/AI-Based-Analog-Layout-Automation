@@ -693,7 +693,10 @@ class ChatPanel(QWidget):
           shows a concise status label (e.g. "🔍 Checking DRC…").
         - Everything else keeps the simple 'Thinking…' dots.
         """
-        from ai_agent.llm.workers import SESSION_ROUTE_LABELS
+        from ai_agent.llm.workers import (
+            SESSION_ROUTE_LABELS,
+            LAYOUT_SESSION_DECISION_LABELS,
+        )
 
         if intent == "abstract":
             # Switch to pipeline stage animation (legacy initial-placement path)
@@ -715,6 +718,11 @@ class ChatPanel(QWidget):
             self._remove_last_message()
             self._append_bubble("ai", f"⏳ {route_label}…")
             # No timer-based animation needed — specialist will respond shortly
+        elif intent in LAYOUT_SESSION_DECISION_LABELS:
+            decision_label = LAYOUT_SESSION_DECISION_LABELS[intent]
+            self._stop_thinking()
+            self._remove_last_message()
+            self._append_bubble("ai", f"⏳ {decision_label}…")
 
     # keep backward-compat for external callers (main.py uses this)
     def _append_message(self, sender, text, bg_color, text_color):

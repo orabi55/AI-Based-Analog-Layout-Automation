@@ -24,7 +24,7 @@ class LayoutState(TypedDict):
       - "legacy_chat": Old chatbot graph kept for backward compatibility
     """
     # --- Execution mode ---
-    mode: Literal["initial", "chat", "legacy_chat"]
+    mode: Literal["initial", "chat", "chat_v2", "legacy_chat"]
 
     # --- Inputs ---
     user_message: str
@@ -130,3 +130,39 @@ class LayoutState(TypedDict):
     # True when the user requested active routing optimization (fix_routing)
     # vs. read-only routing preview (need_routing).
     routing_fix_requested: NotRequired[bool]
+
+    # ── AI-first layout session agent fields (all NotRequired) ─────────────────
+    # These fields are consumed by the new layout_session_agent (chat_v2).
+    # They are fully independent of the existing session chatbot fields above.
+
+    # Decision emitted by the AI-first agent (one of VALID_LAYOUT_SESSION_DECISIONS).
+    layout_session_decision: NotRequired[Optional[str]]
+
+    # Confidence score for the AI-first agent's decision, in [0.0, 1.0].
+    layout_session_confidence: NotRequired[Optional[float]]
+
+    # Human-readable reason explaining the decision.
+    layout_session_reason: NotRequired[Optional[str]]
+
+    # Name and arguments for a deterministic tool the AI agent wants to call.
+    layout_session_tool_name: NotRequired[Optional[str]]
+    layout_session_tool_args: NotRequired[Optional[Dict[str, Any]]]
+
+    # Result dict returned by the deterministic tool runner.
+    deterministic_tool_result: NotRequired[Optional[Dict[str, Any]]]
+
+    # Specialist agent the AI agent wants to delegate to, and the question to ask.
+    layout_session_specialist: NotRequired[Optional[str]]
+    layout_session_specialist_question: NotRequired[Optional[str]]
+
+    # Structured memory update the AI agent wants to persist.
+    layout_session_memory_update: NotRequired[Optional[Dict[str, Any]]]
+
+    # Raw JSON response from the AI agent's LLM call (for debugging/logging).
+    layout_session_raw_json: NotRequired[Optional[Dict[str, Any]]]
+
+    # Target nets the AI agent extracted for routing operations.
+    layout_session_target_nets: NotRequired[Optional[List[str]]]
+
+    # True when the AI agent's output needs synthesis before reaching the user.
+    layout_session_needs_synthesis: NotRequired[bool]

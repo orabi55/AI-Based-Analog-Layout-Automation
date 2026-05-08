@@ -19,6 +19,9 @@ from ai_agent.nodes.save_to_rag import node_save_to_rag
 from ai_agent.nodes.session_chat import node_session_chat
 from ai_agent.nodes.session_finalizer import node_session_finalizer
 from ai_agent.nodes.command_validator import node_command_validator
+from ai_agent.nodes.layout_session_agent import node_layout_session_agent
+from ai_agent.nodes.deterministic_tool_runner import node_deterministic_tool_runner
+from ai_agent.nodes.session_synthesizer import node_session_synthesizer
 
 __all__ = [
     "node_topology_analyst",
@@ -35,4 +38,7 @@ __all__ = [
     "node_session_chat",
     "node_session_finalizer",
     "node_command_validator",
+    "node_layout_session_agent",
+    "node_deterministic_tool_runner",
+    "node_session_synthesizer",
 ]

@@ -200,11 +200,16 @@ class TestValidatorActionCheck:
     def test_accepts_all_allowed_actions(self):
         """Every action in ALLOWED_ACTIONS should pass (with valid fields)."""
         from ai_agent.nodes.command_validator import ALLOWED_ACTIONS
+        _DUMMY_ACTIONS = {"add_dummy", "add_dummies", "dummy", "add dummy"}
         for action in ALLOWED_ACTIONS:
             # move_pair requires ≥2 devices and a delta (Fix 11)
             if action == "move_pair":
                 cmd = {"action": action, "devices": ["M1", "M2"], "dx": 1, "dy": 0}
                 nodes = [{"id": "M1"}, {"id": "M2"}]
+            # Dummy actions require placement context (Fix C)
+            elif action in _DUMMY_ACTIONS:
+                cmd = {"action": action, "target": "M1", "side": "right"}
+                nodes = [{"id": "M1", "type": "nmos", "geometry": {"x": 0, "y": 0, "width": 0.294}}]
             else:
                 cmd = {"action": action, "device_id": "M1"}
                 nodes = [{"id": "M1"}]
@@ -213,7 +218,8 @@ class TestValidatorActionCheck:
                 "placement_nodes": nodes,
             }
             result = node_command_validator(state)
-            assert len(result["pending_cmds"]) == 1, f"Action '{action}' was rejected"
+            # move_pair expands into N individual moves (Fix B), so check >= 1
+            assert len(result["pending_cmds"]) >= 1, f"Action '{action}' was rejected"
 
 
 class TestValidatorDeviceCheck:

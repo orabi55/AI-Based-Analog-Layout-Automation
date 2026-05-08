@@ -12,6 +12,8 @@ Functions:
 
 from __future__ import annotations
 
+import re
+
 from ai_agent.utils.logging import vprint
 
 
@@ -171,7 +173,18 @@ def node_session_finalizer(state: dict) -> dict:
     vprint("[FINALIZER] Building assistant text", flush=True)
 
     route = state.get("session_route")
+    layout_decision = state.get("layout_session_decision")
     summariser = _ROUTE_SUMMARISERS.get(route)
+
+    # chat_v2 may reach finalizer without session_route.
+    if summariser is None and isinstance(layout_decision, str):
+        decision_map = {
+            "check_drc": _summarise_drc,
+            "fix_drc": _summarise_drc,
+            "check_routing": _summarise_routing,
+            "optimize_routing": _summarise_fix_routing,
+        }
+        summariser = decision_map.get(layout_decision)
 
     # For specialist routes, always try the summariser FIRST.
     # The router may have left a placeholder or None in assistant_text —
@@ -188,6 +201,10 @@ def node_session_finalizer(state: dict) -> dict:
     if not text:
         text = str(state.get("assistant_text") or "").strip()
 
+    # Never surface specialist handoff placeholders.
+    if text and re.search(r"\b(delegate|handoff|strategy_selector|topology_analyst|placement_specialist)\b", text, re.IGNORECASE):
+        text = ""
+
     # If still empty, try the summariser's generic fallback or route defaults
     if not text:
         if summariser is not None:
@@ -202,6 +219,6 @@ def node_session_finalizer(state: dict) -> dict:
         else:
             text = "Done."
 
-    vprint(f"[FINALIZER] route={route}  text_len={len(text)}", flush=True)
+    vprint(f"[FINALIZER] route={route or layout_decision}  text_len={len(text)}", flush=True)
 
     return {"assistant_text": text}
