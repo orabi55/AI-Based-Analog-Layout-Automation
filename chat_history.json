@@ -1,18 +1,30 @@
 [
   {
-    "role": "user",
-    "content": "MM3,MM0 is matched with common centriod or interdigitation?"
+    "role": "assistant",
+    "content": "Which nets or devices should I optimize for parasitics? For example: \"reduce parasitics on VOUTP and VOUTN.\""
   },
   {
     "role": "user",
-    "content": "MM3,MM0 is matched with common centriod or interdigitation?"
+    "content": "VOUTP,VOUTN"
   },
   {
     "role": "assistant",
-    "content": "I'll delegate this to the strategy_selector for a more detailed answer."
+    "content": "9 nets analyzed  (3 critical, 6 signal, 0 bias, 0 power)\nTotal Manhattan HPWL : 21.844 µm\nEstimated crossings  : 41\nWeighted cost        : 545.0\n\nWorst nets (by weighted HPWL):\n  VOUTN          critical hpwl=4.512µm  (Δx=2.058, Δy=2.454)  [CROSS-ROW]\n  VOUTP          critical hpwl=4.512µm  (Δx=2.058, Δy=2.454)  [CROSS-ROW]\n  CLK            critical hpwl=2.748µm  (Δx=0.294, Δy=2.454)  [CROSS-ROW]\n  VY             signal   hpwl=2.812µm  (Δx=1.176, Δy=1.636)  [CROSS-ROW]\n  VX             signal   hpwl=2.812µm  (Δx=1.176, Δy=1.636)  [CROSS-ROW]\n\nRouting channels (inter-row bands):\n  band 0  y≈0.334µm  0 track(s)  → widen to 0.134 µm\n  band 1  y≈1.002µm  6 track(s)  → widen to 0.938 µm\n  band 2  y≈2.004µm  5 track(s)  → widen to 0.804 µm\n  band 3  y≈3.006µm  3 track(s)  → widen to 0.536 µm"
   },
   {
     "role": "user",
-    "content": "MM3,MM0 is matched with common centriod or interdigitation?"
+    "content": "MM3,MM0 are matched with common centriod or interdigitation"
+  },
+  {
+    "role": "user",
+    "content": "MM3,MM0 are matched with common centriod or interdigitation"
+  },
+  {
+    "role": "assistant",
+    "content": "Routing as need_strategy."
+  },
+  {
+    "role": "user",
+    "content": "MM3,MM0 are matched with common centriod or interdigitation"
   }
 ]

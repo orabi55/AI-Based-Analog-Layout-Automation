@@ -16,9 +16,14 @@ Exports:
 Design notes:
 - No specialist agents are called here; this file only *decides* a route.
 - Priority order (highest → lowest):
+    0. fix_drc        — DRC repair phrases (remove/clear + violation/overlap)
+                        must beat strong commands so "remove DRC violation"
+                        routes to fix_drc, not command_edit
     1. command_edit   — STRONG imperative verbs (move/swap/flip/delete/…)
-    2. need_drc       — DRC / spacing / overlap vocabulary
-    3. need_routing   — routing / wirelength / crossing vocabulary
+    2a. fix_drc       — explicit "fix DRC" / "repair violation" phrases
+    2b. need_drc      — DRC / spacing / overlap vocabulary (read-only check)
+    3a. fix_routing   — active optimization (reduce parasitics/wirelength/crossings)
+    3b. need_routing  — routing / wirelength (read-only preview)
     4. need_strategy  — symmetry / matching / centroid vocabulary
     5. need_topology  — topology / netlist / connectivity vocabulary
     6. answer_only    — explanation / summarisation vocabulary
@@ -696,7 +701,8 @@ Allowed routes:
 - need_placement: user asks for a large re-placement or global placement change
 - need_drc: user asks to CHECK DRC status, any violations, spacing status (read-only, no fixing)
 - fix_drc: user explicitly asks to FIX, REPAIR, or RESOLVE DRC violations, overlaps, spacing
-- need_routing: user asks about routing, wires, crossings, wirelength, congestion
+- need_routing: user asks about routing, wires, crossings, wirelength, congestion (read-only preview)
+- fix_routing: user asks to REDUCE parasitics, REDUCE wirelength, OPTIMIZE routing, FIX crossings, SHORTEN nets, IMPROVE routing (active optimization)
 - clarify: the request is ambiguous or unsafe to execute
 
 Return strict JSON only:
