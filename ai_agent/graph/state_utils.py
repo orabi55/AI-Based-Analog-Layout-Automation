@@ -13,6 +13,7 @@ Functions:
 
 from __future__ import annotations
 
+import copy
 from typing import Any, Dict, Optional
 
 
@@ -23,9 +24,9 @@ def build_initial_agent_trace(state: Dict[str, Any]) -> Dict[str, Any]:
     the state is empty or only partially populated (e.g. if placement was
     interrupted before routing or DRC ran).
 
-    The returned dict is intentionally lightweight: it references the same
-    list/dict objects that are already in *state*, so callers that need an
-    independent copy should call ``copy.deepcopy`` on the result.
+    The returned dict is a **deep copy** of the extracted state values,
+    so mutating the original *state* after this call has no effect on the
+    trace.  Callers do not need to copy the result.
 
     Args:
         state: A LayoutState dict (or any plain dict).  Missing keys are
@@ -41,7 +42,7 @@ def build_initial_agent_trace(state: Dict[str, Any]) -> Dict[str, Any]:
         routing   – value of ``routing_result``
         drc       – dict with pass, flags, and retry_count
     """
-    return {
+    trace = {
         "topology": state.get("Analysis_result"),
         "strategy": state.get("strategy_result"),
         "placement": {
@@ -56,3 +57,4 @@ def build_initial_agent_trace(state: Dict[str, Any]) -> Dict[str, Any]:
             "retry_count": state.get("drc_retry_count") or 0,
         },
     }
+    return copy.deepcopy(trace)

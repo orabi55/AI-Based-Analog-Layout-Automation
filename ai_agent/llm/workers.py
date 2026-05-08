@@ -66,6 +66,41 @@ from dotenv import load_dotenv
 from PySide6.QtCore import QObject, Signal, Slot
 from ai_agent.utils.logging import vprint
 
+
+# -----------------------------------------------------------------
+# Fix 9 — Response deduplication helper
+# -----------------------------------------------------------------
+
+class ResponseDeduper:
+    """Prevent duplicate ``response_ready`` emissions in a single graph run.
+
+    The worker may emit ``assistant_text`` from both the interrupt handler
+    and ``_finalize_pipeline``.  This class ensures the same text is never
+    emitted twice in a row.
+    """
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        """Call at the start of each new (non-resume) graph run."""
+        self._last_text: str | None = None
+        self._emitted: bool = False
+
+    def should_emit(self, text: str) -> bool:
+        """Return True if *text* should be emitted (not a duplicate)."""
+        if not text:
+            return False
+        if text == self._last_text:
+            return False
+        self._last_text = text
+        self._emitted = True
+        return True
+
+    @property
+    def has_emitted(self) -> bool:
+        return self._emitted
+
 from ai_agent.agents.orchestrator import MultiAgentOrchestrator
 from ai_agent.llm.runner import run_llm
 
@@ -260,6 +295,7 @@ SESSION_ROUTE_LABELS: dict[str, str] = {
     "answer_only":   "Answering",
     "command_edit":   "Preparing edit",
     "need_drc":       "Checking DRC",
+    "fix_drc":        "Fixing DRC",
     "need_routing":   "Previewing routing",
     "need_strategy":  "Checking strategy",
     "need_topology":  "Analyzing topology",
@@ -368,6 +404,7 @@ class OrchestratorWorker(LLMWorker):
     def __init__(self):
         super().__init__()
         self._active_graph_app = None   # set by _stream_graph, reused on resume
+        self._response_deduper = ResponseDeduper()  # Fix 9
         try:
             from langchain_core.runnables import RunnableConfig
             self.thread_config = cast(RunnableConfig, {
@@ -509,6 +546,12 @@ class OrchestratorWorker(LLMWorker):
             langgraph_app = self._resolve_graph_app(input_data)
             vprint(f"[GRAPH] Using {_graph_app_label(langgraph_app)}", flush=True)
 
+            # Fix 9: reset deduper at the start of each new graph run
+            # (but not on resume, since _stream_graph is also called on resume)
+            from langgraph.types import Command as _Cmd
+            if not isinstance(input_data, _Cmd):
+                self._response_deduper.reset()
+
             vprint(f"\n[GRAPH] ▶ Streaming LangGraph...", flush=True)
             interrupted = False
             event_count = 0
@@ -556,7 +599,7 @@ class OrchestratorWorker(LLMWorker):
                                 else ""
                             )
 
-                        if text:
+                        if text and self._response_deduper.should_emit(text):
                             self.response_ready.emit(text)
 
                         if pending_cmds:
@@ -594,15 +637,17 @@ class OrchestratorWorker(LLMWorker):
         if self._active_graph_app is None:
             vprint("[FINALIZE] ⚠ No active graph app stored.", flush=True)
 
-        # Emit assistant_text from the final graph state
+        # Emit assistant_text from the final graph state (if not already sent)
         _app = langgraph_app or self._active_graph_app
         if _app is not None:
             try:
                 final_state = _app.get_state(self.thread_config).values
                 text = extract_assistant_text(final_state)
-                if text:
+                if text and self._response_deduper.should_emit(text):
                     vprint(f"[FINALIZE] Emitting assistant_text ({len(text)} chars)", flush=True)
                     self.response_ready.emit(text)
+                elif text:
+                    vprint(f"[FINALIZE] Skipping duplicate assistant_text ({len(text)} chars)", flush=True)
             except Exception as exc:
                 vprint(f"[FINALIZE] ⚠ Could not read state: {exc}", flush=True)
 

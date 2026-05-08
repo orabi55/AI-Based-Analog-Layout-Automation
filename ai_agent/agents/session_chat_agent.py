@@ -33,7 +33,7 @@ Design notes:
 from __future__ import annotations
 
 import re
-from typing import Optional
+from typing import Optional, List
 
 # ---------------------------------------------------------------------------
 # Route constants
@@ -46,7 +46,8 @@ VALID_SESSION_ROUTES: frozenset[str] = frozenset({
     "need_topology", # delegate to topology_analyst specialist
     "need_strategy", # delegate to strategy_selector specialist
     "need_placement",# delegate to placement_specialist specialist
-    "need_drc",      # delegate to drc_critic specialist
+    "need_drc",      # delegate to drc_checker (read-only) specialist
+    "fix_drc",       # delegate to drc_critic (active fixes) specialist
     "need_routing",  # delegate to routing_previewer specialist
     "clarify",       # ask the user for clarification
 })
@@ -94,6 +95,15 @@ _WEAK_COMMAND_WORDS: tuple[str, ...] = (
     "place", "shift",
 )
 
+#: Fix/repair DRC keywords — checked BEFORE generic DRC words so
+#: "fix DRC violations" → fix_drc, not need_drc.
+_FIX_DRC_WORDS: tuple[str, ...] = (
+    "fix drc", "repair drc", "resolve violation", "fix violation",
+    "fix overlap", "repair spacing", "fix spacing", "fix the drc",
+    "resolve overlap", "repair violation", "repair overlap",
+    "fix design rule", "heal drc",
+)
+
 _DRC_WORDS: tuple[str, ...] = (
     "drc", "violation", "spacing", "overlap", "short", "illegal",
     "design rule", "rule check",
@@ -120,6 +130,231 @@ _EXPLANATION_WORDS: tuple[str, ...] = (
     "why", "explain", "what did", "reason", "describe",
     "tell me", "summarize", "what happened",
 )
+
+
+# ---------------------------------------------------------------------------
+# Deterministic command parser
+# ---------------------------------------------------------------------------
+
+#: Regex matching common analog device names (M1, MM3, XM1, MN1, MP2, etc.).
+#: Preserves original case from the user message.
+DEVICE_RE = re.compile(r"\b((?:MM|XM|MN|MP|M)\d+\w*)\b", re.IGNORECASE)
+
+#: Direction → (dx, dy) map.  Positive Y = up in analog layout convention
+#: (PMOS above NMOS, higher y = higher row).  This matches _pmos_above_nmos()
+#: in cmd_parser.py where PMOS y > NMOS y.
+_DIRECTION_DELTAS: dict[str, tuple[int, int]] = {
+    "left":  (-1,  0),
+    "right": ( 1,  0),
+    "up":    ( 0,  1),
+    "down":  ( 0, -1),
+}
+
+
+def _extract_devices(
+    text: str,
+    placement_nodes: Optional[list] = None,
+) -> list[str]:
+    """Return device IDs found in *text*, validated against *placement_nodes*.
+
+    If *placement_nodes* is provided the device name must match one of the
+    node keys ``id``, ``device_id``, or ``name``.  Otherwise the regex
+    match is accepted as-is.
+    """
+    candidates = DEVICE_RE.findall(text)
+    if not candidates:
+        return []
+
+    if not placement_nodes:
+        return candidates
+
+    # Build lookup set from placement nodes
+    known: set[str] = set()
+    for n in placement_nodes:
+        if isinstance(n, dict):
+            for k in ("id", "device_id", "name"):
+                v = n.get(k)
+                if v:
+                    known.add(str(v))
+
+    # Match candidates against known IDs (case-insensitive lookup,
+    # but return the canonical form from placement_nodes).
+    known_lower: dict[str, str] = {k.lower(): k for k in known}
+    matched: list[str] = []
+    for c in candidates:
+        canon = known_lower.get(c.lower())
+        if canon:
+            matched.append(canon)
+        elif not known:  # no placement_nodes data → trust regex
+            matched.append(c)
+    return matched
+
+
+def _parse_numeric_amount(text: str) -> Optional[int]:
+    """Try to extract a numeric movement amount from *text*.
+
+    Handles patterns like:
+        move M1 left 2
+        move M1 left by 3
+    Returns None if no number is found (caller uses default of 1).
+    """
+    m = re.search(r"(?:by\s+)?(\d+)\s*$", text.strip())
+    if m:
+        return int(m.group(1))
+    return None
+
+
+def _parse_explicit_deltas(text: str) -> Optional[tuple[int, int]]:
+    """Try to parse explicit dx/dy notation.
+
+    Handles:
+        move M1 by -3 0
+        move M1 dx=-2 dy=0
+    Returns (dx, dy) or None.
+    """
+    # dx=N dy=N form
+    m = re.search(r"dx\s*=\s*(-?\d+)\s+dy\s*=\s*(-?\d+)", text, re.IGNORECASE)
+    if m:
+        return int(m.group(1)), int(m.group(2))
+    # "by N N" form
+    m = re.search(r"by\s+(-?\d+)\s+(-?\d+)", text, re.IGNORECASE)
+    if m:
+        return int(m.group(1)), int(m.group(2))
+    return None
+
+
+def parse_direct_edit_command(
+    message: str,
+    placement_nodes: Optional[list] = None,
+) -> list[dict]:
+    """Parse common direct edit messages into structured command dicts.
+
+    Returns a list of command dicts compatible with :mod:`cmd_parser` and
+    the :func:`node_command_validator` schema.  Returns ``[]`` when the
+    message is ambiguous or no valid device can be identified.
+
+    Supported patterns::
+
+        move M1 left
+        shift M1 right 2
+        place M1 up
+        swap M1 and M2
+        swap M1 with M2
+        flip M1
+        flip M1 horizontal / vertical
+        delete M1 / remove M1
+        align M1 with M2
+        abut M1 with M2
+        merge M1 and M2
+        add dummy near M1
+
+    Args:
+        message:         Raw user text.
+        placement_nodes: Optional list of node dicts for device validation.
+
+    Returns:
+        List of command dicts, or ``[]`` if parsing fails.
+    """
+    if not message or not isinstance(message, str):
+        return []
+
+    text = message.strip()
+    low = text.lower()
+
+    # --- Move / Shift / Place -----------------------------------------------
+    m_move = re.match(
+        r"(?:move|shift|place)\s+",
+        low,
+    )
+    if m_move:
+        devices = _extract_devices(text, placement_nodes)
+        if not devices:
+            return []  # ambiguous — "move it left"
+
+        # Try explicit dx/dy first
+        explicit = _parse_explicit_deltas(low)
+        if explicit:
+            dx, dy = explicit
+            return [{"action": "move", "device_id": devices[0], "dx": dx, "dy": dy}]
+
+        # Try direction word
+        for direction, (dx, dy) in _DIRECTION_DELTAS.items():
+            if re.search(r"\b" + direction + r"\b", low):
+                amount = _parse_numeric_amount(low) or 1
+                return [{
+                    "action": "move",
+                    "device_id": devices[0],
+                    "dx": dx * amount,
+                    "dy": dy * amount,
+                }]
+
+        # Have a device but no direction → ambiguous
+        return []
+
+    # --- Swap ---------------------------------------------------------------
+    if re.match(r"swap\s+", low):
+        devices = _extract_devices(text, placement_nodes)
+        if len(devices) >= 2:
+            return [{"action": "swap", "device_a": devices[0], "device_b": devices[1]}]
+        return []
+
+    # --- Flip ---------------------------------------------------------------
+    if re.match(r"flip\s+", low):
+        devices = _extract_devices(text, placement_nodes)
+        if not devices:
+            return []
+        orientation = "horizontal"  # default
+        if re.search(r"\bvertical\b", low):
+            orientation = "vertical"
+        elif re.search(r"\bhorizontal\b", low):
+            orientation = "horizontal"
+        return [{"action": "flip", "device_id": devices[0], "orientation": orientation}]
+
+    # --- Delete / Remove ----------------------------------------------------
+    if re.match(r"(?:delete|remove)\s+", low):
+        devices = _extract_devices(text, placement_nodes)
+        if not devices:
+            return []
+        return [{"action": "delete", "device_id": devices[0]}]
+
+    # --- Align --------------------------------------------------------------
+    if re.match(r"align\s+", low):
+        devices = _extract_devices(text, placement_nodes)
+        if len(devices) >= 2:
+            return [{"action": "align", "device_a": devices[0], "device_b": devices[1]}]
+        return []
+
+    # --- Abut ---------------------------------------------------------------
+    if re.match(r"abut\s+", low):
+        devices = _extract_devices(text, placement_nodes)
+        if len(devices) >= 2:
+            return [{"action": "abut", "device_a": devices[0], "device_b": devices[1]}]
+        return []
+
+    # --- Merge --------------------------------------------------------------
+    if re.match(r"merge\s+", low):
+        devices = _extract_devices(text, placement_nodes)
+        if len(devices) >= 2:
+            return [{"action": "merge", "device_a": devices[0], "device_b": devices[1]}]
+        return []
+
+    # --- Add Dummy ----------------------------------------------------------
+    if re.match(r"add\s+dummy\b", low):
+        devices = _extract_devices(text, placement_nodes)
+        if devices:
+            return [{"action": "add_dummy", "device_id": devices[0]}]
+        # add dummy without target is still valid (global)
+        return [{"action": "add_dummy"}]
+
+    # --- Rotate -------------------------------------------------------------
+    if re.match(r"rotate\s+", low):
+        devices = _extract_devices(text, placement_nodes)
+        if not devices:
+            return []
+        return [{"action": "rotate", "device_id": devices[0]}]
+
+    # No pattern matched
+    return []
 
 
 # ---------------------------------------------------------------------------
@@ -152,7 +387,11 @@ def rule_route(message: str) -> Optional[str]:
     if _word_match(m, _STRONG_COMMAND_WORDS):
         return "command_edit"
 
-    # Priority 2 — DRC / manufacturing rules
+    # Priority 2a — Fix/repair DRC (must be checked before generic DRC words)
+    if _word_match(m, _FIX_DRC_WORDS):
+        return "fix_drc"
+
+    # Priority 2b — DRC / manufacturing rules (read-only check)
     if _word_match(m, _DRC_WORDS):
         return "need_drc"
 
@@ -216,7 +455,8 @@ SPECIALIST_BY_ROUTE: dict[str, str] = {
     "need_topology":  "topology_analyst",
     "need_strategy":  "strategy_selector",
     "need_placement": "placement_specialist",
-    "need_drc":       "drc_critic",
+    "need_drc":       "drc_checker",
+    "fix_drc":        "drc_critic",
     "need_routing":   "routing_previewer",
 }
 
@@ -240,7 +480,8 @@ Allowed routes:
 - need_topology: user asks about circuit connectivity, topology, differential pairs, current mirrors, cascodes, nets
 - need_strategy: user asks to change or analyze matching, symmetry, common-centroid, row assignment, placement strategy
 - need_placement: user asks for a large re-placement or global placement change
-- need_drc: user asks for DRC, spacing, overlap, violations, legality
+- need_drc: user asks to CHECK DRC status, any violations, spacing status (read-only, no fixing)
+- fix_drc: user explicitly asks to FIX, REPAIR, or RESOLVE DRC violations, overlaps, spacing
 - need_routing: user asks about routing, wires, crossings, wirelength, congestion
 - clarify: the request is ambiguous or unsafe to execute
 
@@ -405,6 +646,122 @@ def _build_trace_summary(trace: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Fix 12 — Answer from initial agent trace
+# ---------------------------------------------------------------------------
+
+def answer_from_initial_trace(
+    message: str,
+    initial_agent_trace: dict,
+    placement_nodes: list,
+) -> str:
+    """Build an informative answer using the initial agent trace.
+
+    Detects mentioned devices and pulls relevant facts from the trace
+    sections (topology, strategy, placement, routing, drc).  If no
+    device-specific facts are found, returns a general summary.
+
+    Args:
+        message:              Raw user text.
+        initial_agent_trace:  The initial-placement trace dict.
+        placement_nodes:      Current placement nodes.
+
+    Returns:
+        A concise, informative text answer.
+    """
+    if not initial_agent_trace:
+        return (
+            "I do not have a saved initial-placement trace yet, "
+            "but I can still answer based on the current layout "
+            "if you ask about a specific device or net."
+        )
+
+    # Detect mentioned devices
+    devices = _extract_devices(message, placement_nodes)
+    trace = initial_agent_trace
+
+    # --- Device-specific answer -------------------------------------------
+    if devices:
+        facts: list[str] = []
+        target = devices[0]
+
+        # Strategy / matching
+        strategy = trace.get("strategy")
+        if isinstance(strategy, dict):
+            for group_key in (
+                "matching_groups", "matched_pairs",
+                "symmetry_pairs", "common_centroid_groups",
+            ):
+                groups = strategy.get(group_key)
+                if not isinstance(groups, list):
+                    continue
+                for group in groups:
+                    if isinstance(group, (list, tuple)) and target in [str(d) for d in group]:
+                        partners = [str(d) for d in group if str(d) != target]
+                        facts.append(
+                            f"{target} is part of a matched group with {', '.join(partners)}."
+                        )
+                        break
+            if strategy.get("symmetry_axis"):
+                facts.append(
+                    f"The placement strategy uses a {strategy['symmetry_axis']} symmetry axis."
+                )
+        elif isinstance(strategy, str) and target.lower() in strategy.lower():
+            facts.append(f"Strategy mentions {target}: {strategy[:200]}")
+
+        # DRC
+        drc = trace.get("drc") or {}
+        if drc.get("pass") is True:
+            facts.append("DRC status after initial placement was PASS.")
+        elif drc.get("pass") is False:
+            n_flags = len(drc.get("flags") or [])
+            facts.append(f"DRC status was FAIL with {n_flags} violation(s).")
+
+        # Placement
+        placement = trace.get("placement") or {}
+        nodes_in_trace = placement.get("placement_nodes") or []
+        for n in nodes_in_trace:
+            if isinstance(n, dict) and str(n.get("id", "")) == target:
+                x = n.get("x") or (n.get("geometry", {}) or {}).get("x")
+                y = n.get("y") or (n.get("geometry", {}) or {}).get("y")
+                if x is not None and y is not None:
+                    facts.append(f"{target} was placed at ({x}, {y}).")
+                break
+
+        if facts:
+            return "\n".join(facts)
+
+    # --- General summary --------------------------------------------------
+    lines: list[str] = []
+    lines.append("Here is what the initial placement agents decided:")
+
+    strategy = trace.get("strategy")
+    if isinstance(strategy, dict):
+        groups = (
+            strategy.get("matching_groups")
+            or strategy.get("matched_pairs")
+            or []
+        )
+        if groups:
+            lines.append(f"• Matching groups: {groups}")
+        if strategy.get("symmetry_axis"):
+            lines.append(f"• Symmetry axis: {strategy['symmetry_axis']}")
+    elif isinstance(strategy, str) and strategy.strip():
+        lines.append(f"• Strategy: {strategy[:200]}")
+
+    drc = trace.get("drc") or {}
+    lines.append(
+        f"• DRC: {'PASS' if drc.get('pass') else 'FAIL'} "
+        f"({len(drc.get('flags') or [])} flags)"
+    )
+
+    topology = trace.get("topology")
+    if topology:
+        lines.append(f"• Topology: {str(topology)[:200]}")
+
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
 
@@ -455,6 +812,19 @@ def run_session_chat_agent(
         reason     = f"Deterministic keyword match → {route}"
         llm_text   = ""
         llm_cmds   = []
+
+        # -- 2b. Deterministic command interpretation for command_edit --------
+        if route == "command_edit":
+            commands = parse_direct_edit_command(user_message, placement_nodes)
+            if commands:
+                llm_cmds = commands
+                llm_text = f"Executing: {commands[0].get('action', 'edit')} on {commands[0].get('device_id') or commands[0].get('device_a', 'device')}."
+            else:
+                # Parser could not extract commands — fall back to clarify
+                return _build_fallback_response(
+                    "I understood that you want to edit the layout, but I could not "
+                    "identify the target device or edit direction."
+                )
     else:
         # -- 3. LLM router ---------------------------------------------------
         placement_summary = _build_placement_summary(placement_nodes)
@@ -485,14 +855,14 @@ def run_session_chat_agent(
     specialist_target = SPECIALIST_BY_ROUTE.get(route)
     requires_specialist = specialist_target is not None
 
-    # For answer_only, construct a minimal reply from the trace if the LLM
-    # didn't already produce one (deterministic path).
+    # For answer_only, construct a useful reply from the trace if the LLM
+    # didn't already produce one (deterministic path).  Fix 12 uses the
+    # new answer_from_initial_trace() helper for device-specific answers.
     assistant_text = llm_text
     if not assistant_text:
         if route == "answer_only":
-            assistant_text = (
-                "Here is what the initial placement agents decided:\n"
-                + _build_trace_summary(initial_trace)
+            assistant_text = answer_from_initial_trace(
+                user_message, initial_trace, placement_nodes,
             )
         elif requires_specialist:
             assistant_text = (

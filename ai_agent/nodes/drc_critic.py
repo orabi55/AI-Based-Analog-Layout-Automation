@@ -32,6 +32,7 @@ from ai_agent.nodes._shared import (
     ip_step,
     steps_only,
 )
+from ai_agent.nodes.drc_checker import _format_drc_assistant_text
 from ai_agent.utils.logging import (
     log_section, log_detail, log_device_positions, stage_start,
 )
@@ -87,6 +88,7 @@ def node_drc_critic(state):
             "drc_pass": True, "drc_flags": [],
             "chat_history": updated_chat_history, "drc_retry_count": retry_num + 1,
             "last_agent": "drc_critic",
+            "assistant_text": _format_drc_assistant_text(True, []),
         }
 
     n_violations = len(drc_result['violations'])
@@ -280,25 +282,7 @@ def node_drc_critic(state):
         ip_step("5/5 DRC Critic", f"attempt {retry_num + 1}, fail ({retries_left} left), {remaining} violations ({elapsed:.1f}s)")
 
     # ── Build assistant_text for chat visibility ─────────────────────────
-    if final_drc["pass"]:
-        _assistant_text = "DRC check passed — no violations found."
-    else:
-        _n_violations = len(final_drc.get("violations", []))
-        _flag_lines = []
-        for v in structured_flags[:10]:
-            desc = (
-                v.get("description")
-                or v.get("message")
-                or v.get("value")
-                or str(v)
-            )
-            _flag_lines.append(f"- {desc}")
-        if len(structured_flags) > 10:
-            _flag_lines.append(f"- … and {len(structured_flags) - 10} more.")
-        _assistant_text = (
-            f"DRC check found {_n_violations} violation(s):\n"
-            + "\n".join(_flag_lines)
-        )
+    _assistant_text = _format_drc_assistant_text(final_drc["pass"], structured_flags)
 
     return {
         "placement_nodes": fixed_nodes,

@@ -10,6 +10,8 @@ Functions:
   - Outputs: tuple (compiled_app, memory)
 """
 
+import warnings
+
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
 
@@ -20,6 +22,8 @@ from ai_agent.graph.edges import (
     route_after_human,
     route_by_mode,
     route_after_session_chat,
+    route_after_command_validator,
+    route_after_session_drc,
 )
 from ai_agent.utils.logging import vprint
 from ai_agent.nodes import (
@@ -36,6 +40,7 @@ from ai_agent.nodes import (
     node_session_chat,
     node_session_finalizer,
     node_command_validator,
+    node_drc_checker,
 )
 
 
@@ -90,12 +95,34 @@ def _node_router(state: LayoutState):
 def build_layout_graph(mode: str = "initial"):
     """Build a fresh LangGraph with its own MemorySaver per run.
 
+    .. note:: This is the **full-pipeline** layout graph, not the chatbot.
+
+       * For the **session chatbot** (layout-aware interactive chat),
+         use :func:`build_session_chat_graph` / ``session_chat_app``.
+       * For the **legacy chatbot**, use :func:`build_chat_graph` /
+         ``chat_app``.
+       * The historical ``mode="chat"`` value here means
+         *“interactive full pipeline with human-in-loop”*, **not** the
+         session chatbot flow.  It is deprecated — prefer
+         ``mode="interactive_full"`` to avoid confusion (Fix 10).
+
     Args:
-        mode: "initial" for full auto-run, "chat" for interactive mode.
+        mode: ``"initial"`` for full auto-run, ``"interactive_full"``
+              (or deprecated ``"chat"``) for interactive mode.
 
     Returns:
         (compiled_app, memory) tuple.
     """
+    if mode == "chat":
+        warnings.warn(
+            'build_layout_graph(mode="chat") is deprecated; '
+            'use mode="interactive_full" to avoid confusion with the '
+            'session chatbot.  For the new chatbot, use '
+            'build_session_chat_graph().',
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        mode = "interactive_full"
     memory = MemorySaver()
     builder = StateGraph(LayoutState)
 
@@ -133,7 +160,8 @@ def build_layout_graph(mode: str = "initial"):
         # (no interactive review, no RAG save)
         builder.add_edge("node_human_viewer", END)
     else:
-        # Chat mode: human viewer routes to save or back to placement
+        # Interactive-full mode (was "chat"): human viewer routes to
+        # save or back to placement.
         builder.add_conditional_edges("node_human_viewer", route_after_human)
         builder.add_edge("node_save_to_rag", END)
 
@@ -188,8 +216,17 @@ def build_session_chat_graph():
         need_topology         → node_topology_analyst  → node_session_finalizer → END
         need_strategy         → node_strategy_selector → node_session_finalizer → END
         need_placement        → node_placement_specialist → node_command_validator → node_human_viewer → END
-        need_drc              → node_drc_critic         → node_session_finalizer → END
+        need_drc              → node_drc_checker      → node_session_finalizer → END
+        fix_drc               → node_drc_critic        → conditional → validator → viewer → END
         need_routing          → node_routing_previewer  → node_session_finalizer → END
+
+    Post-human-viewer behavior (Fix 8 – documentation only):
+        The ``node_human_viewer`` interrupts the graph and sends ``pending_cmds``
+        to the GUI via ``visual_viewer_signal``.  The GUI's
+        ``_on_visual_viewer_signal`` handler applies approved commands to the
+        layout canvas.  The graph does **not** contain an apply-commands node;
+        command application is entirely UI-side.  After the interrupt resumes
+        (``Command(resume=...)``), the graph proceeds directly to ``END``.
     """
     memory = MemorySaver()
     builder = StateGraph(LayoutState)
@@ -202,6 +239,7 @@ def build_session_chat_graph():
     builder.add_node("node_strategy_selector",     node_strategy_selector)
     builder.add_node("node_placement_specialist",  node_placement_specialist)
     builder.add_node("node_drc_critic",            node_drc_critic)
+    builder.add_node("node_drc_checker",           node_drc_checker)
     builder.add_node("node_routing_previewer",     node_routing_previewer)
     builder.add_node("node_human_viewer",          node_human_viewer)
 
@@ -218,6 +256,7 @@ def build_session_chat_graph():
             "node_topology_analyst":     "node_topology_analyst",
             "node_strategy_selector":    "node_strategy_selector",
             "node_placement_specialist": "node_placement_specialist",
+            "node_drc_checker":          "node_drc_checker",
             "node_drc_critic":           "node_drc_critic",
             "node_routing_previewer":    "node_routing_previewer",
         },
@@ -226,15 +265,40 @@ def build_session_chat_graph():
     # ── answer_only / clarify → finalizer → END ──
     builder.add_edge("node_session_finalizer", END)
 
-    # ── command_edit → validator → human viewer → END ──
-    builder.add_edge("node_command_validator", "node_human_viewer")
+    # ── command_edit → validator → conditional → human viewer / finalizer ──
+    builder.add_conditional_edges(
+        "node_command_validator",
+        route_after_command_validator,
+        {
+            "node_human_viewer":      "node_human_viewer",
+            "node_session_finalizer": "node_session_finalizer",
+        },
+    )
+    # ── human_viewer → END ──
+    # NOTE (Fix 8): node_human_viewer interrupts the graph and sends
+    # pending_cmds to the GUI via the visual_viewer_signal.  The GUI's
+    # _on_visual_viewer_signal handler is responsible for applying the
+    # approved commands to the layout canvas.  The session graph ends
+    # here because command application is entirely UI-side — the graph
+    # does NOT contain an "apply commands" node.  On resume, the graph
+    # terminates at END.
     builder.add_edge("node_human_viewer", END)
 
     # ── Specialist → finalizer → END ──
     builder.add_edge("node_topology_analyst",     "node_session_finalizer")
     builder.add_edge("node_strategy_selector",    "node_session_finalizer")
-    builder.add_edge("node_drc_critic",           "node_session_finalizer")
+    builder.add_edge("node_drc_checker",          "node_session_finalizer")   # read-only DRC
     builder.add_edge("node_routing_previewer",    "node_session_finalizer")
+
+    # ── fix_drc → drc_critic → conditional → validator/viewer or finalizer ──
+    builder.add_conditional_edges(
+        "node_drc_critic",
+        route_after_session_drc,
+        {
+            "node_command_validator":  "node_command_validator",
+            "node_session_finalizer": "node_session_finalizer",
+        },
+    )
 
     # ── Placement specialist → validator → human viewer → END ──
     builder.add_edge("node_placement_specialist", "node_command_validator")

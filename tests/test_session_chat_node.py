@@ -158,7 +158,7 @@ class TestNodeSessionChatSpecialist:
                 "assistant_text": "I'll run a DRC check.",
                 "session_reason": "DRC keyword detected",
                 "requires_specialist": True,
-                "specialist_target": "drc_critic",
+                "specialist_target": "drc_checker",
             }
 
         monkeypatch.setattr(
@@ -168,7 +168,7 @@ class TestNodeSessionChatSpecialist:
         result = node_session_chat({"user_message": "check DRC"})
         assert result["session_route"] == "need_drc"
         assert result["requires_specialist"] is True
-        assert result["specialist_target"] == "drc_critic"
+        assert result["specialist_target"] == "drc_checker"
         # No pending_cmds for specialist routes
         assert "pending_cmds" not in result
 
@@ -230,7 +230,8 @@ class TestNodeSessionChatHistory:
         ("need_topology",  "node_topology_analyst"),
         ("need_strategy",  "node_strategy_selector"),
         ("need_placement", "node_placement_specialist"),
-        ("need_drc",       "node_drc_critic"),
+        ("need_drc",       "node_drc_checker"),
+        ("fix_drc",        "node_drc_critic"),
         ("need_routing",   "node_routing_previewer"),
         ("unknown",        "node_session_finalizer"),
         (None,             "node_session_finalizer"),

@@ -119,7 +119,7 @@ class TestRuleRouteEdgeCases:
     def test_rotate_is_command_edit(self):
         assert rule_route("rotate M4 by 180 degrees") == "command_edit"
 
-    def test_design_rule_is_need_drc(self):
+    def test_design_rule_violation_is_need_drc(self):
         assert rule_route("fix the design rule violation") == "need_drc"
 
     def test_interconnect_is_need_routing(self):
@@ -175,7 +175,7 @@ class TestValidSessionRoutes:
         required = {
             "answer_only", "command_edit",
             "need_topology", "need_strategy", "need_placement",
-            "need_drc", "need_routing", "clarify",
+            "need_drc", "fix_drc", "need_routing", "clarify",
         }
         assert required <= VALID_SESSION_ROUTES
 

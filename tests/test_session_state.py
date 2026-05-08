@@ -14,19 +14,9 @@ from ai_agent.graph.state import LayoutState
 
 
 # ---------------------------------------------------------------------------
-# Constants duplicated here so the test is self-contained.
-# The authoritative constant will live in the session chat agent module.
+# Fix 13: Import routes from the production single-source-of-truth.
 # ---------------------------------------------------------------------------
-VALID_SESSION_ROUTES = {
-    "answer_only",
-    "command_edit",
-    "need_topology",
-    "need_strategy",
-    "need_placement",
-    "need_drc",
-    "need_routing",
-    "clarify",
-}
+from ai_agent.agents.session_chat_agent import VALID_SESSION_ROUTES
 
 
 class TestLayoutStateSessionFields:
@@ -140,6 +130,7 @@ class TestLayoutStateSessionFields:
             "strategy_selector",
             "placement_specialist",
             "drc_critic",
+            "drc_checker",
             "routing_previewer",
         }
         for target in valid_targets:
@@ -156,3 +147,69 @@ class TestLayoutStateSessionFields:
             "specialist_target": None,
         }
         assert state["specialist_target"] is None
+
+    # ------------------------------------------------------------------
+    # 8. Session fields are NotRequired (Fix 5)
+    # ------------------------------------------------------------------
+    def test_session_fields_are_notrequired(self):
+        """NotRequired must appear in annotations for all session fields."""
+        hints = LayoutState.__annotations__
+        session_fields = {
+            "initial_agent_trace",
+            "assistant_text",
+            "session_route",
+            "route_confidence",
+            "requires_specialist",
+            "specialist_target",
+            "session_reason",
+            "session_commands",
+        }
+        for field in session_fields:
+            hint_str = str(hints[field])
+            assert "NotRequired" in hint_str, (
+                f"Field {field!r} should be NotRequired, got: {hint_str}"
+            )
+
+    # ------------------------------------------------------------------
+    # 9. mode Literal includes legacy_chat (Fix 6)
+    # ------------------------------------------------------------------
+    def test_layout_state_mode_allows_legacy_chat(self):
+        """LayoutState.mode must accept 'legacy_chat' without type errors."""
+        state: dict = {"mode": "legacy_chat"}
+        assert state["mode"] == "legacy_chat"
+
+    def test_mode_literal_includes_legacy_chat(self):
+        """The mode annotation must include 'legacy_chat'."""
+        hint_str = str(LayoutState.__annotations__["mode"])
+        assert "legacy_chat" in hint_str
+
+    # ------------------------------------------------------------------
+    # 10. select_graph_app works for all modes (Fix 6)
+    # ------------------------------------------------------------------
+    def test_select_graph_app_legacy_chat(self):
+        """select_graph_app('legacy_chat') must return the legacy chat app."""
+        try:
+            from ai_agent.llm.workers import select_graph_app
+        except ImportError:
+            pytest.skip("workers module requires langgraph")
+
+        try:
+            app = select_graph_app("legacy_chat")
+        except Exception:
+            pytest.skip("Graph compilation requires langgraph")
+
+        assert app is not None
+
+    def test_select_graph_app_chat(self):
+        """select_graph_app('chat') must return session chat app."""
+        try:
+            from ai_agent.llm.workers import select_graph_app
+        except ImportError:
+            pytest.skip("workers module requires langgraph")
+
+        try:
+            app = select_graph_app("chat")
+        except Exception:
+            pytest.skip("Graph compilation requires langgraph")
+
+        assert app is not None

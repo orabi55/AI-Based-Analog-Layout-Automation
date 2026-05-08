@@ -198,12 +198,19 @@ class TestValidatorActionCheck:
         assert "teleport" in str(result["validation_errors"])
 
     def test_accepts_all_allowed_actions(self):
-        """Every action in ALLOWED_ACTIONS should pass (with a valid device)."""
+        """Every action in ALLOWED_ACTIONS should pass (with valid fields)."""
         from ai_agent.nodes.command_validator import ALLOWED_ACTIONS
         for action in ALLOWED_ACTIONS:
+            # move_pair requires ≥2 devices and a delta (Fix 11)
+            if action == "move_pair":
+                cmd = {"action": action, "devices": ["M1", "M2"], "dx": 1, "dy": 0}
+                nodes = [{"id": "M1"}, {"id": "M2"}]
+            else:
+                cmd = {"action": action, "device_id": "M1"}
+                nodes = [{"id": "M1"}]
             state = {
-                "pending_cmds": [{"action": action, "device_id": "M1"}],
-                "placement_nodes": [{"id": "M1"}],
+                "pending_cmds": [cmd],
+                "placement_nodes": nodes,
             }
             result = node_command_validator(state)
             assert len(result["pending_cmds"]) == 1, f"Action '{action}' was rejected"

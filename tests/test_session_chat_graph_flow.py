@@ -280,14 +280,14 @@ class TestFlow3DRC:
                 "route_confidence": 0.99,
                 "assistant_text": "",
                 "requires_specialist": True,
-                "specialist_target": "drc_critic",
+                "specialist_target": "drc_checker",
             },
         )
         state = {"user_message": "check DRC", "chat_history": []}
         update, next_node = _run_chat_then_route(state)
 
         assert update["session_route"] == "need_drc"
-        assert next_node == "node_drc_critic"
+        assert next_node == "node_drc_checker"
 
     def test_drc_finalizer_produces_text(self, monkeypatch):
         """After DRC specialist runs, finalizer should produce visible text."""

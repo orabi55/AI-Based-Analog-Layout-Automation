@@ -158,7 +158,7 @@ class TestDeterministicRoutes:
         result = run_session_chat_agent({"user_message": "check DRC violations"})
         assert result["session_route"] == "need_drc"
         assert result["requires_specialist"] is True
-        assert result["specialist_target"] == "drc_critic"
+        assert result["specialist_target"] == "drc_checker"
 
     def test_need_routing_sets_specialist(self):
         result = run_session_chat_agent({"user_message": "how is wirelength?"})

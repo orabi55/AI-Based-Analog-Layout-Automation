@@ -8,6 +8,19 @@ Functions:
 - node_human_viewer: Presents the layout to the user and handles approval or edit requests.
   - Inputs: state (dict)
   - Outputs: state update with approval status, optional user_feedback, and chat history.
+
+Command application contract (Fix 8):
+    This node does NOT apply commands to the layout.  It only captures the
+    user's approval/rejection decision and optional modified commands.
+
+    The actual command application happens in the GUI layer
+    (``chat_panel.ChatPanel._on_visual_viewer_signal``), which receives the
+    ``pending_cmds`` payload via the ``visual_viewer_signal`` Qt signal and
+    applies each command to the layout canvas.
+
+    The session graph routes ``node_human_viewer → END`` because there is no
+    graph-level apply node.  This is intentional — the GUI is the
+    authority for layout mutation during interactive sessions.
 """
 
 import json

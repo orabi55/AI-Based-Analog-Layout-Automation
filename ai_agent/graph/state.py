@@ -9,16 +9,22 @@ Functions:
 
 from typing import TypedDict, List, Dict, Any, Literal, Optional
 
+try:
+    from typing import NotRequired          # Python 3.11+
+except ImportError:
+    from typing_extensions import NotRequired  # Python 3.10 and below
+
 
 class LayoutState(TypedDict):
     """Shared state passed between all LangGraph nodes.
 
     Execution modes:
-      - "initial": Full pipeline, auto-run, no interrupts (Ctrl+P placement)
-      - "chat":    Selective nodes, human-in-loop enabled (chatbot mode)
+      - "initial":     Full pipeline, auto-run, no interrupts (Ctrl+P placement)
+      - "chat":        Selective nodes, human-in-loop enabled (session chatbot)
+      - "legacy_chat": Old chatbot graph kept for backward compatibility
     """
     # --- Execution mode ---
-    mode: Literal["initial", "chat"]
+    mode: Literal["initial", "chat", "legacy_chat"]
 
     # --- Inputs ---
     user_message: str
@@ -78,30 +84,35 @@ class LayoutState(TypedDict):
     # --- Agent output cache ---
     placement_text: str
 
-    # ── Session chatbot state fields ──────────────────────────────────────────
+    # ── Session chatbot state fields (all NotRequired) ─────────────────────────
+    # These keys may be absent from legacy state dicts that predate the session
+    # chatbot.  Using NotRequired ensures type checkers do not flag their
+    # absence as an error.
+
     # Compact record of what initial-placement agents decided (topology,
     # strategy, placement list, routing, DRC pass/flags).
-    initial_agent_trace: Optional[Dict[str, Any]]
+    initial_agent_trace: NotRequired[Optional[Dict[str, Any]]]
 
     # Final text to display in the chat UI after any node finishes.
-    assistant_text: Optional[str]
+    assistant_text: NotRequired[Optional[str]]
 
     # Strict route chosen by the session chatbot (see VALID_SESSION_ROUTES).
-    session_route: Optional[str]
+    session_route: NotRequired[Optional[str]]
 
     # Confidence score for the chosen route, in the range [0.0, 1.0].
-    route_confidence: Optional[float]
+    route_confidence: NotRequired[Optional[float]]
 
     # True when the session chatbot decides to delegate to a specialist agent.
-    requires_specialist: bool
+    requires_specialist: NotRequired[bool]
 
     # Which specialist to call: one of the five agent names or None.
     # Valid values: "topology_analyst", "strategy_selector",
-    #               "placement_specialist", "drc_critic", "routing_previewer".
-    specialist_target: Optional[str]
+    #               "placement_specialist", "drc_critic", "drc_checker",
+    #               "routing_previewer".
+    specialist_target: NotRequired[Optional[str]]
 
     # Short human-readable reason explaining the routing/specialist decision.
-    session_reason: Optional[str]
+    session_reason: NotRequired[Optional[str]]
 
     # Raw commands produced by the session chatbot, before validation.
-    session_commands: Optional[List[Dict[str, Any]]]
+    session_commands: NotRequired[Optional[List[Dict[str, Any]]]]

@@ -64,7 +64,8 @@ _SESSION_ROUTE_MAP: dict[str, str] = {
     "need_topology":  "node_topology_analyst",
     "need_strategy":  "node_strategy_selector",
     "need_placement": "node_placement_specialist",
-    "need_drc":       "node_drc_critic",
+    "need_drc":       "node_drc_checker",
+    "fix_drc":        "node_drc_critic",
     "need_routing":   "node_routing_previewer",
 }
 
@@ -84,3 +85,52 @@ def route_after_session_chat(state: LayoutState) -> str:
     route = state.get("session_route")
     target = _SESSION_ROUTE_MAP.get(route, _SESSION_FALLBACK_NODE)
     return target
+
+
+# ---------------------------------------------------------------------------
+# Post-command-validator routing
+# ---------------------------------------------------------------------------
+
+def route_after_command_validator(state: LayoutState) -> str:
+    """Conditional edge after node_command_validator.
+
+    Routes to ``node_human_viewer`` only when there are valid pending
+    commands to review.  Otherwise routes to ``node_session_finalizer``
+    so the user receives feedback without an unnecessary visual-review
+    interrupt.
+
+    Validation *warnings* (e.g. symmetry concerns) do **not** block
+    human review — only an empty ``pending_cmds`` list or an explicit
+    ``clarify`` route prevents the viewer from being invoked.
+    """
+    pending_cmds = state.get("pending_cmds") or []
+    session_route = state.get("session_route")
+
+    if session_route == "clarify":
+        return "node_session_finalizer"
+
+    if not pending_cmds:
+        return "node_session_finalizer"
+
+    # Valid commands exist → allow visual review (even with warnings).
+    return "node_human_viewer"
+
+
+# ---------------------------------------------------------------------------
+# Post-DRC-critic routing (for fix_drc route)
+# ---------------------------------------------------------------------------
+
+def route_after_session_drc(state: LayoutState) -> str:
+    """Conditional edge after node_drc_critic in the session graph.
+
+    When the DRC critic produces fix commands (``pending_cmds``),
+    route through the command validator and then to human viewer.
+    Otherwise, go straight to the session finalizer for a summary.
+    """
+    route = state.get("session_route")
+    pending_cmds = state.get("pending_cmds") or []
+
+    if route == "fix_drc" and pending_cmds:
+        return "node_command_validator"
+
+    return "node_session_finalizer"

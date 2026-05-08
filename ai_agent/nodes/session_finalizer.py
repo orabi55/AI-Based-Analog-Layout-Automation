@@ -82,6 +82,7 @@ def _summarise_strategy(state: dict) -> str:
 
 _ROUTE_SUMMARISERS: dict[str, callable] = {
     "need_drc":       _summarise_drc,
+    "fix_drc":        _summarise_drc,
     "need_routing":   _summarise_routing,
     "need_topology":  _summarise_topology,
     "need_strategy":  _summarise_strategy,
