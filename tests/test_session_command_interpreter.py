@@ -133,13 +133,11 @@ class TestDeleteCommands:
 
 
 class TestAlignCommands:
-    """Align commands."""
+    """Align commands — NOT SUPPORTED, should return empty."""
 
-    def test_parse_align(self):
+    def test_parse_align_returns_empty(self):
         cmds = parse_direct_edit_command("align M1 with M2")
-        assert cmds[0]["action"] == "align"
-        assert cmds[0]["device_a"] == "M1"
-        assert cmds[0]["device_b"] == "M2"
+        assert cmds == []
 
     def test_align_single_device_returns_empty(self):
         cmds = parse_direct_edit_command("align M1")
@@ -157,35 +155,33 @@ class TestAbutCommands:
 
 
 class TestMergeCommands:
-    """Merge commands."""
+    """Merge commands — NOT SUPPORTED, should return empty."""
 
-    def test_parse_merge(self):
+    def test_parse_merge_returns_empty(self):
         cmds = parse_direct_edit_command("merge M1 and M2")
-        assert cmds[0]["action"] == "merge"
-        assert cmds[0]["device_a"] == "M1"
-        assert cmds[0]["device_b"] == "M2"
+        assert cmds == []
 
 
 class TestAddDummyCommands:
-    """Add dummy commands."""
+    """Add dummy commands — now require context."""
 
     def test_add_dummy_near_device(self):
         cmds = parse_direct_edit_command("add dummy near M1")
         assert cmds[0]["action"] == "add_dummy"
-        assert cmds[0]["device_id"] == "M1"
+        assert cmds[0]["target"] == "M1"
 
-    def test_add_dummy_global(self):
+    def test_add_dummy_global_returns_empty(self):
+        """Vague 'add dummy' without target now returns empty for clarify."""
         cmds = parse_direct_edit_command("add dummy")
-        assert cmds[0]["action"] == "add_dummy"
+        assert cmds == []
 
 
 class TestRotateCommands:
-    """Rotate commands."""
+    """Rotate commands — NOT SUPPORTED, should return empty."""
 
-    def test_parse_rotate(self):
+    def test_parse_rotate_returns_empty(self):
         cmds = parse_direct_edit_command("rotate M1")
-        assert cmds[0]["action"] == "rotate"
-        assert cmds[0]["device_id"] == "M1"
+        assert cmds == []
 
 
 class TestDeviceNameVariants:
@@ -326,13 +322,14 @@ class TestRunSessionChatAgentCommandEdit:
         assert result["session_route"] == "command_edit"
         assert result["pending_cmds"][0]["action"] == "delete"
 
-    def test_command_edit_align_generates_cmds(self):
+    def test_command_edit_align_routes_to_clarify(self):
+        """Align is unsupported — should route to clarify."""
         result = run_session_chat_agent({
             "user_message": "align M1 with M2",
             "placement_nodes": [{"id": "M1"}, {"id": "M2"}],
         })
-        assert result["session_route"] == "command_edit"
-        assert result["pending_cmds"][0]["action"] == "align"
+        assert result["session_route"] == "clarify"
+        assert "not currently supported" in result["assistant_text"].lower()
 
     def test_command_edit_abut_generates_cmds(self):
         result = run_session_chat_agent({
@@ -350,7 +347,12 @@ class TestRunSessionChatAgentCommandEdit:
         })
         assert result["session_route"] == "clarify"
         assert result["pending_cmds"] == []
-        assert "could not" in result["assistant_text"].lower()
+        # With slot-filling, a partial intent is created and the user is
+        # asked for the device name instead of a generic fallback.
+        assert (
+            "which device" in result["assistant_text"].lower()
+            or "could not" in result["assistant_text"].lower()
+        )
 
     def test_no_llm_called_for_deterministic_edit(self, monkeypatch):
         """Deterministic edits should not invoke the LLM."""

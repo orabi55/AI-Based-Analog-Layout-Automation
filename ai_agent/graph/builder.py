@@ -219,6 +219,7 @@ def build_session_chat_graph():
         need_drc              → node_drc_checker      → node_session_finalizer → END
         fix_drc               → node_drc_critic        → conditional → validator → viewer → END
         need_routing          → node_routing_previewer  → node_session_finalizer → END
+        fix_routing           → node_routing_previewer  → node_session_finalizer → END
 
     Post-human-viewer behavior (Fix 8 – documentation only):
         The ``node_human_viewer`` interrupts the graph and sends ``pending_cmds``

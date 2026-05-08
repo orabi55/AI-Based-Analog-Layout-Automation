@@ -17,6 +17,10 @@ from __future__ import annotations
 
 import re
 from ai_agent.utils.logging import vprint
+from ai_agent.tools.command_schema import (
+    SUPPORTED_COMMAND_ACTIONS,
+    get_cmd_device,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -24,17 +28,11 @@ from ai_agent.utils.logging import vprint
 # ---------------------------------------------------------------------------
 
 #: Actions the validator considers safe to pass through.
-ALLOWED_ACTIONS: frozenset[str] = frozenset({
-    "move", "move_device",
-    "swap", "swap_devices",
-    "flip", "flip_h", "flip_v",
-    "delete",
-    "align",
-    "abut",
-    "merge",
-    "add_dummy", "add dummy",
-    "rotate",
-    "move_pair",
+#: Sourced from the shared command_schema module so the validator never
+#: accepts actions that the GUI/executor cannot handle.
+ALLOWED_ACTIONS: frozenset[str] = SUPPORTED_COMMAND_ACTIONS | frozenset({
+    "move_pair",   # accepted at validation, expanded into individual moves
+    "add dummy",   # alternate form of add_dummy
 })
 
 #: Keys that may hold a list of device IDs.
@@ -147,6 +145,113 @@ def _validate_move_pair(cmd: dict) -> str | None:
     return None
 
 
+def _expand_move_pair(cmd: dict) -> list[dict]:
+    """Expand a move_pair command into individual move commands.
+
+    The GUI does not have a native move_pair handler, so we expand it
+    into one move command per device before forwarding.
+    """
+    devices = _extract_device_ids(cmd)
+    expanded: list[dict] = []
+    for dev_id in devices:
+        move_cmd: dict = {"action": "move", "device_id": dev_id}
+        if cmd.get("dx") is not None:
+            move_cmd["dx"] = cmd["dx"]
+        if cmd.get("dy") is not None:
+            move_cmd["dy"] = cmd["dy"]
+        if cmd.get("x") is not None:
+            move_cmd["x"] = cmd["x"]
+        if cmd.get("y") is not None:
+            move_cmd["y"] = cmd["y"]
+        if cmd.get("force_y"):
+            move_cmd["force_y"] = True
+        expanded.append(move_cmd)
+    return expanded
+
+
+def _validate_add_dummy_context(cmd: dict) -> str | None:
+    """Return an error if an add_dummy command lacks placement context.
+
+    The GUI handler requires at least x/y coordinates.  If the parser
+    provided a target/side pair, the validator will resolve them to x/y
+    later.  But a bare ``{"action": "add_dummy"}`` is underspecified.
+    """
+    action = str(cmd.get("action", "")).lower().strip()
+    if action not in ("add_dummy", "add_dummies", "dummy", "add dummy"):
+        return None
+    has_context = (
+        cmd.get("target") or cmd.get("device_id") or cmd.get("device")
+        or cmd.get("x") is not None or cmd.get("y") is not None
+        or cmd.get("row") or cmd.get("type")
+        or cmd.get("side")
+    )
+    if not has_context:
+        return (
+            "add_dummy requires placement context. "
+            "Please specify where to add the dummy device, "
+            "for example 'add dummy left of M1'."
+        )
+    return None
+
+
+def _resolve_add_dummy_coordinates(
+    cmd: dict, placement_nodes: list,
+) -> dict:
+    """If add_dummy has target+side but no x/y, compute x/y from the
+    target device's current position in placement_nodes.
+
+    Returns a new command dict (does not mutate the original).
+    """
+    import copy as _copy
+
+    action = str(cmd.get("action", "")).lower().strip()
+    if action not in ("add_dummy", "add_dummies", "dummy", "add dummy"):
+        return cmd
+
+    # Already has explicit coordinates — nothing to resolve
+    if cmd.get("x") is not None and cmd.get("y") is not None:
+        return cmd
+
+    target = cmd.get("target") or cmd.get("device_id") or cmd.get("device")
+    side = str(cmd.get("side", "")).lower()
+    if not target:
+        return cmd
+
+    # Find the target device in placement_nodes
+    target_node = None
+    for n in placement_nodes:
+        if isinstance(n, dict):
+            nid = n.get("id") or n.get("name") or n.get("device_id")
+            if str(nid) == str(target):
+                target_node = n
+                break
+
+    if not target_node:
+        return cmd  # target not found; validator will catch via ref check
+
+    # Extract target geometry
+    geom = target_node.get("geometry", {})
+    tx = float(geom.get("x", target_node.get("x", 0.0)))
+    ty = float(geom.get("y", target_node.get("y", 0.0)))
+    tw = float(geom.get("width", 0.294))
+
+    resolved = _copy.copy(cmd)
+    resolved["y"] = ty
+    dev_type = str(target_node.get("type", "nmos")).lower()
+    if "type" not in resolved:
+        resolved["type"] = dev_type
+
+    if side == "left":
+        resolved["x"] = round(tx - tw, 6)
+    elif side == "right":
+        resolved["x"] = round(tx + tw, 6)
+    else:
+        # Default: place to the right
+        resolved["x"] = round(tx + tw, 6)
+
+    return resolved
+
+
 def _check_finger_integrity(
     cmd: dict, placement_nodes: list,
 ) -> str | None:
@@ -194,28 +299,31 @@ def _check_finger_integrity(
 
 def _check_row_legality(
     cmd: dict, placement_nodes: list,
-) -> str | None:
-    """Return a warning string if a move command would cross the PMOS/NMOS
-    row boundary, else None.
+) -> tuple[list[str], list[str]]:
+    """Check whether a move command would cross the PMOS/NMOS row boundary.
 
-    Only applies to absolute-y moves (``y`` key present).  Relative moves
-    (``dy`` only) are accepted without warning — the user may intend a
-    small in-row shift.
+    Returns ``(errors, warnings)``.
+
+    - Absolute-y row crossing WITHOUT ``force_y`` → **blocking error**.
+    - Absolute-y row crossing WITH ``force_y=True`` → **warning only**.
+    - Relative moves (``dy`` only) → no check.
     """
+    errors: list[str] = []
+    warnings: list[str] = []
+
     action = str(cmd.get("action", "")).lower().strip()
     if action not in ("move", "move_device", "move_pair"):
-        return None
+        return errors, warnings
 
     target_y = cmd.get("y")
     if target_y is None:
-        return None   # relative move — no check
+        return errors, warnings   # relative move — no check
 
-    if cmd.get("force_y"):
-        return None   # explicit override
+    force_y = bool(cmd.get("force_y", False))
 
     refs = _extract_device_ids(cmd)
     if not refs:
-        return None
+        return errors, warnings
 
     # Determine device type from placement_nodes
     node_map: dict[str, dict] = {}
@@ -245,15 +353,22 @@ def _check_row_legality(
                 cy = float(current_y)
                 ty = float(target_y)
                 if (cy >= 0 and ty < 0) or (cy < 0 and ty >= 0):
-                    return (
+                    msg = (
                         f"Device '{ref}' ({dev_type}) would move from y={cy} to y={ty}, "
-                        f"which may cross the PMOS/NMOS row boundary. "
-                        f"Set 'force_y': true to override."
+                        f"which crosses the PMOS/NMOS row boundary."
                     )
+                    if force_y:
+                        warnings.append(
+                            f"{msg} (force_y=True overrides row legality guard)"
+                        )
+                    else:
+                        errors.append(
+                            f"{msg} Set 'force_y': true to override."
+                        )
             except (ValueError, TypeError):
                 pass
 
-    return None
+    return errors, warnings
 
 
 def _detect_symmetry_warning(
@@ -364,23 +479,50 @@ def node_command_validator(state: dict) -> dict:
             errors.append(f"Command {i + 1}: {pair_err}")
             continue
 
+        # --- add_dummy context check (Fix C) --------------------------------
+        dummy_err = _validate_add_dummy_context(cmd)
+        if dummy_err:
+            errors.append(f"Command {i + 1}: {dummy_err}")
+            continue
+
+        # --- Resolve add_dummy target/side → x/y ---------------------------
+        action = str(cmd.get("action", "")).lower().strip()
+        if action in ("add_dummy", "add_dummies", "dummy", "add dummy"):
+            cmd = _resolve_add_dummy_coordinates(cmd, placement_nodes)
+            # After resolution, verify x/y are present
+            if cmd.get("x") is None or cmd.get("y") is None:
+                errors.append(
+                    f"Command {i + 1}: Could not compute coordinates "
+                    f"for add_dummy. Please specify x/y or a valid target device."
+                )
+                continue
+
         # --- Finger integrity check (Fix 11 — blocking) --------------------
         finger_err = _check_finger_integrity(cmd, placement_nodes)
         if finger_err:
             errors.append(f"Command {i + 1}: {finger_err}")
             continue
 
-        # --- Row legality warning (Fix 11 — non-blocking) -------------------
-        row_warn = _check_row_legality(cmd, placement_nodes)
-        if row_warn:
-            warnings.append(f"Command {i + 1}: {row_warn}")
+        # --- Row legality check (Fix F — blocking for row crossing) ---------
+        row_errs, row_warns = _check_row_legality(cmd, placement_nodes)
+        if row_errs:
+            for re_ in row_errs:
+                errors.append(f"Command {i + 1}: {re_}")
+            continue
+        for rw in row_warns:
+            warnings.append(f"Command {i + 1}: {rw}")
 
         # --- Symmetry warning (non-blocking) --------------------------------
         sym_warn = _detect_symmetry_warning(cmd, initial_trace)
         if sym_warn:
             warnings.append(f"Command {i + 1}: {sym_warn}")
 
-        validated.append(cmd)
+        # --- move_pair expansion (Fix B — expand into individual moves) -----
+        if action == "move_pair":
+            expanded = _expand_move_pair(cmd)
+            validated.extend(expanded)
+        else:
+            validated.append(cmd)
 
     vprint(
         f"[VALIDATOR] {len(validated)} valid, {len(errors)} rejected, "

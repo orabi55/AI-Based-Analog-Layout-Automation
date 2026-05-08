@@ -3008,6 +3008,50 @@ class LayoutEditorTab(QWidget):
                 self._refresh_panels(compact=False)
                 self.chat_panel._append_message("AI", f"Moved all {count} {dev_type} devices to Y={new_y}", "#e8f4fd", "#1a1a2e")
 
+            elif action in {"flip", "flip_h", "flip_v"}:
+                raw_dev = cmd.get("device_id") or cmd.get("device") or cmd.get("id")
+                dev_id = self._resolve_device_id(raw_dev)
+                if not dev_id:
+                    self.chat_panel._append_message("AI", f"Flip failed: device not found ({raw_dev}).", "#fde8e8", "#a00")
+                    return
+                if self._is_device_locked(dev_id):
+                    self.chat_panel._append_message("AI", f"⚠️ Cannot flip locked device ({dev_id}).", "#fff3e0", "#e65100")
+                    return
+                self._sync_node_positions()
+                if not _skip_undo:
+                    self._push_undo()
+                node = next((n for n in self.nodes if n.get("id") == dev_id), None)
+                if node:
+                    orient = cmd.get("orientation", "horizontal")
+                    axis = "v" if orient == "vertical" or action == "flip_v" else "h"
+                    cur = node["geometry"].get("orientation", "R0")
+                    from ai_agent.tools.cmd_parser import _flip_orientation
+                    node["geometry"]["orientation"] = _flip_orientation(cur, axis)
+                    self._refresh_panels(compact=False)
+                    self.chat_panel._append_message("AI", f"✅ Flipped {dev_id} ({axis})", "#e8f4fd", "#1a1a2e")
+
+            elif action == "delete":
+                raw_dev = cmd.get("device_id") or cmd.get("device") or cmd.get("id")
+                dev_id = self._resolve_device_id(raw_dev)
+                if not dev_id:
+                    self.chat_panel._append_message("AI", f"Delete failed: device not found ({raw_dev}).", "#fde8e8", "#a00")
+                    return
+                if self._is_device_locked(dev_id):
+                    self.chat_panel._append_message("AI", f"⚠️ Cannot delete locked device ({dev_id}).", "#fff3e0", "#e65100")
+                    return
+                self._sync_node_positions()
+                if not _skip_undo:
+                    self._push_undo()
+                self.nodes = [n for n in self.nodes if n.get("id") != dev_id]
+                if self._original_data:
+                    self._original_data["nodes"] = self.nodes
+                # Clear selection state if the deleted device was selected
+                if getattr(self, "_selected_device_id", None) == dev_id:
+                    self._selected_device_id = None
+                self._refresh_panels(compact=False)
+                self._sync_node_positions()
+                self.chat_panel._append_message("AI", f"✅ Deleted {dev_id}", "#e8f4fd", "#1a1a2e")
+
             elif action in {"add_dummy", "add_dummies", "dummy"}:
                 dev_type = str(cmd.get("type", "nmos")).strip().lower()
                 if dev_type not in ("nmos", "pmos"):

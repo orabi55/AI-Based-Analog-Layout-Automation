@@ -67,6 +67,7 @@ _SESSION_ROUTE_MAP: dict[str, str] = {
     "need_drc":       "node_drc_checker",
     "fix_drc":        "node_drc_critic",
     "need_routing":   "node_routing_previewer",
+    "fix_routing":    "node_routing_previewer",
 }
 
 #: Safe default when the route is unknown or missing.

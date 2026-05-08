@@ -297,6 +297,7 @@ SESSION_ROUTE_LABELS: dict[str, str] = {
     "need_drc":       "Checking DRC",
     "fix_drc":        "Fixing DRC",
     "need_routing":   "Previewing routing",
+    "fix_routing":    "Optimizing routing",
     "need_strategy":  "Checking strategy",
     "need_topology":  "Analyzing topology",
     "need_placement": "Computing placement",

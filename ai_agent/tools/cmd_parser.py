@@ -20,6 +20,12 @@ import re
 import json
 import copy
 from typing import List
+
+from ai_agent.tools.command_schema import (
+    get_cmd_device,
+    get_cmd_device_a,
+    get_cmd_device_b,
+)
 DEFAULT_MIN_DEVICE_SPACING_UM: float = 0.294
 NMOS_ROW_Y_MIN: float = 0.0
 
@@ -177,8 +183,8 @@ def apply_cmds_to_nodes(nodes: List[dict], cmds: List[dict]) -> List[dict]:
         action = cmd.get('action', '').lower()
 
         if action in ('swap', 'swap_devices'):
-            a_id = cmd.get('device_a', cmd.get('a'))
-            b_id = cmd.get('device_b', cmd.get('b'))
+            a_id = get_cmd_device_a(cmd)
+            b_id = get_cmd_device_b(cmd)
             if a_id in id_map and b_id in id_map:
                 ga, gb = id_map[a_id]['geometry'], id_map[b_id]['geometry']
                 ga['x'], gb['x'] = gb['x'], ga['x']
@@ -189,7 +195,7 @@ def apply_cmds_to_nodes(nodes: List[dict], cmds: List[dict]) -> List[dict]:
                 )
 
         elif action in ('move', 'move_device'):
-            dev_id = cmd.get('device', cmd.get('device_id', cmd.get('id')))
+            dev_id = get_cmd_device(cmd)
             if dev_id in id_map:
                 node = id_map[dev_id]
                 if cmd.get('x') is not None:
@@ -206,14 +212,14 @@ def apply_cmds_to_nodes(nodes: List[dict], cmds: List[dict]) -> List[dict]:
                 _log(f"  MOVE: device not found: {dev_id!r}")
 
         elif action in ('flip', 'flip_h', 'flip_v'):
-            dev_id = cmd.get('device', cmd.get('id'))
+            dev_id = get_cmd_device(cmd)
             if dev_id in id_map:
                 cur = id_map[dev_id]['geometry'].get('orientation', 'R0')
                 axis = 'v' if action == 'flip_v' else 'h'
                 id_map[dev_id]['geometry']['orientation'] = _flip_orientation(cur, axis)
 
         elif action == 'delete':
-            dev_id = cmd.get('device', cmd.get('id'))
+            dev_id = get_cmd_device(cmd)
             nodes  = [n for n in nodes if n['id'] != dev_id]
             id_map = {n['id']: n for n in nodes}
 

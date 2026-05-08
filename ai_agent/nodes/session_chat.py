@@ -110,6 +110,16 @@ def node_session_chat(state: dict) -> dict:
         update["session_commands"] = list(commands)
         update["pending_cmds"]    = list(commands)
 
+    # -- Propagate or clear pending edit intent (slot-filling) ----------------
+    if "pending_edit_intent" in result:
+        update["pending_edit_intent"] = result["pending_edit_intent"]
+
+    # -- Propagate routing optimization context --------------------------------
+    if "target_nets" in result:
+        update["target_nets"] = result["target_nets"]
+    if "routing_fix_requested" in result:
+        update["routing_fix_requested"] = result["routing_fix_requested"]
+
     # -- Append assistant turn to chat history --------------------------------
     chat_history = list(state.get("chat_history") or [])
     user_message = str(state.get("user_message") or "").strip()

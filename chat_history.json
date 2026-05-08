@@ -1,10 +1,18 @@
 [
   {
-    "role": "system",
-    "content": "Starting **DRC Critic (Attempt 1)**..."
+    "role": "user",
+    "content": "MM3,MM0 is matched with common centriod or interdigitation?"
+  },
+  {
+    "role": "user",
+    "content": "MM3,MM0 is matched with common centriod or interdigitation?"
   },
   {
     "role": "assistant",
-    "content": "Clean placement. No DRC violations found."
+    "content": "I'll delegate this to the strategy_selector for a more detailed answer."
+  },
+  {
+    "role": "user",
+    "content": "MM3,MM0 is matched with common centriod or interdigitation?"
   }
 ]

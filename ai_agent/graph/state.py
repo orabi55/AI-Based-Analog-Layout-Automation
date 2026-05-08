@@ -116,3 +116,17 @@ class LayoutState(TypedDict):
 
     # Raw commands produced by the session chatbot, before validation.
     session_commands: NotRequired[Optional[List[Dict[str, Any]]]]
+
+    # Slot-filling state for multi-turn edit clarification.
+    # When the parser detects an edit intent but is missing a required field
+    # (e.g., device_id), it stores the partial intent here.  The next message
+    # can fill the missing slot(s) to complete the command.
+    pending_edit_intent: NotRequired[Optional[Dict[str, Any]]]
+
+    # Target nets specified by the user for routing optimization
+    # (e.g., ["VOUTP", "VOUTN"] from "reduce parasitics on VOUTP and VOUTN").
+    target_nets: NotRequired[Optional[List[str]]]
+
+    # True when the user requested active routing optimization (fix_routing)
+    # vs. read-only routing preview (need_routing).
+    routing_fix_requested: NotRequired[bool]

@@ -48,7 +48,8 @@ VALID_SESSION_ROUTES: frozenset[str] = frozenset({
     "need_placement",# delegate to placement_specialist specialist
     "need_drc",      # delegate to drc_checker (read-only) specialist
     "fix_drc",       # delegate to drc_critic (active fixes) specialist
-    "need_routing",  # delegate to routing_previewer specialist
+    "need_routing",  # delegate to routing_previewer (read-only preview)
+    "fix_routing",   # delegate to routing_previewer (active optimization)
     "clarify",       # ask the user for clarification
 })
 
@@ -84,8 +85,11 @@ def _word_match(text: str, words: tuple[str, ...]) -> bool:
 # These are unambiguous layout-edit verbs that cannot appear in a
 # purely interrogative context with a different meaning.
 _STRONG_COMMAND_WORDS: tuple[str, ...] = (
-    "move", "swap", "flip", "delete", "remove", "align", "abut",
-    "merge", "add dummy", "dummy", "rotate",
+    "move", "swap", "flip", "delete", "remove", "abut",
+    "add dummy", "dummy",
+    # Unsupported but recognized — route to command_edit where the parser
+    # returns [] and the unsupported-action fallback message is triggered.
+    "align", "merge", "rotate",
 )
 
 # Weak command verbs — yield to explanation context.
@@ -104,6 +108,19 @@ _FIX_DRC_WORDS: tuple[str, ...] = (
     "fix design rule", "heal drc",
 )
 
+#: DRC repair phrases involving remove/clear + DRC/violation/overlap/spacing.
+#: These MUST be checked BEFORE _STRONG_COMMAND_WORDS so that
+#: "remove DRC violation" routes to fix_drc, not command_edit.
+_DRC_REPAIR_PHRASES: tuple[str, ...] = (
+    "remove drc", "clear drc",
+    "remove violation", "clear violation",
+    "remove violations", "clear violations",
+    "remove overlap", "clear overlap",
+    "fix violation", "fix violations",
+    "resolve drc", "resolve violation", "resolve violations",
+    "fix spacing violation", "clear drc errors",
+)
+
 _DRC_WORDS: tuple[str, ...] = (
     "drc", "violation", "spacing", "overlap", "short", "illegal",
     "design rule", "rule check",
@@ -112,6 +129,19 @@ _DRC_WORDS: tuple[str, ...] = (
 _ROUTING_WORDS: tuple[str, ...] = (
     "route", "routing", "wire", "wirelength", "crossing",
     "congestion", "net crossing", "interconnect",
+)
+
+#: Active routing optimization phrases — checked BEFORE generic routing words
+#: so "reduce parasitics" → fix_routing, not need_routing.
+_ROUTING_FIX_PHRASES: tuple[str, ...] = (
+    "reduce parasitic", "reduce parasitics",
+    "reduce wirelength", "reduce wire length",
+    "reduce crossings", "reduce crossing",
+    "optimize routing", "optimise routing",
+    "fix routing", "fix crossings", "fix crossing",
+    "improve routing", "shorten net", "shorten nets",
+    "minimize wirelength", "minimise wirelength",
+    "lower parasitic", "lower parasitics",
 )
 
 _STRATEGY_WORDS: tuple[str, ...] = (
@@ -140,6 +170,45 @@ _EXPLANATION_WORDS: tuple[str, ...] = (
 #: Preserves original case from the user message.
 DEVICE_RE = re.compile(r"\b((?:MM|XM|MN|MP|M)\d+\w*)\b", re.IGNORECASE)
 
+#: Regex matching common net names (VOUTP, VOUTN, CLK, VIN, etc.).
+#: Net names are typically uppercase identifiers ≥ 2 chars that are NOT devices.
+_NET_RE = re.compile(r"\b([A-Z][A-Z0-9_]{1,})\b")
+
+#: Net names that are too generic to be useful targets.
+_IGNORE_NETS = frozenset({
+    "DRC", "HPWL", "AND", "THE", "FOR", "NOT", "WITH", "FROM",
+    "VDD", "VSS", "GND", "AVDD", "AVSS", "DVDD", "DVSS",
+})
+
+
+def _extract_target_nets(message: str) -> list[str]:
+    """Extract net names from a routing-related message.
+
+    Looks for patterns like::
+
+        "reduce parasitics on VOUTP and VOUTN nets"
+        "optimize net CLK"
+        "shorten VOUTP"
+
+    Returns a deduplicated list of net names, excluding device names
+    and common non-net words.
+    """
+    if not message:
+        return []
+
+    candidates = _NET_RE.findall(message)
+    device_names = {d.upper() for d in DEVICE_RE.findall(message)}
+    nets: list[str] = []
+    seen: set[str] = set()
+    for c in candidates:
+        cu = c.upper()
+        if cu in _IGNORE_NETS or cu in device_names or cu in seen:
+            continue
+        seen.add(cu)
+        nets.append(c)
+    return nets
+
+
 #: Direction → (dx, dy) map.  Positive Y = up in analog layout convention
 #: (PMOS above NMOS, higher y = higher row).  This matches _pmos_above_nmos()
 #: in cmd_parser.py where PMOS y > NMOS y.
@@ -158,9 +227,12 @@ def _extract_devices(
     """Return device IDs found in *text*, validated against *placement_nodes*.
 
     If *placement_nodes* is provided the device name must match one of the
-    node keys ``id``, ``device_id``, or ``name``.  Otherwise the regex
-    match is accepted as-is.
+    node keys ``id``, ``device_id``, ``name``, ``parent_id``, or the
+    logical base ID computed from finger-expanded names (e.g. ``MM1_f0``
+    → ``MM1``).  Otherwise the regex match is accepted as-is.
     """
+    from ai_agent.tools.command_schema import logical_base_device_id
+
     candidates = DEVICE_RE.findall(text)
     if not candidates:
         return []
@@ -168,7 +240,8 @@ def _extract_devices(
     if not placement_nodes:
         return candidates
 
-    # Build lookup set from placement nodes
+    # Build lookup set from placement nodes — includes exact IDs,
+    # parent_id, and logical base IDs from finger-expanded names.
     known: set[str] = set()
     for n in placement_nodes:
         if isinstance(n, dict):
@@ -176,6 +249,14 @@ def _extract_devices(
                 v = n.get(k)
                 if v:
                     known.add(str(v))
+                    # Also index the logical base (e.g. MM1_f0 → MM1)
+                    base = logical_base_device_id(str(v))
+                    if base != str(v):
+                        known.add(base)
+            # Also index parent_id (explicit logical parent)
+            pid = n.get("parent_id")
+            if pid:
+                known.add(str(pid))
 
     # Match candidates against known IDs (case-insensitive lookup,
     # but return the canonical form from placement_nodes).
@@ -317,11 +398,8 @@ def parse_direct_edit_command(
             return []
         return [{"action": "delete", "device_id": devices[0]}]
 
-    # --- Align --------------------------------------------------------------
+    # --- Align (NOT SUPPORTED — return empty to trigger clarify) -----------
     if re.match(r"align\s+", low):
-        devices = _extract_devices(text, placement_nodes)
-        if len(devices) >= 2:
-            return [{"action": "align", "device_a": devices[0], "device_b": devices[1]}]
         return []
 
     # --- Abut ---------------------------------------------------------------
@@ -331,30 +409,154 @@ def parse_direct_edit_command(
             return [{"action": "abut", "device_a": devices[0], "device_b": devices[1]}]
         return []
 
-    # --- Merge --------------------------------------------------------------
+    # --- Merge (NOT SUPPORTED — return empty to trigger clarify) -----------
     if re.match(r"merge\s+", low):
-        devices = _extract_devices(text, placement_nodes)
-        if len(devices) >= 2:
-            return [{"action": "merge", "device_a": devices[0], "device_b": devices[1]}]
         return []
 
     # --- Add Dummy ----------------------------------------------------------
     if re.match(r"add\s+dummy\b", low):
         devices = _extract_devices(text, placement_nodes)
-        if devices:
-            return [{"action": "add_dummy", "device_id": devices[0]}]
-        # add dummy without target is still valid (global)
-        return [{"action": "add_dummy"}]
+        # Parse side/location context
+        side = None
+        if re.search(r"\bleft\s+of\b", low):
+            side = "left"
+        elif re.search(r"\bright\s+of\b", low):
+            side = "right"
+        elif re.search(r"\bnear\b", low):
+            side = "right"  # default near = right
 
-    # --- Rotate -------------------------------------------------------------
+        if devices and side:
+            return [{"action": "add_dummy", "target": devices[0], "side": side}]
+        elif devices:
+            # Has target but no explicit side
+            return [{"action": "add_dummy", "target": devices[0], "side": "right"}]
+        # Vague "add dummy" without target — return empty for clarify
+        return []
+
+    # --- Rotate (NOT SUPPORTED — return empty to trigger clarify) ----------
     if re.match(r"rotate\s+", low):
-        devices = _extract_devices(text, placement_nodes)
-        if not devices:
-            return []
-        return [{"action": "rotate", "device_id": devices[0]}]
+        return []
 
     # No pattern matched
     return []
+
+
+# ---------------------------------------------------------------------------
+# Partial intent builder (slot-filling support)
+# ---------------------------------------------------------------------------
+
+def _build_partial_move_intent(message: str) -> Optional[dict]:
+    """Detect a partial edit command that has action/direction but no device.
+
+    Returns a dict with the known fields + a ``missing`` list, or ``None``
+    if the message is not a recognisable partial edit.
+
+    Examples::
+
+        >>> _build_partial_move_intent("move left")
+        {"action": "move", "dx": -1, "dy": 0, "missing": ["device_id"]}
+
+        >>> _build_partial_move_intent("flip horizontal")
+        {"action": "flip", "orientation": "horizontal", "missing": ["device_id"]}
+    """
+    if not message:
+        return None
+
+    low = message.strip().lower()
+
+    # --- Move/shift/place without device ---
+    if re.match(r"(?:move|shift|place)\s+", low):
+        # Try direction
+        for direction, (dx, dy) in _DIRECTION_DELTAS.items():
+            if re.search(r"\b" + direction + r"\b", low):
+                amount = _parse_numeric_amount(low) or 1
+                return {
+                    "action": "move",
+                    "dx": dx * amount,
+                    "dy": dy * amount,
+                    "missing": ["device_id"],
+                }
+        # Try explicit dx/dy
+        explicit = _parse_explicit_deltas(low)
+        if explicit:
+            dx, dy = explicit
+            return {
+                "action": "move",
+                "dx": dx,
+                "dy": dy,
+                "missing": ["device_id"],
+            }
+        # "move" with no direction either — not enough info
+        return None
+
+    # --- Flip without device ---
+    if re.match(r"flip\s*", low):
+        orientation = "horizontal"
+        if re.search(r"\bvertical\b", low):
+            orientation = "vertical"
+        elif re.search(r"\bhorizontal\b", low):
+            orientation = "horizontal"
+        return {
+            "action": "flip",
+            "orientation": orientation,
+            "missing": ["device_id"],
+        }
+
+    # --- Delete/remove without device ---
+    if re.match(r"(?:delete|remove)\s*$", low):
+        return {
+            "action": "delete",
+            "missing": ["device_id"],
+        }
+
+    return None
+
+
+def try_fill_edit_slots(
+    message: str,
+    pending_intent: dict,
+    placement_nodes: Optional[list] = None,
+) -> Optional[dict]:
+    """Try to fill missing slots in *pending_intent* from *message*.
+
+    Returns a complete command dict if all required slots are filled,
+    or ``None`` if the message doesn't provide the missing information.
+
+    Recognised patterns for device slot::
+
+        "Target device is MM1"
+        "device is MM1"
+        "use MM1"
+        "MM1"
+        "it's MM1"
+        "the device is MM1"
+    """
+    if not pending_intent or not message:
+        return None
+
+    missing = pending_intent.get("missing") or []
+    if "device_id" not in missing:
+        return None
+
+    # Try to extract a device from the follow-up message
+    devices = _extract_devices(message, placement_nodes)
+
+    # Also try bare regex without placement validation as fallback
+    if not devices:
+        devices = DEVICE_RE.findall(message)
+
+    if not devices:
+        return None
+
+    # Build the completed command
+    completed = {k: v for k, v in pending_intent.items() if k != "missing"}
+    completed["device_id"] = devices[0]
+
+    # Verify the completed command has an action
+    if "action" not in completed:
+        return None
+
+    return completed
 
 
 # ---------------------------------------------------------------------------
@@ -383,6 +585,12 @@ def rule_route(message: str) -> Optional[str]:
     """
     m = (message or "").lower()
 
+    # Priority 0 — DRC repair phrases (remove/clear + DRC/violation/overlap)
+    # Must be checked BEFORE strong commands so "remove DRC violation" routes
+    # to fix_drc, not command_edit.
+    if _word_match(m, _DRC_REPAIR_PHRASES):
+        return "fix_drc"
+
     # Priority 1 — STRONG layout edit commands (always win)
     if _word_match(m, _STRONG_COMMAND_WORDS):
         return "command_edit"
@@ -395,7 +603,12 @@ def rule_route(message: str) -> Optional[str]:
     if _word_match(m, _DRC_WORDS):
         return "need_drc"
 
-    # Priority 3 — routing / wirelength
+    # Priority 3a — Active routing optimization (must be checked before
+    # generic routing words so "reduce parasitics" → fix_routing, not need_routing).
+    if _word_match(m, _ROUTING_FIX_PHRASES):
+        return "fix_routing"
+
+    # Priority 3b — routing / wirelength (read-only preview)
     if _word_match(m, _ROUTING_WORDS):
         return "need_routing"
 
@@ -458,6 +671,7 @@ SPECIALIST_BY_ROUTE: dict[str, str] = {
     "need_drc":       "drc_checker",
     "fix_drc":        "drc_critic",
     "need_routing":   "routing_previewer",
+    "fix_routing":    "routing_previewer",
 }
 
 #: Minimum LLM confidence required to trust the route (below → clarify).
@@ -646,6 +860,83 @@ def _build_trace_summary(trace: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Fix E — Permissive device extraction for explanations
+# ---------------------------------------------------------------------------
+
+def _extract_devices_for_explanation(
+    message: str,
+    placement_nodes: Optional[list] = None,
+    initial_agent_trace: Optional[dict] = None,
+) -> list[str]:
+    """Extract device IDs from *message* with permissive matching for
+    explanation mode.
+
+    Unlike :func:`_extract_devices`, this function also recognises logical
+    device names (e.g. ``M1``) when the current placement only contains
+    physical finger IDs (e.g. ``M1_f0``, ``M1_f1``).
+
+    **This function must NOT be used for command execution** — commands
+    require strict device validation.
+    """
+    from ai_agent.tools.command_schema import logical_base_device_id
+
+    candidates = DEVICE_RE.findall(message)
+    if not candidates:
+        return []
+
+    # Try strict matching first
+    strict = _extract_devices(message, placement_nodes)
+    if strict:
+        return strict
+
+    # Build logical-base lookup from placement nodes
+    logical_ids: set[str] = set()
+    if placement_nodes:
+        for n in placement_nodes:
+            if isinstance(n, dict):
+                nid = n.get("id") or n.get("device_id") or n.get("name")
+                if nid:
+                    base = logical_base_device_id(str(nid))
+                    logical_ids.add(base)
+                # Also check parent_id
+                pid = n.get("parent_id")
+                if pid:
+                    logical_ids.add(str(pid))
+
+    # Also harvest device IDs from the initial agent trace
+    trace_ids: set[str] = set()
+    if initial_agent_trace:
+        strategy = initial_agent_trace.get("strategy")
+        if isinstance(strategy, dict):
+            for group_key in (
+                "matching_groups", "matched_pairs",
+                "symmetry_pairs", "common_centroid_groups",
+            ):
+                groups = strategy.get(group_key)
+                if isinstance(groups, list):
+                    for group in groups:
+                        if isinstance(group, (list, tuple)):
+                            for d in group:
+                                trace_ids.add(str(d))
+
+    known = logical_ids | trace_ids
+
+    # Match candidates against known logical IDs (case-insensitive)
+    known_lower: dict[str, str] = {k.lower(): k for k in known}
+    matched: list[str] = []
+    for c in candidates:
+        canon = known_lower.get(c.lower())
+        if canon:
+            matched.append(canon)
+
+    # If no known IDs exist at all, trust the regex
+    if not known and not matched:
+        return candidates
+
+    return matched
+
+
+# ---------------------------------------------------------------------------
 # Fix 12 — Answer from initial agent trace
 # ---------------------------------------------------------------------------
 
@@ -675,8 +966,11 @@ def answer_from_initial_trace(
             "if you ask about a specific device or net."
         )
 
-    # Detect mentioned devices
-    devices = _extract_devices(message, placement_nodes)
+    # Detect mentioned devices — use permissive extraction that recognizes
+    # logical device names even when placement has finger-expanded IDs.
+    devices = _extract_devices_for_explanation(
+        message, placement_nodes, initial_agent_trace,
+    )
     trace = initial_agent_trace
 
     # --- Device-specific answer -------------------------------------------
@@ -803,6 +1097,29 @@ def run_session_chat_agent(
     if not user_message:
         return _build_fallback_response("Please enter a message.")
 
+    # -- 1b. Check for pending edit intent (slot-filling) --------------------
+    pending_intent = state.get("pending_edit_intent")
+    if pending_intent and isinstance(pending_intent, dict):
+        filled_cmd = try_fill_edit_slots(
+            user_message, pending_intent, placement_nodes,
+        )
+        if filled_cmd:
+            action = filled_cmd.get("action", "edit")
+            device = filled_cmd.get("device_id", "device")
+            return {
+                "session_route":       "command_edit",
+                "route_confidence":    0.95,
+                "session_reason":      f"Slot-filled: {action} on {device}",
+                "assistant_text":      f"Executing: {action} on {device}.",
+                "pending_cmds":        [filled_cmd],
+                "session_commands":    [filled_cmd],
+                "requires_specialist": False,
+                "specialist_target":   None,
+                "pending_edit_intent": None,  # clear the pending intent
+            }
+        # Could not fill slots — fall through to normal routing
+        # (the pending intent stays alive unless something else clears it)
+
     # -- 2. Deterministic rule router ----------------------------------------
     rule_result = rule_route(user_message)
 
@@ -818,13 +1135,59 @@ def run_session_chat_agent(
             commands = parse_direct_edit_command(user_message, placement_nodes)
             if commands:
                 llm_cmds = commands
-                llm_text = f"Executing: {commands[0].get('action', 'edit')} on {commands[0].get('device_id') or commands[0].get('device_a', 'device')}."
+                llm_text = f"Executing: {commands[0].get('action', 'edit')} on {commands[0].get('device_id') or commands[0].get('device_a') or commands[0].get('target', 'device')}."
             else:
-                # Parser could not extract commands — fall back to clarify
+                # Parser could not extract commands — check if unsupported action
+                _unsupported_actions = ("align", "merge", "rotate")
+                _low_msg = user_message.lower()
+                for _ua in _unsupported_actions:
+                    if re.match(rf"{_ua}\s+", _low_msg):
+                        return _build_fallback_response(
+                            f"I understand the requested operation, but '{_ua}' is not "
+                            f"currently supported by the layout command executor."
+                        )
+                # Check if we can build a partial intent for slot-filling
+                partial = _build_partial_move_intent(user_message)
+                if partial:
+                    missing_fields = partial.get("missing", [])
+                    action = partial.get("action", "edit")
+                    return {
+                        "session_route":       "clarify",
+                        "route_confidence":    0.8,
+                        "session_reason":      f"Partial {action} — missing: {missing_fields}",
+                        "assistant_text":      f"Which device do you want to {action}?",
+                        "pending_cmds":        [],
+                        "session_commands":    [],
+                        "requires_specialist": False,
+                        "specialist_target":   None,
+                        "pending_edit_intent": partial,
+                    }
                 return _build_fallback_response(
                     "I understood that you want to edit the layout, but I could not "
                     "identify the target device or edit direction."
                 )
+
+        # -- 2c. fix_routing: extract target nets or clarify ------------------
+        if route == "fix_routing":
+            target_nets = _extract_target_nets(user_message)
+            target_devices = _extract_devices(user_message, placement_nodes)
+            if not target_nets and not target_devices:
+                return {
+                    "session_route":       "clarify",
+                    "route_confidence":    0.8,
+                    "session_reason":      "fix_routing requested but no target nets or devices specified",
+                    "assistant_text":      (
+                        "Which nets or devices should I optimize for parasitics? "
+                        "For example: \"reduce parasitics on VOUTP and VOUTN.\""
+                    ),
+                    "pending_cmds":        [],
+                    "session_commands":    [],
+                    "requires_specialist": False,
+                    "specialist_target":   None,
+                }
+            # Store target context for the routing previewer
+            llm_text = ""
+            reason = f"Deterministic keyword match → fix_routing (targets: {target_nets or target_devices})"
     else:
         # -- 3. LLM router ---------------------------------------------------
         placement_summary = _build_placement_summary(placement_nodes)
@@ -865,16 +1228,19 @@ def run_session_chat_agent(
                 user_message, initial_trace, placement_nodes,
             )
         elif requires_specialist:
-            assistant_text = (
-                f"I'll delegate this to the {specialist_target} for a more detailed answer."
-            )
+            # Do NOT set a user-facing placeholder here — the specialist
+            # node will produce a real result (strategy_result, Analysis_result,
+            # etc.) and the session_finalizer will build assistant_text from it.
+            # Setting a placeholder would cause the finalizer to prefer it
+            # over the specialist output.
+            assistant_text = None
         else:
             assistant_text = f"Routing as {route}."
 
     # command_edit: pass through LLM commands as session_commands
     session_commands = list(llm_cmds) if isinstance(llm_cmds, list) else []
 
-    return {
+    output = {
         "session_route":       route,
         "route_confidence":    round(confidence, 4),
         "session_reason":      reason,
@@ -884,3 +1250,10 @@ def run_session_chat_agent(
         "requires_specialist": requires_specialist,
         "specialist_target":   specialist_target,
     }
+
+    # fix_routing: include target nets for downstream routing previewer/finalizer
+    if route == "fix_routing":
+        output["target_nets"] = _extract_target_nets(user_message)
+        output["routing_fix_requested"] = True
+
+    return output

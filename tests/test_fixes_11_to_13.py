@@ -105,7 +105,8 @@ class TestValidatorRejectsUnknownDeviceInList:
             "placement_nodes": [{"id": "M1"}, {"id": "M2"}],
         }
         result = node_command_validator(state)
-        assert len(result["pending_cmds"]) == 1
+        # move_pair gets expanded into 2 individual move commands
+        assert len(result["pending_cmds"]) == 2
 
 
 class TestValidateMovePair:
@@ -186,42 +187,44 @@ class TestFingerIntegrity:
 
 
 class TestRowLegality:
-    """Absolute-y moves crossing row boundary must warn."""
+    """Absolute-y moves crossing row boundary must be blocked."""
 
-    def test_warns_on_row_crossing(self):
-        warn = _check_row_legality(
+    def test_blocks_on_row_crossing(self):
+        errs, warns = _check_row_legality(
             {"action": "move", "device_id": "M1", "y": -5},
             [{"id": "M1", "type": "pmos", "y": 10}],
         )
-        assert warn is not None
-        assert "row boundary" in warn.lower()
+        assert errs  # blocking error
+        assert "row boundary" in errs[0].lower()
 
-    def test_no_warn_relative_move(self):
-        warn = _check_row_legality(
+    def test_no_error_relative_move(self):
+        errs, warns = _check_row_legality(
             {"action": "move", "device_id": "M1", "dy": -1},
             [{"id": "M1", "type": "pmos", "y": 10}],
         )
-        assert warn is None
+        assert not errs
+        assert not warns
 
-    def test_no_warn_with_force_y(self):
-        warn = _check_row_legality(
+    def test_force_y_warning_not_error(self):
+        errs, warns = _check_row_legality(
             {"action": "move", "device_id": "M1", "y": -5, "force_y": True},
             [{"id": "M1", "type": "pmos", "y": 10}],
         )
-        assert warn is None
+        assert not errs  # not a blocking error
+        assert warns      # but still a warning
 
-    def test_row_warning_is_non_blocking(self):
-        """Row legality generates a warning, not an error."""
+    def test_row_crossing_is_blocking(self):
+        """Row crossing without force_y generates a blocking error."""
         state = {
             "pending_cmds": [
                 {"action": "move", "device_id": "M1", "y": -5}
             ],
-            "placement_nodes": [{"id": "M1", "type": "pmos", "y": 10}],
+            "placement_nodes": [{"id": "M1", "type": "pmos", "y": 10, "geometry": {"y": 10}}],
         }
         result = node_command_validator(state)
-        # Command should still pass (warning, not error)
-        assert len(result["pending_cmds"]) == 1
-        assert result["validation_warnings"]
+        # Command should be blocked (error, not just warning)
+        assert len(result["pending_cmds"]) == 0
+        assert result["validation_errors"]
 
 
 class TestSymmetryWarningStructured:
