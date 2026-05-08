@@ -18,21 +18,29 @@ CLASSIFIER_PROMPT = """\
 You are an intent classifier for an analog IC layout editor.
 Classify the user's message into exactly ONE of these intent targets:
 
-    topology_analyst     - topology extraction, circuit understanding,
-                           netlist analysis, or general circuit questions.
+    topology_analyst     - Requests to ANALYZE or EXPLAIN the circuit's
+                           netlist structure, net connections, or device
+                           connectivity. The user wants a structural report
+                           or connectivity trace, not a factual lookup.
 
-    strategy_selector    - high-level floorplanning strategy requests,
-                           placement improvement, symmetry, matching,
-                           and layout constraint brainstorming.
+    strategy_selector    - High-level floorplanning strategy requests.
 
-    placement_specialist - direct placement / movement / ordering /
+    placement_specialist - Direct placement / movement / ordering /
                            abutment / interdigitation / row assignment.
+                           Usually a command for the placement engine.
 
     drc_critic           - DRC violations, spacing, overlap, clean-up,
                            or fix-and-verify layout requests.
 
-    routing_previewer    - routing, wire-length, crossings, connectivity,
+    routing_previewer    - Routing, wire-length, crossings, connectivity,
                            or parasitic-routing analysis.
+
+    general              - Factual lookups, definitions, or knowledge
+                           questions about devices, properties, or concepts
+                           (e.g. "What is...", "How does...", "Why is...",
+                           "What are the specs of..."). Use this when the
+                           user is asking FOR INFORMATION rather than
+                           requesting an action on the layout.
 
 Choose the single best target for the user's request.
 Reply with ONLY the target name.
@@ -75,6 +83,7 @@ def classify_intent(user_message: str, selected_model: str) -> str:
             "placement_specialist": "placement_specialist",
             "drc_critic": "drc_critic",
             "routing_previewer": "routing_previewer",
+            "general": "general",
         }
         if label in node_labels:
             vprint(f"[CLASSIFIER] LLM -> {label}: '{stripped[:60]}'")

@@ -9,6 +9,7 @@ Functions:
 from ai_agent.nodes.topology_analyst import node_topology_analyst
 from ai_agent.nodes.strategy_selector import node_strategy_selector
 from ai_agent.nodes.placement_specialist import node_placement_specialist, node_placement_specialist_chatbot
+from ai_agent.nodes.general_chatbot import node_general_chatbot
 from ai_agent.nodes.finger_expansion import node_finger_expansion
 from ai_agent.nodes.symmetry_enforcer import node_symmetry_enforcer
 from ai_agent.nodes.drc_critic import node_drc_critic
@@ -21,6 +22,7 @@ __all__ = [
     "node_strategy_selector",
     "node_placement_specialist",
     "node_placement_specialist_chatbot",
+    "node_general_chatbot",
     "node_finger_expansion",
     "node_symmetry_enforcer",
     "node_drc_critic",

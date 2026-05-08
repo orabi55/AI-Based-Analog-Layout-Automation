@@ -24,6 +24,7 @@ def node_human_viewer(state):
         "Strategy": state.get("strategy_result", ""),
         "Placement": state.get("placement_text", ""),
         "Routing": state.get("routing_result", {}),
+        "General": state.get("general_response", ""),
     })
     return {
         "approved": False,
