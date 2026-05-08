@@ -77,3 +77,4 @@ class LayoutState(TypedDict):
 
     # --- Agent output cache ---
     placement_text: str
+    general_response: str

@@ -310,6 +310,7 @@ class OrchestratorWorker(LLMWorker):
             initial_state.setdefault("deterministic_snapshot", [])
             initial_state.setdefault("original_placement_cmds", [])
             initial_state.setdefault("placement_text", "")
+            initial_state.setdefault("general_response", "")
             initial_state.setdefault("drc_flags", [])
             initial_state.setdefault("drc_pass", False)
             initial_state.setdefault("drc_retry_count", 0)
@@ -371,6 +372,7 @@ class OrchestratorWorker(LLMWorker):
                         if interrupt_data.get("last_agent") == "topology_analyst": text = interrupt_data.get("Analysis", "")
                         elif interrupt_data.get("last_agent") == "strategy_selector": text = interrupt_data.get("Strategy", "")
                         elif interrupt_data.get("last_agent") == "placement_specialist": text = interrupt_data.get("Placement", "")
+                        elif interrupt_data.get("last_agent") == "general": text = interrupt_data.get("General", "")
                         else: text = ""
 
                         if text:

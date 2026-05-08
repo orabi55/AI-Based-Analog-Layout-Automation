@@ -111,6 +111,7 @@ class PlacementWorker(QObject):
             "placement_mode": "auto",   # symmetry_enforcer may upgrade to "two_half"
             "placement_quality": {},        # populated by node_placement_specialist
             "placement_text": "",
+            "general_response": "",
             "placement_goals": layout_context.get("placement_goals", {}),  # user priorities
         }
         print(f"[DIAG-WORKER] placement_goals in initial_state = {initial_state['placement_goals']}")

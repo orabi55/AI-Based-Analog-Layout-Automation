@@ -28,6 +28,7 @@ from ai_agent.nodes import (
     node_routing_previewer,
     node_human_viewer,
     node_save_to_rag,
+    node_general_chatbot,
 )
 
 
@@ -40,6 +41,7 @@ def _route_after_router(state: LayoutState):
         "placement_specialist",
         "drc_critic",
         "routing_previewer",
+        "general",
     }:
         return target
     return "topology_analyst"
@@ -70,8 +72,9 @@ def _node_router(state: LayoutState):
         "placement_specialist",
         "drc_critic",
         "routing_previewer",
+        "general",
     }:
-        target = "topology_analyst"
+        target = "general"
 
     return {
         "intent": intent,
@@ -143,6 +146,7 @@ def build_chat_graph():
     builder.add_node("placement_specialist", node_placement_specialist_chatbot)
     builder.add_node("drc_critic", node_drc_critic)
     builder.add_node("routing_previewer", node_routing_previewer)
+    builder.add_node("general", node_general_chatbot)
     builder.add_node("human_viewer", node_human_viewer)
 
     builder.add_edge(START, "router")
@@ -155,6 +159,7 @@ def build_chat_graph():
             "placement_specialist": "placement_specialist",
             "drc_critic": "drc_critic",
             "routing_previewer": "routing_previewer",
+            "general": "general",
         },
     )
     builder.add_edge("topology_analyst", "human_viewer")
@@ -162,6 +167,7 @@ def build_chat_graph():
     builder.add_edge("placement_specialist", "human_viewer")
     builder.add_edge("drc_critic", "human_viewer")
     builder.add_edge("routing_previewer", "human_viewer")
+    builder.add_edge("general", "human_viewer")
     builder.add_edge("human_viewer", END)
 
     return builder.compile(checkpointer=memory), memory

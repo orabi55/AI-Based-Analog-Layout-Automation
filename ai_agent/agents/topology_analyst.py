@@ -201,17 +201,6 @@ PAIR_MAPPING: (ONLY if Differential Pair, else NONE)
 (repeat for all groups)
 
 ────────────────────────────────────────────
-CURRENT_FLOW_GRAPH:
-- A → B
-- C → D
-or NONE
-
-────────────────────────────────────────────
-NETLIST_GRAPH:
-- A — B : net : HIGH|MEDIUM|LOW
-or NONE
-
-────────────────────────────────────────────
 10. FINAL VALIDATION (MANDATORY)
 ────────────────────────────────────────────
 
