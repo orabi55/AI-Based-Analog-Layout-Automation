@@ -1,10 +1,22 @@
 [
   {
-    "role": "system",
-    "content": "Starting **DRC Critic (Attempt 1)**..."
+    "role": "assistant",
+    "content": "VOUTP connectivity: Drain/source logical devices: MM5, MM2, MM6. Gate-connected logical devices: MM4, MM7."
+  },
+  {
+    "role": "user",
+    "content": "what devices are connected to VOUTN?"
   },
   {
     "role": "assistant",
-    "content": "Clean placement. No DRC violations found."
+    "content": "VOUTN connectivity: Drain/source logical devices: MM4, MM1, MM7. Gate-connected logical devices: MM5, MM6."
+  },
+  {
+    "role": "user",
+    "content": "which devices form the latch?"
+  },
+  {
+    "role": "assistant",
+    "content": "The devices that form the core regenerative feedback (latch) are:\n- **MM4** (PMOS)\n- **MM5** (PMOS)\n- **MM6** (NMOS)\n- **MM7** (NMOS)\n\nThese devices are cross-coupled:\n- MM4 and MM7 form an inverter with input VOUTP and output VOUTN.\n- MM5 and MM6 form an inverter with input VOUTN and output VOUTP.\n\nThis cross-coupling creates the positive feedback necessary for latching."
   }
 ]

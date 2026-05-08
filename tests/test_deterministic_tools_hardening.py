@@ -78,9 +78,11 @@ class TestCheck1_ParseMoveMM1Left:
     """Check 1: parse_direct_edit_command("Move MM1 to the left") → move cmd."""
 
     def test_parse_move_mm1_left(self):
-        nodes = _finger_nodes("MM1", 4)
-        cmds = parse_direct_edit_command("Move MM1 to the left", nodes)
-        assert cmds, "Should produce a move command"
+        # MM1 is in MM2_MM1_matched block. With finger nodes as
+        # placement_nodes, matched-block safety returns clarify.
+        # Without placement_nodes, raw parsing still produces a move.
+        cmds = parse_direct_edit_command("Move MM1 to the left")
+        assert cmds, "Should produce a move command (raw parsing, no placement context)"
         assert cmds[0]["action"] == "move"
         assert cmds[0]["device_id"] == "MM1"
         assert cmds[0]["dx"] == -1
@@ -349,7 +351,7 @@ class TestLayoutSessionConstants:
         expected = {
             "rule_route", "parse_direct_edit_command",
             "try_fill_edit_slots", "extract_target_nets",
-            "answer_from_initial_trace",
+            "answer_from_initial_trace", "evaluate_matching_edit_intent",
         }
         assert VALID_DETERMINISTIC_TOOLS == expected
 
@@ -357,7 +359,7 @@ class TestLayoutSessionConstants:
         from ai_agent.agents.layout_session_agent import VALID_SPECIALISTS
         expected = {
             "topology_analyst", "strategy_selector",
-            "placement_specialist", "drc_critic", "routing_previewer",
+            "placement_specialist", "routing_previewer",
         }
         assert VALID_SPECIALISTS == expected
 

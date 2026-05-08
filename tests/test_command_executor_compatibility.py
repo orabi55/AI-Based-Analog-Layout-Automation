@@ -68,9 +68,10 @@ def _make_nodes():
 
 class TestMoveRoundtrip:
     def test_move_parser_validator_executor(self):
-        nodes = _make_nodes()
-        cmds = parse_direct_edit_command("move M1 left", nodes)
+        # Use M1 without placement_nodes for raw parsing (no matched-block check)
+        cmds = parse_direct_edit_command("move M1 left")
         assert cmds
+        nodes = _make_nodes()
         validated = node_command_validator({
             "pending_cmds": cmds,
             "placement_nodes": nodes,

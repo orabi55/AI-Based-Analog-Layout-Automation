@@ -127,12 +127,38 @@ def _normalize_action_alias(cmd: dict) -> dict:
 
 
 def _validate_device_refs(cmd: dict, known_ids: set[str]) -> str | None:
-    """Return an error string if any referenced device is unknown, else None."""
+    """Return an error string if any referenced device is unknown, else None.
+
+    Bug 2/3/5 fix: resolves logical device names via device_resolver.
+    """
+    from ai_agent.tools.device_resolver import normalize_logical_device_id
+    from ai_agent.tools.command_schema import logical_base_device_id
+
     refs = _extract_device_ids(cmd)
     if not refs:
         # Some actions (e.g. add_dummy) may not reference existing devices.
         return None
-    unknown = [r for r in refs if r not in known_ids]
+
+    # Build logical-level lookup from known physical IDs
+    logical_known: set[str] = set()
+    for kid in known_ids:
+        logical_known.add(kid)
+        base = logical_base_device_id(kid)
+        if base:
+            logical_known.add(base)
+
+    unknown = []
+    for r in refs:
+        if r in known_ids:
+            continue
+        base = logical_base_device_id(r)
+        if base in logical_known:
+            continue
+        normalized = normalize_logical_device_id(r)
+        if normalized in logical_known:
+            continue
+        unknown.append(r)
+
     if unknown:
         return f"Unknown device(s): {', '.join(unknown)}"
     return None

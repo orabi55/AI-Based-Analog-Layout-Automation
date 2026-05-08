@@ -163,6 +163,8 @@ class LayoutState(TypedDict):
 
     # Target nets the AI agent extracted for routing operations.
     layout_session_target_nets: NotRequired[Optional[List[str]]]
+    # Target devices the AI agent extracted for routing optimization context.
+    layout_session_target_devices: NotRequired[Optional[List[str]]]
 
     # True when the AI agent's output needs synthesis before reaching the user.
     layout_session_needs_synthesis: NotRequired[bool]

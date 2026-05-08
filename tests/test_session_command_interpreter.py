@@ -287,15 +287,17 @@ class TestRunSessionChatAgentCommandEdit:
     """run_session_chat_agent should produce pending_cmds for command_edit."""
 
     def test_command_edit_generates_pending_cmds(self):
+        # Use MM10 (free device, not in any matched block) so the
+        # matched-block safety check does not produce a clarify sentinel.
         result = run_session_chat_agent({
-            "user_message": "move M1 left",
-            "placement_nodes": [{"id": "M1"}],
+            "user_message": "move MM10 left",
+            "placement_nodes": [{"id": "MM10"}],
         })
         assert result["session_route"] == "command_edit"
         assert result["session_commands"]
         assert result["pending_cmds"]
         assert result["session_commands"][0]["action"] == "move"
-        assert result["session_commands"][0]["device_id"] == "M1"
+        assert result["session_commands"][0]["device_id"] == "MM10"
         assert result["session_commands"][0]["dx"] == -1
 
     def test_command_edit_swap_generates_cmds(self):

@@ -130,9 +130,16 @@ def route_after_session_drc(state: LayoutState) -> str:
     """
     route = state.get("session_route")
     layout_decision = state.get("layout_session_decision")
+    specialist = state.get("layout_session_specialist")
     pending_cmds = state.get("pending_cmds") or []
 
-    if (route == "fix_drc" or layout_decision == "fix_drc") and pending_cmds:
+    if (
+        pending_cmds and (
+            route == "fix_drc"
+            or layout_decision == "fix_drc"
+            or specialist == "drc_critic"
+        )
+    ):
         return "node_command_validator"
 
     return "node_session_finalizer"
@@ -200,6 +207,15 @@ def route_after_deterministic_tool_runner(state: LayoutState) -> str:
     Otherwise, go to the session finalizer for feedback.
     """
     decision = state.get("layout_session_decision")
+
+    if decision in {"check_routing", "optimize_routing"}:
+        return "node_routing_previewer"
+
+    if decision == "check_drc":
+        return "node_drc_checker"
+
+    if decision == "fix_drc":
+        return "node_drc_critic"
 
     if decision == "propose_commands" and state.get("pending_cmds"):
         return "node_command_validator"

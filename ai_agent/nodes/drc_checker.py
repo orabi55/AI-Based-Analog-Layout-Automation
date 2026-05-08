@@ -16,6 +16,7 @@ Functions:
 from __future__ import annotations
 
 import time
+import re
 from ai_agent.agents.drc_critic import run_drc_check
 from ai_agent.utils.logging import vprint
 
@@ -23,6 +24,81 @@ from ai_agent.utils.logging import vprint
 # ---------------------------------------------------------------------------
 # Shared DRC text formatter (also importable by drc_critic for Fix 4)
 # ---------------------------------------------------------------------------
+
+def _flag_text(flag) -> str:
+    if isinstance(flag, dict):
+        return str(
+            flag.get("text")
+            or flag.get("description")
+            or flag.get("message")
+            or flag.get("value")
+            or ""
+        )
+    return str(getattr(flag, "text", "") or flag)
+
+
+def _flag_value(flag, key: str):
+    if isinstance(flag, dict):
+        return flag.get(key)
+    return getattr(flag, key, None)
+
+
+def format_drc_flags(flags: list, max_items: int = 10) -> str:
+    """Format structured DRC flags without leaking raw Python dicts."""
+    if not flags:
+        return "No DRC violations found."
+
+    lines: list[str] = []
+    for idx, flag in enumerate(flags[:max_items], start=1):
+        text = _flag_text(flag)
+        kind = str(_flag_value(flag, "kind") or "").strip()
+        if not kind and text:
+            kind = text.split(":", 1)[0].strip()
+        kind = kind or "DRC"
+
+        dev_a = str(_flag_value(flag, "dev_a") or "").strip()
+        dev_b = str(_flag_value(flag, "dev_b") or "").strip()
+        if not (dev_a and dev_b):
+            m_pair = re.search(
+                r"\b([A-Za-z]{1,5}\d+(?:_[A-Za-z0-9]+)?)\s+(?:vs|->|→)\s+([A-Za-z]{1,5}\d+(?:_[A-Za-z0-9]+)?)",
+                text,
+            )
+            if m_pair:
+                dev_a, dev_b = m_pair.group(1), m_pair.group(2)
+
+        if dev_a and dev_b:
+            verb = "overlaps" if kind.upper().startswith("OVERLAP") else "conflicts with"
+            pair_text = f"{dev_a} {verb} {dev_b}"
+        elif dev_a:
+            pair_text = dev_a
+        else:
+            pair_text = text.split("  ", 1)[0].split(" MOVE ", 1)[0].strip() or "violation"
+
+        nums: list[float] = []
+        for key in ("x1_a", "x2_a", "x1_b", "x2_b"):
+            try:
+                nums.append(float(_flag_value(flag, key)))
+            except (TypeError, ValueError):
+                pass
+        location = f" near x={min(nums):.3f}-{max(nums):.3f}" if nums else ""
+
+        suggestion = ""
+        m_move = re.search(
+            r"MOVE\s+([A-Za-z]{1,5}\d+(?:_[A-Za-z0-9]+)?)\s+to\s+x=([-+]?\d+(?:\.\d+)?),\s*y=([-+]?\d+(?:\.\d+)?)",
+            text,
+            flags=re.IGNORECASE,
+        )
+        if m_move:
+            suggestion = (
+                f" Suggested fix: move {m_move.group(1)} to "
+                f"x={float(m_move.group(2)):.3f}, y={float(m_move.group(3)):.3f}."
+            )
+
+        lines.append(f"{idx}. {kind}: {pair_text}{location}.{suggestion}")
+
+    if len(flags) > max_items:
+        lines.append(f"... and {len(flags) - max_items} more.")
+    return "\n".join(lines)
 
 def _format_drc_assistant_text(
     drc_pass: bool,
@@ -44,25 +120,9 @@ def _format_drc_assistant_text(
         return f"{prefix}DRC check passed — no violations found."
 
     if drc_flags:
-        lines: list[str] = []
-        for v in drc_flags[:10]:
-            if isinstance(v, dict):
-                desc = (
-                    v.get("description")
-                    or v.get("message")
-                    or v.get("value")
-                    or str(v)
-                )
-            elif hasattr(v, "__slots__"):
-                desc = getattr(v, "text", None) or str(v)
-            else:
-                desc = str(v)
-            lines.append(f"- {desc}")
-        if len(drc_flags) > 10:
-            lines.append(f"- … and {len(drc_flags) - 10} more.")
         return (
             f"{prefix}DRC check found {len(drc_flags)} violation(s):\n"
-            + "\n".join(lines)
+            + format_drc_flags(drc_flags, max_items=10)
         )
 
     return f"{prefix}DRC check completed."

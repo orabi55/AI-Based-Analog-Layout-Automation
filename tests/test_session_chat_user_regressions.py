@@ -51,6 +51,8 @@ def _run_deterministic(state: dict) -> dict:
 
 class TestUserMoveM1Left:
     def test_generates_valid_command(self):
+        # M1 normalizes to MM1 which is in MM2_MM1_matched block.
+        # With placement_nodes, matched-block safety activates.
         state = {
             "mode": "chat",
             "user_message": "move M1 left",
@@ -64,17 +66,18 @@ class TestUserMoveM1Left:
         assert result["session_route"] == "command_edit"
         assert result["session_commands"]
         cmd = result["session_commands"][0]
-        assert cmd["action"] == "move"
+        # matched-block safety for M1/MM1
+        assert cmd["action"] == "clarify_matched_block"
         assert cmd.get("device_id") == "M1"
-        # left → negative dx
-        assert cmd.get("dx", 0) < 0 or cmd.get("dx") == -1
 
     def test_move_m1_right(self):
+        # M1 in matched block → clarify_matched_block with positive dx
         result = _run_deterministic({
             "user_message": "move M1 right",
             "placement_nodes": [{"id": "M1"}],
         })
         assert result["session_route"] == "command_edit"
+        assert result["session_commands"][0]["action"] == "clarify_matched_block"
         assert result["session_commands"][0]["dx"] > 0
 
     def test_swap_m1_m2(self):

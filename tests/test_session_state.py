@@ -201,7 +201,7 @@ class TestLayoutStateSessionFields:
         assert app is not None
 
     def test_select_graph_app_chat(self):
-        """select_graph_app('chat') must return session chat app."""
+        """select_graph_app('chat') must return layout session app."""
         try:
             from ai_agent.llm.workers import select_graph_app
         except ImportError:

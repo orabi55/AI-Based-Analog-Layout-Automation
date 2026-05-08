@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import re
 
+from ai_agent.nodes.drc_checker import format_drc_flags
 from ai_agent.utils.logging import vprint
 
 
@@ -30,23 +31,8 @@ def _summarise_drc(state: dict) -> str:
         return "DRC check passed for the current placement."
 
     if flags:
-        lines = []
-        for f in flags[:10]:
-            if isinstance(f, dict):
-                # Prefer a human-readable description key
-                desc = (
-                    f.get("description")
-                    or f.get("message")
-                    or f.get("value")
-                    or str(f)
-                )
-            else:
-                desc = str(f)
-            lines.append(f"- {desc}")
         header = f"DRC check found {len(flags)} issue(s):"
-        if len(flags) > 10:
-            lines.append(f"- … and {len(flags) - 10} more.")
-        return header + "\n" + "\n".join(lines)
+        return header + "\n" + format_drc_flags(flags, max_items=10)
 
     return "DRC check completed, but no detailed result was provided."
 
@@ -71,54 +57,68 @@ def _summarise_fix_routing(state: dict) -> str:
     * Clearly states whether any layout changes were applied.
     """
     routing = state.get("routing_result") or {}
-    target_nets = state.get("target_nets") or []
+    target_nets = [
+        str(n).strip()
+        for n in (state.get("layout_session_target_nets") or state.get("target_nets") or [])
+        if str(n).strip()
+    ]
+    report = (routing.get("log_text") or routing.get("summary")) if isinstance(routing, dict) else ""
+    net_details = routing.get("net_details") if isinstance(routing, dict) else {}
+    worst_nets = routing.get("worst_nets") if isinstance(routing, dict) else []
+    worst_upper = {str(n).upper() for n in worst_nets or []}
 
     lines: list[str] = []
-
-    # Routing density / HPWL report
-    report = routing.get("log_text") or routing.get("summary")
-    if report:
-        lines.append(str(report))
-    else:
-        lines.append("Routing analysis completed.")
-
-    # Target-net-specific recommendations
     if target_nets:
         net_list = ", ".join(target_nets)
-        lines.append(f"")
-        lines.append(f"Target nets: {net_list}")
-        lines.append("")
-        lines.append("Recommendations to reduce parasitics:")
-        lines.append(
-            f"• Move devices connected to {net_list} closer together "
-            f"to reduce HPWL."
-        )
-        lines.append(
-            "• Minimize the number of cross-row routing segments "
-            "for these nets."
-        )
-        if len(target_nets) >= 2:
-            lines.append(
-                f"• Keep {target_nets[0]} and {target_nets[1]} routing "
-                f"symmetric to preserve differential balance."
-            )
-        lines.append(
-            "• Consider using \"move <device> left/right\" commands to "
-            "adjust placement manually, or ask me to propose a "
-            "placement adjustment."
-        )
+        lines.append(f"I analyzed {net_list} for routing/parasitic reduction.")
     else:
-        lines.append("")
-        lines.append(
-            "To target specific nets, try: "
-            '"reduce parasitics on VOUTP and VOUTN."'
-        )
+        lines.append("I analyzed routing/parasitic optimization opportunities.")
 
-    lines.append("")
-    lines.append(
-        "⚠ No layout changes were applied automatically. "
-        "Use placement commands to act on these recommendations."
-    )
+    if target_nets and isinstance(net_details, dict):
+        observations: list[str] = []
+        for net in target_nets:
+            detail = None
+            real_name = net
+            for key, value in net_details.items():
+                if str(key).upper() == net.upper() and isinstance(value, dict):
+                    detail = value
+                    real_name = str(key)
+                    break
+            if not detail:
+                continue
+            tags: list[str] = []
+            if real_name.upper() in worst_upper:
+                tags.append("one of the worst HPWL nets")
+            if detail.get("cross_row"):
+                tags.append("cross-row")
+            hpwl = detail.get("wire_length") or detail.get("span")
+            tag_text = f" ({', '.join(tags)})" if tags else ""
+            if hpwl is not None:
+                try:
+                    observations.append(f"- {real_name}: HPWL={float(hpwl):.3f} um{tag_text}.")
+                except (TypeError, ValueError):
+                    observations.append(f"- {real_name}: targeted net{tag_text}.")
+            else:
+                observations.append(f"- {real_name}: targeted net{tag_text}.")
+        if observations:
+            lines.append("Target-net observations:")
+            lines.extend(observations)
+
+    lines.append("Recommendations:")
+    if target_nets:
+        lines.append(f"1. Keep devices connected to {', '.join(target_nets)} closer to reduce HPWL/parasitics.")
+    else:
+        lines.append("1. Keep connected devices closer to reduce HPWL/parasitics.")
+    if len(target_nets) >= 2:
+        lines.append(f"2. Optimize {target_nets[0]} and {target_nets[1]} symmetrically to preserve differential balance.")
+    else:
+        lines.append("2. Keep matched/differential routes symmetric.")
+    lines.append("3. Reduce local crossings and avoid unnecessary cross-row routes near output/load devices.")
+    lines.append("No layout changes were applied automatically.")
+    if report:
+        lines.append("")
+        lines.append("Raw routing report:")
+        lines.append(str(report))
 
     return "\n".join(lines)
 
@@ -202,7 +202,7 @@ def node_session_finalizer(state: dict) -> dict:
         text = str(state.get("assistant_text") or "").strip()
 
     # Never surface specialist handoff placeholders.
-    if text and re.search(r"\b(delegate|handoff|strategy_selector|topology_analyst|placement_specialist)\b", text, re.IGNORECASE):
+    if text and re.search(r"\b(delegate|handoff|strategy_selector|topology_analyst|placement_specialist|routing_previewer|drc_critic)\b", text, re.IGNORECASE):
         text = ""
 
     # If still empty, try the summariser's generic fallback or route defaults

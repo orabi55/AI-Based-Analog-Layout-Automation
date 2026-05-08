@@ -322,7 +322,7 @@ def get_chat_mode_from_env() -> str:
     """Return safe chat mode from ANALOG_LAYOUT_CHAT_MODE env var."""
     raw = os.getenv("ANALOG_LAYOUT_CHAT_MODE", "chat")
     mode = str(raw or "").strip()
-    if mode in {"chat", "chat_v2", "legacy_chat"}:
+    if mode in {"chat", "chat_v2", "chat_v1", "session_chat_legacy", "legacy_chat"}:
         return mode
     return "chat"
 
@@ -378,9 +378,10 @@ def select_graph_app(mode: str | None, *, is_resume: bool = False):
 
     Routing table::
 
-        "chat"                session_chat_app       Deterministic-first session
-        "chat_v2"             layout_session_app     AI-first session agent
-        "session_chat_legacy" session_chat_app       Explicit alias for legacy
+        "chat"                layout_session_app     AI-first session agent (default)
+        "chat_v2"             layout_session_app     Alias for AI-first session
+        "chat_v1"             session_chat_app       Explicit legacy alias
+        "session_chat_legacy" session_chat_app       Explicit legacy alias
         "legacy_chat"         chat_app               Old chatbot graph
         "initial"             app                    Full initial-placement pipeline
         None / unknown        app                    Preserves previous default
@@ -396,14 +397,21 @@ def select_graph_app(mode: str | None, *, is_resume: bool = False):
         app            as initial_graph_app,
         chat_app       as legacy_chat_app,
         session_chat_app,
-        layout_session_app,
     )
 
-    if mode == "chat_v2":
-        return layout_session_app
-    if mode == "chat":
+    layout_session_app = None
+    try:
+        from ai_agent.graph.builder import layout_session_app as _layout_session_app
+        layout_session_app = _layout_session_app
+    except Exception:
+        layout_session_app = None
+
+    if mode in {"chat", "chat_v2"}:
+        if layout_session_app is not None:
+            return layout_session_app
+        vprint("[WARN] layout_session_app unavailable; falling back to session_chat_app.", flush=True)
         return session_chat_app
-    if mode == "session_chat_legacy":
+    if mode in {"chat_v1", "session_chat_legacy"}:
         return session_chat_app
     if mode == "legacy_chat":
         return legacy_chat_app
@@ -451,6 +459,7 @@ class OrchestratorWorker(LLMWorker):
         super().__init__()
         self._active_graph_app = None   # set by _stream_graph, reused on resume
         self._response_deduper = ResponseDeduper()  # Fix 9
+        self._chat_session_memory: dict = {}
         try:
             from langchain_core.runnables import RunnableConfig
             self.thread_config = cast(RunnableConfig, {
@@ -460,6 +469,66 @@ class OrchestratorWorker(LLMWorker):
             })
         except ImportError:
             self.thread_config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+
+    def _inject_chat_session_memory(self, initial_state: dict) -> None:
+        """Carry safe chat-session fields across GUI turns."""
+        memory = self._chat_session_memory
+        if not isinstance(memory, dict) or not memory:
+            return
+
+        if memory.get("pending_edit_intent") is not None:
+            initial_state["pending_edit_intent"] = copy.deepcopy(memory["pending_edit_intent"])
+
+        for key in (
+            "layout_session_target_nets",
+            "layout_session_target_devices",
+            "target_nets",
+            "target_devices",
+        ):
+            value = memory.get(key)
+            if value and not initial_state.get(key):
+                initial_state[key] = copy.deepcopy(value)
+
+        if not initial_state.get("chat_history") and memory.get("chat_history"):
+            initial_state["chat_history"] = copy.deepcopy(memory["chat_history"])
+
+    def _cache_chat_session_memory(self, final_state: dict) -> None:
+        """Persist only cross-turn chat fields; never cache pending_cmds."""
+        if not isinstance(final_state, dict):
+            return
+
+        memory = self._chat_session_memory
+
+        if "pending_edit_intent" in final_state:
+            pending = final_state.get("pending_edit_intent")
+            if isinstance(pending, dict):
+                memory["pending_edit_intent"] = copy.deepcopy(pending)
+            else:
+                memory.pop("pending_edit_intent", None)
+        elif final_state.get("layout_session_decision") == "propose_commands":
+            memory.pop("pending_edit_intent", None)
+
+        update = final_state.get("layout_session_memory_update")
+        if isinstance(update, dict):
+            if update.get("target_nets"):
+                memory["layout_session_target_nets"] = copy.deepcopy(update.get("target_nets"))
+                memory["target_nets"] = copy.deepcopy(update.get("target_nets"))
+            if update.get("target_devices"):
+                memory["layout_session_target_devices"] = copy.deepcopy(update.get("target_devices"))
+                memory["target_devices"] = copy.deepcopy(update.get("target_devices"))
+
+        for key in (
+            "layout_session_target_nets",
+            "layout_session_target_devices",
+            "target_nets",
+            "target_devices",
+        ):
+            value = final_state.get(key)
+            if value:
+                memory[key] = copy.deepcopy(value)
+
+        if isinstance(final_state.get("chat_history"), list):
+            memory["chat_history"] = copy.deepcopy(final_state.get("chat_history"))
 
     @Slot(str, str, list, str)
     def process_orchestrated_request(
@@ -510,8 +579,17 @@ class OrchestratorWorker(LLMWorker):
             if not _existing_trace and initial_state:
                 _existing_trace = build_initial_agent_trace(initial_state)
 
+            _mode_from_context = str(
+                layout_context.get("chat_mode")
+                or layout_context.get("mode")
+                or ""
+            ).strip()
+            _valid_modes = {"chat", "chat_v2", "chat_v1", "session_chat_legacy", "legacy_chat"}
+            chat_mode = _mode_from_context if _mode_from_context in _valid_modes else get_chat_mode_from_env()
+            vprint(f"[ORCH] Chat mode: {chat_mode}", flush=True)
+
             initial_state.update({
-                "mode":                get_chat_mode_from_env(),
+                "mode":                chat_mode,
                 "intent":              "",
                 "router_target":       "",
                 "last_agent":          initial_state.get("last_agent", ""),
@@ -563,6 +641,7 @@ class OrchestratorWorker(LLMWorker):
             initial_state.setdefault("approved", False)
             initial_state.setdefault("no_abutment", bool(layout_context.get("no_abutment", False)))
             initial_state.setdefault("abutment_candidates", layout_context.get("abutment_candidates", []))
+            self._inject_chat_session_memory(initial_state)
 
             try:
                 from langchain_core.runnables import RunnableConfig
@@ -690,6 +769,7 @@ class OrchestratorWorker(LLMWorker):
         if _app is not None:
             try:
                 final_state = _app.get_state(self.thread_config).values
+                self._cache_chat_session_memory(final_state)
                 text = extract_assistant_text(final_state)
                 if text and self._response_deduper.should_emit(text):
                     vprint(f"[FINALIZE] Emitting assistant_text ({len(text)} chars)", flush=True)
@@ -726,7 +806,14 @@ class OrchestratorWorker(LLMWorker):
             return self._active_graph_app
 
         mode = input_data.get("mode") if isinstance(input_data, dict) else None
-        self._active_graph_app = select_graph_app(mode)
+        try:
+            self._active_graph_app = select_graph_app(mode)
+        except Exception:
+            if mode in {"chat", "chat_v2"}:
+                vprint("[WARN] layout_session_app unavailable; falling back to session_chat_app.", flush=True)
+                self._active_graph_app = select_graph_app("session_chat_legacy")
+            else:
+                raise
         return self._active_graph_app
 
     @Slot(str)

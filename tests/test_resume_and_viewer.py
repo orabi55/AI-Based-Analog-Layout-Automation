@@ -22,7 +22,7 @@ import pytest
 
 # Check if builder is importable (requires full langchain chain)
 try:
-    from ai_agent.graph.builder import app, chat_app, session_chat_app
+    from ai_agent.graph.builder import app, chat_app, layout_session_app, session_chat_app
     _HAS_BUILDER = True
 except ImportError:
     _HAS_BUILDER = False
@@ -37,9 +37,9 @@ requires_builder = pytest.mark.skipif(
 class TestSelectGraphApp:
     """Verify select_graph_app returns the correct app per mode."""
 
-    def test_chat_returns_session_chat(self):
+    def test_chat_returns_layout_session(self):
         from ai_agent.llm.workers import select_graph_app
-        assert select_graph_app("chat") is session_chat_app
+        assert select_graph_app("chat") is layout_session_app
 
     def test_legacy_chat_returns_legacy(self):
         from ai_agent.llm.workers import select_graph_app

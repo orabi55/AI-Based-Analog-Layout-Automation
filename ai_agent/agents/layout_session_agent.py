@@ -30,17 +30,64 @@ VALID_DETERMINISTIC_TOOLS: frozenset[str] = frozenset({
     "try_fill_edit_slots",
     "extract_target_nets",
     "answer_from_initial_trace",
+    "evaluate_matching_edit_intent",
 })
 
 VALID_SPECIALISTS: frozenset[str] = frozenset({
     "topology_analyst",
     "strategy_selector",
     "placement_specialist",
-    "drc_critic",
     "routing_previewer",
 })
 
 CONFIDENCE_THRESHOLD = 0.60
+
+
+def _is_matching_question_guard(message: str) -> bool:
+    """Hard guard for matching questions that must not generate commands."""
+    try:
+        from ai_agent.agents.session_chat_agent import is_matching_question
+
+        return is_matching_question(message)
+    except Exception:
+        msg = str(message or "").strip().lower()
+        has_term = any(
+            term in msg
+            for term in (
+                "matching", "matched", "match", "common centroid",
+                "common-centroid", "interdigitation", "interdigitated",
+                "interdig",
+            )
+        )
+        return bool(has_term and ("?" in msg or re.match(r"^(how|what|why|is|are|should)\b", msg)))
+
+
+def _is_targeted_matching_request(message: str) -> bool:
+    """Action-like matching requests are explanatory until a safe planner exists."""
+    try:
+        from ai_agent.agents.session_chat_agent import is_targeted_matching_request
+
+        return is_targeted_matching_request(message)
+    except Exception:
+        msg = str(message or "").strip().lower()
+        has_term = any(term in msg for term in ("match", "common centroid", "common-centroid", "interdig"))
+        return bool(has_term and re.match(r"^(match|make|use|apply|implement)\b", msg))
+
+
+def _is_direct_trace_answer_request(message: str) -> bool:
+    """Questions we can answer from trace/layout context without an LLM."""
+    msg = str(message or "").strip().lower()
+    if not msg:
+        return False
+    if _is_matching_question_guard(msg) or _is_targeted_matching_request(msg):
+        return True
+    return bool(
+        "what is this circuit" in msg
+        or "what circuit" in msg
+        or re.search(r"^what\s+(?:is|does)\s+(?:mm|m|mn|mp|xm)\d+", msg)
+        or "what devices are connected to" in msg
+        or "which devices are connected to" in msg
+    )
 
 _LAYOUT_SESSION_PROMPT_TEMPLATE = """You are the main interactive analog layout session agent.
 
@@ -58,10 +105,14 @@ Your responsibilities:
 1. Understand the user's intent.
 2. Answer directly if possible using current layout and initial placement trace.
 3. Use deterministic tools for parsing simple edits, slot filling, target-net extraction, and trace-based answers.
+3a. Use answer_from_initial_trace mainly for placement/strategy/matching/why-placement questions.
+3b. For "what is device X doing" or "what devices are connected to net Y", answer from topology/current layout context or call topology_analyst.
+3c. Do not return a generic initial-trace dump for device-role/net-connectivity questions.
 4. Call exactly one specialist only when deeper topology/strategy/placement/DRC/routing analysis is needed.
 5. If the user asks for a small layout edit, either call parse_direct_edit_command or propose supported commands directly.
 6. If the user asks to check DRC, choose check_drc.
 7. If the user asks to fix DRC, choose fix_drc.
+7a. Do not call drc_critic via call_specialist; use decision=fix_drc.
 8. If the user asks to check routing/parasitics, choose check_routing.
 9. If the user asks to reduce/optimize routing/parasitics/wirelength/crossings, choose optimize_routing.
 10. If ambiguous, choose clarify and ask a specific question.
@@ -92,7 +143,6 @@ Allowed specialists:
 - topology_analyst
 - strategy_selector
 - placement_specialist
-- drc_critic
 - routing_previewer
 
 Return strict JSON only:
@@ -107,6 +157,7 @@ Return strict JSON only:
   "specialist_question": null,
   "commands": [],
   "target_nets": [],
+  "target_devices": [],
   "memory_update": {}
 }
 """
@@ -265,26 +316,59 @@ def _base_result() -> dict:
         "session_commands": [],
         "pending_cmds": [],
         "layout_session_target_nets": [],
+        "layout_session_target_devices": [],
         "layout_session_memory_update": {},
         "layout_session_raw_json": {},
         "layout_session_needs_synthesis": False,
     }
 
 
+def _normalize_string_list(value: Any) -> list[str]:
+    if isinstance(value, str):
+        token = value.strip()
+        return [token] if token else []
+    if isinstance(value, (list, tuple, set)):
+        out: list[str] = []
+        seen: set[str] = set()
+        for item in value:
+            token = str(item).strip()
+            if not token:
+                continue
+            key = token.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(token)
+        return out
+    return []
+
+
+def _extract_targets_from_message(message: str, state: dict) -> tuple[list[str], list[str]]:
+    """Extract routing targets from user text without mutating state."""
+    if not message:
+        return [], []
+    try:
+        from ai_agent.agents.session_chat_agent import _extract_target_nets, _extract_devices
+
+        placement_nodes = state.get("placement_nodes") or state.get("nodes") or []
+        nets = _normalize_string_list(_extract_target_nets(message))
+        devices = _normalize_string_list(_extract_devices(message, placement_nodes))
+        return nets, devices
+    except Exception:
+        return [], []
+
+
 def normalize_layout_session_result(parsed: dict, state: dict) -> dict:
     """Normalize parsed LLM JSON into graph state fields."""
     out = _base_result()
     parsed = parsed if isinstance(parsed, dict) else {}
+    user_message = str(state.get("user_message") or "")
 
     decision = normalize_layout_session_decision(parsed.get("decision"))
     confidence = _safe_confidence(parsed.get("confidence", 0.0))
     reason = str(parsed.get("reason") or "")
     assistant_text = str(parsed.get("assistant_text") or "")
-
-    if confidence < CONFIDENCE_THRESHOLD:
-        decision = "clarify"
-        if not assistant_text:
-            assistant_text = "I need one more detail to proceed safely."
+    tool_args = parsed.get("tool_args") if isinstance(parsed.get("tool_args"), dict) else {}
 
     out["layout_session_decision"] = decision
     out["layout_session_confidence"] = confidence
@@ -292,17 +376,35 @@ def normalize_layout_session_result(parsed: dict, state: dict) -> dict:
     out["assistant_text"] = assistant_text
     out["layout_session_raw_json"] = parsed
 
+    if _is_matching_question_guard(user_message) or _is_targeted_matching_request(user_message):
+        out["layout_session_decision"] = "call_deterministic_tool"
+        out["layout_session_confidence"] = max(confidence, 0.95)
+        out["layout_session_reason"] = "matching question/request guard"
+        out["assistant_text"] = ""
+        out["layout_session_tool_name"] = "answer_from_initial_trace"
+        out["layout_session_tool_args"] = {"question": user_message}
+        out["session_commands"] = []
+        out["pending_cmds"] = []
+        return out
+
     memory_update = parsed.get("memory_update")
     if isinstance(memory_update, dict):
         out["layout_session_memory_update"] = memory_update
 
-    raw_targets = parsed.get("target_nets")
-    if isinstance(raw_targets, list):
-        out["layout_session_target_nets"] = [str(x) for x in raw_targets if str(x).strip()]
-    elif isinstance(memory_update, dict) and isinstance(memory_update.get("target_nets"), list):
-        out["layout_session_target_nets"] = [
-            str(x) for x in memory_update.get("target_nets") if str(x).strip()
-        ]
+    parsed_targets = _normalize_string_list(parsed.get("target_nets"))
+    memory_targets = _normalize_string_list(memory_update.get("target_nets")) if isinstance(memory_update, dict) else []
+    tool_targets = _normalize_string_list(tool_args.get("target_nets"))
+    target_nets = parsed_targets or memory_targets or tool_targets
+    out["layout_session_target_nets"] = target_nets
+
+    parsed_devices = _normalize_string_list(parsed.get("target_devices"))
+    memory_devices = (
+        _normalize_string_list(memory_update.get("target_devices"))
+        if isinstance(memory_update, dict) else []
+    )
+    tool_devices = _normalize_string_list(tool_args.get("target_devices"))
+    target_devices = parsed_devices or memory_devices or tool_devices
+    out["layout_session_target_devices"] = target_devices
 
     if decision == "call_deterministic_tool":
         tool_name = parsed.get("tool_name")
@@ -315,8 +417,13 @@ def normalize_layout_session_result(parsed: dict, state: dict) -> dict:
             out["layout_session_tool_args"] = tool_args
 
     if decision == "call_specialist":
-        specialist = parsed.get("specialist")
-        if specialist not in VALID_SPECIALISTS:
+        specialist = str(parsed.get("specialist") or "")
+        if specialist == "drc_critic":
+            out["layout_session_decision"] = "fix_drc"
+            out["layout_session_specialist"] = None
+            out["layout_session_specialist_question"] = None
+            out["assistant_text"] = ""
+        elif specialist not in VALID_SPECIALISTS:
             out["layout_session_decision"] = "clarify"
             out["assistant_text"] = "I need a bit more context before deeper analysis."
         else:
@@ -342,6 +449,32 @@ def normalize_layout_session_result(parsed: dict, state: dict) -> dict:
         else:
             out["session_commands"] = valid_commands
             out["pending_cmds"] = valid_commands
+
+    if out["layout_session_decision"] == "optimize_routing":
+        if not out["layout_session_target_nets"] and not out["layout_session_target_devices"]:
+            msg_targets, msg_devices = _extract_targets_from_message(
+                str(state.get("user_message") or ""),
+                state,
+            )
+            if msg_targets:
+                out["layout_session_target_nets"] = msg_targets
+            if msg_devices:
+                out["layout_session_target_devices"] = msg_devices
+        if not out["layout_session_target_nets"] and not out["layout_session_target_devices"]:
+            out["layout_session_decision"] = "clarify"
+            out["assistant_text"] = (
+                "Which nets or devices should I optimize? "
+                "For example: reduce parasitics on VOUTP and VOUTN."
+            )
+            out["pending_edit_intent"] = {
+                "type": "optimize_routing",
+                "missing": ["target_nets"],
+            }
+
+    if out["layout_session_target_nets"]:
+        out["target_nets"] = list(out["layout_session_target_nets"])
+    if out["layout_session_target_devices"]:
+        out["target_devices"] = list(out["layout_session_target_devices"])
 
     out["layout_session_needs_synthesis"] = out["layout_session_decision"] in {
         "call_specialist",
@@ -417,6 +550,10 @@ def convert_session_chat_result_to_layout_session_result(result: dict) -> dict:
 
     if isinstance(result.get("target_nets"), list):
         out["layout_session_target_nets"] = [str(x) for x in result.get("target_nets")]
+        out["target_nets"] = [str(x) for x in result.get("target_nets")]
+    if isinstance(result.get("target_devices"), list):
+        out["layout_session_target_devices"] = [str(x) for x in result.get("target_devices")]
+        out["target_devices"] = [str(x) for x in result.get("target_devices")]
 
     if "pending_edit_intent" in result:
         out["pending_edit_intent"] = result.get("pending_edit_intent")
@@ -431,6 +568,8 @@ def _build_prompt_from_state(state: dict) -> str:
     user_message = str(state.get("user_message") or "").strip()
     chat_history = state.get("chat_history") or []
     pending_intent = state.get("pending_edit_intent")
+    route_hint = state.get("_layout_session_route_hint")
+    extracted_nets = state.get("_layout_session_extracted_target_nets") or []
 
     history_lines: list[str] = []
     for turn in (chat_history if isinstance(chat_history, list) else [])[-6:]:
@@ -447,6 +586,16 @@ def _build_prompt_from_state(state: dict) -> str:
         f"[PENDING EDIT INTENT]\n{pending_intent if isinstance(pending_intent, dict) else '(none)'}\n\n"
         f"[SUPPORTED COMMANDS]\n{build_supported_command_summary()}\n\n"
         f"[DETERMINISTIC TOOLS]\n{', '.join(sorted(VALID_DETERMINISTIC_TOOLS))}\n\n"
+        f"[DETERMINISTIC ROUTE HINT]\n{route_hint if route_hint else '(none)'}\n\n"
+        f"[EXTRACTED TARGET NETS]\n{extracted_nets if extracted_nets else '(none)'}\n\n"
+        f"[ROUTE-HINT MAPPING]\n"
+        f"- command_edit -> call_deterministic_tool or propose_commands\n"
+        f"- need_drc -> check_drc\n"
+        f"- fix_drc -> fix_drc\n"
+        f"- need_routing -> check_routing\n"
+        f"- fix_routing -> optimize_routing\n"
+        f"- need_strategy -> call_specialist(strategy_selector)\n"
+        f"- need_topology -> call_specialist(topology_analyst)\n\n"
         f"[SPECIALISTS]\n{', '.join(sorted(VALID_SPECIALISTS))}\n\n"
         f"[USER MESSAGE]\n{user_message}"
     )
@@ -462,12 +611,35 @@ def _heuristic_fast_path(state: dict) -> Optional[dict]:
 
     pending = state.get("pending_edit_intent")
     if isinstance(pending, dict) and pending.get("missing"):
+        pending_type = str(pending.get("type") or pending.get("action") or "")
+        if pending_type == "optimize_routing":
+            out = _base_result()
+            out["layout_session_decision"] = "call_deterministic_tool"
+            out["layout_session_confidence"] = 0.95
+            out["layout_session_reason"] = "pending routing optimization intent exists"
+            out["layout_session_tool_name"] = "extract_target_nets"
+            out["layout_session_tool_args"] = {
+                "message": state.get("user_message", ""),
+                "next_decision": "optimize_routing",
+            }
+            return out
         out = _base_result()
         out["layout_session_decision"] = "call_deterministic_tool"
         out["layout_session_confidence"] = 0.95
         out["layout_session_reason"] = "pending edit intent exists"
         out["layout_session_tool_name"] = "try_fill_edit_slots"
         out["layout_session_tool_args"] = {"message": state.get("user_message", "")}
+        return out
+
+    if _is_direct_trace_answer_request(str(state.get("user_message") or "")):
+        out = _base_result()
+        out["layout_session_decision"] = "call_deterministic_tool"
+        out["layout_session_confidence"] = 0.97
+        out["layout_session_reason"] = "deterministic trace/layout answer guard"
+        out["layout_session_tool_name"] = "answer_from_initial_trace"
+        out["layout_session_tool_args"] = {"question": state.get("user_message", "")}
+        out["session_commands"] = []
+        out["pending_cmds"] = []
         return out
 
     return None
@@ -483,13 +655,23 @@ def _build_clarify_response(reason: str = "I need more detail to proceed safely.
 
 def run_layout_session_agent(state: dict) -> dict:
     """AI-first session agent with deterministic fallback."""
-    from ai_agent.agents.session_chat_agent import run_session_chat_agent
+    from ai_agent.agents.session_chat_agent import (
+        _extract_target_nets,
+        rule_route,
+        run_session_chat_agent,
+    )
 
     fast = _heuristic_fast_path(state)
     if fast is not None:
         return fast
 
-    prompt = _build_prompt_from_state(state)
+    user_message = str(state.get("user_message") or "")
+    route_hint = rule_route(user_message) if user_message else None
+    extracted_nets = _extract_target_nets(user_message) if user_message else []
+    prompt_state = dict(state)
+    prompt_state["_layout_session_route_hint"] = route_hint
+    prompt_state["_layout_session_extracted_target_nets"] = extracted_nets
+    prompt = _build_prompt_from_state(prompt_state)
 
     try:
         raw = call_layout_session_llm(prompt, state)
@@ -497,9 +679,20 @@ def run_layout_session_agent(state: dict) -> dict:
         if not parsed:
             raise ValueError("layout_session_agent returned invalid JSON")
 
+        llm_confidence = _safe_confidence(parsed.get("confidence", 0.0))
+        if llm_confidence < CONFIDENCE_THRESHOLD:
+            fallback = run_session_chat_agent(state)
+            converted = convert_session_chat_result_to_layout_session_result(fallback)
+            original_reason = str(parsed.get("reason") or "").strip() or "(none)"
+            converted["layout_session_reason"] = (
+                "LLM confidence below threshold; used deterministic fallback. "
+                f"Original reason: {original_reason}"
+            )
+            converted["layout_session_raw_json"] = parsed
+            return converted
+
         normalized = normalize_layout_session_result(parsed, state)
-        if normalized.get("layout_session_decision") != "clarify" or parsed:
-            return normalized
+        return normalized
     except Exception:
         pass
 

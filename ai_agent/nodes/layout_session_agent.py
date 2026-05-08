@@ -33,8 +33,14 @@ def node_layout_session_agent(state: dict) -> dict:
         "layout_session_memory_update": result.get("layout_session_memory_update") or {},
         "layout_session_raw_json": result.get("layout_session_raw_json") or {},
         "layout_session_target_nets": result.get("layout_session_target_nets") or [],
+        "layout_session_target_devices": result.get("layout_session_target_devices") or [],
         "layout_session_needs_synthesis": bool(result.get("layout_session_needs_synthesis", False)),
     }
+
+    if "target_nets" in result:
+        update["target_nets"] = result.get("target_nets") or []
+    if "target_devices" in result:
+        update["target_devices"] = result.get("target_devices") or []
 
     if "pending_edit_intent" in result:
         update["pending_edit_intent"] = result.get("pending_edit_intent")

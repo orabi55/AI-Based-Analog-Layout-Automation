@@ -2,7 +2,7 @@
 
 ## Setup
 1. Set `ANALOG_LAYOUT_CHAT_MODE=chat_v2`.
-2. Start the GUI.
+2. Launch with `ANALOG_LAYOUT_CHAT_MODE=chat_v2 python symbolic_editor/main.py`.
 3. Load a layout.
 4. Run initial placement.
 

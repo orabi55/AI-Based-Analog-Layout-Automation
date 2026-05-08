@@ -52,6 +52,30 @@ def _run_parse_direct_edit_command(state: dict, tool_args: dict) -> dict:
     commands = parse_direct_edit_command(user_message, placement_nodes)
 
     if commands:
+        # Bug 2/3: Check for matched-block clarify sentinel
+        if commands[0].get("action") == "clarify_matched_block":
+            clarify_cmd = commands[0]
+            return {
+                "layout_session_decision": "clarify",
+                "session_commands": [],
+                "pending_cmds": [],
+                "assistant_text": clarify_cmd.get("assistant_text", "I need clarification."),
+                "pending_edit_intent": {
+                    "action": "move",
+                    "dx": clarify_cmd.get("dx", 0),
+                    "dy": clarify_cmd.get("dy", 0),
+                    "device_id": clarify_cmd.get("device_id"),
+                    "matched_block": clarify_cmd.get("matched_block"),
+                    "partner_devices": clarify_cmd.get("partner_devices", []),
+                    "missing": ["confirmation"],
+                },
+                "deterministic_tool_result": {
+                    "tool": "parse_direct_edit_command",
+                    "status": "matched_block_clarify",
+                    "matched_block": clarify_cmd.get("matched_block"),
+                },
+            }
+
         return {
             "layout_session_decision": "propose_commands",
             "session_commands": commands,
@@ -181,10 +205,15 @@ def _run_extract_target_nets(state: dict, tool_args: dict) -> dict:
     target_nets = _extract_target_nets(user_message)
 
     if target_nets:
+        next_decision = str(tool_args.get("next_decision") or "").strip().lower()
+        if next_decision not in {"check_routing", "optimize_routing"}:
+            next_decision = "optimize_routing"
         return {
+            "layout_session_decision": next_decision,
             "layout_session_target_nets": target_nets,
             "target_nets": target_nets,
             "assistant_text": "",  # synthesizer will produce the final answer
+            "pending_edit_intent": None,
             "deterministic_tool_result": {
                 "tool": "extract_target_nets",
                 "status": "ok",
@@ -195,9 +224,13 @@ def _run_extract_target_nets(state: dict, tool_args: dict) -> dict:
     return {
         "layout_session_decision": "clarify",
         "assistant_text": (
-            "Which nets should I optimize for parasitics? "
-            "For example: \"reduce parasitics on VOUTP and VOUTN.\""
+            "Which nets or devices should I optimize? "
+            "For example: reduce parasitics on VOUTP and VOUTN."
         ),
+        "pending_edit_intent": {
+            "type": "optimize_routing",
+            "missing": ["target_nets"],
+        },
         "deterministic_tool_result": {
             "tool": "extract_target_nets",
             "status": "no_nets_found",
@@ -215,6 +248,8 @@ def _run_answer_from_initial_trace(state: dict, tool_args: dict) -> dict:
     user_message = str(
         tool_args.get("message")
         or tool_args.get("user_message")
+        or tool_args.get("query")
+        or tool_args.get("question")
         or state.get("user_message", "")
     )
     initial_trace = (
@@ -228,8 +263,47 @@ def _run_answer_from_initial_trace(state: dict, tool_args: dict) -> dict:
         or state.get("nodes")
         or []
     )
+    terminal_nets = (
+        tool_args.get("terminal_nets")
+        or state.get("terminal_nets")
+        or {}
+    )
+    edges = (
+        tool_args.get("edges")
+        or state.get("edges")
+        or []
+    )
 
-    answer = answer_from_initial_trace(user_message, initial_trace, placement_nodes)
+    answer = answer_from_initial_trace(
+        user_message,
+        initial_trace,
+        placement_nodes,
+        terminal_nets=terminal_nets,
+        edges=edges,
+    )
+
+    msg_l = user_message.lower()
+    looks_topology_specific = bool(
+        ("connected to" in msg_l)
+        or ("what devices are connected" in msg_l)
+        or ("what is mm" in msg_l)
+        or ("what does mm" in msg_l)
+        or ("what is m" in msg_l)
+        or ("what does m" in msg_l)
+    )
+    generic_dump = answer.strip().startswith("Here is what the initial placement agents decided")
+    if looks_topology_specific and generic_dump:
+        return {
+            "layout_session_decision": "clarify",
+            "assistant_text": (
+                "I need deeper topology context to answer that precisely from the current data. "
+                "Please ask me to analyze topology for that device/net."
+            ),
+            "deterministic_tool_result": {
+                "tool": "answer_from_initial_trace",
+                "status": "insufficient_specific_answer",
+            },
+        }
 
     return {
         "layout_session_decision": "answer",
@@ -267,16 +341,53 @@ def _run_rule_route(state: dict, tool_args: dict) -> dict:
     }
 
 
+def _run_evaluate_matching_edit_intent(state: dict, tool_args: dict) -> dict:
+    """Run ``evaluate_matching_edit_intent`` and return a safe answer.
+
+    Matching edit commands ("match MM8 MM9 with common centroid") are handled
+    deterministically without generating layout commands.
+    """
+    from ai_agent.tools.matching_intent import (
+        parse_matching_edit_intent,
+        evaluate_matching_edit_intent,
+    )
+
+    user_message = str(
+        tool_args.get("message")
+        or tool_args.get("user_message")
+        or state.get("user_message", "")
+    )
+
+    intent = parse_matching_edit_intent(user_message, state)
+    result = evaluate_matching_edit_intent(intent, state)
+
+    decision = result.get("layout_session_decision", "answer")
+    text = result.get("assistant_text", "")
+
+    return {
+        "layout_session_decision": decision,
+        "session_commands": [],
+        "pending_cmds": [],
+        "assistant_text": text,
+        "deterministic_tool_result": {
+            "tool": "evaluate_matching_edit_intent",
+            "status": "ok",
+            "intent": intent,
+        },
+    }
+
+
 # ---------------------------------------------------------------------------
 # Tool dispatch map
 # ---------------------------------------------------------------------------
 
 _TOOL_DISPATCH: dict[str, callable] = {
-    "parse_direct_edit_command": _run_parse_direct_edit_command,
-    "try_fill_edit_slots":       _run_try_fill_edit_slots,
-    "extract_target_nets":       _run_extract_target_nets,
-    "answer_from_initial_trace": _run_answer_from_initial_trace,
-    "rule_route":                _run_rule_route,
+    "parse_direct_edit_command":     _run_parse_direct_edit_command,
+    "try_fill_edit_slots":           _run_try_fill_edit_slots,
+    "extract_target_nets":           _run_extract_target_nets,
+    "answer_from_initial_trace":     _run_answer_from_initial_trace,
+    "rule_route":                    _run_rule_route,
+    "evaluate_matching_edit_intent": _run_evaluate_matching_edit_intent,
 }
 
 
@@ -323,6 +434,32 @@ def node_deterministic_tool_runner(state: dict) -> dict:
             "assistant_text": f"Tool '{tool_name}' is registered but not implemented.",
             "deterministic_tool_result": {"status": "error", "message": f"no handler: {tool_name}"},
         }
+
+    if tool_name in {"parse_direct_edit_command", "try_fill_edit_slots"}:
+        try:
+            from ai_agent.agents.session_chat_agent import (
+                is_matching_question,
+                is_targeted_matching_request,
+            )
+            from ai_agent.tools.matching_intent import parse_matching_edit_intent
+
+            user_message = str(
+                tool_args.get("message")
+                or tool_args.get("user_message")
+                or state.get("user_message", "")
+            )
+            # Check for matching questions (read-only)
+            if is_matching_question(user_message) or is_targeted_matching_request(user_message):
+                return _run_answer_from_initial_trace(state, {"question": user_message})
+
+            # Check for matching edit commands (Bug 7)
+            matching_intent = parse_matching_edit_intent(user_message, state)
+            if matching_intent.get("is_matching_edit") or (
+                matching_intent.get("is_question") and matching_intent.get("normalized_technique")
+            ):
+                return _run_evaluate_matching_edit_intent(state, {"user_message": user_message})
+        except Exception:
+            pass
 
     vprint(f"[TOOL_RUNNER] Running: {tool_name}  args={tool_args}", flush=True)
 

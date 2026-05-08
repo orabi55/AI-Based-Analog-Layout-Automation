@@ -10,6 +10,7 @@ When no tabs are open the WelcomeScreen is displayed.
 import sys
 import os
 import glob
+import subprocess
 import warnings
 
 # Suppress annoying Pydantic v1 warnings triggered by LangChain in Python 3.14+
@@ -49,6 +50,14 @@ from PySide6.QtWidgets import (
     QTabBar,
     QToolButton,
     QSizePolicy,
+    QDialog,
+    QVBoxLayout,
+    QTableWidget,
+    QTableWidgetItem,
+    QHeaderView,
+    QAbstractItemView,
+    QDialogButtonBox,
+    QPlainTextEdit,
 )
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import (
@@ -533,6 +542,13 @@ class MainWindow(QMainWindow):
         design_menu.addSeparator()
         design_menu.addAction("View in KLayout", lambda: self._fwd("on_view_in_klayout"))
 
+        # —— Tools ——————————————————————————————————————————————————————
+        tools_menu = mb.addMenu("&Tools")
+        tools_menu.addAction(
+            "Run Chatbot Regression Suite",
+            self._run_chatbot_regression_suite,
+        )
+
     # =================================================================
     #  Toolbar
     # =================================================================
@@ -979,6 +995,149 @@ class MainWindow(QMainWindow):
             if isinstance(tab, LayoutEditorTab):
                 tab.shutdown()
         os.execl(sys.executable, sys.executable, *sys.argv)
+
+    def _run_chatbot_regression_suite(self):
+        script_path = os.path.join(_project_root, "scripts", "run_chatbot_case_suite.py")
+        if not os.path.isfile(script_path):
+            QMessageBox.warning(
+                self,
+                "Regression Suite Missing",
+                f"Could not find:\n{script_path}",
+            )
+            return
+
+        try:
+            proc = subprocess.run(
+                [sys.executable, script_path],
+                cwd=_project_root,
+                capture_output=True,
+                text=True,
+                timeout=300,
+            )
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Regression Suite Error",
+                f"Failed to run chatbot regression suite:\n{exc}",
+            )
+            return
+
+        output = (proc.stdout or "").strip()
+        error_output = (proc.stderr or "").strip()
+        rows = self._parse_chatbot_suite_table(output)
+        summary = self._extract_chatbot_suite_summary(output)
+        self._show_chatbot_suite_results_dialog(rows, output, summary, proc.returncode, error_output)
+
+    @staticmethod
+    def _parse_chatbot_suite_table(output: str) -> list[dict]:
+        if not output:
+            return []
+
+        lines = [ln.rstrip() for ln in output.splitlines()]
+        header_idx = -1
+        for i, line in enumerate(lines):
+            if line.strip().startswith("Case | Input") and "Pass/Fail" in line:
+                header_idx = i
+                break
+        if header_idx < 0:
+            return []
+
+        rows: list[dict] = []
+        for line in lines[header_idx + 2:]:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if stripped.startswith("-"):
+                break
+            if "|" not in line:
+                continue
+            parts = [p.strip() for p in line.split("|")]
+            if len(parts) < 5:
+                continue
+            rows.append(
+                {
+                    "case": parts[0],
+                    "input": parts[1],
+                    "expected": parts[2],
+                    "actual": parts[3],
+                    "status": parts[4],
+                }
+            )
+        return rows
+
+    @staticmethod
+    def _extract_chatbot_suite_summary(output: str) -> str:
+        if not output:
+            return "No output received."
+        for line in reversed(output.splitlines()):
+            if line.strip().startswith("Summary:"):
+                return line.strip()
+        return "Summary not found."
+
+    def _show_chatbot_suite_results_dialog(
+        self,
+        rows: list[dict],
+        output: str,
+        summary: str,
+        return_code: int,
+        error_output: str,
+    ):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Chatbot Regression Suite Results")
+        dialog.resize(1200, 740)
+
+        layout = QVBoxLayout(dialog)
+
+        table = QTableWidget(dialog)
+        table.setColumnCount(5)
+        table.setHorizontalHeaderLabels(["Case", "Input", "Expected", "Actual", "Pass/Fail"])
+        table.setRowCount(len(rows))
+        table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        table.verticalHeader().setVisible(False)
+        table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+
+        for r, row in enumerate(rows):
+            table.setItem(r, 0, QTableWidgetItem(str(row.get("case", ""))))
+            table.setItem(r, 1, QTableWidgetItem(str(row.get("input", ""))))
+            table.setItem(r, 2, QTableWidgetItem(str(row.get("expected", ""))))
+            table.setItem(r, 3, QTableWidgetItem(str(row.get("actual", ""))))
+            table.setItem(r, 4, QTableWidgetItem(str(row.get("status", ""))))
+
+        layout.addWidget(table)
+
+        summary_label = QLabel(
+            f"{summary} | Exit Code: {return_code}"
+        )
+        summary_label.setWordWrap(True)
+        layout.addWidget(summary_label)
+
+        raw_output = QPlainTextEdit(dialog)
+        raw_output.setReadOnly(True)
+        combined_output = output
+        if error_output:
+            combined_output = f"{combined_output}\n\n[stderr]\n{error_output}"
+        raw_output.setPlainText(combined_output)
+        raw_output.setMinimumHeight(240)
+        layout.addWidget(raw_output)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, parent=dialog)
+        buttons.rejected.connect(dialog.reject)
+        buttons.accepted.connect(dialog.accept)
+        layout.addWidget(buttons)
+
+        if not rows:
+            QMessageBox.warning(
+                self,
+                "Regression Suite Output",
+                "The suite ran, but no table rows were parsed. Raw output is shown.",
+            )
+        dialog.exec()
 
     # =================================================================
     #  Close event – graceful shutdown

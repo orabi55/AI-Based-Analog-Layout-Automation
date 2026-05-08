@@ -30,10 +30,15 @@ class TestSelectGraphApp:
         from ai_agent.graph.builder import layout_session_app
         assert select_graph_app("chat_v2") is layout_session_app
 
-    def test_chat_routes_to_session_chat_app(self):
+    def test_chat_routes_to_layout_session_app(self):
+        from ai_agent.llm.workers import select_graph_app
+        from ai_agent.graph.builder import layout_session_app
+        assert select_graph_app("chat") is layout_session_app
+
+    def test_chat_v1_routes_to_session_chat_app(self):
         from ai_agent.llm.workers import select_graph_app
         from ai_agent.graph.builder import session_chat_app
-        assert select_graph_app("chat") is session_chat_app
+        assert select_graph_app("chat_v1") is session_chat_app
 
     def test_session_chat_legacy_routes_to_session_chat_app(self):
         from ai_agent.llm.workers import select_graph_app
@@ -130,15 +135,77 @@ class TestExtractLayoutSessionDecisionFromEvent:
 
 
 class TestChatModeEnv:
+    def test_chat_mode_env_default(self, monkeypatch):
+        from ai_agent.llm.workers import get_chat_mode_from_env
+        monkeypatch.delenv("ANALOG_LAYOUT_CHAT_MODE", raising=False)
+        assert get_chat_mode_from_env() == "chat"
+
     def test_chat_mode_env_valid(self, monkeypatch):
         from ai_agent.llm.workers import get_chat_mode_from_env
         monkeypatch.setenv("ANALOG_LAYOUT_CHAT_MODE", "chat_v2")
         assert get_chat_mode_from_env() == "chat_v2"
 
+    def test_chat_mode_env_chat_v1_valid(self, monkeypatch):
+        from ai_agent.llm.workers import get_chat_mode_from_env
+        monkeypatch.setenv("ANALOG_LAYOUT_CHAT_MODE", "chat_v1")
+        assert get_chat_mode_from_env() == "chat_v1"
+
+    def test_chat_mode_env_session_chat_legacy_valid(self, monkeypatch):
+        from ai_agent.llm.workers import get_chat_mode_from_env
+        monkeypatch.setenv("ANALOG_LAYOUT_CHAT_MODE", "session_chat_legacy")
+        assert get_chat_mode_from_env() == "session_chat_legacy"
+
     def test_chat_mode_env_invalid(self, monkeypatch):
         from ai_agent.llm.workers import get_chat_mode_from_env
         monkeypatch.setenv("ANALOG_LAYOUT_CHAT_MODE", "bad")
         assert get_chat_mode_from_env() == "chat"
+
+
+class TestOrchestratedChatDefaultMode:
+    @pytest.fixture(autouse=True)
+    def _skip_if_no_langgraph(self):
+        try:
+            from langgraph.graph import StateGraph
+        except ImportError:
+            pytest.skip("langgraph not available")
+
+    def test_process_orchestrated_request_uses_chat_mode_and_layout_session_app(self, monkeypatch):
+        from ai_agent.llm import workers as workers_mod
+        from ai_agent.llm.workers import OrchestratorWorker, _graph_app_label
+
+        monkeypatch.delenv("ANALOG_LAYOUT_CHAT_MODE", raising=False)
+        monkeypatch.setattr(
+            "ai_agent.llm.placement_worker.get_last_initial_state",
+            lambda: {},
+            raising=False,
+        )
+
+        seen: dict[str, str] = {}
+        logs: list[str] = []
+
+        def _capture_log(*args, **kwargs):
+            logs.append(" ".join(str(a) for a in args))
+
+        def _fake_stream(self, input_data):
+            seen["mode"] = str(input_data.get("mode"))
+            app = self._resolve_graph_app(input_data)
+            seen["graph"] = _graph_app_label(app)
+
+        monkeypatch.setattr(workers_mod, "vprint", _capture_log)
+        monkeypatch.setattr(OrchestratorWorker, "_stream_graph", _fake_stream)
+
+        worker = OrchestratorWorker()
+        worker.process_orchestrated_request(
+            "what is this circuit",
+            "{}",
+            [],
+            "Gemini",
+            "light",
+        )
+
+        assert seen["mode"] == "chat"
+        assert seen["graph"] == "layout_session_app"
+        assert any("[ORCH] Chat mode: chat" in line for line in logs)
 
 
 # ══════════════════════════════════════════════════════════════════

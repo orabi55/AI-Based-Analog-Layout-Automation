@@ -174,9 +174,19 @@ class TestExtractTargetNets:
             "user_message": "reduce parasitics on VOUTP and VOUTN",
         }
         result = node_deterministic_tool_runner(state)
+        assert result["layout_session_decision"] == "optimize_routing"
         nets = result.get("target_nets") or result.get("layout_session_target_nets") or []
         assert "VOUTP" in nets
         assert "VOUTN" in nets
+
+    def test_extracts_nets_with_explicit_next_decision(self):
+        state = {
+            "layout_session_tool_name": "extract_target_nets",
+            "layout_session_tool_args": {"next_decision": "check_routing"},
+            "user_message": "reduce parasitics on VOUTP and VOUTN",
+        }
+        result = node_deterministic_tool_runner(state)
+        assert result["layout_session_decision"] == "check_routing"
 
     def test_no_nets_found_returns_clarify(self):
         state = {
@@ -186,6 +196,7 @@ class TestExtractTargetNets:
         }
         result = node_deterministic_tool_runner(state)
         assert result["layout_session_decision"] == "clarify"
+        assert "Which nets or devices should I optimize?" in result["assistant_text"]
 
 
 class TestAnswerFromTrace:
@@ -204,6 +215,34 @@ class TestAnswerFromTrace:
         result = node_deterministic_tool_runner(state)
         assert result["layout_session_decision"] == "answer"
         assert result["assistant_text"]
+
+    def test_query_alias_is_accepted(self):
+        state = {
+            "layout_session_tool_name": "answer_from_initial_trace",
+            "layout_session_tool_args": {"query": "what is this circuit"},
+            "initial_agent_trace": {
+                "topology": {"CIRCUIT_TYPE": "Dynamic Latch-based Comparator"},
+                "drc": {"pass": True, "flags": []},
+            },
+            "placement_nodes": [{"id": "MM10", "type": "nmos"}],
+        }
+        result = node_deterministic_tool_runner(state)
+        assert result["layout_session_decision"] == "answer"
+        assert "comparator" in result["assistant_text"].lower()
+
+    def test_specific_topology_question_not_answered_by_generic_dump(self):
+        state = {
+            "layout_session_tool_name": "answer_from_initial_trace",
+            "layout_session_tool_args": {"question": "what devices are connected to VOUTP?"},
+            "initial_agent_trace": {
+                "strategy": "placeholder only",
+                "drc": {"pass": True, "flags": []},
+            },
+            "placement_nodes": [],
+        }
+        result = node_deterministic_tool_runner(state)
+        assert result["layout_session_decision"] == "clarify"
+        assert "deeper topology context" in result["assistant_text"].lower()
 
 
 class TestRuleRoute:

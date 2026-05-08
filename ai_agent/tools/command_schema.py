@@ -90,8 +90,19 @@ def get_cmd_device_b(cmd: dict) -> Optional[str]:
 
 #: Regex that strips physical-finger suffixes.
 _FINGER_SUFFIX_RE = re.compile(
-    r"(?:_f\d+|_finger\d+|__finger\d+|\[\d+\])$", re.IGNORECASE
+    r"(?:_f\d+|_m\d+|_finger\d+|__finger\d+|\[\d+\])$", re.IGNORECASE
 )
+
+
+def _is_filler_or_dummy(node_id: str) -> bool:
+    """Return True if *node_id* looks like a filler or edge dummy device."""
+    upper = str(node_id or "").upper()
+    return bool(
+        "DUMMY" in upper
+        or "FILLER" in upper
+        or "EDGE_DUMMY" in upper
+        or upper.startswith("FILL_")
+    )
 
 
 def logical_base_device_id(device_id: str) -> str:

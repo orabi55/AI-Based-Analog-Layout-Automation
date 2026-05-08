@@ -14,6 +14,7 @@ import pytest
 from ai_agent.graph.edges import (
     route_after_layout_session_agent,
     route_after_deterministic_tool_runner,
+    route_after_session_drc,
 )
 from ai_agent.agents.layout_session_agent import (
     VALID_LAYOUT_SESSION_DECISIONS,
@@ -162,6 +163,38 @@ class TestRouteAfterDeterministicToolRunner:
             "pending_cmds": None,
         }
         assert route_after_deterministic_tool_runner(state) == "node_session_finalizer"
+
+    def test_optimize_routing_routes_to_previewer(self):
+        state = {"layout_session_decision": "optimize_routing"}
+        assert route_after_deterministic_tool_runner(state) == "node_routing_previewer"
+
+    def test_check_routing_routes_to_previewer(self):
+        state = {"layout_session_decision": "check_routing"}
+        assert route_after_deterministic_tool_runner(state) == "node_routing_previewer"
+
+    def test_check_drc_routes_to_checker(self):
+        state = {"layout_session_decision": "check_drc"}
+        assert route_after_deterministic_tool_runner(state) == "node_drc_checker"
+
+    def test_fix_drc_routes_to_critic(self):
+        state = {"layout_session_decision": "fix_drc"}
+        assert route_after_deterministic_tool_runner(state) == "node_drc_critic"
+
+
+class TestRouteAfterSessionDrc:
+    def test_fix_drc_with_commands_routes_to_validator(self):
+        state = {
+            "layout_session_decision": "fix_drc",
+            "pending_cmds": [{"action": "move", "device_id": "M1", "dx": 1, "dy": 0}],
+        }
+        assert route_after_session_drc(state) == "node_command_validator"
+
+    def test_non_fix_drc_with_commands_routes_to_finalizer(self):
+        state = {
+            "layout_session_decision": "check_drc",
+            "pending_cmds": [{"action": "move", "device_id": "M1", "dx": 1, "dy": 0}],
+        }
+        assert route_after_session_drc(state) == "node_session_finalizer"
 
 
 # ══════════════════════════════════════════════════════════════════

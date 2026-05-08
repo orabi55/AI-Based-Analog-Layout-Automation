@@ -17,6 +17,7 @@ try:
     from ai_agent.graph.builder import (
         app,
         chat_app,
+        layout_session_app,
         session_chat_app,
     )
     _HAS_BUILDER = True
@@ -116,9 +117,13 @@ class TestBuildSessionChatGraph:
 class TestSelectGraphApp:
     """Verify the testable graph selector helper in workers.py."""
 
-    def test_chat_mode_returns_session_chat_app(self):
+    def test_chat_mode_returns_layout_session_app(self):
         from ai_agent.llm.workers import select_graph_app
-        assert select_graph_app("chat") is session_chat_app
+        assert select_graph_app("chat") is layout_session_app
+
+    def test_chat_v1_mode_returns_session_chat_app(self):
+        from ai_agent.llm.workers import select_graph_app
+        assert select_graph_app("chat_v1") is session_chat_app
 
     def test_legacy_chat_mode_returns_chat_app(self):
         from ai_agent.llm.workers import select_graph_app

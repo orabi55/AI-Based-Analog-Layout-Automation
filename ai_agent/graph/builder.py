@@ -406,6 +406,9 @@ def build_layout_session_graph():
         "node_deterministic_tool_runner",
         route_after_deterministic_tool_runner,
         {
+            "node_routing_previewer": "node_routing_previewer",
+            "node_drc_checker": "node_drc_checker",
+            "node_drc_critic": "node_drc_critic",
             "node_command_validator":  "node_command_validator",
             "node_session_finalizer": "node_session_finalizer",
         },

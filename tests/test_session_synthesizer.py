@@ -129,6 +129,18 @@ class TestSynthesizerRoutingDecision:
         result = node_session_synthesizer(state)
         assert "HPWL" in result["assistant_text"]
 
+    def test_routing_previewer_specialist_synthesized(self):
+        state = {
+            "layout_session_specialist": "routing_previewer",
+            "routing_result": {"log_text": "Routing check: HPWL=10.5um, crossings=1"},
+            "user_message": "check routing",
+        }
+        result = node_session_synthesizer(state)
+        text = result["assistant_text"]
+        assert "HPWL" in text
+        assert "delegate" not in text.lower()
+        assert "routing_previewer" not in text
+
 
 class TestSynthesizerChatHistoryIntegrity:
     def test_always_appends_user_and_assistant(self):
