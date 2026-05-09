@@ -38,6 +38,7 @@ from PySide6.QtCore import Qt, Signal, QTimer, QThread, Slot
 from PySide6.QtGui import QFont
 
 from ai_agent.llm.workers import OrchestratorWorker, build_system_prompt
+from ai_agent.agents.prompts import build_fc_system_prompt
 from ai_agent.tools.cmd_parser import extract_cmd_blocks
 try:
     from .icons import icon_panel_toggle
@@ -116,8 +117,10 @@ class ChatPanel(QWidget):
     command_requested = Signal(dict)  # emits parsed command dicts
     toggle_requested = Signal()        # emitted when the user clicks the panel-toggle button
 
-    # Single-agent path (normal chat)
+    # Single-agent path (normal chat — text-only fallback when no layout loaded)
     request_inference = Signal(str, list, str)
+    # Tool-enabled single-agent path (FC as primary, [CMD]-block as fallback)
+    request_inference_with_tools = Signal(str, list, str)
     # Multi-agent path (orchestrator pipeline)
     request_orchestrated = Signal(str, str, list, str)
     # Resume paths for LangGraph interrupts
@@ -138,15 +141,20 @@ class ChatPanel(QWidget):
 
         # Model preferences (synced from MainWindow)
         self.selected_model = "VertexGemini"
-        
+        # Chat mode: "FC" (function-calling tools) or "CMD" ([CMD] text blocks)
+        self._chat_mode = "FC"
 
         # --- Worker-Object Pattern: QThread + OrchestratorWorker ---
         self._worker_thread = QThread()
         self._llm_worker = OrchestratorWorker()   # superset of LLMWorker
         self._llm_worker.moveToThread(self._worker_thread)
 
-        # Single-agent path
+        # Single-agent path (kept for legacy callers that emit request_inference directly)
         self.request_inference.connect(self._llm_worker.process_request)
+        # Tool-enabled single-agent path
+        self.request_inference_with_tools.connect(self._llm_worker.process_request_with_tools)
+        # FC tool calls arrive via command_ready — route them straight to the editor
+        self._llm_worker.command_ready.connect(self.command_requested)
         # Multi-agent (orchestrator) path
         self.request_orchestrated.connect(self._llm_worker.process_orchestrated_request)
         self.request_resume_strategy.connect(self._llm_worker.resume_with_strategy)
@@ -186,6 +194,8 @@ class ChatPanel(QWidget):
             self._layout_context["edges"] = edges
         if terminal_nets:
             self._layout_context["terminal_nets"] = terminal_nets
+        # Keep the worker in sync so process_request_with_tools has access to nodes
+        self._llm_worker.set_layout_context(self._layout_context)
 
     # -----------------------------------------
     # UI
@@ -254,6 +264,41 @@ class ChatPanel(QWidget):
         """)
         self._model_combo.currentTextChanged.connect(self._on_model_changed)
         header_layout.addWidget(self._model_combo)
+
+        # Mode toggle button: FC (function-calling) ↔ CMD ([CMD] text blocks)
+        self._mode_btn = QPushButton("FC")
+        self._mode_btn.setFixedSize(42, 26)
+        self._mode_btn.setCheckable(True)
+        self._mode_btn.setChecked(True)   # FC is default
+        self._mode_btn.setToolTip(
+            "FC — Function Calling: LLM calls tools directly\n"
+            "CMD — Text mode: LLM emits [CMD]…[/CMD] blocks"
+        )
+        self._mode_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #1a6b3c;
+                color: #7fffc4;
+                border: 1px solid #2aaa6a;
+                border-radius: 4px;
+                padding: 2px 6px;
+                font-size: 10px;
+                font-family: 'Consolas', monospace;
+                font-weight: bold;
+            }
+            QPushButton:hover { background-color: #227a46; }
+            QPushButton:checked {
+                background-color: #1a6b3c;
+                color: #7fffc4;
+                border-color: #2aaa6a;
+            }
+            QPushButton:!checked {
+                background-color: #3a2a10;
+                color: #ffcc66;
+                border-color: #8a6020;
+            }
+        """)
+        self._mode_btn.clicked.connect(self._on_mode_toggled)
+        header_layout.addWidget(self._mode_btn)
 
         # Clear chat button
         clear_btn = QPushButton("🗑️")
@@ -636,21 +681,23 @@ class ChatPanel(QWidget):
         self._chat_history.append({"role": "user", "content": text})
         self.input_field.clear()
 
-        # --- Route to orchestrator or single-agent ----------------------
-        # If we have a pending topology, ANY message goes to the Orchestrator
-        # to resume the pipeline, regardless of keywords.
-        # If a layout is loaded, always use the Orchestrator — it contains the
-        # Classifier Agent which does fine-grained intent routing internally.
-        if self._layout_context:
+        # --- Routing logic -----------------------------------------------
+        # 1. Pipeline interrupts always resume the orchestrator regardless of mode.
+        # 2. Pipeline keywords ("optimize", "auto-layout", "fix DRC", …) always
+        #    trigger the LangGraph pipeline regardless of mode.
+        # 3. Everything else is routed by the user-selected mode:
+        #    FC  → function-calling (tools bound, replace_layout)
+        #    CMD → MultiAgentOrchestrator text path ([CMD] blocks)
+        awaiting_resume    = self._awaiting_strategy_resume or self._awaiting_visual_resume
+        is_pipeline_request = bool(_ORCHESTRATOR_KEYWORDS.search(text))
 
-            # Layout loaded → use orchestrator with classifier routing.
-            # Set _is_orchestrated = False initially; only abstract intents
-            # trigger the pipeline stage animation. The classifier runs
-            # server-side and routes to chat/question/concrete/abstract.
-            self._is_orchestrated = False
+        if awaiting_resume or (self._layout_context and is_pipeline_request):
+            self._is_orchestrated = True
             self._call_orchestrator(text)
-        else:
-            # No layout loaded → single-agent mode
+        elif self._chat_mode == "CMD":
+            self._is_orchestrated = False
+            self._call_llm_cmd(text)
+        else:  # FC (default)
             self._is_orchestrated = False
             self._call_llm(text)
 
@@ -665,6 +712,16 @@ class ChatPanel(QWidget):
         """Handle model selection change from the dropdown."""
         self.selected_model = model_name
         print(f"[CHAT] Model changed to: {model_name}")
+
+    def _on_mode_toggled(self):
+        """Toggle between FC (function-calling) and CMD ([CMD] text blocks) mode."""
+        if self._mode_btn.isChecked():
+            self._chat_mode = "FC"
+            self._mode_btn.setText("FC")
+        else:
+            self._chat_mode = "CMD"
+            self._mode_btn.setText("CMD")
+        print(f"[CHAT] Mode switched to: {self._chat_mode}")
 
     @Slot(str)
     def _on_intent_classified(self, intent: str):
@@ -781,10 +838,13 @@ class ChatPanel(QWidget):
         )
 
     def _call_llm(self, user_message):
-        """Build prompts and dispatch the request to the single-agent worker thread."""
+        """Build prompts and dispatch the request to the FC-enabled worker thread."""
         self._start_thinking()
 
-        system_prompt = build_system_prompt(self._layout_context)
+        # Use the FC-oriented prompt: it tells the LLM to call tools directly
+        # and includes the full device list so it never needs to call
+        # list_devices as a "warm-up" before acting.
+        system_prompt = build_fc_system_prompt(self._layout_context)
 
         # Trim history: last 4 msgs, strip old [CMD] blocks & error noise
         def _clean(content):
@@ -812,10 +872,44 @@ class ChatPanel(QWidget):
                 "content": _clean(msg["content"]),
             })
 
-        # Emit signal → crosses thread boundary → runs on worker thread
-        self.request_inference.emit(
+        # Emit signal → crosses thread boundary → runs on worker thread (FC-enabled path)
+        self.request_inference_with_tools.emit(
             full_prompt, chat_messages, self.selected_model
         )
+
+    def _call_llm_cmd(self, user_message):
+        """CMD mode: dispatch to MultiAgentOrchestrator which emits [CMD] blocks.
+
+        This is the original pre-FC path. The orchestrator classifies intent,
+        then routes concrete requests through the CodeGen agent which produces
+        [CMD]{"action":...}[/CMD] blocks that _on_llm_response parses.
+        """
+        self._start_thinking()
+
+        system_prompt = build_system_prompt(self._layout_context)
+
+        def _clean(content):
+            c = re.sub(r'\[CMD\].*?\[/CMD\]', '', content, flags=re.DOTALL)
+            if c.startswith("⚠️ Error:"):
+                return "(error – skipped)"
+            return c.strip()
+
+        recent = self._chat_history[-4:]
+        history_text = ""
+        for msg in recent:
+            role_label = "User" if msg["role"] == "user" else "Assistant"
+            history_text += f"{role_label}: {_clean(msg['content'])}\n"
+
+        full_prompt    = f"{system_prompt}\n\nConversation:\n{history_text}"
+        chat_messages  = [{"role": "system", "content": system_prompt}]
+        for msg in recent:
+            chat_messages.append({
+                "role":    msg["role"],
+                "content": _clean(msg["content"]),
+            })
+
+        # Route through the text-only / CMD-block path
+        self.request_inference.emit(full_prompt, chat_messages, self.selected_model)
 
     # -----------------------------------------
     # Response handling (GUI thread)

@@ -3042,7 +3042,23 @@ class LayoutEditorTab(QWidget):
             return
         action = str(cmd.get("action", "")).strip().lower()
         try:
-            if action in {"swap", "swap_devices"}:
+            if action in {"replace_layout", "apply_layout", "apply_layout_state"}:
+                new_nodes = cmd.get("nodes")
+                if not isinstance(new_nodes, list):
+                    self.chat_panel._append_message("AI", "Layout update failed: missing nodes.", "#fde8e8", "#a00")
+                    return
+                if not _skip_undo:
+                    self._push_undo()
+                self.nodes = copy.deepcopy(new_nodes)
+                if self._original_data is None:
+                    self._original_data = {}
+                self._original_data["nodes"] = self.nodes
+                self._refresh_panels(compact=False)
+                self._sync_node_positions()
+                message = cmd.get("message") or "Applied layout tool result."
+                self.chat_panel._append_message("AI", f"✅ {message}", "#e8f4fd", "#1a1a2e")
+
+            elif action in {"swap", "swap_devices"}:
                 raw_a = cmd.get("device_a", cmd.get("a"))
                 raw_b = cmd.get("device_b", cmd.get("b"))
                 id_a = self._resolve_device_id(raw_a)

@@ -206,6 +206,42 @@ class LLMWorker(QObject):
         """Reset the orchestrator state (e.g. when chat is cleared)."""
         self._orchestrator.reset()
 
+    @Slot(str, list, str)
+    def process_request_with_tools(self, full_prompt: str, chat_messages: list,
+                                   selected_model: str):
+        """Tool-enabled chat path: bind TOOL_REGISTRY, dispatch any tool_calls,
+        emit a summary + the updated layout via the existing signals.
+
+        - For providers in PROVIDERS_WITHOUT_TOOLS (Alibaba/Qwen) bind_tools is
+          skipped and the LLM falls through to the [CMD]-block flow handled
+          by `process_request` upstream.
+        - When FC IS used, the dispatched tool calls are emitted via
+          `command_ready` so the editor can refresh its state, and a textual
+          summary is sent via `response_ready`.
+        """
+        try:
+            from ai_agent.llm.tool_runner import run_llm_with_tools
+            ctx = getattr(self, "_layout_context", None) or {}
+            nodes = ctx.get("nodes", []) if isinstance(ctx, dict) else []
+            terminal_nets = ctx.get("terminal_nets", {}) if isinstance(ctx, dict) else {}
+            result = run_llm_with_tools(
+                chat_messages, full_prompt, selected_model,
+                task_weight="light",
+                nodes=nodes,
+                terminal_nets=terminal_nets,
+            )
+            # Always emit the text — chat_panel will run [CMD]-block extraction
+            # on it (the fallback path) when fc_used is False.
+            self.response_ready.emit(result.get("text") or "(no response)")
+            # When FC was used, propagate the per-call cmd dicts.
+            if result.get("fc_used"):
+                for cmd in result.get("cmd_blocks", []):
+                    self.command_ready.emit(cmd)
+        except Exception as exc:
+            import traceback
+            print(f"[LLM Worker] tool path error:\n{traceback.format_exc()}")
+            self.error_occurred.emit(f"Tool-enabled LLM failed: {exc}")
+
 
 # -----------------------------------------------------------------
 # OrchestratorWorker — LangGraph multi-agent pipeline driver

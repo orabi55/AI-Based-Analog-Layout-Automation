@@ -1,6 +1,6 @@
 import time
 import ai_agent.agents.strategy_selector as strategy_selector
-from ai_agent.agents.strategy_selector import parse_placement_mode
+from ai_agent.core.strategy import parse_placement_mode
 from ai_agent.nodes._shared import (
     _build_llm_messages,
     _invoke_with_retry,

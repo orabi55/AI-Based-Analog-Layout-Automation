@@ -11,7 +11,7 @@ Functions:
 """
 
 import time
-from ai_agent.agents.routing_previewer import build_routing_report
+from ai_agent.core.routing import build_routing_report
 from ai_agent.nodes._shared import ip_step
 from ai_agent.utils.logging import log_section, log_detail
 
