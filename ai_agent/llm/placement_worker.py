@@ -113,6 +113,7 @@ class PlacementWorker(QObject):
             "placement_text": "",
             "general_response": "",
             "placement_goals": layout_context.get("placement_goals", {}),  # user priorities
+            "groups": {},
         }
         print(f"[DIAG-WORKER] placement_goals in initial_state = {initial_state['placement_goals']}")
         print(f"[DIAG-WORKER] layout_context keys = {list(layout_context.keys())[:15]}")
@@ -189,6 +190,7 @@ class PlacementWorker(QObject):
         self._last_initial_state = snapshot
         PlacementWorker._last_initial_state = snapshot
         placement_nodes = final_state.get("placement_nodes", [])
+        groups = final_state.get("groups", {})
         final_cmds = []
         for node in placement_nodes:
             if node.get("is_dummy"):
@@ -278,6 +280,7 @@ class PlacementWorker(QObject):
             "placement_nodes": placement_nodes,
             "placement": final_cmds,
             "routing": final_state.get("routing_result", {}),
+            "groups": groups,
         })
         self.response_ready.emit(summary)
 

@@ -321,6 +321,7 @@ class OrchestratorWorker(LLMWorker):
             initial_state.setdefault("approved", False)
             initial_state.setdefault("no_abutment", bool(layout_context.get("no_abutment", False)))
             initial_state.setdefault("abutment_candidates", layout_context.get("abutment_candidates", []))
+            initial_state.setdefault("groups", {})
 
             try:
                 from langchain_core.runnables import RunnableConfig

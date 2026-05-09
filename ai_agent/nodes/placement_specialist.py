@@ -783,9 +783,10 @@ def node_placement_specialist(state):
     grp_nodes  = copy.deepcopy(nodes)
     finger_map = {}
     merged     = {}
+    groups     = {}
     try:
         from ai_agent.agents.placement_specialist import _compute_matching_and_rows
-        grp_nodes, finger_map, row_str, match_str, _, merged = _compute_matching_and_rows(
+        grp_nodes, finger_map, row_str, match_str, _, merged, groups = _compute_matching_and_rows(
             nodes, edges, terminal_nets,
             no_abutment=no_abutment_flag,
             matching_priority=match_priority,
@@ -801,6 +802,8 @@ def node_placement_specialist(state):
             f"Matched blocks: {len(merged)} "
             f"({', '.join(merged.keys()) if merged else 'none'})"
         )
+        if groups:
+            log_detail(f"Groups captured: {len(groups)}")
         if row_str:
             log_section("Pre-computed Row Assignments")
             for line in row_str.strip().split("\n"):
@@ -1007,6 +1010,7 @@ def node_placement_specialist(state):
         "chat_history":            updated_chat_history,
         "placement_quality":       quality_report,
         "placement_text":          placement_text,
+        "groups":                  groups,
         "last_agent":              "placement_specialist",
     }
 
