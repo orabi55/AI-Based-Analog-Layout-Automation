@@ -93,6 +93,10 @@ class LayoutEditorTab(QWidget):
         self.nodes = []
         self._matched_groups = []
         self._custom_groups = []
+        self.groups = {}
+        self._group_members_by_device = {}
+        self._active_group_drag = None
+        self._group_drag_last_pos = {}
 
         # Mode flags (toolbar communicates via setters)
         self._dummy_mode = False
@@ -677,7 +681,31 @@ class LayoutEditorTab(QWidget):
         self._original_data = data
         self.nodes = data["nodes"]
         self._custom_groups = copy.deepcopy(data.get("custom_groups", []))
+        self._set_groups(data.get("groups", {}))
         self._terminal_nets = self._parse_spice_terminals(filepath)
+
+    def _set_groups(self, groups):
+        if not isinstance(groups, dict):
+            groups = {}
+        self.groups = groups
+        self._group_members_by_device = {}
+        for _gid, members in groups.items():
+            if not isinstance(members, (list, tuple, set)):
+                continue
+            cleaned = [m for m in members if isinstance(m, str) and m.strip()]
+            if not cleaned:
+                continue
+            member_set = set(cleaned)
+            for dev_id in member_set:
+                self._group_members_by_device.setdefault(dev_id, set()).update(member_set)
+
+    def _group_items_for_device(self, dev_id):
+        member_ids = self._group_members_by_device.get(dev_id, set())
+        return [
+            self.editor.device_items.get(mid)
+            for mid in member_ids
+            if mid in self.editor.device_items
+        ]
 
     @staticmethod
     def _parse_spice_terminals(json_path):
@@ -905,6 +933,7 @@ class LayoutEditorTab(QWidget):
         self._blocks = blocks
         self.device_tree.set_edges(edges)
         self.device_tree.set_terminal_nets(self._terminal_nets)
+        self.device_tree.set_groups(self.groups)
         self.device_tree.load_devices(self.nodes, blocks=blocks)
         self.editor.load_placement(self.nodes, compact=compact)
         self.editor.apply_custom_groups(self._custom_groups)
@@ -927,6 +956,9 @@ class LayoutEditorTab(QWidget):
             if hasattr(item.signals, "position_changed"):
                 item.signals.position_changed.connect(
                     lambda: self._schedule_live_klayout_update()
+                )
+                item.signals.position_changed.connect(
+                    lambda item=item: self._on_device_position_changed(item)
                 )
         self._update_grid_counts()
         self._on_editor_selection_changed()
@@ -1089,6 +1121,14 @@ class LayoutEditorTab(QWidget):
             items = []
         if dragged_item is not None and dragged_item not in items:
             items.append(dragged_item)
+        if (
+            dragged_item is not None
+            and getattr(self.editor, "_moving_groups_only", False)
+            and hasattr(dragged_item, "device_name")
+        ):
+            for item in self._group_items_for_device(dragged_item.device_name):
+                if item and item not in items:
+                    items.append(item)
         return items
 
     def _capture_drag_start_positions(self, dragged_item, items):
@@ -1138,6 +1178,19 @@ class LayoutEditorTab(QWidget):
             self.editor.scene.blockSignals(False)
 
     def _on_device_drag_start(self, dragged_item=None):
+        if dragged_item is not None and getattr(self.editor, "_moving_groups_only", False):
+            group_items = self._group_items_for_device(dragged_item.device_name)
+            if group_items:
+                self._active_group_drag = {
+                    "leader": dragged_item.device_name,
+                    "members": [
+                        it.device_name for it in group_items
+                        if hasattr(it, "device_name")
+                    ],
+                }
+                self._group_drag_last_pos = {
+                    dragged_item.device_name: QPointF(dragged_item.pos())
+                }
         drag_items = self._drag_items(dragged_item)
         self._capture_drag_start_positions(dragged_item, drag_items)
         try:
@@ -1171,9 +1224,70 @@ class LayoutEditorTab(QWidget):
                 logging.debug("Skipped routing redraw for deleted selected item", exc_info=True)
 
         self._drag_start_positions = {}
+        self._active_group_drag = None
+        self._group_drag_last_pos = {}
         self._sync_node_positions()
         self._update_grid_counts()
         self.editor.refresh_hierarchy_group_geometry()
+
+    def _on_device_position_changed(self, item):
+        if not getattr(self.editor, "_moving_groups_only", False):
+            return
+        if not item or getattr(item, "_propagating_move", False):
+            return
+        active = getattr(self, "_active_group_drag", None)
+        if not active:
+            if not hasattr(item, "device_name"):
+                return
+            group_items = self._group_items_for_device(item.device_name)
+            if not group_items:
+                return
+            active = {
+                "leader": item.device_name,
+                "members": [
+                    it.device_name for it in group_items
+                    if hasattr(it, "device_name")
+                ],
+            }
+            self._active_group_drag = active
+            start_pos = getattr(item, "_drag_start_pos", None)
+            if start_pos is not None:
+                dx = item.pos().x() - start_pos.x()
+                dy = item.pos().y() - start_pos.y()
+                if abs(dx) < 1e-9 and abs(dy) < 1e-9:
+                    self._group_drag_last_pos[item.device_name] = QPointF(item.pos())
+                    return
+                for dev_id in active.get("members", []):
+                    if dev_id == item.device_name:
+                        continue
+                    sibling = self.editor.device_items.get(dev_id)
+                    if not sibling:
+                        continue
+                    sibling._propagating_move = True
+                    sibling.moveBy(dx, dy)
+                    sibling._propagating_move = False
+                self._group_drag_last_pos[item.device_name] = QPointF(item.pos())
+                return
+        if active.get("leader") != getattr(item, "device_name", None):
+            return
+        last_pos = self._group_drag_last_pos.get(item.device_name)
+        if last_pos is None:
+            self._group_drag_last_pos[item.device_name] = QPointF(item.pos())
+            return
+        dx = item.pos().x() - last_pos.x()
+        dy = item.pos().y() - last_pos.y()
+        if abs(dx) < 1e-9 and abs(dy) < 1e-9:
+            return
+        for dev_id in active.get("members", []):
+            if dev_id == item.device_name:
+                continue
+            sibling = self.editor.device_items.get(dev_id)
+            if not sibling:
+                continue
+            sibling._propagating_move = True
+            sibling.moveBy(dx, dy)
+            sibling._propagating_move = False
+        self._group_drag_last_pos[item.device_name] = QPointF(item.pos())
 
     def _hierarchy_drag_items(self, group):
         groups = []
@@ -1629,6 +1743,9 @@ class LayoutEditorTab(QWidget):
     def set_moving_groups_only(self, enabled):
         """Enable/disable moving groups only mode."""
         self.editor.set_moving_groups_only(enabled)
+        if not enabled:
+            self._active_group_drag = None
+            self._group_drag_last_pos = {}
 
     # =================================================================
     #  Dummy helpers
@@ -2603,6 +2720,7 @@ class LayoutEditorTab(QWidget):
                 
                 data["routing_result"] = final_payload.get("routing", {})
                 data["chat_response"] = final_payload.get("chat_response", "")
+                data["groups"] = final_payload.get("groups", {})
                 print(f"[layout_tab] Captured chat response: {len(data['chat_response'])} chars")
         finally:
             for p in (tmp_in_path, tmp_out_path):
@@ -2620,6 +2738,7 @@ class LayoutEditorTab(QWidget):
         self._original_data = data
         self.nodes = data["nodes"]
         self._custom_groups = copy.deepcopy(data.get("custom_groups", []))
+        self._set_groups(data.get("groups", {}))
         self._terminal_nets = data.get("terminal_nets", {})
         self._routing_result = data.get("routing_result", {})
         self._current_file = file_path

@@ -48,6 +48,7 @@ class DeviceTreePanel(QWidget):
         self._nodes = []
         self._blocks = {}
         self._custom_groups = []
+        self._placement_groups = {}
         self._active_tab = "instances"
         self._init_ui()
         self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -273,6 +274,12 @@ class DeviceTreePanel(QWidget):
         """
         self._custom_groups = groups or []
 
+    def set_groups(self, groups):
+        """Set placement groups (dict of group_id -> [device_ids])."""
+        if not isinstance(groups, dict):
+            groups = {}
+        self._placement_groups = groups
+
     def load_devices(self, nodes, blocks=None):
         self.tree.clear()
         self._nodes = nodes or []
@@ -388,6 +395,33 @@ class DeviceTreePanel(QWidget):
                     child.setData(0, Qt.ItemDataRole.UserRole, dev_id)
                 block_item.setExpanded(False)
             blocks_root.setExpanded(True)
+
+        if self._placement_groups:
+            placement_root = QTreeWidgetItem(
+                self.tree,
+                [f"Placement Groups  |  {len(self._placement_groups)}"],
+            )
+            placement_root.setFont(0, QFont("Segoe UI", 10, QFont.Weight.Bold))
+            placement_root.setForeground(0, QColor("#8fa8d8"))
+            for group_name, dev_ids in sorted(self._placement_groups.items()):
+                members = [d for d in dev_ids if isinstance(d, str) and d.strip()]
+                if not members:
+                    continue
+                group_item = QTreeWidgetItem(
+                    placement_root,
+                    [f"{group_name}  |  {len(members)} devices"],
+                )
+                group_item.setFont(0, QFont("Segoe UI", 10, QFont.Weight.DemiBold))
+                group_item.setForeground(0, QColor("#8fa8d8"))
+                if icon_group:
+                    group_item.setIcon(0, icon_group())
+                for dev_id in sorted(members):
+                    child = QTreeWidgetItem(group_item, [f"  {dev_id}"])
+                    child.setForeground(0, QColor("#6f7d98"))
+                    child.setFont(0, QFont("Segoe UI", 9))
+                    child.setData(0, Qt.ItemDataRole.UserRole, dev_id)
+                group_item.setExpanded(False)
+            placement_root.setExpanded(True)
 
         parent_groups = {}
         for parent_name, (children, _meta) in self._group_by_parent(self._nodes).items():

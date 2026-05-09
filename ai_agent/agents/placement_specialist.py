@@ -530,7 +530,7 @@ def _compute_matching_and_rows(
 
     Returns:
         (group_nodes, finger_map, row_summary_str, matching_section_str,
-         finger_group_str, merged_blocks)
+         finger_group_str, merged_blocks, groups)
     """
     try:
         from ai_agent.placement.finger_grouper import (
@@ -731,7 +731,32 @@ def _compute_matching_and_rows(
         # Step 8: build finger group section
         finger_group_str = build_finger_group_section(finger_map, group_nodes)
 
-        return group_nodes, finger_map, row_summary_str, matching_section_str, finger_group_str, merged_blocks
+        groups = {}
+        for gn in group_nodes:
+            gid = gn.get("id")
+            if not gid:
+                continue
+            members = finger_map.get(gid, [])
+            member_ids = []
+            for member in members:
+                if not isinstance(member, dict):
+                    continue
+                mid = member.get("id")
+                if not mid or _is_dummy_node(member):
+                    continue
+                member_ids.append(mid)
+            if member_ids:
+                groups[gid] = sorted(set(member_ids))
+
+        return (
+            group_nodes,
+            finger_map,
+            row_summary_str,
+            matching_section_str,
+            finger_group_str,
+            merged_blocks,
+            groups,
+        )
     except Exception as exc:
         import traceback
         try:
@@ -740,7 +765,7 @@ def _compute_matching_and_rows(
             vprint(traceback.format_exc())
         except Exception:
             pass
-        return [], {}, "", "", "", {}
+        return [], {}, "", "", "", {}, {}
 
 
 def build_placement_context_chatbot(
@@ -904,7 +929,7 @@ def build_placement_context(
     finger_pattern = re.compile(r"^(?P<base>.+)_f(?P<idx>\d+)$", re.IGNORECASE)
 
     # ── Pre-compute matching groups and row assignments ──────────────────────
-    group_nodes, finger_map, row_summary_str, matching_section_str, finger_group_str, merged_blocks = \
+    group_nodes, finger_map, row_summary_str, matching_section_str, finger_group_str, merged_blocks, _groups = \
         _compute_matching_and_rows(
             nodes, edges, terminal_nets,
             no_abutment=no_abutment,

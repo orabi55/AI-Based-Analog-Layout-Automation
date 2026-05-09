@@ -40,6 +40,7 @@ class LayoutState(TypedDict):
     placement_nodes: List[Dict]
     deterministic_snapshot: List[Dict]
     original_placement_cmds: List[Dict]
+    groups: Dict[str, List[str]]
 
     # --- DRC ---
     drc_flags: List[Dict]
