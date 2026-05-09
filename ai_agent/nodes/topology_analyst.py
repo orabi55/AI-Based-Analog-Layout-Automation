@@ -11,7 +11,8 @@ Functions:
 """
 
 import time
-import ai_agent.agents.topology_analyst as topology_analyst
+from ai_agent.core.topology import analyze_json, extract_symmetry_block
+from ai_agent.agents.topology_analyst import TOPOLOGY_ANALYST_PROMPT
 from ai_agent.placement.finger_grouper import aggregate_to_logical_devices
 from ai_agent.nodes._shared import (
     _build_llm_messages,
@@ -43,7 +44,7 @@ def node_topology_analyst(state):
     logical_nodes = aggregate_to_logical_devices(nodes)
     vprint(f"[TOPO] Aggregated {len(nodes)} fingers → {len(logical_nodes)} logical devices", flush=True)
 
-    constraint_text = topology_analyst.analyze_json(logical_nodes, terminal_nets)
+    constraint_text = analyze_json(logical_nodes, terminal_nets)
     vprint(f"[TOPO] Extracted {len(constraint_text.splitlines())} constraint lines", flush=True)
 
     analyst_user = (
@@ -51,7 +52,7 @@ def node_topology_analyst(state):
         f"Extracted Constraints:\n{constraint_text}\n\n"
     )
     analyst_msgs = _build_llm_messages(
-        topology_analyst.TOPOLOGY_ANALYST_PROMPT, chat_history, analyst_user,
+        TOPOLOGY_ANALYST_PROMPT, chat_history, analyst_user,
     )
     vprint(f"[TOPO] Calling LLM ({selected_model}, weight=light)...", flush=True)
 

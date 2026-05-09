@@ -79,3 +79,7 @@ class LayoutState(TypedDict):
     # --- Agent output cache ---
     placement_text: str
     general_response: str
+
+    # --- Device groups (topology-extracted, consumed by placement) ---
+    # Each entry: {id: str, type: str, devices: list[str], matching: bool, placement_style: str}
+    groups: List[Dict[str, Any]]

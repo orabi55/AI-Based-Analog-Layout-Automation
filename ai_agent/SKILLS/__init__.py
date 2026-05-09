@@ -6,6 +6,6 @@ Initializes the skills system for LangGraph agents, providing access to the Skil
 Functions:
 - None (Initializes SkillCatalog export)
 """
-from ai_agent.skills.loader import SkillCatalog
+from ai_agent.SKILLS.loader import SkillCatalog
 
 __all__ = ["SkillCatalog"]

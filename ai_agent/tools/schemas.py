@@ -1,0 +1,643 @@
+"""
+Tool Registry
+=============
+Anthropic-compatible tool schema dicts for every layout operation.
+Single source of truth for both the chatbot and the MCP server.
+
+Parameter names exactly match the underlying core/ function signatures.
+The dispatcher in dispatcher.py is the authoritative routing layer.
+
+Usage:
+    from ai_agent.tools.schemas import TOOL_REGISTRY
+    # Pass TOOL_REGISTRY directly to the Anthropic client as the `tools` argument.
+"""
+
+from __future__ import annotations
+
+# ---------------------------------------------------------------------------
+# Shared sub-schema fragments
+# ---------------------------------------------------------------------------
+
+_FLOAT = {"type": "number"}
+_STR   = {"type": "string"}
+_INT   = {"type": "integer"}
+_STR_ARRAY = {"type": "array", "items": {"type": "string"}}
+
+
+def _prop(type_: str, description: str, **extra) -> dict:
+    return {"type": type_, "description": description, **extra}
+
+
+# ---------------------------------------------------------------------------
+# Individual schemas
+# ---------------------------------------------------------------------------
+
+_READ_LAYOUT = {
+    "name": "read_layout",
+    "description": (
+        "Return the full current layout: every device node with its position, "
+        "type, and geometry. Use this to inspect the state before making changes."
+    ),
+    "input_schema": {"type": "object", "properties": {}, "required": []},
+}
+
+_LIST_DEVICES = {
+    "name": "list_devices",
+    "description": "List all device IDs and types in the current layout.",
+    "input_schema": {"type": "object", "properties": {}, "required": []},
+}
+
+_GET_DEVICE_INFO = {
+    "name": "get_device_info",
+    "description": "Return geometry, type, and electrical properties for one device.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "device_id": _prop("string", "Device identifier, e.g. 'MM1'"),
+        },
+        "required": ["device_id"],
+    },
+}
+
+_MOVE_DEVICE = {
+    "name": "move_device",
+    "description": "Move a device to a new (x, y) position in micrometers.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "device": _prop("string", "Device ID to move"),
+            "x":      _prop("number", "Target X position in µm"),
+            "y":      _prop("number", "Target Y position in µm"),
+        },
+        "required": ["device", "x", "y"],
+    },
+}
+
+_SWAP_DEVICES = {
+    "name": "swap_devices",
+    "description": "Swap the (x, y) positions of two devices.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "device_a": _prop("string", "First device ID"),
+            "device_b": _prop("string", "Second device ID"),
+        },
+        "required": ["device_a", "device_b"],
+    },
+}
+
+_FLIP_DEVICE = {
+    "name": "flip_device",
+    "description": "Flip a device horizontally ('h') or vertically ('v').",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "device": _prop("string", "Device ID to flip"),
+            "axis":   _prop("string", "Flip axis: 'h' for horizontal, 'v' for vertical"),
+        },
+        "required": ["device", "axis"],
+    },
+}
+
+_ADD_DUMMY = {
+    "name": "add_dummy",
+    "description": "Add a single dummy fill device at a specified position.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "type":   _prop("string", "Device type for the dummy, e.g. 'nmos' or 'pmos'"),
+            "x":      _prop("number", "X position in µm"),
+            "y":      _prop("number", "Y position in µm"),
+            "width":  _prop("number", "Device width in µm (default 0.294)"),
+            "height": _prop("number", "Device height in µm (default 0.568)"),
+        },
+        "required": ["type", "x", "y"],
+    },
+}
+
+_REMOVE_DUMMIES = {
+    "name": "remove_dummies",
+    "description": "Remove all dummy and filler cells from the layout.",
+    "input_schema": {"type": "object", "properties": {}, "required": []},
+}
+
+_CHECK_OVERLAPS = {
+    "name": "check_overlaps",
+    "description": (
+        "Run a DRC check to detect overlap and minimum-spacing violations. "
+        "Returns a pass/fail result with a full violation list."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "gap_px": _prop("number", "Minimum spacing in layout pixels (default 0.0)"),
+        },
+        "required": [],
+    },
+}
+
+_RUN_LEGALIZER = {
+    "name": "run_legalizer",
+    "description": (
+        "Detect all DRC violations and apply prescriptive mechanical fixes to "
+        "resolve them. Modifies device positions to eliminate overlaps and gaps."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "gap_px": _prop("number", "Minimum spacing in layout pixels (default 0.0)"),
+        },
+        "required": [],
+    },
+}
+
+_SAVE_LAYOUT = {
+    "name": "save_layout",
+    "description": (
+        "Serialize the current layout to JSON. Optionally write to a file path. "
+        "Returns the serialized JSON string in metrics['serialized']."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "path": _prop("string", "Optional file path to write the layout JSON to"),
+        },
+        "required": [],
+    },
+}
+
+_INSERT_TAPS = {
+    "name": "insert_taps",
+    "description": (
+        "Insert substrate / well-tie tap cells (ptap for NMOS rows, ntap for PMOS rows) "
+        "at required intervals across every row. Interval driven by PDK tap_max_distance_um."
+    ),
+    "input_schema": {"type": "object", "properties": {}, "required": []},
+}
+
+_INSERT_ENDCAPS = {
+    "name": "insert_endcaps",
+    "description": (
+        "Insert endcap cells at the left and right boundary of every row. "
+        "Cell names come from the PDK's endcap_cell_names rule."
+    ),
+    "input_schema": {"type": "object", "properties": {}, "required": []},
+}
+
+_INSERT_FILLERS = {
+    "name": "insert_fillers",
+    "description": (
+        "Fill intra-row gaps with density dummy cells using the existing "
+        "finger-grouper legalizer. Ensures equal row widths and pitch-grid alignment."
+    ),
+    "input_schema": {"type": "object", "properties": {}, "required": []},
+}
+
+_INSERT_ALL_PHYSICAL_CELLS = {
+    "name": "insert_all_physical_cells",
+    "description": (
+        "Run the full physical-cell insertion pipeline in order: "
+        "endcaps → tap cells → fillers. Aggregates warnings from each step."
+    ),
+    "input_schema": {"type": "object", "properties": {}, "required": []},
+}
+
+_PLACE_COMMON_CENTROID = {
+    "name": "place_common_centroid",
+    "description": (
+        "Place two groups of matched finger nodes in a 1D common-centroid (ABBA) "
+        "pattern. Calls generate_placement_grid(technique='CC', rows=1). "
+        "Returns repositioned nodes and centroid_error_um."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "group_a_ids": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "IDs of the finger nodes that belong to device A",
+            },
+            "group_b_ids": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "IDs of the finger nodes that belong to device B",
+            },
+            "start_x": _prop("number", "Left-edge X coordinate for the pattern in µm"),
+            "row_y":   _prop("number", "Row Y coordinate in µm"),
+            "pattern": _prop("string", "Pattern label, e.g. 'ABBA' (informational only, default 'ABBA')"),
+        },
+        "required": ["group_a_ids", "group_b_ids", "start_x", "row_y"],
+    },
+}
+
+_PLACE_COMMON_CENTROID_2D = {
+    "name": "place_common_centroid_2d",
+    "description": (
+        "Place multiple device groups in a 2D common-centroid matrix. "
+        "Calls generate_common_centroid_matrix() and handles arbitrary device ratios. "
+        "Returns repositioned nodes and centroid_error_um."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "device_specs": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "id":      {"type": "string",  "description": "Logical device ID, e.g. 'MM1'"},
+                        "fingers": {"type": "integer", "description": "Number of fingers (inferred from nodes if omitted)"},
+                    },
+                    "required": ["id"],
+                },
+                "description": "List of {id, fingers} specs — one entry per device",
+            },
+            "start_x": _prop("number", "Left-edge X coordinate in µm"),
+            "row_y":   _prop("number", "Y coordinate of the bottom row in µm"),
+        },
+        "required": ["device_specs", "start_x", "row_y"],
+    },
+}
+
+_INSERT_DUMMIES_AROUND_GROUP = {
+    "name": "insert_dummies_around_group",
+    "description": (
+        "Insert structural isolation dummy fingers on both sides of a matched device "
+        "group. Dummies are marked structural=True so the filler engine does NOT strip them."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "group_node_ids": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "IDs of the finger nodes that form the group",
+            },
+            "n_dummies": _prop("integer", "Number of dummy fingers per side per row (default 1)"),
+        },
+        "required": ["group_node_ids"],
+    },
+}
+
+_SCORE_LAYOUT = {
+    "name": "score_layout",
+    "description": (
+        "Compute quantitative matching and symmetry quality scores for the current "
+        "placement: layout Y symmetry, X mirror symmetry, interdigitation pattern, "
+        "2D common-centroid accuracy, and DRC cleanliness. Returns a composite score."
+    ),
+    "input_schema": {"type": "object", "properties": {}, "required": []},
+}
+
+_PLACE_RESISTOR = {
+    "name": "place_resistor",
+    "description": (
+        "Compute resistor geometry from a target area and aspect ratio (L/W). "
+        "Series folding stacks segments vertically (increases R per unit width). "
+        "Returns node with type='resistor', segments list, and actual_resistance_ratio."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "node_id":       _prop("string",  "ID of the device node to configure as a resistor"),
+            "area_um2":      _prop("number",  "Target physical area in µm²"),
+            "aspect_ratio":  _prop("number",  "L/W ratio (default 4.0); higher = higher resistance"),
+            "allow_series":  _prop("boolean", "Allow folding into stacked series segments (default true)"),
+            "allow_parallel":_prop("boolean", "Allow parallel finger configurations (default true)"),
+        },
+        "required": ["node_id", "area_um2"],
+    },
+}
+
+_PLACE_MOM_CAP = {
+    "name": "place_mom_cap",
+    "description": (
+        "Place a rectangular interdigitated metal-finger MOM capacitor. "
+        "Sets can_overlap=True — the cell may be placed above transistor rows."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "node_id":  _prop("string", "ID of the device node to configure as a MOM cap"),
+            "area_um2": _prop("number", "Target physical area in µm²"),
+            "layers": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Metal layers to use, e.g. ['M2','M3','M4'] (default ['M2','M3','M4'])",
+            },
+        },
+        "required": ["node_id", "area_um2"],
+    },
+}
+
+_PLACE_MOS_CAP = {
+    "name": "place_mos_cap",
+    "description": (
+        "Place a MOS capacitor (transistor with gate tied to drain). "
+        "Reuses standard transistor geometry: nf fingers × 0.294 µm pitch. "
+        "Returns node with type='mos_cap'."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "node_id":   _prop("string",  "ID of the device node to configure as a MOS cap"),
+            "nf":        _prop("integer", "Number of gate fingers (≥ 1)"),
+            "width_um":  _prop("number",  "Channel width per finger in µm"),
+        },
+        "required": ["node_id", "nf", "width_um"],
+    },
+}
+
+_RESHAPE_PASSIVE = {
+    "name": "reshape_passive",
+    "description": (
+        "Resize any passive device (resistor, mom_cap, mos_cap) to a new area "
+        "while preserving its type and electrical ratios. "
+        "Reads stored _passive metadata written by the original place_* call."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "node_id":      _prop("string", "ID of the passive device node to resize"),
+            "new_area_um2": _prop("number", "New target physical area in µm²"),
+        },
+        "required": ["node_id", "new_area_um2"],
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# Mid-level / block tools — circuit-pattern detection
+# ---------------------------------------------------------------------------
+
+_DETECT_MATCHED_PAIRS = {
+    "name": "detect_matched_pairs",
+    "description": (
+        "Find devices that share the same electrical signature (type, W, H). "
+        "Returns matched_pairs and matched_clusters (full equivalence classes)."
+    ),
+    "input_schema": {"type": "object", "properties": {}, "required": []},
+}
+
+_DETECT_DIFFERENTIAL_PAIRS = {
+    "name": "detect_differential_pairs",
+    "description": (
+        "Detect differential pairs: two same-type devices sharing a non-power "
+        "source net. Requires terminal_nets to be loaded with the layout."
+    ),
+    "input_schema": {"type": "object", "properties": {}, "required": []},
+}
+
+_DETECT_CURRENT_MIRRORS = {
+    "name": "detect_current_mirrors",
+    "description": (
+        "Detect current-mirror clusters: same-type devices sharing a non-power gate "
+        "net where at least one is diode-connected (gate == drain)."
+    ),
+    "input_schema": {"type": "object", "properties": {}, "required": []},
+}
+
+_DETECT_CROSS_COUPLED = {
+    "name": "detect_cross_coupled_pairs",
+    "description": (
+        "Detect cross-coupled latch pairs: same-type device pair where "
+        "drain(A)==gate(B) and drain(B)==gate(A)."
+    ),
+    "input_schema": {"type": "object", "properties": {}, "required": []},
+}
+
+_PLACE_MATCHED_PAIR = {
+    "name": "place_matched_pair",
+    "description": (
+        "Interdigitate two matched parent devices in an ABBA common-centroid "
+        "pattern. start_x and row_y default to the existing position of device_a "
+        "if omitted."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "device_a": _prop("string", "First parent device ID"),
+            "device_b": _prop("string", "Second parent device ID"),
+            "start_x":  _prop("number", "Optional left-edge X in µm"),
+            "row_y":    _prop("number", "Optional row Y coordinate in µm"),
+        },
+        "required": ["device_a", "device_b"],
+    },
+}
+
+_PLACE_DIFFERENTIAL_PAIR = {
+    "name": "place_differential_pair",
+    "description": "Interdigitate a differential pair (ABAB pattern).",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "device_a": _prop("string", "VINP-side parent device ID"),
+            "device_b": _prop("string", "VINN-side parent device ID"),
+            "start_x":  _prop("number", "Optional left-edge X in µm"),
+            "row_y":    _prop("number", "Optional row Y coordinate in µm"),
+        },
+        "required": ["device_a", "device_b"],
+    },
+}
+
+_PLACE_CURRENT_MIRROR = {
+    "name": "place_current_mirror",
+    "description": (
+        "Place a current-mirror cluster (>= 2 parent devices) common-centroid. "
+        "For 2 devices uses ABBA; for larger clusters uses 2D matrix CC."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "device_ids": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Parent device IDs in the mirror cluster (>= 2)",
+            },
+            "start_x":  _prop("number", "Optional left-edge X in µm"),
+            "row_y":    _prop("number", "Optional row Y coordinate in µm"),
+        },
+        "required": ["device_ids"],
+    },
+}
+
+_ADD_DUMMY_GROUP = {
+    "name": "add_dummy_group",
+    "description": (
+        "Insert N structural dummy fingers on each side of a matched group. "
+        "Dummies are marked structural=True so the filler engine does NOT strip them. "
+        "Same engine as insert_dummies_around_group, exposed under a name that matches "
+        "the natural 'add dummies around X' phrasing."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "group_node_ids": {
+                "type":  "array",
+                "items": {"type": "string"},
+                "description": "IDs of finger nodes that form the group",
+            },
+            "n_dummies": _prop("integer", "Dummies per side per row (default 1)"),
+        },
+        "required": ["group_node_ids"],
+    },
+}
+
+_VALIDATE_SYMMETRY = {
+    "name": "validate_symmetry",
+    "description": (
+        "Score the placement against symmetry & matching benchmarks. "
+        "Returns pass/fail (>= 90% on both axes) plus the full score breakdown."
+    ),
+    "input_schema": {"type": "object", "properties": {}, "required": []},
+}
+
+_VALIDATE_DUMMY_PRESENCE = {
+    "name": "validate_dummy_presence",
+    "description": (
+        "Verify that structural dummies sit on both sides of a matched group "
+        "on each row. Returns pass/fail per row plus per-side dummy counts."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "group_node_ids": {
+                "type":  "array",
+                "items": {"type": "string"},
+                "description": "IDs of finger nodes that form the group",
+            },
+            "min_dummies_per_side": _prop("integer",
+                "Minimum dummies required on each side per row (default 1)"),
+        },
+        "required": ["group_node_ids"],
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# Advanced / circuit-level tools
+# ---------------------------------------------------------------------------
+
+_DETECT_CIRCUIT_TYPE = {
+    "name": "detect_circuit_type",
+    "description": (
+        "Best-effort circuit classification (comparator / latch / "
+        "differential_amplifier / differential_pair / current_mirror_array / "
+        "matched_array / generic) using detection results from diff/cross/mirror "
+        "scans."
+    ),
+    "input_schema": {"type": "object", "properties": {}, "required": []},
+}
+
+_PLACE_COMPARATOR = {
+    "name": "place_comparator",
+    "description": (
+        "Place a comparator: detect + place differential input pair, "
+        "cross-coupled latch (ABBA), and load mirror in one go."
+    ),
+    "input_schema": {"type": "object", "properties": {}, "required": []},
+}
+
+_PLACE_TX_DRIVER = {
+    "name": "place_tx_driver",
+    "description": (
+        "Place a TX driver: every detected current-mirror cluster gets "
+        "common-centroid placement."
+    ),
+    "input_schema": {"type": "object", "properties": {}, "required": []},
+}
+
+_RUN_FULL_LAYOUT_PIPELINE = {
+    "name": "run_full_layout_pipeline",
+    "description": (
+        "End-to-end layout: detect circuit type → optimize for matching → "
+        "insert physical cells (endcaps + taps + fillers) → validate symmetry."
+    ),
+    "input_schema": {"type": "object", "properties": {}, "required": []},
+}
+
+_OPTIMIZE_FOR_MATCHING = {
+    "name": "optimize_layout_for_matching",
+    "description": (
+        "Apply common-centroid placement to every detected matched structure: "
+        "diff pairs (ABAB), cross-coupled (ABBA), current mirrors (ABBA / 2D-CC), "
+        "and remaining matched pairs (ABBA)."
+    ),
+    "input_schema": {"type": "object", "properties": {}, "required": []},
+}
+
+_OPTIMIZE_FOR_ROUTING = {
+    "name": "optimize_layout_for_routing",
+    "description": (
+        "Routing-friendly cleanup: legalize DRC, then insert structural dummies "
+        "around every matched cluster for vertical routing breathing room."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "gap_px": _prop("number", "Minimum spacing in pixels (default 0.0)"),
+        },
+        "required": [],
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# Registry — order matches the logical tool-call workflow
+# ---------------------------------------------------------------------------
+
+TOOL_REGISTRY: list = [
+    # Layout inspection
+    _READ_LAYOUT,
+    _LIST_DEVICES,
+    _GET_DEVICE_INFO,
+    _SCORE_LAYOUT,
+    # Device manipulation
+    _MOVE_DEVICE,
+    _SWAP_DEVICES,
+    _FLIP_DEVICE,
+    _ADD_DUMMY,
+    _REMOVE_DUMMIES,
+    # DRC & legalisation
+    _CHECK_OVERLAPS,
+    _RUN_LEGALIZER,
+    # Physical cell insertion (order = pipeline execution order)
+    _INSERT_ENDCAPS,
+    _INSERT_TAPS,
+    _INSERT_FILLERS,
+    _INSERT_ALL_PHYSICAL_CELLS,
+    # Matching placement (low-level)
+    _PLACE_COMMON_CENTROID,
+    _PLACE_COMMON_CENTROID_2D,
+    _INSERT_DUMMIES_AROUND_GROUP,
+    # Passive devices
+    _PLACE_RESISTOR,
+    _PLACE_MOM_CAP,
+    _PLACE_MOS_CAP,
+    _RESHAPE_PASSIVE,
+    # Mid-level: circuit-pattern detection
+    _DETECT_MATCHED_PAIRS,
+    _DETECT_DIFFERENTIAL_PAIRS,
+    _DETECT_CURRENT_MIRRORS,
+    _DETECT_CROSS_COUPLED,
+    # Mid-level: named placement
+    _PLACE_MATCHED_PAIR,
+    _PLACE_DIFFERENTIAL_PAIR,
+    _PLACE_CURRENT_MIRROR,
+    _ADD_DUMMY_GROUP,
+    # Mid-level: validation
+    _VALIDATE_SYMMETRY,
+    _VALIDATE_DUMMY_PRESENCE,
+    # Advanced / circuit-level
+    _DETECT_CIRCUIT_TYPE,
+    _PLACE_COMPARATOR,
+    _PLACE_TX_DRIVER,
+    _RUN_FULL_LAYOUT_PIPELINE,
+    _OPTIMIZE_FOR_MATCHING,
+    _OPTIMIZE_FOR_ROUTING,
+    # Persistence
+    _SAVE_LAYOUT,
+]
+
+# Quick lookup: name → schema
+TOOL_MAP: dict = {t["name"]: t for t in TOOL_REGISTRY}
