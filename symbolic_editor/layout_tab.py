@@ -257,8 +257,13 @@ class LayoutEditorTab(QWidget):
         main_layout.setSpacing(0)
         main_layout.addWidget(container)
 
+        # Loading overlay (per-tab)
+        self.overlay = LoadingOverlay(self)
+        self.overlay.hide()
+        self.overlay.cancel_requested.connect(self._cancel_ai_placement)
+
         # Populate panels
-        self._refresh_panels(compact=True)
+        self._refresh_panels(compact=placement_file is None)
         self._init_workspace_shortcuts()
 
         # Fit view after initial load
@@ -301,10 +306,6 @@ class LayoutEditorTab(QWidget):
             lambda: self._schedule_live_klayout_update(delay_ms=0, force=True)
         )
 
-        # Loading overlay (per-tab)
-        self.overlay = LoadingOverlay(self)
-        self.overlay.hide()
-        self.overlay.cancel_requested.connect(self._cancel_ai_placement)
         self.set_workspace_mode(self._workspace_mode)
 
     # ─────────────────────────────────────────────────────────────────
