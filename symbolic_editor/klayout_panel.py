@@ -43,7 +43,7 @@ class _ZoomableView(QGraphicsView):
         self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setBackgroundBrush(Qt.GlobalColor.black)
         self.setStyleSheet(
-            "QGraphicsView { background-color: #0e1219; border: none; }"
+            "QGraphicsView { background-color: #05090b; border: none; }"
         )
         self._zoom_factor = 1.0
 
@@ -84,7 +84,7 @@ class KLayoutPanel(QWidget):
         header = QWidget()
         header.setFixedHeight(34)
         header.setStyleSheet(
-            "background-color: #1a1f2b; border-bottom: 1px solid #2d3548;"
+            "background-color: #070c0f; border-bottom: 1px solid #142127;"
         )
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(10, 0, 6, 0)
@@ -92,7 +92,7 @@ class KLayoutPanel(QWidget):
 
         title = QLabel("KLayout Preview")
         title.setStyleSheet(
-            "color: #8899aa; font-family: 'Segoe UI'; font-size: 10pt; "
+            "color: #9daab0; font-family: 'Segoe UI'; font-size: 10pt; "
             "font-weight: 600; border: none;"
         )
         header_layout.addWidget(title)
@@ -144,8 +144,8 @@ class KLayoutPanel(QWidget):
         self._status = QLabel("")
         self._status.setFixedHeight(22)
         self._status.setStyleSheet(
-            "color: #556677; font-family: 'Segoe UI'; font-size: 8pt; "
-            "background-color: #12161f; border-top: 1px solid #2d3548; "
+            "color: #64777e; font-family: 'Segoe UI'; font-size: 8pt; "
+            "background-color: #05090b; border-top: 1px solid #142127; "
             "padding: 0 8px;"
         )
         layout.addWidget(self._status)
@@ -154,21 +154,21 @@ class KLayoutPanel(QWidget):
     def _button_style():
         return """
             QPushButton {
-                background-color: #232a38;
-                color: #c8d0dc;
-                border: 1px solid #3d5066;
+                background-color: #071014;
+                color: #bfd0d6;
+                border: 1px solid #1b3038;
                 border-radius: 4px;
                 font-family: 'Segoe UI';
                 font-size: 8pt;
                 padding: 2px 8px;
             }
             QPushButton:hover {
-                background-color: #2d3f54;
-                border-color: #4a90d9;
-                color: #ffffff;
+                background-color: #101b20;
+                border-color: #00e5ff;
+                color: #00e5ff;
             }
             QPushButton:pressed {
-                background-color: #4a90d9;
+                background-color: #092531;
             }
         """
 

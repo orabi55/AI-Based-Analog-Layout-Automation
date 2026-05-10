@@ -141,9 +141,9 @@ class LayoutEditorTab(QWidget):
         sidebar_layout.setSpacing(0)
 
         sidebar_tabs = QFrame()
-        sidebar_tabs.setFixedHeight(38)
+        sidebar_tabs.setFixedHeight(44)
         sidebar_tabs.setStyleSheet(
-            "background-color:#121821; border-bottom:1px solid #2d3548;"
+            "background-color:#05090b; border-bottom:1px solid #142127;"
         )
         sidebar_tab_layout = QHBoxLayout(sidebar_tabs)
         sidebar_tab_layout.setContentsMargins(6, 4, 6, 4)
@@ -151,8 +151,8 @@ class LayoutEditorTab(QWidget):
 
         self._hierarchy_tab_btn = self._make_sidebar_tab_button("Hierarchy", 0)
         self._properties_tab_btn = self._make_sidebar_tab_button("Properties", 1)
-        sidebar_tab_layout.addWidget(self._hierarchy_tab_btn)
-        sidebar_tab_layout.addWidget(self._properties_tab_btn)
+        sidebar_tab_layout.addWidget(self._hierarchy_tab_btn, 1)
+        sidebar_tab_layout.addWidget(self._properties_tab_btn, 1)
 
         self._sidebar_stack = QStackedWidget()
         self._sidebar_stack.addWidget(self.device_tree)
@@ -176,34 +176,26 @@ class LayoutEditorTab(QWidget):
         self._left_splitter.setChildrenCollapsible(False)
         self._left_splitter.setSizes([390, 230])
         self._left_splitter.setStyleSheet(
-            "QSplitter::handle { background-color: #2d3548; height: 2px; }"
-            "QSplitter::handle:hover { background-color: #4a90d9; }"
+            "QSplitter::handle { background-color: #142127; height: 2px; }"
+            "QSplitter::handle:hover { background-color: #00e5ff; }"
         )
         self.schematic_panel.setVisible(False)
 
         # ── Main horizontal splitter ──────────────────────────────
         workspace_header = QFrame()
-        workspace_header.setFixedHeight(48)
+        workspace_header.setFixedHeight(36)
         workspace_header.setStyleSheet(
-            "background-color: #111821; border-bottom: 1px solid #2d3548;"
+            "background-color: #05090b; border-bottom: 1px solid #142127;"
         )
         workspace_header_layout = QHBoxLayout(workspace_header)
-        workspace_header_layout.setContentsMargins(16, 0, 16, 0)
-        workspace_header_layout.setSpacing(12)
-
-        workspace_title = QLabel("Workspace")
-        workspace_title.setStyleSheet(
-            "color: #dbe5ef; font-family: 'Segoe UI'; font-size: 11pt; font-weight: 600;"
+        workspace_header_layout.setContentsMargins(16, 2, 16, 2)
+        workspace_header_layout.setSpacing(0)
+        workspace_header_layout.addStretch(1)
+        self._workspace_toggle.setToolTip("Switch workspace view")
+        workspace_header_layout.addWidget(
+            self._workspace_toggle, 0, Qt.AlignmentFlag.AlignCenter
         )
-        workspace_header_layout.addWidget(workspace_title)
-
-        workspace_hint = QLabel("Hierarchy-driven symbolic editing with physical preview")
-        workspace_hint.setStyleSheet(
-            "color: #708399; font-family: 'Segoe UI'; font-size: 9pt;"
-        )
-        workspace_header_layout.addWidget(workspace_hint)
-        workspace_header_layout.addStretch()
-        self._workspace_toggle.hide()
+        workspace_header_layout.addStretch(1)
 
         self._workspace_splitter = QSplitter(Qt.Orientation.Horizontal)
         self._workspace_splitter.addWidget(self.editor)
@@ -212,15 +204,16 @@ class LayoutEditorTab(QWidget):
         self._workspace_splitter.setStretchFactor(1, 1)
         self._workspace_splitter.setSizes(self._both_workspace_sizes)
         self._workspace_splitter.setStyleSheet(
-            "QSplitter::handle { background-color: #2d3548; width: 2px; }"
-            "QSplitter::handle:hover { background-color: #4a90d9; }"
+            "QSplitter::handle { background-color: #142127; width: 2px; }"
+            "QSplitter::handle:hover { background-color: #00e5ff; }"
         )
 
         self._workspace_shell = QFrame()
-        self._workspace_shell.setStyleSheet("background-color: #0e1219;")
+        self._workspace_shell.setStyleSheet("background-color: #05090b;")
         workspace_layout = QVBoxLayout(self._workspace_shell)
         workspace_layout.setContentsMargins(0, 0, 0, 0)
         workspace_layout.setSpacing(0)
+        workspace_layout.addWidget(workspace_header)
         workspace_layout.addWidget(self._workspace_splitter, 1)
 
         self._splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -230,8 +223,9 @@ class LayoutEditorTab(QWidget):
         self._splitter.setStretchFactor(0, 0)
         self._splitter.setStretchFactor(1, 1)
         self._splitter.setStretchFactor(2, 0)
-        self._splitter.setSizes([240, 1060, 320])
-        self._sidebar_default_width = 240
+        self._splitter.setSizes([300, 1000, 320])
+        self._splitter.setHandleWidth(1)
+        self._sidebar_default_width = 300
         self._chat_default_width = 320
 
         # ── Collapsed-panel reopen strips ─────────────────────────
@@ -252,8 +246,8 @@ class LayoutEditorTab(QWidget):
         container_layout.addWidget(self._chat_reopen_strip)
 
         self._splitter.setStyleSheet(
-            "QSplitter::handle { background-color: #2d3548; width: 2px; }"
-            "QSplitter::handle:hover { background-color: #4a90d9; }"
+            "QSplitter::handle { background-color: #0f1b20; width: 1px; }"
+            "QSplitter::handle:hover { background-color: #00e5ff; }"
         )
 
         # ── Set as this widget's layout ───────────────────────────
@@ -375,7 +369,7 @@ class LayoutEditorTab(QWidget):
             """
             QPushButton {
                 background: transparent;
-                color: #8795a8;
+                color: #9aa8ae;
                 border: 1px solid transparent;
                 border-radius: 5px;
                 padding: 5px 8px;
@@ -384,13 +378,13 @@ class LayoutEditorTab(QWidget):
                 font-weight: 700;
             }
             QPushButton:hover {
-                background-color: #1d2531;
-                color: #cbd7e6;
+                background-color: #101b20;
+                color: #e4f6f9;
             }
             QPushButton:checked {
-                background-color: #26364a;
-                border-color: #4a90d9;
-                color: #ffffff;
+                background-color: #082331;
+                border-color: #00e5ff;
+                color: #00e5ff;
             }
             """
         )
@@ -415,9 +409,9 @@ class LayoutEditorTab(QWidget):
         btn.setToolTip(tooltip)
         btn.setFixedWidth(18)
         btn.setStyleSheet(
-            "QToolButton { background-color:#1a1f2b; color:#7b8a9c;"
+            "QToolButton { background-color:#071014; color:#7b8a90;"
             " border:none; font-size:11px; padding:0; }"
-            "QToolButton:hover { background-color:#2d3f54; color:#e0e8f0; }"
+            "QToolButton:hover { background-color:#0d2a35; color:#00e5ff; }"
         )
         return btn
 

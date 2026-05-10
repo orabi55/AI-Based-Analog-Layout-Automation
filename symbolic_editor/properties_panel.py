@@ -37,14 +37,14 @@ class PropertiesPanel(QWidget):
         header = QFrame()
         header.setFixedHeight(46)
         header.setStyleSheet(
-            "background-color: #171d28; border-bottom: 1px solid #2d3548;"
+            "background-color: #070c0f; border-bottom: 1px solid #142127;"
         )
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(14, 0, 14, 0)
 
         title = QLabel("Properties")
         title.setFont(QFont("Segoe UI", 11, QFont.Weight.DemiBold))
-        title.setStyleSheet("color: #d8e2ee;")
+        title.setStyleSheet("color: #e4ecef;")
         header_layout.addWidget(title)
         header_layout.addStretch()
 
@@ -56,7 +56,7 @@ class PropertiesPanel(QWidget):
         self._scroll.setStyleSheet(
             """
             QScrollArea {
-                background-color: #10151d;
+                background-color: #070c0f;
                 border: none;
             }
             QScrollBar:vertical {
@@ -64,12 +64,12 @@ class PropertiesPanel(QWidget):
                 background: transparent;
             }
             QScrollBar::handle:vertical {
-                background: #2d3548;
+                background: #1b3038;
                 border-radius: 4px;
                 min-height: 28px;
             }
             QScrollBar::handle:vertical:hover {
-                background: #3a4a60;
+                background: #00a9bc;
             }
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
                 height: 0px;
@@ -92,15 +92,15 @@ class PropertiesPanel(QWidget):
     def _group_style(self):
         return """
             QGroupBox {
-                color: #94a6bb;
-                border: 1px solid #232c3b;
-                border-radius: 10px;
+                color: #9daab0;
+                border: 1px solid #1b3038;
+                border-radius: 6px;
                 margin-top: 12px;
                 padding: 12px 10px 10px 10px;
                 font-family: 'Segoe UI';
                 font-size: 9pt;
                 font-weight: 600;
-                background-color: #111821;
+                background-color: #071014;
             }
             QGroupBox::title {
                 subcontrol-origin: margin;
@@ -110,14 +110,14 @@ class PropertiesPanel(QWidget):
         """
 
     def _label_style(self):
-        return "color: #8192a7; font-family: 'Segoe UI'; font-size: 9pt;"
+        return "color: #8c9aa0; font-family: 'Segoe UI'; font-size: 9pt;"
 
     def _field_style(self):
         return """
             QLineEdit {
-                background-color: #1a2330;
-                color: #e4ebf3;
-                border: 1px solid #2d3a4c;
+                background-color: #05090b;
+                color: #e7f8fb;
+                border: 1px solid #1b3038;
                 border-radius: 6px;
                 padding: 5px 8px;
                 font-family: 'Segoe UI';
@@ -166,7 +166,7 @@ class PropertiesPanel(QWidget):
         placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
         placeholder.setWordWrap(True)
         placeholder.setStyleSheet(
-            "color: #5d6f84; font-family: 'Segoe UI'; font-size: 10pt; padding: 36px 18px;"
+            "color: #64777e; font-family: 'Segoe UI'; font-size: 10pt; padding: 36px 18px;"
         )
         self._content_layout.addStretch()
         self._content_layout.addWidget(placeholder)

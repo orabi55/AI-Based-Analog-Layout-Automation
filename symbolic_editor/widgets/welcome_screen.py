@@ -11,10 +11,10 @@ from PySide6.QtWidgets import (
     QFrame, QGridLayout, QScrollArea, QSizePolicy,
     QGraphicsDropShadowEffect,
 )
-from PySide6.QtCore import Qt, Signal, QTimer
+from PySide6.QtCore import Qt, Signal, QTimer, QPoint
 from PySide6.QtGui import (
     QFont, QColor, QPainter, QLinearGradient, QRadialGradient,
-    QPen, QBrush, QPainterPath,
+    QPen, QBrush, QPainterPath, QIcon, QPixmap,
 )
 
 class _CircuitIcon(QWidget):
@@ -157,6 +157,19 @@ class _CircuitIcon(QWidget):
                 p.drawLine(cx - 8 + i * 8, cy + 8, cx - 8 + i * 8, cy + 12)
         
         p.end()
+
+
+def circuit_icon_for_name(name: str, width: int = 32, height: int = 24) -> QIcon:
+    """Render the welcome-page circuit symbol as a reusable tab icon."""
+    widget = _CircuitIcon(name or "circuit")
+    pixmap = QPixmap(width, height)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.scale(width / widget.width(), height / widget.height())
+    widget.render(painter, QPoint(0, 0))
+    painter.end()
+    return QIcon(pixmap)
 
 
 class _ChipIcon(QWidget):
