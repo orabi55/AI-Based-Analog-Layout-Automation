@@ -167,8 +167,11 @@ def run_llm_with_tools(
     nodes: list = None,
     pdk: dict = None,
     terminal_nets: dict = None,
+    progress_cb=None,
+    worker=None,
+    message_id: str = "",
 ) -> dict:
-    """Execute an LLM call with tool-binding and dispatcher routing.
+    """Execute an LLM call with tool-binding, optional streaming, and dispatch.
 
     Args:
         chat_messages:  list of {"role", "content"} dicts.
@@ -178,19 +181,25 @@ def run_llm_with_tools(
         nodes:          current layout node list.
         pdk:            PDK dict; defaults to load_pdk("saed14nm") in dispatcher.
         terminal_nets:  current {device_id: {D, G, S}} map for topology-aware tools.
+        progress_cb:    legacy per-tool callback (name, success, message).
+        worker:         QObject exposing the new streaming/tool signals.  When
+                        provided, response_delta + response_done are emitted
+                        via stream_llm and tool_started/tool_done bracket each
+                        executor.execute() call.
+        message_id:     stream identifier matching what the worker emitted in
+                        response_started.
 
     Returns:
         dict with keys:
             text          str            — the LLM's free-form text content
             fc_used       bool           — True iff at least one tool_call was dispatched
             tool_results  list[LayoutToolResult]
-                                          — results from each dispatched call (in order)
             updated_nodes list           — final node list after all dispatches
-                                          (== nodes when fc_used is False)
-            cmd_blocks    list[dict]     — synthesized [CMD]-style dicts for chat_panel compatibility
+            cmd_blocks    list[dict]     — replace_layout + any GUI passthroughs
             tools_bound   bool           — whether bind_tools was actually applied
     """
     from ai_agent.tools.tool_executor import ToolExecutor
+    from ai_agent.llm.runner import stream_llm
 
     nodes = list(nodes) if nodes is not None else []
 
@@ -211,12 +220,18 @@ def run_llm_with_tools(
     if not lc_messages:
         lc_messages = [{"role": "user", "content": full_prompt or "Hello"}]
 
-    # Invoke
+    # ── 1. Stream the LLM text response (tool_calls land in the merged AIMessage) ──
     t0 = time.time()
+    text     = ""
+    response = None
     try:
-        response = llm.invoke(lc_messages)
+        if worker is not None:
+            text, response = stream_llm(lc_messages, llm, message_id, worker)
+        else:
+            response = llm.invoke(lc_messages)
+            text     = _extract_text(response)
     except Exception as exc:
-        logger.error("[TOOL_RUNNER] llm.invoke failed: %s", exc)
+        logger.error("[TOOL_RUNNER] llm call failed: %s", exc)
         return {
             "text":          f"Error: {exc}",
             "fc_used":       False,
@@ -226,12 +241,12 @@ def run_llm_with_tools(
             "tools_bound":   tools_bound,
         }
     elapsed = time.time() - t0
-    logger.debug("[TOOL_RUNNER] invoke took %.2fs (tools_bound=%s)", elapsed, tools_bound)
+    logger.debug("[TOOL_RUNNER] llm took %.2fs (tools_bound=%s, streamed=%s)",
+                 elapsed, tools_bound, worker is not None)
 
-    text       = _extract_text(response)
     tool_calls = _extract_tool_calls(response) if tools_bound else []
 
-    # No FC → return text for [CMD]-block fallback
+    # ── 2. No FC → return streamed text for [CMD]-block fallback ──
     if not tool_calls:
         return {
             "text":          text,
@@ -242,7 +257,7 @@ def run_llm_with_tools(
             "tools_bound":   tools_bound,
         }
 
-    # FC path — dispatch every call in order, threading updated nodes through
+    # ── 3. FC path — dispatch every call in order, threading updated nodes ──
     tool_results = []
     executor     = ToolExecutor(nodes, terminal_nets=terminal_nets, pdk=pdk)
     changed_any  = False
@@ -252,8 +267,43 @@ def run_llm_with_tools(
         name = tc.get("name", "")
         args = tc.get("args", {}) or {}
 
+        # Legacy tool_progress callback (string-typed signal)
+        if progress_cb:
+            try:
+                progress_cb(name, None, "")
+            except Exception:
+                pass
+        # New tool_started signal (typed dict args)
+        if worker is not None:
+            try:
+                worker.tool_started.emit(
+                    str(name),
+                    args if isinstance(args, dict) else {"_raw": str(args)},
+                )
+            except Exception:
+                pass
+
         result = executor.execute(name, args)
         tool_results.append(result)
+
+        if progress_cb:
+            try:
+                progress_cb(name, result.success, result.message)
+            except Exception:
+                pass
+        if worker is not None:
+            try:
+                worker.tool_done.emit(
+                    str(name),
+                    {
+                        "success": bool(result.success),
+                        "message": str(result.message or ""),
+                        "changed": bool(result.changed),
+                        "metrics": dict(result.metrics or {}),
+                    },
+                )
+            except Exception:
+                pass
 
         if result.success and result.changed:
             changed_any = True
@@ -262,14 +312,20 @@ def run_llm_with_tools(
     cmd_blocks = []
     if changed_any:
         # Synthesize one GUI command carrying the deterministic tool output.
-        # This avoids reinterpreting each tool name in symbolic_editor/layout_tab.py
-        # and lets primitive, block, and circuit-level tools share the same path.
         cmd_blocks.append({
-            "action": "replace_layout",
-            "nodes": executor.nodes,
+            "action":         "replace_layout",
+            "nodes":          executor.nodes,
             "source_actions": changed_calls,
-            "message": _summarize_changed_calls(tool_results),
+            "message":        _summarize_changed_calls(tool_results),
         })
+
+    # Any tool can embed extra GUI-only commands via metrics["gui_commands"].
+    # Emit them directly so the editor handles them without going through
+    # replace_layout (e.g. create_group which doesn't mutate node positions).
+    for result in tool_results:
+        for gui_cmd in (result.metrics.get("gui_commands") or []):
+            if isinstance(gui_cmd, dict) and gui_cmd.get("action"):
+                cmd_blocks.append(gui_cmd)
 
     return {
         "text":          text or _summarize_calls(tool_calls, tool_results),

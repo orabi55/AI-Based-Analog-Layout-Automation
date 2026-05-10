@@ -76,22 +76,46 @@ def _ids(result):
 
 class TestRegistry:
     _EXPECTED_NAMES = {
-        "read_layout", "list_devices", "get_device_info", "move_device",
-        "swap_devices", "flip_device", "add_dummy", "remove_dummies",
-        "check_overlaps", "run_legalizer", "save_layout",
+        # Inspection
+        "read_layout", "list_devices", "get_device_info", "score_layout",
+        "get_layout_bounds",
+        # Primitive manipulation
+        "move_device", "swap_devices", "flip_device",
+        "delete_device", "align_devices",
+        "add_dummy", "remove_dummies",
+        # DRC / legalization
+        "check_overlaps", "run_legalizer",
+        # Diffusion sharing
+        "abut_devices", "merge_shared_source", "merge_shared_drain",
+        # Device state
+        "lock_device", "unlock_device",
+        "set_device_color", "reset_device_color",
+        # Grouping
+        "create_group",
+        # Matching
+        "match_devices",
+        # Physical cells
         "insert_taps", "insert_endcaps", "insert_fillers",
-        "insert_all_physical_cells", "place_common_centroid",
-        "place_common_centroid_2d", "insert_dummies_around_group",
-        "score_layout",
+        "insert_all_physical_cells",
+        # Common-centroid placement (low-level)
+        "place_common_centroid", "place_common_centroid_2d",
+        "insert_dummies_around_group",
+        # Passive devices
         "place_resistor", "place_mom_cap", "place_mos_cap", "reshape_passive",
+        # Mid-level detection
         "detect_matched_pairs", "detect_differential_pairs",
         "detect_current_mirrors", "detect_cross_coupled_pairs",
+        # Mid-level placement
         "place_matched_pair", "place_differential_pair",
         "place_current_mirror", "add_dummy_group",
+        # Validation
         "validate_symmetry", "validate_dummy_presence",
+        # Advanced / circuit-level
         "detect_circuit_type", "place_comparator", "place_tx_driver",
         "run_full_layout_pipeline", "optimize_layout_for_matching",
         "optimize_layout_for_routing",
+        # Persistence
+        "save_layout",
     }
 
     def test_all_tools_registered(self):

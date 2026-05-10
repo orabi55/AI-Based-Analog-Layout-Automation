@@ -367,6 +367,200 @@ _RESHAPE_PASSIVE = {
 
 
 # ---------------------------------------------------------------------------
+# GUI-parity layout operation tools
+# ---------------------------------------------------------------------------
+
+_DELETE_DEVICE = {
+    "name": "delete_device",
+    "description": "Remove a device (and all its finger nodes) from the layout.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "device_id": _prop("string", "ID of the device to delete"),
+        },
+        "required": ["device_id"],
+    },
+}
+
+_ALIGN_DEVICES = {
+    "name": "align_devices",
+    "description": (
+        "Align a group of devices along the x-axis (left edges) or y-axis (row). "
+        "mode: 'mean' (average position), 'min', 'max', or 'reference' "
+        "(snap to reference_id's coordinate)."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "device_ids":   {"type": "array", "items": {"type": "string"},
+                             "description": "IDs of devices to align"},
+            "axis":         _prop("string", "'x' (left-edge) or 'y' (row)"),
+            "mode":         _prop("string",
+                                  "'mean' | 'min' | 'max' | 'reference' (default 'mean')"),
+            "reference_id": _prop("string", "Reference device ID when mode='reference'"),
+        },
+        "required": ["device_ids"],
+    },
+}
+
+_ABUT_DEVICES = {
+    "name": "abut_devices",
+    "description": (
+        "Place device_b immediately to the right of device_a for shared-diffusion "
+        "abutment (0.070 µm pitch instead of the standard 0.294 µm slot). "
+        "Sets abut_right on A and abut_left on B."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "device_a": _prop("string", "Left device ID"),
+            "device_b": _prop("string", "Right device ID"),
+        },
+        "required": ["device_a", "device_b"],
+    },
+}
+
+_MERGE_SHARED_SOURCE = {
+    "name": "merge_shared_source",
+    "description": (
+        "SS-merge: place device_b immediately LEFT of device_a and flip it "
+        "horizontally so their source diffusions share a contact. "
+        "Both devices must be the same type."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "device_a": _prop("string", "Reference (right) device"),
+            "device_b": _prop("string", "Device to flip and place on the left"),
+        },
+        "required": ["device_a", "device_b"],
+    },
+}
+
+_MERGE_SHARED_DRAIN = {
+    "name": "merge_shared_drain",
+    "description": (
+        "DD-merge: place device_b immediately RIGHT of device_a and flip it "
+        "horizontally so their drain diffusions share a contact."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "device_a": _prop("string", "Reference (left) device"),
+            "device_b": _prop("string", "Device to flip and place on the right"),
+        },
+        "required": ["device_a", "device_b"],
+    },
+}
+
+_LOCK_DEVICE = {
+    "name": "lock_device",
+    "description": "Freeze a device's position so it cannot be moved by the editor.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "device_id": _prop("string", "Device to lock"),
+        },
+        "required": ["device_id"],
+    },
+}
+
+_UNLOCK_DEVICE = {
+    "name": "unlock_device",
+    "description": "Remove the position lock from a device.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "device_id": _prop("string", "Device to unlock"),
+        },
+        "required": ["device_id"],
+    },
+}
+
+_SET_DEVICE_COLOR = {
+    "name": "set_device_color",
+    "description": "Assign a custom hex color to a device in the editor (e.g. '#ff6b6b').",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "device_id": _prop("string", "Device ID"),
+            "color":     _prop("string", "CSS hex color, e.g. '#4a90d9'"),
+        },
+        "required": ["device_id", "color"],
+    },
+}
+
+_RESET_DEVICE_COLOR = {
+    "name": "reset_device_color",
+    "description": "Remove the custom color from a device (reverts to default type color).",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "device_id": _prop("string", "Device ID"),
+        },
+        "required": ["device_id"],
+    },
+}
+
+_GET_LAYOUT_BOUNDS = {
+    "name": "get_layout_bounds",
+    "description": (
+        "Return the bounding box (min/max x,y), total area, active device area, "
+        "utilization %, and aspect ratio of the current layout."
+    ),
+    "input_schema": {"type": "object", "properties": {}, "required": []},
+}
+
+_CREATE_GROUP = {
+    "name": "create_group",
+    "description": (
+        "Create a named custom group from a list of device IDs. "
+        "The group appears in the Hierarchy → Groups tab and lets the user "
+        "move all its members together. "
+        "Equivalent to right-click → Create Group in the editor."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "device_ids": {
+                "type":  "array",
+                "items": {"type": "string"},
+                "description": "IDs of devices to group (minimum 2)",
+            },
+            "name": _prop("string",
+                          "Group name (default auto-generated, e.g. 'GROUP_1')"),
+        },
+        "required": ["device_ids"],
+    },
+}
+
+_MATCH_DEVICES = {
+    "name": "match_devices",
+    "description": (
+        "Apply an interdigitation or common-centroid matching pattern to a set of "
+        "devices. Equivalent to Design → Match Devices in the GUI. "
+        "technique: 'interdigitated' | 'common_centroid' | 'common_centroid_2d' | 'custom'. "
+        "For 'custom', supply a pattern string in custom_pattern."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "device_ids": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "IDs of finger/device nodes to include in the match",
+            },
+            "technique":      _prop("string",
+                                    "Matching technique (default 'interdigitated')"),
+            "custom_pattern": _prop("string",
+                                    "Pattern string when technique='custom', e.g. 'M0 M1 M0 / M1 M0 M1'"),
+        },
+        "required": ["device_ids"],
+    },
+}
+
+
+# ---------------------------------------------------------------------------
 # Mid-level / block tools — circuit-pattern detection
 # ---------------------------------------------------------------------------
 
@@ -592,12 +786,28 @@ TOOL_REGISTRY: list = [
     _LIST_DEVICES,
     _GET_DEVICE_INFO,
     _SCORE_LAYOUT,
+    _GET_LAYOUT_BOUNDS,
     # Device manipulation
     _MOVE_DEVICE,
     _SWAP_DEVICES,
     _FLIP_DEVICE,
+    _DELETE_DEVICE,
+    _ALIGN_DEVICES,
     _ADD_DUMMY,
     _REMOVE_DUMMIES,
+    # Diffusion sharing / abutment
+    _ABUT_DEVICES,
+    _MERGE_SHARED_SOURCE,
+    _MERGE_SHARED_DRAIN,
+    # Device state
+    _LOCK_DEVICE,
+    _UNLOCK_DEVICE,
+    _SET_DEVICE_COLOR,
+    _RESET_DEVICE_COLOR,
+    # Grouping
+    _CREATE_GROUP,
+    # Matching
+    _MATCH_DEVICES,
     # DRC & legalisation
     _CHECK_OVERLAPS,
     _RUN_LEGALIZER,

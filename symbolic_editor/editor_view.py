@@ -751,6 +751,10 @@ class SymbolicEditor(QGraphicsView):
         self.scale_factor = 80  # visual scaling
         widths = []
         heights = []
+        # Track transistor-only dimensions so passives (caps/res) don't
+        # inflate row_pitch or deflate snap_grid.
+        xtor_widths  = []
+        xtor_heights = []
 
         for node in nodes:
             geom = node.get("geometry", {})
@@ -766,6 +770,10 @@ class SymbolicEditor(QGraphicsView):
             height = geom.get("height", 0.5) * self.scale_factor
             widths.append(width)
             heights.append(height)
+            dtype_tmp = node.get("type", "nmos")
+            if dtype_tmp not in ("res", "cap"):
+                xtor_widths.append(width)
+                xtor_heights.append(height)
 
             nf   = node.get("electrical", {}).get("nf", 1)
             dtype = node.get("type", "nmos")
@@ -792,39 +800,53 @@ class SymbolicEditor(QGraphicsView):
             self.scene.addItem(item)
             self.device_items[node.get("id", "unknown")] = item
 
+            # Apply custom color stored on the node (e.g. set by the AI color tool)
+            _node_color = node.get("color")
+            if _node_color and hasattr(item, "set_custom_color"):
+                from PySide6.QtGui import QColor as _NC
+                _c = _NC(_node_color)
+                if _c.isValid():
+                    item.set_custom_color(_c)
+
         # ── Build hierarchy groups for ALL devices ──────────────────────
         # Always build hierarchy groups, even for standalone devices
         self._build_hierarchy_groups(nodes)
 
-        # Compute grid metrics from device sizes (used for UI snap / row pitch).
-        if widths:
-            min_w = min(widths)
-            col_gap = 0.0
-            self._snap_grid = max(1.0, min_w + col_gap)
-        if heights:
-            max_h = max(heights)
-            row_gap = 0.0
-            self._row_pitch = max(1.0, max_h + row_gap)
+        # Compute grid metrics from TRANSISTOR sizes only — passives (caps, res)
+        # must not inflate row_pitch or the transistor rows will have huge gaps.
+        ref_w = xtor_widths  or widths
+        ref_h = xtor_heights or heights
+        if ref_w:
+            self._snap_grid = max(1.0, min(ref_w))
+        if ref_h:
+            self._row_pitch = max(1.0, max(ref_h))
 
         if compact:
-            # Grid-snap mode: apply snap grid to items and compact rows.
+            # Grid-snap mode: snap transistors to grid and compact their rows.
+            # Passives (caps/res) keep their original positions.
             for item in self.device_items.values():
-                item.set_snap_grid(self._snap_grid, self._row_pitch)
+                if hasattr(item, "set_snap_grid"):
+                    item.set_snap_grid(self._snap_grid, self._row_pitch)
             for item in self.device_items.values():
-                item.setPos(self._snap_point(item.pos().x(), item.pos().y()))
+                if isinstance(item, DeviceItem):
+                    item.setPos(self._snap_point(item.pos().x(), item.pos().y()))
             self._compact_rows_abutted()
         else:
             # Exact-coordinate mode (OAS import / AI placement):
             # Preserve loaded coordinates, then use the same drag snap behavior
             # as regular canvas movement once the user interacts with an item.
             for item in self.device_items.values():
-                item.set_snap_grid(self._snap_grid, self._row_pitch)
+                if hasattr(item, "set_snap_grid"):
+                    item.set_snap_grid(self._snap_grid, self._row_pitch)
             self._skip_compaction = True          # skip the set_terminal_nets compaction
 
         self.refresh_hierarchy_group_geometry()
 
         # Practically unlimited canvas.
         self.scene.setSceneRect(-1000000, -1000000, 2000000, 2000000)
+
+        # Force viewport repaint so custom colors and new positions are visible immediately.
+        self.viewport().update()
 
     def get_updated_positions(self):
         """Return a dict mapping device id -> (x, y) in original coordinates."""
@@ -1536,9 +1558,16 @@ class SymbolicEditor(QGraphicsView):
         return row
 
     def _compact_rows_abutted(self, row_keys=None):
-        """Pack row devices and collapse occupied rows onto touching tracks."""
+        """Pack row devices and collapse occupied rows onto touching tracks.
+
+        Only DeviceItem (transistors) are compacted; capacitors and resistors
+        keep their stored positions so their larger footprint doesn't dominate
+        the row pitch used for transistor placement.
+        """
         rows = {}
         for item in self.device_items.values():
+            if not isinstance(item, DeviceItem):
+                continue  # skip caps / resistors
             row_y = self._snap_row(item.pos().y())
             key = (getattr(item, "device_type", ""), row_y)
             rows.setdefault(key, []).append(item)

@@ -37,6 +37,7 @@ import ai_agent.core.passive_placer       as _pp
 import ai_agent.core.circuit_detection    as _cd
 import ai_agent.core.group_placer         as _gp
 import ai_agent.core.circuit_orchestrator as _co
+import ai_agent.core.layout_ops           as _lo
 
 from ai_agent.tools.cmd_parser import apply_cmds_to_nodes
 from ai_agent.placement.quality_metrics import score_placement, _transistor_key
@@ -460,6 +461,76 @@ def _route(tool_name: str, args: dict, nodes: list, pdk: dict,
             changed = False,
             nodes   = list(nodes),
             metrics = {"serialized": layout_json},
+        )
+
+    # ── GUI-parity layout operations ─────────────────────────────────────────
+
+    if tool_name == "delete_device":
+        return _lo.delete_device(nodes, args["device_id"])
+
+    if tool_name == "align_devices":
+        return _lo.align_devices(
+            nodes,
+            device_ids   = list(args.get("device_ids") or []),
+            axis         = str(args.get("axis", "x")),
+            mode         = str(args.get("mode", "mean")),
+            reference_id = args.get("reference_id"),
+        )
+
+    if tool_name == "abut_devices":
+        return _lo.abut_devices(nodes, args["device_a"], args["device_b"])
+
+    if tool_name == "merge_shared_source":
+        return _lo.merge_shared_source(nodes, args["device_a"], args["device_b"])
+
+    if tool_name == "merge_shared_drain":
+        return _lo.merge_shared_drain(nodes, args["device_a"], args["device_b"])
+
+    if tool_name == "lock_device":
+        return _lo.lock_device(nodes, args["device_id"])
+
+    if tool_name == "unlock_device":
+        return _lo.unlock_device(nodes, args["device_id"])
+
+    if tool_name == "set_device_color":
+        return _lo.set_device_color(nodes, args["device_id"], str(args.get("color", "#4a90d9")))
+
+    if tool_name == "reset_device_color":
+        return _lo.reset_device_color(nodes, args["device_id"])
+
+    if tool_name == "get_layout_bounds":
+        return _lo.get_layout_bounds(nodes)
+
+    if tool_name == "create_group":
+        device_ids = list(args.get("device_ids") or [])
+        if len(device_ids) < 2:
+            return LayoutToolResult(
+                success=False,
+                message="create_group: need at least 2 device Iids",
+                nodes=list(nodes),
+            )
+        name = str(args.get("name") or "")
+        # Return unchanged nodes but embed a GUI command the editor will execute
+        return LayoutToolResult(
+            success=True,
+            message=f"Group created: {name or 'auto-named'} ({len(device_ids)} devices)",
+            changed=True,   # triggers cmd_block emission in tool_runner
+            nodes=list(nodes),
+            metrics={
+                "gui_commands": [
+                    {"action": "create_group",
+                     "name":   name,
+                     "device_ids": device_ids}
+                ]
+            },
+        )
+
+    if tool_name == "match_devices":
+        return _lo.match_devices(
+            nodes,
+            device_ids      = list(args.get("device_ids") or []),
+            technique       = str(args.get("technique", "interdigitated")),
+            custom_pattern  = args.get("custom_pattern"),
         )
 
     # ── Mid-level: circuit-pattern detection ─────────────────────────────────

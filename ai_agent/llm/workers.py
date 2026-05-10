@@ -135,9 +135,22 @@ class LLMWorker(QObject):
     Adapter -> CodeGen).
     """
 
-    response_ready = Signal(str)
-    command_ready  = Signal(dict)
-    error_occurred = Signal(str)
+    # ── Legacy signals (kept for backward compat: CMD mode + simple paths) ──
+    response_ready  = Signal(str)
+    command_ready   = Signal(dict)
+    error_occurred  = Signal(str)
+    # Per-tool one-line progress (state ∈ {"starting","success","failed"})
+    tool_progress   = Signal(str, str, str)
+
+    # ── New streaming signals (FC mode + LangGraph orchestrator path) ──
+    response_started = Signal(str)          # message_id
+    response_delta   = Signal(str, str)     # message_id, text_delta
+    response_done    = Signal(str, str)     # message_id, final_text
+    stage_started    = Signal(str, str)     # stage_key, display_title
+    stage_delta      = Signal(str, str)     # stage_key, short_update
+    stage_done       = Signal(str, str)     # stage_key, summary
+    tool_started     = Signal(str, dict)    # tool_name, args
+    tool_done        = Signal(str, dict)    # tool_name, result_dict
 
     def __init__(self):
         super().__init__()
@@ -209,31 +222,62 @@ class LLMWorker(QObject):
     @Slot(str, list, str)
     def process_request_with_tools(self, full_prompt: str, chat_messages: list,
                                    selected_model: str):
-        """Tool-enabled chat path: bind TOOL_REGISTRY, dispatch any tool_calls,
-        emit a summary + the updated layout via the existing signals.
+        """Tool-enabled chat path with token streaming.
 
-        - For providers in PROVIDERS_WITHOUT_TOOLS (Alibaba/Qwen) bind_tools is
-          skipped and the LLM falls through to the [CMD]-block flow handled
-          by `process_request` upstream.
-        - When FC IS used, the dispatched tool calls are emitted via
-          `command_ready` so the editor can refresh its state, and a textual
-          summary is sent via `response_ready`.
+        Streaming events emitted (in order):
+            response_started(mid)
+            response_delta(mid, chunk)*       — text token deltas
+            tool_started(name, args)
+            tool_done(name, result_dict)      — once per tool call
+            response_done(mid, final_text)
+            command_ready(replace_layout)     — once if any tool changed nodes
+
+        Falls back silently to one-shot via stream_llm's invoke() path if the
+        provider doesn't support .stream().  Alibaba/Qwen still skips
+        bind_tools (handled inside run_llm_with_tools).
         """
         try:
             from ai_agent.llm.tool_runner import run_llm_with_tools
+
+            message_id = str(uuid.uuid4())
+
             ctx = getattr(self, "_layout_context", None) or {}
             nodes = ctx.get("nodes", []) if isinstance(ctx, dict) else []
             terminal_nets = ctx.get("terminal_nets", {}) if isinstance(ctx, dict) else {}
+
+            # Legacy progress callback (kept for non-streaming consumers)
+            def _progress(name, success, message):
+                if success is None:
+                    self.tool_progress.emit(str(name), "starting", "")
+                elif success:
+                    self.tool_progress.emit(str(name), "success", str(message or ""))
+                else:
+                    self.tool_progress.emit(str(name), "failed", str(message or ""))
+
+            # Open the streaming bubble before any deltas land
+            self.response_started.emit(message_id)
+
             result = run_llm_with_tools(
                 chat_messages, full_prompt, selected_model,
                 task_weight="light",
                 nodes=nodes,
                 terminal_nets=terminal_nets,
+                progress_cb=_progress,
+                worker=self,
+                message_id=message_id,
             )
-            # Always emit the text — chat_panel will run [CMD]-block extraction
-            # on it (the fallback path) when fc_used is False.
-            self.response_ready.emit(result.get("text") or "(no response)")
-            # When FC was used, propagate the per-call cmd dicts.
+
+            final_text = result.get("text") or "(no response)"
+
+            # response_done is emitted by stream_llm itself; emit a safety
+            # final-text done in case run_llm_with_tools used the no-stream path
+            # (defensive — receivers are idempotent against repeats).
+            try:
+                self.response_done.emit(message_id, final_text)
+            except Exception:
+                pass
+
+            # GUI command propagation — exactly once per cmd_block
             if result.get("fc_used"):
                 for cmd in result.get("cmd_blocks", []):
                     self.command_ready.emit(cmd)
@@ -380,6 +424,53 @@ class OrchestratorWorker(LLMWorker):
             vprint(f"[ORCH] Pipeline error:\n{traceback.format_exc()}", flush=True)
             self.error_occurred.emit(f"Orchestrator error: {exc}")
 
+    # ── Mapping: LangGraph node key → user-facing stage title ──────────
+    NODE_DISPLAY = {
+        "router":                            "Classifying request",
+        "topology_analyst":                  "Topology Analyst",
+        "node_topology_analyst":             "Topology Analyst",
+        "strategy_selector":                 "Strategy Selector",
+        "node_strategy_selector":            "Strategy Selector",
+        "placement_specialist":              "Placement Specialist",
+        "node_placement_specialist":         "Placement Specialist",
+        "node_placement_specialist_chatbot": "Placement Specialist",
+        "node_finger_expansion":             "Finger Expansion",
+        "node_symmetry_enforcer":            "Symmetry Enforcer",
+        "routing_previewer":                 "Routing Previewer",
+        "node_routing_previewer":            "Routing Previewer",
+        "drc_critic":                        "DRC Critic",
+        "node_drc_critic":                   "DRC Critic",
+        "human_viewer":                      "Visual Review",
+        "node_human_viewer":                 "Visual Review",
+        "general":                           "General Chat",
+    }
+
+    @staticmethod
+    def _short_summary(value, limit: int = 120) -> str:
+        """Build a one-line summary for the stage_delta from a node's output."""
+        if not isinstance(value, dict):
+            return ""
+        # Order matters: pick the first populated field
+        for key in ("Analysis_result", "strategy_result", "placement_text",
+                    "general_response"):
+            v = value.get(key)
+            if isinstance(v, str) and v.strip():
+                s = v.strip().replace("\n", " ")
+                return s[:limit] + ("…" if len(s) > limit else "")
+        rr = value.get("routing_result")
+        if isinstance(rr, dict):
+            log_text = rr.get("log_text") or rr.get("summary") or ""
+            if log_text:
+                s = str(log_text).strip().replace("\n", " ")
+                return s[:limit] + ("…" if len(s) > limit else "")
+        flags = value.get("drc_flags")
+        if isinstance(flags, list) and flags:
+            return f"{len(flags)} DRC violation(s)"
+        pending = value.get("pending_cmds")
+        if isinstance(pending, list) and pending:
+            return f"{len(pending)} command(s) pending"
+        return ""
+
     def _stream_graph(self, input_data):
         try:
             from ai_agent.graph.builder import app as initial_graph_app
@@ -391,12 +482,23 @@ class OrchestratorWorker(LLMWorker):
             vprint(f"\n[GRAPH] ▶ Streaming LangGraph...", flush=True)
             interrupted = False
             event_count = 0
+            active_stage_key = None   # last stage_started we emitted
+
             for event in langgraph_app.stream(input_data, self.thread_config, stream_mode="updates"):
                 event_count += 1
                 event_keys = list(event.keys())
                 vprint(f"[GRAPH]   Event #{event_count}: {event_keys}", flush=True)
 
+                # ── Interrupt handling — preserved exactly ───────────────────
                 if "__interrupt__" in event:
+                    # close any active stage cleanly first
+                    if active_stage_key is not None:
+                        try:
+                            self.stage_done.emit(active_stage_key, "")
+                        except Exception:
+                            pass
+                        active_stage_key = None
+
                     interrupt_data = event["__interrupt__"][0].value
                     itype = interrupt_data.get('type', '?')
                     vprint(f"[GRAPH]   ⏸ INTERRUPT: type={itype}", flush=True)
@@ -434,7 +536,54 @@ class OrchestratorWorker(LLMWorker):
                     interrupted = True
                     return
 
+                # ── Per-node stage events ───────────────────────────────────
+                for node_key, node_value in event.items():
+                    if node_key == "__interrupt__":
+                        continue
+                    title = self.NODE_DISPLAY.get(node_key, node_key)
+
+                    # Close any previously-active stage
+                    if active_stage_key is not None and active_stage_key != node_key:
+                        try:
+                            self.stage_done.emit(active_stage_key, "")
+                        except Exception:
+                            pass
+
+                    # Open the new stage
+                    try:
+                        self.stage_started.emit(node_key, title)
+                    except Exception:
+                        pass
+                    active_stage_key = node_key
+
+                    # Emit a delta if we can find a meaningful field
+                    summary = self._short_summary(node_value)
+                    if summary:
+                        try:
+                            self.stage_delta.emit(node_key, summary)
+                        except Exception:
+                            pass
+
+                    # Mark stage done immediately — LangGraph emits each node's
+                    # output as a single update, so the node has already finished.
+                    try:
+                        self.stage_done.emit(node_key, summary)
+                    except Exception:
+                        pass
+                    active_stage_key = None
+
+                    # Emit stage_completed for legacy listeners
+                    try:
+                        self.stage_completed.emit(event_count, node_key)
+                    except Exception:
+                        pass
+
             vprint(f"[GRAPH] ✓ Stream complete ({event_count} events)", flush=True)
+            if active_stage_key is not None:
+                try:
+                    self.stage_done.emit(active_stage_key, "")
+                except Exception:
+                    pass
             if not interrupted:
                 self._finalize_pipeline()
 

@@ -162,7 +162,9 @@ class ChatPanel(QWidget):
         # Shared response signals back to GUI
         self._llm_worker.response_ready.connect(self._on_llm_response)
         self._llm_worker.error_occurred.connect(self._on_llm_error)
-        
+        # FC streaming path — response_done replaces response_ready for that path
+        self._llm_worker.response_done.connect(self._on_response_done)
+
         # Human-in-the-loop pause signal
         self._llm_worker.topology_ready_for_review.connect(self._on_topology_review)
         self._llm_worker.visual_viewer_signal.connect(self._on_visual_viewer_signal)  # reuse same handler for viewer interrupts
@@ -964,6 +966,46 @@ class ChatPanel(QWidget):
         clean = display_text.strip()
         self._chat_history.append({"role": "assistant", "content": clean})
         self._append_bubble("ai", clean)
+
+    @Slot(str, str)
+    def _on_response_done(self, message_id: str, final_text: str):
+        """FC streaming path: workers emit response_done instead of response_ready.
+
+        Deduplication: stream_llm and process_request_with_tools both emit
+        response_done for the same message_id — only the first is processed.
+
+        Deferred: command_ready (which carries the replace_layout result) is
+        already in the Qt queued-signal queue when this fires. QTimer.singleShot(0)
+        runs AFTER that queued signal, so _on_response_done_deferred can check
+        whether FC tools actually ran before deciding what to show.
+        """
+        if not hasattr(self, '_handled_response_ids'):
+            self._handled_response_ids = set()
+        if message_id in self._handled_response_ids:
+            return
+        self._handled_response_ids.add(message_id)
+        if len(self._handled_response_ids) > 20:
+            self._handled_response_ids.clear()
+        self._pending_response_text = (final_text or "").strip()
+        self._fc_command_received   = False
+        QTimer.singleShot(0, self._on_response_done_deferred)
+
+    def _on_response_done_deferred(self):
+        """Runs after any pending command_ready signal for this turn has fired."""
+        if self._fc_command_received:
+            # FC tools already showed feedback and updated history via the
+            # replace_layout / create_group handlers — just kill the spinner.
+            self._stop_thinking()
+            self._remove_last_message()
+        else:
+            # No FC command arrived: CMD fallback (Alibaba) or pure chat response.
+            text = getattr(self, '_pending_response_text', '')
+            if text and text != "(no response)":
+                self._on_llm_response(text)
+            else:
+                self._stop_thinking()
+                self._remove_last_message()
+        self._pending_response_text = ''
 
     def _parse_commands(self, text):
         """Extract [CMD]...[/CMD] blocks, return (display_text, list_of_cmds)."""
