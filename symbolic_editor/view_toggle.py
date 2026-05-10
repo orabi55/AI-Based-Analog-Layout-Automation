@@ -21,7 +21,7 @@ class SegmentedToggle(QWidget):
 
     def __init__(self, parent=None, accent="#5aa9e6", variant="panel"):
         super().__init__(parent)
-        self._accent = accent
+        self._accent = "#00e5ff" if accent == "#5aa9e6" else accent
         self._variant = variant
         self._current_mode = None
         self._buttons = {}
@@ -32,15 +32,15 @@ class SegmentedToggle(QWidget):
             self.setStyleSheet(
                 f"""
                 SegmentedToggle {{
-                    background-color: #1a1d23;
-                    border: 1px solid #303642;
+                    background-color: #070d10;
+                    border: 1px solid #19323a;
                     border-radius: 6px;
                 }}
                 QPushButton {{
                     background-color: transparent;
                     border: none;
                     border-radius: 4px;
-                    color: #9aa4b2;
+                    color: #9daab0;
                     padding: 3px 11px;
                     font-family: 'Segoe UI';
                     font-size: 8.5pt;
@@ -48,12 +48,12 @@ class SegmentedToggle(QWidget):
                     min-height: 18px;
                 }}
                 QPushButton:hover {{
-                    background-color: #252a33;
-                    color: #e3e8f0;
+                    background-color: #101c21;
+                    color: #e7f8fb;
                 }}
                 QPushButton:checked {{
-                    background-color: #2b3b4d;
-                    color: #ffffff;
+                    background-color: #092531;
+                    color: #00e5ff;
                     border: 1px solid {self._accent};
                 }}
                 """
@@ -63,40 +63,41 @@ class SegmentedToggle(QWidget):
             self.setStyleSheet(
                 f"""
                 SegmentedToggle {{
-                    background-color: #1a1d23;
-                    border: 1px solid #303642;
-                    border-radius: 10px;
+                    background-color: #05090b;
+                    border: 1px solid #1c3036;
+                    border-radius: 6px;
                 }}
                 QPushButton {{
                     background-color: transparent;
                     border: none;
-                    border-radius: 7px;
-                    color: #9aa4b2;
-                    padding: 5px 14px;
+                    border-radius: 4px;
+                    color: #9daab0;
+                    padding: 3px 22px;
                     font-family: 'Segoe UI';
-                    font-size: 9pt;
+                    font-size: 8.5pt;
                     font-weight: 600;
-                    min-height: 24px;
+                    min-height: 18px;
                 }}
                 QPushButton:hover {{
-                    background-color: #252a33;
-                    color: #e3e8f0;
+                    background-color: #101c21;
+                    color: #e7f8fb;
                 }}
                 QPushButton:checked {{
-                    background-color: {self._accent};
-                    color: #ffffff;
+                    background-color: #082331;
+                    color: #00e5ff;
+                    border: 1px solid {self._accent};
                 }}
                 """
             )
-            self.setFixedHeight(34)
+            self.setFixedHeight(30)
 
         layout = QHBoxLayout(self)
         if self._variant == "toolbar":
             layout.setContentsMargins(2, 2, 2, 2)
             layout.setSpacing(2)
         else:
-            layout.setContentsMargins(3, 3, 3, 3)
-            layout.setSpacing(3)
+            layout.setContentsMargins(2, 2, 2, 2)
+            layout.setSpacing(2)
 
         for mode, label in self._MODES:
             button = QPushButton(label)

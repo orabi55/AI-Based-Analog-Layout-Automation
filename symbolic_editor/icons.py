@@ -12,8 +12,8 @@ from PySide6.QtCore import Qt, QRectF, QPointF
 _CACHE: dict[str, QIcon] = {}
 
 # Default palette
-_FG = QColor("#e0e8f0")       # light foreground for dark toolbar
-_ACCENT = QColor("#4a90d9")   # blue accent
+_FG = QColor("#eef6f7")       # light foreground for dark toolbar
+_ACCENT = QColor("#00e5ff")   # cyan accent
 _WARN = QColor("#e74c3c")     # red / destructive
 _GREEN = QColor("#2ecc71")    # success green
 _PINK = QColor("#d14d94")     # pink for dummies
@@ -402,6 +402,63 @@ def icon_panel_toggle() -> QIcon:
     return icon
 
 
+def icon_filter() -> QIcon:
+    if "filter" in _CACHE:
+        return _CACHE["filter"]
+    pm, p = _make_pixmap()
+    p.setPen(QPen(_FG, 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    path = QPainterPath()
+    path.moveTo(7, 8)
+    path.lineTo(25, 8)
+    path.lineTo(18, 16)
+    path.lineTo(18, 24)
+    path.lineTo(14, 26)
+    path.lineTo(14, 16)
+    path.closeSubpath()
+    p.drawPath(path)
+    p.setPen(QPen(_ACCENT, 1.6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+    p.drawLine(QPointF(11, 8), QPointF(21, 8))
+    icon = _icon_from_painter(pm, p)
+    _CACHE["filter"] = icon
+    return icon
+
+
+def icon_list_view() -> QIcon:
+    if "list_view" in _CACHE:
+        return _CACHE["list_view"]
+    pm, p = _make_pixmap()
+    p.setPen(QPen(_FG, 1.7, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+    for y in (10, 16, 22):
+        p.drawLine(QPointF(13, y), QPointF(25, y))
+        p.setBrush(QBrush(_ACCENT))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.drawEllipse(QRectF(7, y - 2, 4, 4))
+        p.setPen(QPen(_FG, 1.7, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+    icon = _icon_from_painter(pm, p)
+    _CACHE["list_view"] = icon
+    return icon
+
+
+def icon_empty_layers() -> QIcon:
+    if "empty_layers" in _CACHE:
+        return _CACHE["empty_layers"]
+    pm, p = _make_pixmap()
+    p.setPen(QPen(_ACCENT, 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    p.setBrush(QBrush(QColor(_ACCENT.red(), _ACCENT.green(), _ACCENT.blue(), 18)))
+    for dy in (5, 11, 17):
+        path = QPainterPath()
+        path.moveTo(16, dy)
+        path.lineTo(25, dy + 5)
+        path.lineTo(16, dy + 10)
+        path.lineTo(7, dy + 5)
+        path.closeSubpath()
+        p.drawPath(path)
+    icon = _icon_from_painter(pm, p)
+    _CACHE["empty_layers"] = icon
+    return icon
+
+
 def icon_open_file() -> QIcon:
     if "open_file" in _CACHE:
         return _CACHE["open_file"]
@@ -530,6 +587,23 @@ def icon_bell() -> QIcon:
     p.drawEllipse(QRectF(14.4, 23, 3.2, 3.2))
     icon = _icon_from_painter(pm, p)
     _CACHE["bell"] = icon
+    return icon
+
+
+def icon_help() -> QIcon:
+    if "help" in _CACHE:
+        return _CACHE["help"]
+    pm, p = _make_pixmap()
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.setPen(QPen(_FG, 1.9, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    p.drawEllipse(QRectF(7, 7, 18, 18))
+    p.setFont(QFont("Segoe UI", 14, QFont.Weight.DemiBold))
+    p.setPen(QPen(_FG, 1.4))
+    p.drawText(QRectF(7, 6, 18, 19), Qt.AlignmentFlag.AlignCenter, "?")
+    p.setPen(QPen(_ACCENT, 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+    p.drawPoint(QPointF(16, 23))
+    icon = _icon_from_painter(pm, p)
+    _CACHE["help"] = icon
     return icon
 
 

@@ -220,6 +220,10 @@ class SymbolicEditor(QGraphicsView):
         self._grid_color_major = QColor("#2d3f54")
         self._snap_grid = self._grid_size
         self._row_pitch = self._grid_size * 3 
+        self._canvas_background_color = QColor("#05090b")
+        self._canvas_panel_color = QColor("#071014")
+        self._canvas_dot_color = QColor(0, 229, 255, 58)
+        self._canvas_dot_spacing_px = 18.0
 
         # Dummy placement mode
         self._dummy_mode = False
@@ -276,7 +280,7 @@ class SymbolicEditor(QGraphicsView):
         self.setStyleSheet("""
             QGraphicsView {
                 border: none;
-                background-color: #0e1219;
+                background-color: #05090b;
             }
         """)
 
@@ -2563,13 +2567,34 @@ class SymbolicEditor(QGraphicsView):
     # -------------------------------------------------
     # Background Grid
     # -------------------------------------------------
+    def _draw_canvas_dots(self, painter: QPainter, rect):
+        scale = max(abs(self.transform().m11()), 0.01)
+        spacing = max(4.0, self._canvas_dot_spacing_px / scale)
+        left = math.floor(rect.left() / spacing) * spacing
+        top = math.floor(rect.top() / spacing) * spacing
+        right = rect.right()
+        bottom = rect.bottom()
+
+        painter.save()
+        painter.setPen(QPen(self._canvas_dot_color, 0))
+        y = top
+        while y <= bottom:
+            x = left
+            while x <= right:
+                painter.drawPoint(QPointF(x, y))
+                x += spacing
+            y += spacing
+        painter.restore()
+
     def drawBackground(self, painter: QPainter, rect):
-        """Draw a compact cached canvas panel around the active layout."""
+        """Draw the dark dotted canvas and active layout panel."""
         super().drawBackground(painter, rect)
+        painter.fillRect(rect, self._canvas_background_color)
 
         has_devices = bool(self.device_items)
         has_virtual = self._virtual_row_count > 0 or self._virtual_col_count > 0
         if not has_devices and not has_virtual:
+            self._draw_canvas_dots(painter, rect)
             return
 
         if has_devices:
@@ -2610,17 +2635,24 @@ class SymbolicEditor(QGraphicsView):
         panel_y = global_top - pad_y
         panel_h = (global_bottom - global_top) + (pad_y * 2)
 
-        if (
+        panel_visible = not (
             panel_x > rect.right()
             or panel_x + panel_w < rect.left()
             or panel_y > rect.bottom()
             or panel_y + panel_h < rect.top()
-        ):
-            return
+        )
 
-        painter.setPen(QPen(QColor("#2d3548"), 1.0))
-        painter.setBrush(QBrush(QColor("#151c28")))
-        painter.drawRoundedRect(panel_x, panel_y, panel_w, panel_h, 4.0, 4.0)
+        if panel_visible:
+            painter.setPen(QPen(self._canvas_panel_color, 0))
+            painter.setBrush(QBrush(self._canvas_panel_color))
+            painter.drawRoundedRect(panel_x, panel_y, panel_w, panel_h, 4.0, 4.0)
+
+        self._draw_canvas_dots(painter, rect)
+
+        if panel_visible:
+            painter.setPen(QPen(QColor("#1b3038"), 1.0))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRoundedRect(panel_x, panel_y, panel_w, panel_h, 4.0, 4.0)
 
     # -------------------------------------------------
     # Zoom with Mouse Wheel

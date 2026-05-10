@@ -244,16 +244,15 @@ class ChatPanel(QWidget):
         header = QFrame()
         header.setFixedHeight(44)
         header.setStyleSheet(
-            "background: qlineargradient(x1:0,y1:0,x2:1,y2:0,"
-            "stop:0 #1e2a3a, stop:1 #2d3f54);"
-            "border-bottom: 1px solid #4a90d9;"
+            "background-color: #070c0f;"
+            "border-bottom: 1px solid #142127;"
         )
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(12, 0, 8, 0)
 
         title = QLabel("🤖 AI Assistant")
         title.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
-        title.setStyleSheet("color: #e0e8f0;")
+        title.setStyleSheet("color: #e4ecef;")
         header_layout.addWidget(title)
 
         header_layout.addStretch()
@@ -266,9 +265,9 @@ class ChatPanel(QWidget):
         self._model_combo.setToolTip("Select AI model for chat")
         self._model_combo.setStyleSheet("""
             QComboBox {
-                background-color: #1a2536;
-                color: #b0c0d0;
-                border: 1px solid #2d3f54;
+                background-color: #071014;
+                color: #bfd0d6;
+                border: 1px solid #1b3038;
                 border-radius: 4px;
                 padding: 2px 8px;
                 font-size: 10px;
@@ -276,7 +275,7 @@ class ChatPanel(QWidget):
                 min-width: 100px;
             }
             QComboBox:hover {
-                border-color: #4a90d9;
+                border-color: #00e5ff;
             }
             QComboBox::drop-down {
                 border: none;
@@ -286,15 +285,15 @@ class ChatPanel(QWidget):
                 image: none;
                 border-left: 4px solid transparent;
                 border-right: 4px solid transparent;
-                border-top: 5px solid #6080a0;
+                border-top: 5px solid #00e5ff;
                 margin-right: 5px;
             }
             QComboBox QAbstractItemView {
-                background-color: #1a2536;
-                color: #b0c0d0;
-                border: 1px solid #2d3f54;
-                selection-background-color: #2a3a52;
-                selection-color: #e0e8f0;
+                background-color: #071014;
+                color: #bfd0d6;
+                border: 1px solid #1b3038;
+                selection-background-color: #0d2a35;
+                selection-color: #00e5ff;
             }
         """)
         self._model_combo.currentTextChanged.connect(self._on_model_changed)
@@ -366,17 +365,17 @@ class ChatPanel(QWidget):
                 background: transparent;
                 border: none;
                 border-radius: 4px;
-                color: #9aa4b2;
+                color: #9daab0;
                 font-family: 'Segoe UI';
                 font-size: 14px;
                 font-weight: 700;
             }
             QPushButton:hover {
-                background-color: rgba(255,255,255,0.12);
-                color: #ffffff;
+                background-color: #101b20;
+                color: #00e5ff;
             }
             QPushButton:pressed {
-                background-color: rgba(255,255,255,0.20);
+                background-color: #092531;
             }
             """
         )
@@ -398,12 +397,12 @@ class ChatPanel(QWidget):
         self.chat_display.setStyleSheet(
             """
             QTextEdit {
-                background-color: #111621;
+                background-color: #070c0f;
                 border: none;
                 padding: 10px;
                 font-family: 'Segoe UI', sans-serif;
                 font-size: 13px;
-                color: #d0d8e0;
+                color: #d7e4e8;
             }
             QScrollBar:vertical {
                 width: 6px;
@@ -411,12 +410,12 @@ class ChatPanel(QWidget):
                 border-radius: 3px;
             }
             QScrollBar::handle:vertical {
-                background: #2d3548;
+                background: #1b3038;
                 border-radius: 3px;
                 min-height: 30px;
             }
             QScrollBar::handle:vertical:hover {
-                background: #3d5066;
+                background: #00a9bc;
             }
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
                 height: 0px;
@@ -428,7 +427,7 @@ class ChatPanel(QWidget):
         # Input area
         input_frame = QFrame()
         input_frame.setStyleSheet(
-            "background-color: #1a1f2b; border-top: 1px solid #2d3548;"
+            "background-color: #070c0f; border-top: 1px solid #142127;"
         )
         input_layout = QHBoxLayout(input_frame)
         input_layout.setContentsMargins(10, 10, 10, 10)
@@ -438,16 +437,16 @@ class ChatPanel(QWidget):
         self.input_field.setStyleSheet(
             """
             QTextEdit {
-                border: 1px solid #2d3548;
-                border-radius: 12px;
+                border: 1px solid #1b3038;
+                border-radius: 6px;
                 padding: 8px 14px;
                 font-size: 13px;
                 font-family: 'Segoe UI';
-                background: #232a38;
-                color: #e0e8f0;
+                background: #05090b;
+                color: #e7f8fb;
             }
             QTextEdit:focus {
-                border-color: #4a90d9;
+                border-color: #00e5ff;
             }
             """
         )
@@ -459,17 +458,17 @@ class ChatPanel(QWidget):
         send_btn.setStyleSheet(
             """
             QPushButton {
-                background-color: #4a90d9;
-                color: white;
+                background-color: #073d5a;
+                color: #e7f8fb;
                 border: none;
-                border-radius: 19px;
+                border-radius: 6px;
                 font-size: 17px;
             }
             QPushButton:hover {
-                background-color: #5a9fe8;
+                background-color: #005f7a;
             }
             QPushButton:pressed {
-                background-color: #357abd;
+                background-color: #00a9bc;
             }
             """
         )
@@ -499,9 +498,9 @@ class ChatPanel(QWidget):
                 for line in inner.split("\n"):
                     if ":" in line:
                         k, v = line.split(":", 1)
-                        rows_html += f"<tr><td style='color:#7cb7ff;padding:2px 8px;font-weight:bold;'>{k.strip()}</td>"
-                        rows_html += f"<td style='color:#e0e8f0;padding:2px 8px;'>{v.strip()}</td></tr>"
-                table_html = f"<table style='margin:10px 0;border-collapse:collapse;width:100%;background:#1a2030;border-radius:8px;border:1px solid #2d3548;'>{rows_html}</table>"
+                        rows_html += f"<tr><td style='color:#00e5ff;padding:2px 8px;font-weight:bold;'>{k.strip()}</td>"
+                        rows_html += f"<td style='color:#e7f8fb;padding:2px 8px;'>{v.strip()}</td></tr>"
+                table_html = f"<table style='margin:10px 0;border-collapse:collapse;width:100%;background:#071014;border-radius:8px;border:1px solid #1b3038;'>{rows_html}</table>"
                 text = text.replace(match.group(0), table_html)
 
         # Detect MATCHING & SYMMETRY QUALITY BENCHMARK block
@@ -528,33 +527,33 @@ class ChatPanel(QWidget):
                         total = len(prog_chars)
                         pct = (filled / total * 100) if total > 0 else 0
                         bar_color = "#4caf50" if pct > 80 else "#ff9800" if pct > 50 else "#f44336"
-                        bar_html = f"<div style='width:60px;height:6px;background:#2d3548;border-radius:3px;margin-top:4px;'><div style='width:{pct}%;height:100%;background:{bar_color};border-radius:3px;'></div></div>"
+                        bar_html = f"<div style='width:60px;height:6px;background:#1b3038;border-radius:3px;margin-top:4px;'><div style='width:{pct}%;height:100%;background:{bar_color};border-radius:3px;'></div></div>"
                         
-                        rows_html += f"<tr style='border-bottom:1px solid #232a38;'>"
-                        rows_html += f"<td style='padding:6px 8px;color:#d0d8e0;'>{metric}</td>"
-                        rows_html += f"<td style='padding:6px 8px;color:#7cb7ff;font-weight:bold;'>{score}</td>"
+                        rows_html += f"<tr style='border-bottom:1px solid #142127;'>"
+                        rows_html += f"<td style='padding:6px 8px;color:#d7e4e8;'>{metric}</td>"
+                        rows_html += f"<td style='padding:6px 8px;color:#00e5ff;font-weight:bold;'>{score}</td>"
                         rows_html += f"<td style='padding:6px 8px;'>{bar_html}</td>"
                         rows_html += f"<td style='padding:6px 8px;font-weight:bold;color:#fff;'>{grade}</td>"
                         rows_html += "</tr>"
                 
-                table_html = f"<div style='margin-top:15px;color:#7cb7ff;font-weight:bold;font-size:11px;'>MATCHING & SYMMETRY QUALITY</div>"
-                table_html += f"<table style='margin:5px 0;border-collapse:collapse;width:100%;background:#1a2030;border-radius:8px;border:1px solid #2d3548;'>{rows_html}</table>"
+                table_html = f"<div style='margin-top:15px;color:#00e5ff;font-weight:bold;font-size:11px;'>MATCHING & SYMMETRY QUALITY</div>"
+                table_html += f"<table style='margin:5px 0;border-collapse:collapse;width:100%;background:#071014;border-radius:8px;border:1px solid #1b3038;'>{rows_html}</table>"
                 text = text.replace(match.group(0), table_html)
 
         # Code blocks (fallthrough for other terminal-style blocks)
         text = re.sub(
             r'```(\w*)\n(.*?)```',
-            r'<pre style="background:#0d1117;color:#8b9eb0;padding:10px 12px;'
+            r'<pre style="background:#05090b;color:#8c9aa0;padding:10px 12px;'
             r'border-radius:8px;font-size:11px;font-family:Consolas,monospace;'
-            r'border:1px solid #2d3548;overflow-x:auto;margin:6px 0;">\2</pre>',
+            r'border:1px solid #1b3038;overflow-x:auto;margin:6px 0;">\2</pre>',
             text, flags=re.DOTALL,
         )
         # Inline code
         text = re.sub(
             r'`([^`]+)`',
-            r'<code style="background:#1e2a3a;color:#7cb7ff;padding:2px 6px;'
+            r'<code style="background:#071014;color:#00e5ff;padding:2px 6px;'
             r'border-radius:4px;font-size:12px;font-family:Consolas,monospace;'
-            r'border:1px solid #2d3f54;">\1</code>',
+            r'border:1px solid #1b3038;">\1</code>',
             text,
         )
         # Detect Routing Pre-Viewer block
@@ -569,8 +568,8 @@ class ChatPanel(QWidget):
             if match:
                 inner = match.group(1).strip()
                 lines = inner.split("\n")
-                html = "<div style='margin-top:15px;padding:12px;background:#1a1f2b;border-radius:10px;border:1px solid #30363d;font-family:Segoe UI, sans-serif;'>"
-                html += "<div style='color:#4FC3F7;font-weight:bold;font-size:12px;margin-bottom:8px;display:flex;align-items:center;'><span>📡 ROUTING DENSITY REPORT</span></div>"
+                html = "<div style='margin-top:15px;padding:12px;background:#071014;border-radius:6px;border:1px solid #1b3038;font-family:Segoe UI, sans-serif;'>"
+                html += "<div style='color:#00e5ff;font-weight:bold;font-size:12px;margin-bottom:8px;display:flex;align-items:center;'><span>📡 ROUTING DENSITY REPORT</span></div>"
                 
                 in_worst = False
                 in_bands = False
@@ -580,18 +579,18 @@ class ChatPanel(QWidget):
                     if not line: continue
                     
                     if "nets analyzed" in line:
-                        html += f"<div style='color:#8b9eb0;font-size:11px;margin-bottom:8px;background:#0d1117;padding:4px 8px;border-radius:4px;'>{line}</div>"
+                        html += f"<div style='color:#8c9aa0;font-size:11px;margin-bottom:8px;background:#05090b;padding:4px 8px;border-radius:4px;'>{line}</div>"
                     elif "Worst nets" in line:
-                        html += "<div style='color:#e0e8f0;font-weight:bold;font-size:11px;margin-top:10px;margin-bottom:5px;border-bottom:1px solid #2d3548;'>Critical Nets (Worst HPWL)</div>"
+                        html += "<div style='color:#e7f8fb;font-weight:bold;font-size:11px;margin-top:10px;margin-bottom:5px;border-bottom:1px solid #1b3038;'>Critical Nets (Worst HPWL)</div>"
                         in_worst = True
                         in_bands = False
                     elif "Routing channels" in line:
-                        html += "<div style='color:#e0e8f0;font-weight:bold;font-size:11px;margin-top:10px;margin-bottom:5px;border-bottom:1px solid #2d3548;'>Inter-Row Routing Tracks</div>"
+                        html += "<div style='color:#e7f8fb;font-weight:bold;font-size:11px;margin-top:10px;margin-bottom:5px;border-bottom:1px solid #1b3038;'>Inter-Row Routing Tracks</div>"
                         in_worst = False
                         in_bands = True
                     elif "HPWL" in line or "crossings" in line or "cost" in line:
                         k, v = line.split(":", 1) if ":" in line else (line, "")
-                        html += f"<div style='font-size:12px;'><b>{k.strip()}:</b> <span style='color:#7cb7ff;'>{v.strip()}</span></div>"
+                        html += f"<div style='font-size:12px;'><b>{k.strip()}:</b> <span style='color:#00e5ff;'>{v.strip()}</span></div>"
                     elif in_worst and ("critical" in line or "signal" in line):
                         # Format net details: NetName Type HPWL (Details) [Type]
                         net_match = re.match(r"(\w+)\s+(\w+)\s+(hpwl=[\d\.]+µm)\s+(.*)", line)
@@ -604,7 +603,7 @@ class ChatPanel(QWidget):
                         else:
                             html += f"<div style='margin-left:4px;font-size:11px;color:#abb2bf;'>• {line}</div>"
                     elif in_bands and line.startswith("band"):
-                        html += f"<div style='margin-left:4px;font-family:Consolas, monospace;font-size:11px;color:#7cb7ff;'>{line}</div>"
+                        html += f"<div style='margin-left:4px;font-family:Consolas, monospace;font-size:11px;color:#00e5ff;'>{line}</div>"
                     else:
                         html += f"<div style='margin-top:2px;font-size:11px;color:#abb2bf;'>{line}</div>"
                 
@@ -614,8 +613,8 @@ class ChatPanel(QWidget):
         # Bold/Italic/Lists/Linebreaks
         text = re.sub(r'\*\*(.+?)\*\*', r'<b style="color:#e8f0ff;">\1</b>', text)
         text = re.sub(r'\*(.+?)\*', r'<i>\1</i>', text)
-        text = re.sub(r'(?m)^[\-\*]\s+(.+)$', r'<div style="margin:3px 0 3px 14px;padding-left:2px;"><span style="color:#4a90d9;">•</span> \1</div>', text)
-        text = re.sub(r'(?m)^(\d+)\.\s+(.+)$', r'<div style="margin:3px 0 3px 14px;"><span style="color:#4a90d9;">\1.</span> \2</div>', text)
+        text = re.sub(r'(?m)^[\-\*]\s+(.+)$', r'<div style="margin:3px 0 3px 14px;padding-left:2px;"><span style="color:#00e5ff;">•</span> \1</div>', text)
+        text = re.sub(r'(?m)^(\d+)\.\s+(.+)$', r'<div style="margin:3px 0 3px 14px;"><span style="color:#00e5ff;">\1.</span> \2</div>', text)
         text = text.replace("\n", "<br>")
         return text
 
@@ -625,19 +624,19 @@ class ChatPanel(QWidget):
     def _show_welcome(self):
         welcome = (
             "<div style='margin-bottom:6px;'>"
-            "<b style='color:#7cb7ff;font-size:14px;'>Welcome to the AI Layout Assistant</b>"
+            "<b style='color:#00e5ff;font-size:14px;'>Welcome to the AI Layout Assistant</b>"
             "</div>"
             "I can help you with your analog IC layout. Here are some things to try:<br><br>"
             "<div style='margin-left:8px;'>"
-            "<div style='margin:4px 0;'><span style='color:#4a90d9;'>◆</span> "
+            "<div style='margin:4px 0;'><span style='color:#00e5ff;'>◆</span> "
             "<b>Swap</b> — <i style='color:#8899aa;'>\"Swap MM28 with MM25\"</i></div>"
-            "<div style='margin:4px 0;'><span style='color:#4a90d9;'>◆</span> "
+            "<div style='margin:4px 0;'><span style='color:#00e5ff;'>◆</span> "
             "<b>Move</b> — <i style='color:#8899aa;'>\"Move MM3 to x=0.5 y=0.3\"</i></div>"
-            "<div style='margin:4px 0;'><span style='color:#4a90d9;'>◆</span> "
+            "<div style='margin:4px 0;'><span style='color:#00e5ff;'>◆</span> "
             "<b>Analyze</b> — <i style='color:#8899aa;'>\"How many NMOS devices?\"</i></div>"
-            "<div style='margin:4px 0;'><span style='color:#4a90d9;'>◆</span> "
+            "<div style='margin:4px 0;'><span style='color:#00e5ff;'>◆</span> "
             "<b>Optimize</b> — <i style='color:#8899aa;'>\"Suggest a better placement\"</i></div>"
-            "<div style='margin:4px 0;'><span style='color:#4a90d9;'>◆</span> "
+            "<div style='margin:4px 0;'><span style='color:#00e5ff;'>◆</span> "
             "<b>Add dummies</b> — <i style='color:#8899aa;'>\"Add 2 nmos dummies on left\"</i></div>"
             "</div><br>"
             "<div style='color:#5a6d82;font-size:11px;'>💡 I remember our conversation — ask follow-ups anytime.</div>"
@@ -692,8 +691,8 @@ class ChatPanel(QWidget):
             <div style="text-align:right; margin:6px 0;">
                 <div style="display:inline-block; max-width:82%; text-align:left;">
                     <div style="
-                        background-color: #4a90d9;
-                        color: white;
+                        background-color: #073d5a;
+                        color: #e7f8fb;
                         padding: 10px 16px;
                         border-radius: 16px 16px 4px 16px;
                         font-size: 13px;
@@ -709,9 +708,9 @@ class ChatPanel(QWidget):
             """
 
         avatar = "AI" if role == "assistant" else "Info"
-        bg = "#1a2230" if role == "assistant" else "#2a2518"
-        border_col = "#2d3548" if role == "assistant" else "#4a4020"
-        text_col = "#d0d8e0" if role == "assistant" else "#e8ddb8"
+        bg = "#071014" if role == "assistant" else "#2a2518"
+        border_col = "#1b3038" if role == "assistant" else "#4a4020"
+        text_col = "#d7e4e8" if role == "assistant" else "#e8ddb8"
         return f"""
         <div style="text-align:left; margin:6px 0;">
             <div style="display:inline-block; max-width:88%; text-align:left;">
@@ -742,7 +741,7 @@ class ChatPanel(QWidget):
         updates = [str(u) for u in meta.get("updates", []) if str(u).strip()]
         status = msg.get("status", "running")
         symbol = "&#10003;" if status == "done" else "&rarr;"
-        color = "#6fd09a" if status == "done" else "#7cb7ff"
+        color = "#6fd09a" if status == "done" else "#00e5ff"
         dots = "" if status == "done" else html.escape(str(meta.get("dots", "")))
         body = ""
         if updates:
@@ -752,11 +751,11 @@ class ChatPanel(QWidget):
         <div style="text-align:left; margin:5px 0;">
             <div style="display:inline-block; max-width:92%; text-align:left;">
                 <div style="
-                    background:#141d2b;
-                    color:#d0d8e0;
+                    background:#071014;
+                    color:#d7e4e8;
                     padding:8px 12px;
                     border-radius:8px;
-                    border:1px solid #2d3548;
+                    border:1px solid #1b3038;
                     font-size:12px;
                     line-height:1.35;
                 ">
@@ -771,7 +770,7 @@ class ChatPanel(QWidget):
     def _tool_message_html(self, msg):
         meta = msg.get("meta", {})
         status = msg.get("status", "running")
-        color = "#6fd09a" if status == "done" else "#7cb7ff"
+        color = "#6fd09a" if status == "done" else "#00e5ff"
         if status == "error":
             color = "#ff6b6b"
         title = html.escape(str(msg.get("content") or "Tool update"))
@@ -782,11 +781,11 @@ class ChatPanel(QWidget):
         <div style="text-align:left; margin:5px 0;">
             <div style="display:inline-block; max-width:92%; text-align:left;">
                 <div style="
-                    background:#121b26;
-                    color:#d0d8e0;
+                    background:#071014;
+                    color:#d7e4e8;
                     padding:8px 12px;
                     border-radius:8px;
-                    border:1px solid #273446;
+                    border:1px solid #1b3038;
                     font-size:12px;
                     line-height:1.35;
                 ">
@@ -822,8 +821,8 @@ class ChatPanel(QWidget):
             <div style="text-align:right; margin:6px 0;">
                 <div style="display:inline-block; max-width:82%; text-align:left;">
                     <div style="
-                        background-color: #4a90d9;
-                        color: white;
+                        background-color: #073d5a;
+                        color: #e7f8fb;
                         padding: 10px 16px;
                         border-radius: 16px 16px 4px 16px;
                         font-size: 13px;
@@ -839,9 +838,9 @@ class ChatPanel(QWidget):
             """
         else:
             avatar = "🤖" if role == "ai" else "ℹ️"
-            bg = "#1a2230" if role == "ai" else "#2a2518"
-            border_col = "#2d3548" if role == "ai" else "#4a4020"
-            text_col = "#d0d8e0" if role == "ai" else "#e8ddb8"
+            bg = "#071014" if role == "ai" else "#2a2518"
+            border_col = "#1b3038" if role == "ai" else "#4a4020"
+            text_col = "#d7e4e8" if role == "ai" else "#e8ddb8"
             html = f"""
             <div style="text-align:left; margin:6px 0;">
                 <div style="display:inline-block; max-width:88%; text-align:left;">

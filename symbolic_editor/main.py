@@ -48,6 +48,7 @@ from PySide6.QtWidgets import (
     QStatusBar,
     QTabBar,
     QToolButton,
+    QLineEdit,
     QSizePolicy,
 )
 from PySide6.QtCore import Qt, QSize
@@ -61,7 +62,6 @@ from PySide6.QtGui import (
 )
 
 from symbolic_editor.layout_tab import LayoutEditorTab
-from symbolic_editor.view_toggle import SegmentedToggle
 from symbolic_editor.icons import (
     icon_undo,
     icon_redo,
@@ -80,6 +80,7 @@ from symbolic_editor.icons import (
     icon_home,
     icon_new_tab,
     icon_bell,
+    icon_help,
     icon_circuit_tab,
     icon_abutment,
     icon_ai_placement,
@@ -88,7 +89,7 @@ from symbolic_editor.icons import (
     icon_schematic,
     icon_route,
 )
-from symbolic_editor.widgets.welcome_screen import WelcomeScreen
+from symbolic_editor.widgets.welcome_screen import WelcomeScreen, circuit_icon_for_name
 
 # =====================================================================
 #  MainWindow — Tab Manager
@@ -149,10 +150,12 @@ class MainWindow(QMainWindow):
         tab_bar.setDocumentMode(True)
         tab_bar.setMovable(True)
         tab_bar.setExpanding(False)
-        tab_bar.setUsesScrollButtons(True)
+        tab_bar.setUsesScrollButtons(False)
         tab_bar.setElideMode(Qt.TextElideMode.ElideRight)
+        tab_bar.setIconSize(QSize(18, 16))
         tab_bar.setMinimumWidth(1)
-        tab_bar.setMaximumWidth(560)
+        tab_bar.setMaximumWidth(660)
+        tab_bar.setFixedHeight(34)
         tab_bar.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         tab_bar.setStyleSheet(
             """
@@ -162,27 +165,34 @@ class MainWindow(QMainWindow):
                 qproperty-drawBase: 0;
             }
             QTabBar::tab {
-                background-color: #1b1d23;
-                color: #aab2bf;
-                border: 1px solid #2b3038;
+                background-color: #070c0f;
+                color: #a4b0b6;
+                border: 1px solid #18252b;
                 border-radius: 4px;
-                padding: 4px 24px 4px 10px;
+                padding: 5px 24px 5px 9px;
                 margin: 0 2px;
-                min-width: 118px;
-                max-width: 220px;
+                min-height: 22px;
+                min-width: 126px;
+                max-width: 226px;
                 font-family: 'Segoe UI';
                 font-size: 9pt;
                 font-weight: 600;
             }
             QTabBar::tab:selected {
-                background-color: #242832;
-                color: #f4f7fb;
-                border-color: #3b4654;
+                background-color: #0b1519;
+                color: #f4fbfd;
+                border-color: #00dff7;
             }
             QTabBar::tab:hover:!selected {
-                background-color: #222631;
-                color: #dce3ec;
-                border-color: #394251;
+                background-color: #101b20;
+                color: #dceef2;
+                border-color: #24424b;
+            }
+            QTabBar QToolButton {
+                width: 0px;
+                height: 0px;
+                border: none;
+                background: transparent;
             }
             """
         )
@@ -196,7 +206,7 @@ class MainWindow(QMainWindow):
             return
         self._syncing_document_tabs = True
         try:
-            tab_index = self._doc_tab_bar.insertTab(index, icon_circuit_tab(), title)
+            tab_index = self._doc_tab_bar.insertTab(index, self._tab_icon_for_title(title), title)
             self._doc_tab_bar.setTabToolTip(tab_index, title)
             self._install_document_tab_close_button(tab_index)
             self._update_document_tab_bar_width()
@@ -210,25 +220,25 @@ class MainWindow(QMainWindow):
         button.setText("x")
         button.setToolTip("Close tab")
         button.setCursor(Qt.CursorShape.PointingHandCursor)
-        button.setFixedSize(16, 16)
+        button.setFixedSize(14, 14)
         button.setStyleSheet(
             """
             QToolButton {
                 background: transparent;
-                color: #7f8793;
+                color: #7e8d94;
                 border: none;
                 border-radius: 4px;
                 font-family: 'Segoe UI';
-                font-size: 9pt;
+                font-size: 8pt;
                 font-weight: 700;
                 padding: 0;
             }
             QToolButton:hover {
-                background-color: #313743;
-                color: #f4f7fb;
+                background-color: #11242c;
+                color: #00e5ff;
             }
             QToolButton:pressed {
-                background-color: #3b4452;
+                background-color: #17323b;
             }
             """
         )
@@ -246,8 +256,8 @@ class MainWindow(QMainWindow):
         width = 8
         for index in range(count):
             text_width = fm.horizontalAdvance(self._doc_tab_bar.tabText(index))
-            width += min(max(text_width + 58, 126), 224) + 4
-        self._doc_tab_bar.setFixedWidth(min(width, 560))
+            width += min(max(text_width + 60, 134), 230) + 4
+        self._doc_tab_bar.setFixedWidth(min(width, 660))
 
     def _close_tab_from_button(self, button):
         if self._doc_tab_bar is None:
@@ -298,7 +308,8 @@ class MainWindow(QMainWindow):
     def _new_tab(self, placement_file=None) -> LayoutEditorTab:
         tab = LayoutEditorTab(placement_file, parent=self._tab_widget)
         title = tab.document_title
-        idx = self._tab_widget.addTab(tab, icon_circuit_tab(), title)
+        icon = self._tab_icon_for_title(title)
+        idx = self._tab_widget.addTab(tab, icon, title)
         self._insert_document_tab(idx, title)
         self._stack.setCurrentIndex(1)  # show tabs
         self._set_chrome_visible(True)
@@ -359,9 +370,12 @@ class MainWindow(QMainWindow):
     def _on_tab_title_changed(self, tab, title):
         idx = self._tab_widget.indexOf(tab)
         if idx >= 0:
+            icon = self._tab_icon_for_title(title)
             self._tab_widget.setTabText(idx, title)
+            self._tab_widget.setTabIcon(idx, icon)
             if self._doc_tab_bar is not None and idx < self._doc_tab_bar.count():
                 self._doc_tab_bar.setTabText(idx, title)
+                self._doc_tab_bar.setTabIcon(idx, icon)
                 self._doc_tab_bar.setTabToolTip(idx, title)
                 self._update_document_tab_bar_width()
         if tab is self.current_tab():
@@ -374,6 +388,14 @@ class MainWindow(QMainWindow):
     # =================================================================
     #  Welcome-screen handlers
     # =================================================================
+    def _tab_icon_for_title(self, title):
+        try:
+            stem = os.path.splitext(os.path.basename(title or ""))[0]
+            stem = stem.replace("_graph", "").replace("_compressed", "")
+            return circuit_icon_for_name(stem or title or "circuit", 18, 16)
+        except Exception:
+            return icon_circuit_tab()
+
     def _on_open_file(self):
         file_path, _ = QFileDialog.getOpenFileName(
             self, "Open Placement JSON", "", "JSON Files (*.json)"
@@ -424,30 +446,35 @@ class MainWindow(QMainWindow):
             blocked = action.blockSignals(True)
             action.setChecked(checked)
             action.blockSignals(blocked)
-        blocked = self._workspace_quick_toggle.blockSignals(True)
-        self._workspace_quick_toggle.setEnabled(tab is not None)
-        self._workspace_quick_toggle.set_mode(tab.workspace_mode() if tab else "both", emit=False)
-        self._workspace_quick_toggle.blockSignals(blocked)
+        quick_toggle = getattr(self, "_workspace_quick_toggle", None)
+        if quick_toggle is not None:
+            blocked = quick_toggle.blockSignals(True)
+            quick_toggle.setEnabled(tab is not None)
+            quick_toggle.set_mode(tab.workspace_mode() if tab else "both", emit=False)
+            quick_toggle.blockSignals(blocked)
 
     # =================================================================
     #  Menu bar
     # =================================================================
     def _create_menu_bar(self):
         mb = self.menuBar()
+        mb.setNativeMenuBar(False)
+        self._top_level_menus = []
         mb.setStyleSheet(
-            "QMenuBar { background-color: #15171d; color: #d4dae4; "
-            "border-bottom: 1px solid #2a2f38; font-family: 'Segoe UI'; font-size: 10pt; }"
+            "QMenuBar { background-color: #05090b; color: #e4ecef; "
+            "border-bottom: 1px solid #152229; font-family: 'Segoe UI'; font-size: 10pt; }"
             "QMenuBar::item { padding: 4px 9px; }"
-            "QMenuBar::item:selected { background-color: #22262e; color: #ffffff; }"
-            "QMenu { background-color: #1b1e25; color: #d4dae4; border: 1px solid #303642; "
+            "QMenuBar::item:selected { background-color: #101b20; color: #00e5ff; }"
+            "QMenu { background-color: #070c0f; color: #dce8ec; border: 1px solid #1b3038; "
             "font-family: 'Segoe UI'; font-size: 10pt; }"
             "QMenu::item { padding: 5px 22px; }"
-            "QMenu::item:selected { background-color: #283141; color: #ffffff; }"
-            "QMenu::separator { background-color: #303642; height: 1px; margin: 4px 8px; }"
+            "QMenu::item:selected { background-color: #0d2a35; color: #00e5ff; }"
+            "QMenu::separator { background-color: #1b3038; height: 1px; margin: 4px 8px; }"
         )
 
         # ── File ─────────────────────────────────────────────────
         file_menu = mb.addMenu("&File")
+        self._top_level_menus.append(file_menu)
         file_menu.addAction("New Tab", self._on_new_tab, QKeySequence("Ctrl+T"))
         file_menu.addSeparator()
         file_menu.addAction("Import Netlist + Layout…", self._on_import, QKeySequence("Ctrl+I"))
@@ -487,6 +514,7 @@ class MainWindow(QMainWindow):
 
         # ── Edit ─────────────────────────────────────────────────
         edit_menu = mb.addMenu("&Edit")
+        self._top_level_menus.append(edit_menu)
         self._act_undo = edit_menu.addAction("&Undo", lambda: self._fwd("do_undo"), QKeySequence.StandardKey.Undo)
         self._act_redo = edit_menu.addAction("&Redo", lambda: self._fwd("do_redo"), QKeySequence.StandardKey.Redo)
         self._act_undo.setEnabled(False)
@@ -499,6 +527,7 @@ class MainWindow(QMainWindow):
 
         # ── View ─────────────────────────────────────────────────
         view_menu = mb.addMenu("&View")
+        self._top_level_menus.append(view_menu)
         view_menu.addAction("Fit to View", lambda: self._fwd_editor("fit_to_view"))
         view_menu.addAction("Zoom In", lambda: self._fwd_editor("zoom_in"), QKeySequence("Ctrl+="))
         view_menu.addAction("Zoom Out", lambda: self._fwd_editor("zoom_out"), QKeySequence("Ctrl+-"))
@@ -519,6 +548,7 @@ class MainWindow(QMainWindow):
 
         # ── Design ───────────────────────────────────────────────
         design_menu = mb.addMenu("&Design")
+        self._top_level_menus.append(design_menu)
         design_menu.addAction("Swap Selected (2)", lambda: self._fwd("do_swap"), QKeySequence("Ctrl+Shift+X"))
         design_menu.addAction("Merge Shared Source", lambda: self._fwd("do_merge_ss"))
         design_menu.addAction("Merge Shared Drain", lambda: self._fwd("do_merge_dd"))
@@ -536,35 +566,68 @@ class MainWindow(QMainWindow):
     # =================================================================
     #  Toolbar
     # =================================================================
+    def _make_chrome_menu_button(self, menu):
+        button = QToolButton(self)
+        button.setText(menu.title().replace("&", ""))
+        button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+        button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        button.setMenu(menu)
+        button.setArrowType(Qt.ArrowType.NoArrow)
+        button.setCursor(Qt.CursorShape.PointingHandCursor)
+        button.setProperty("chromeMenu", True)
+        self._chrome_menus.append(menu)
+        self._chrome_menu_buttons.append(button)
+        return button
+
+    def _create_command_search(self):
+        search = QLineEdit(self)
+        search.setPlaceholderText("Search or type a command...")
+        search.setToolTip("Search or type a command (Ctrl+K)")
+        search.setFixedSize(300, 26)
+        search.setClearButtonEnabled(True)
+        search.setFrame(False)
+        search.setProperty("chromeSearch", True)
+        self._focus_command_search_action = QAction(self)
+        self._focus_command_search_action.setShortcut(QKeySequence("Ctrl+K"))
+        self._focus_command_search_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+        self._focus_command_search_action.triggered.connect(
+            lambda: (search.setFocus(Qt.FocusReason.ShortcutFocusReason), search.selectAll())
+        )
+        self.addAction(self._focus_command_search_action)
+        return search
+
     def _create_file_toolbar(self):
         tb = QToolBar("File Quick Actions")
         tb.setMovable(False)
         tb.setFloatable(False)
         tb.setAllowedAreas(Qt.ToolBarArea.TopToolBarArea)
         tb.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
-        tb.setIconSize(QSize(16, 16))
+        tb.setIconSize(QSize(15, 15))
+        tb.setFixedHeight(50)
         tb.setStyleSheet(
-            "QToolBar { background-color: #15171d; border: none; border-bottom: 1px solid #2a2f38; spacing: 3px; padding: 3px 8px; }"
-            "QToolBar::separator { background-color: #2f3540; width: 1px; margin: 4px 7px; }"
+            "QToolBar { background-color: #05090b; border: none; border-bottom: 1px solid #142127; spacing: 2px; padding: 5px 8px 7px 8px; }"
+            "QToolBar::separator { background-color: #17252b; width: 1px; margin: 6px 6px; }"
             "QToolButton { background: transparent; border: 1px solid transparent; border-radius: 5px; "
-            "padding: 4px; color: #d8dde6; min-width: 24px; min-height: 24px; }"
-            "QToolButton:hover { background-color: #22262e; border-color: #3a424e; }"
-            "QToolButton:pressed { background-color: #2b313b; }"
-            "QToolButton:checked { background-color: #243546; border-color: #5aa9e6; }"
-            "QLabel { color: #9aa4b2; font-family: 'Segoe UI'; font-size: 8.5pt; font-weight: 600; padding: 0 2px 0 6px; }"
+            "padding: 2px; color: #e3ecef; min-width: 24px; min-height: 24px; }"
+            "QToolButton:hover { background-color: #101b20; border-color: #22414b; color: #00e5ff; }"
+            "QToolButton:pressed { background-color: #092531; }"
+            "QToolButton:checked { background-color: #092531; border-color: #00e5ff; color: #00e5ff; }"
+            "QToolButton::menu-indicator { image: none; width: 0px; height: 0px; }"
+            "QToolButton[chromeMenu=\"true\"] { color: #f0f4f5; padding: 1px 5px; min-width: 28px; "
+            "min-height: 22px; font-family: 'Segoe UI'; font-size: 8pt; font-weight: 500; }"
+            "QLineEdit[chromeSearch=\"true\"] { background-color: #070c0f; color: #dce8ec; "
+            "border: 1px solid #17252b; border-radius: 5px; padding: 2px 28px 2px 10px; "
+            "font-family: 'Segoe UI'; font-size: 8.5pt; selection-background-color: #0b6d82; }"
+            "QLineEdit[chromeSearch=\"true\"]:focus { border-color: #00dff7; background-color: #091217; }"
+            "QLabel { color: #9daab0; font-family: 'Segoe UI'; font-size: 8.5pt; font-weight: 600; padding: 0 2px 0 6px; }"
         )
         self._file_toolbar = tb
+        self._chrome_menus = []
+        self._chrome_menu_buttons = []
         self.addToolBar(Qt.ToolBarArea.TopToolBarArea, tb)
 
-        self._quick_act_import = QAction(icon_import_file(), "Import Netlist + Layout", self)
-        self._quick_act_import.setToolTip("Import netlist + layout (Ctrl+I)")
-        self._quick_act_import.triggered.connect(self._on_import)
-        tb.addAction(self._quick_act_import)
-
-        self._quick_act_export = QAction(icon_export_file(), "Export JSON", self)
-        self._quick_act_export.setToolTip("Export placement JSON")
-        self._quick_act_export.triggered.connect(lambda: self._fwd("do_export_json"))
-        tb.addAction(self._quick_act_export)
+        for menu in getattr(self, "_top_level_menus", []):
+            tb.addWidget(self._make_chrome_menu_button(menu))
 
         tb.addSeparator()
         self._quick_act_home = QAction(icon_home(), "Home", self)
@@ -579,45 +642,14 @@ class MainWindow(QMainWindow):
         self._quick_act_new_tab.triggered.connect(self._on_new_tab)
         tb.addAction(self._quick_act_new_tab)
 
-        left_spacer = QWidget()
-        left_spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        tb.addWidget(left_spacer)
+        chrome_spacer = QWidget()
+        chrome_spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        tb.addWidget(chrome_spacer)
 
-        self._workspace_quick_toggle = SegmentedToggle(variant="toolbar")
-        self._workspace_quick_toggle.setToolTip("Switch workspace view")
-        self._workspace_quick_toggle.mode_changed.connect(self._on_workspace_mode_changed)
-        self._workspace_quick_toggle.setEnabled(False)
-        tb.addWidget(self._workspace_quick_toggle)
+        self._command_search = self._create_command_search()
+        tb.addWidget(self._command_search)
 
-        right_spacer = QWidget()
-        right_spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        tb.addWidget(right_spacer)
-
-        self._quick_act_notifications = QAction(icon_bell(), "Notifications", self)
-        self._quick_act_notifications.setToolTip("Notifications")
-        self._quick_act_notifications.triggered.connect(self._show_notifications)
-        tb.addAction(self._quick_act_notifications)
-
-    def _create_toolbar(self):
-        tb = QToolBar("Main")
-        tb.setMovable(False)
-        tb.setFloatable(False)
-        tb.setAllowedAreas(Qt.ToolBarArea.LeftToolBarArea)
-        tb.setOrientation(Qt.Orientation.Vertical)
-        tb.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
-        tb.setIconSize(QSize(15, 15))
-        tb.setStyleSheet(
-            "QToolBar { background-color: #121419; border-right: 1px solid #2a2f38; spacing: 1px; padding: 3px 3px; }"
-            "QToolBar::separator { background-color: #303642; height: 1px; margin: 2px 3px; }"
-            "QToolButton { background: transparent; border: 1px solid transparent; border-radius: 6px; "
-            "padding: 2px; color: #d8dde6; min-width: 21px; min-height: 21px; }"
-            "QToolButton:hover { background-color: #22262e; border-color: #3a424e; }"
-            "QToolButton:pressed { background-color: #2b313b; }"
-            "QToolButton:checked { background-color: #243546; border-color: #5aa9e6; }"
-            "QLabel { color: #9aa4b2; font-family: 'Segoe UI'; font-size: 8pt; font-weight: 600; }"
-        )
-        self._toolbar = tb
-        self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, tb)
+        self._workspace_quick_toggle = None
 
         self._tb_act_undo = QAction(icon_undo(), "Undo", self)
         self._tb_act_undo.setToolTip("Undo (Ctrl+Z)")
@@ -630,6 +662,47 @@ class MainWindow(QMainWindow):
         self._tb_act_redo.setEnabled(False)
         self._tb_act_redo.triggered.connect(lambda: self._fwd("do_redo"))
         tb.addAction(self._tb_act_redo)
+
+        self._quick_act_notifications = QAction(icon_bell(), "Notifications", self)
+        self._quick_act_notifications.setToolTip("Notifications")
+        self._quick_act_notifications.triggered.connect(self._show_notifications)
+        tb.addAction(self._quick_act_notifications)
+
+        self._quick_act_help = QAction(icon_help(), "Help", self)
+        self._quick_act_help.setToolTip("Help")
+        self._quick_act_help.triggered.connect(self._show_help)
+        tb.addAction(self._quick_act_help)
+
+    def _create_toolbar(self):
+        tb = QToolBar("Main")
+        tb.setMovable(False)
+        tb.setFloatable(False)
+        tb.setAllowedAreas(Qt.ToolBarArea.LeftToolBarArea)
+        tb.setOrientation(Qt.Orientation.Vertical)
+        tb.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+        tb.setIconSize(QSize(15, 15))
+        tb.setStyleSheet(
+            "QToolBar { background-color: #05090b; border-right: 1px solid #142127; spacing: 2px; padding: 5px 4px; }"
+            "QToolBar::separator { background-color: #17252b; height: 1px; margin: 3px 3px; }"
+            "QToolButton { background: transparent; border: 1px solid transparent; border-radius: 6px; "
+            "padding: 2px; color: #e3ecef; min-width: 22px; min-height: 22px; }"
+            "QToolButton:hover { background-color: #101b20; border-color: #22414b; color: #00e5ff; }"
+            "QToolButton:pressed { background-color: #092531; }"
+            "QToolButton:checked { background-color: #092531; border-color: #00e5ff; color: #00e5ff; }"
+            "QLabel { color: #9daab0; font-family: 'Segoe UI'; font-size: 8pt; font-weight: 600; }"
+        )
+        self._toolbar = tb
+        self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, tb)
+
+        self._tb_act_import = QAction(icon_import_file(), "Import Netlist + Layout", self)
+        self._tb_act_import.setToolTip("Import netlist + layout (Ctrl+I)")
+        self._tb_act_import.triggered.connect(self._on_import)
+        tb.addAction(self._tb_act_import)
+
+        self._tb_act_export = QAction(icon_export_file(), "Export JSON", self)
+        self._tb_act_export.setToolTip("Export placement JSON")
+        self._tb_act_export.triggered.connect(lambda: self._fwd("do_export_json"))
+        tb.addAction(self._tb_act_export)
         tb.addSeparator()
 
         self._tb_act_schematic = QAction(icon_schematic(), "Toggle Schematic Assistant", self)
@@ -734,9 +807,9 @@ class MainWindow(QMainWindow):
         tb.addSeparator()
 
         spin_style = (
-            "QSpinBox { background: #1a1f2b; color: #e0e8f0; border: 1px solid #2d3548; "
+            "QSpinBox { background: #071014; color: #e5f4f6; border: 1px solid #1b3038; "
             "border-radius: 4px; padding: 1px 2px; min-width: 42px; max-width: 42px; min-height: 20px; }"
-            "QSpinBox:focus { border-color: #4a90d9; }"
+            "QSpinBox:focus { border-color: #00e5ff; }"
             "QSpinBox::up-button, QSpinBox::down-button { width: 10px; }"
         )
 
@@ -768,7 +841,7 @@ class MainWindow(QMainWindow):
         self._sel_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._sel_label.setToolTip("Selected device count")
         self._sel_label.setStyleSheet(
-            "color: #9aa7b7; background: #161c28; border: 1px solid #2d3548; "
+            "color: #9daab0; background: #071014; border: 1px solid #1b3038; "
             "border-radius: 4px; padding: 2px 3px; min-width: 42px; max-width: 42px;"
         )
         tb.addWidget(self._sel_label)
@@ -875,7 +948,7 @@ class MainWindow(QMainWindow):
         sb.addPermanentWidget(self._sel_label)
 
     def _set_chrome_visible(self, visible):
-        self.menuBar().setVisible(visible)
+        self.menuBar().setVisible(False)
         self._file_toolbar.setVisible(visible)
         self._toolbar.setVisible(visible)
         if getattr(self, "_status_bar", None) is not None:
@@ -909,6 +982,14 @@ class MainWindow(QMainWindow):
 
     def _show_notifications(self):
         QMessageBox.information(self, "Notifications", "No notifications yet.")
+
+    def _show_help(self):
+        QMessageBox.information(
+            self,
+            "Help",
+            "Use File, Edit, View, and Design for layout commands. "
+            "The left rail has import/export and editing tools; the AI panel keeps FC/CMD controls.",
+        )
 
     def _on_new_tab(self):
         self._new_tab()
@@ -998,15 +1079,15 @@ class MainWindow(QMainWindow):
         return """
             QTabWidget::pane {
                 border: none;
-                background-color: #101216;
+                background-color: #05090b;
             }
             QTabBar {
-                background-color: #15171d;
-                border-bottom: 1px solid #2a2f38;
+                background-color: #05090b;
+                border-bottom: 1px solid #142127;
             }
             QTabBar::tab {
-                background-color: #1b1d23;
-                color: #aab2bf;
+                background-color: #070c0f;
+                color: #a4b0b6;
                 border: 1px solid transparent;
                 border-bottom: none;
                 border-top-left-radius: 4px;
@@ -1019,14 +1100,14 @@ class MainWindow(QMainWindow):
                 min-width: 96px;
             }
             QTabBar::tab:selected {
-                background-color: #242832;
-                color: #f4f7fb;
-                border-color: #3b4654;
+                background-color: #0b1519;
+                color: #f4fbfd;
+                border-color: #00dff7;
                 font-weight: 600;
             }
             QTabBar::tab:hover:!selected {
-                background-color: #222631;
-                color: #dce3ec;
+                background-color: #101b20;
+                color: #dceef2;
             }
             QTabBar::close-button {
                 image: none;
@@ -1058,29 +1139,29 @@ if __name__ == "__main__":
     # ── Fusion dark palette ──────────────────────────────────────
     app.setStyle("Fusion")
     palette = QPalette()
-    palette.setColor(QPalette.ColorRole.Window, QColor("#15171d"))
-    palette.setColor(QPalette.ColorRole.WindowText, QColor("#d4dae4"))
-    palette.setColor(QPalette.ColorRole.Base, QColor("#101216"))
-    palette.setColor(QPalette.ColorRole.AlternateBase, QColor("#1b1e25"))
-    palette.setColor(QPalette.ColorRole.ToolTipBase, QColor("#22262e"))
-    palette.setColor(QPalette.ColorRole.ToolTipText, QColor("#e2e7ef"))
-    palette.setColor(QPalette.ColorRole.Text, QColor("#d4dae4"))
-    palette.setColor(QPalette.ColorRole.Button, QColor("#1b1e25"))
-    palette.setColor(QPalette.ColorRole.ButtonText, QColor("#d4dae4"))
+    palette.setColor(QPalette.ColorRole.Window, QColor("#05090b"))
+    palette.setColor(QPalette.ColorRole.WindowText, QColor("#e4ecef"))
+    palette.setColor(QPalette.ColorRole.Base, QColor("#070c0f"))
+    palette.setColor(QPalette.ColorRole.AlternateBase, QColor("#0d1519"))
+    palette.setColor(QPalette.ColorRole.ToolTipBase, QColor("#071014"))
+    palette.setColor(QPalette.ColorRole.ToolTipText, QColor("#e7f8fb"))
+    palette.setColor(QPalette.ColorRole.Text, QColor("#e4ecef"))
+    palette.setColor(QPalette.ColorRole.Button, QColor("#071014"))
+    palette.setColor(QPalette.ColorRole.ButtonText, QColor("#e4ecef"))
     palette.setColor(QPalette.ColorRole.BrightText, QColor("#ffffff"))
-    palette.setColor(QPalette.ColorRole.Link, QColor("#5aa9e6"))
-    palette.setColor(QPalette.ColorRole.Highlight, QColor("#5aa9e6"))
-    palette.setColor(QPalette.ColorRole.HighlightedText, QColor("#ffffff"))
-    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, QColor("#687180"))
-    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, QColor("#687180"))
+    palette.setColor(QPalette.ColorRole.Link, QColor("#00e5ff"))
+    palette.setColor(QPalette.ColorRole.Highlight, QColor("#00e5ff"))
+    palette.setColor(QPalette.ColorRole.HighlightedText, QColor("#031014"))
+    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, QColor("#5d6b71"))
+    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, QColor("#5d6b71"))
     app.setPalette(palette)
 
     # ── Global tooltip styling ───────────────────────────────────
     app.setStyleSheet("""
         QToolTip {
-            background-color: #22262e;
-            color: #e2e7ef;
-            border: 1px solid #3a424e;
+            background-color: #071014;
+            color: #e7f8fb;
+            border: 1px solid #1b3038;
             border-radius: 5px;
             padding: 6px 10px;
             font-family: 'Segoe UI';

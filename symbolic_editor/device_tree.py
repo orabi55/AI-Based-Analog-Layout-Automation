@@ -9,7 +9,10 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QPushButton,
+    QStackedWidget,
+    QToolButton,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -18,9 +21,9 @@ from PySide6.QtWidgets import (
 )
 
 try:
-    from .icons import icon_panel_toggle
+    from .icons import icon_empty_layers, icon_filter, icon_list_view
 except ImportError:
-    from icons import icon_panel_toggle
+    from icons import icon_empty_layers, icon_filter, icon_list_view
 try:
     from .icons import icon_group
 except ImportError:
@@ -49,93 +52,58 @@ class DeviceTreePanel(QWidget):
         self._blocks = {}
         self._custom_groups = []
         self._placement_groups = {}
-        self._active_tab = "instances"
+        self._active_tab = "all"
+        self._tree_expanded = False
         self._init_ui()
         self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self._show_context_menu)
 
     def _init_ui(self):
-        self.setMinimumWidth(220)
+        self.setMinimumWidth(280)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        header = QFrame()
-        header.setFixedHeight(44)
-        header.setStyleSheet(
-            "background-color: #1a1f2b;"
-            "border-bottom: 1px solid #2d3548;"
-        )
-        header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(10, 0, 8, 0)
-
-        title = QLabel("Design Hierarchy")
-        title.setFont(QFont("Segoe UI", 11, QFont.Weight.DemiBold))
-        title.setStyleSheet("color: #d7dfeb;")
-        header_layout.addWidget(title)
-        header_layout.addStretch()
-
-        toggle_btn = QPushButton()
-        toggle_btn.setText("<")
-        toggle_btn.setFixedSize(26, 26)
-        toggle_btn.setToolTip("Hide panel")
-        toggle_btn.setStyleSheet(
-            """
-            QPushButton {
-                background: transparent;
-                border: none;
-                border-radius: 4px;
-                color: #9aa4b2;
-                font-family: 'Segoe UI';
-                font-size: 14px;
-                font-weight: 700;
-            }
-            QPushButton:hover {
-                background-color: rgba(255,255,255,0.12);
-                color: #ffffff;
-            }
-            QPushButton:pressed {
-                background-color: rgba(255,255,255,0.20);
-            }
-            """
-        )
-        toggle_btn.clicked.connect(self.toggle_requested.emit)
-        header_layout.addWidget(toggle_btn)
-        layout.addWidget(header)
-
         tab_bar = QFrame()
-        tab_bar.setFixedHeight(40)
+        tab_bar.setFixedHeight(52)
         tab_bar.setStyleSheet(
-            "background-color: #151a23; border-bottom: 1px solid #2d3548;"
+            "background-color: #070c0f; border-bottom: 1px solid #142127;"
         )
         tab_layout = QHBoxLayout(tab_bar)
-        tab_layout.setContentsMargins(6, 4, 6, 4)
-        tab_layout.setSpacing(3)
+        tab_layout.setContentsMargins(12, 8, 12, 8)
+        tab_layout.setSpacing(4)
 
         tab_style = """
         QPushButton {
             background-color: transparent;
-            color: #808896;
-            border: none;
+            color: #8c9aa0;
+            border: 1px solid transparent;
             border-radius: 6px;
-            padding: 6px 10px;
+            padding: 7px 11px;
             font-family: 'Segoe UI';
-            font-size: 10pt;
+            font-size: 9pt;
             font-weight: 600;
         }
         QPushButton:hover {
-            background-color: rgba(255,255,255,0.08);
-            color: #a8b4c4;
+            background-color: #101b20;
+            color: #dceef2;
         }
         QPushButton:checked {
-            background-color: #2d4665;
-            color: #ffffff;
+            background-color: #082331;
+            border: 1px solid #00e5ff;
+            color: #00e5ff;
         }
         """
 
+        self.tab_all = QPushButton("All")
+        self.tab_all.setCheckable(True)
+        self.tab_all.setChecked(True)
+        self.tab_all.setStyleSheet(tab_style)
+        self.tab_all.clicked.connect(lambda: self._switch_tab("all"))
+        tab_layout.addWidget(self.tab_all)
+
         self.tab_instances = QPushButton("Instances")
         self.tab_instances.setCheckable(True)
-        self.tab_instances.setChecked(True)
         self.tab_instances.setStyleSheet(tab_style)
         self.tab_instances.clicked.connect(lambda: self._switch_tab("instances"))
         tab_layout.addWidget(self.tab_instances)
@@ -153,11 +121,14 @@ class DeviceTreePanel(QWidget):
         tab_layout.addWidget(self.tab_groups)
 
         tab_layout.addStretch()
+        self._filter_btn = self._make_icon_button(icon_filter(), "Filter hierarchy view")
+        self._filter_btn.clicked.connect(self._show_filter_menu)
+        tab_layout.addWidget(self._filter_btn)
 
         from PySide6.QtWidgets import QCheckBox
         self.check_colorize_nets = QCheckBox("Colorize")
         self.check_colorize_nets.setStyleSheet(
-            "QCheckBox { color: #808896; font-size: 9pt; margin-right: 4px; }"
+            "QCheckBox { color: #8c9aa0; font-size: 9pt; margin-right: 4px; }"
             "QCheckBox::indicator { width: 14px; height: 14px; }"
         )
         self.check_colorize_nets.setVisible(False)
@@ -166,6 +137,45 @@ class DeviceTreePanel(QWidget):
 
         layout.addWidget(tab_bar)
 
+        search_bar = QFrame()
+        search_bar.setFixedHeight(48)
+        search_bar.setStyleSheet(
+            "background-color: #070c0f; border-bottom: 1px solid #101b20;"
+        )
+        search_layout = QHBoxLayout(search_bar)
+        search_layout.setContentsMargins(12, 6, 12, 6)
+        search_layout.setSpacing(8)
+
+        self._search_edit = QLineEdit()
+        self._search_edit.setPlaceholderText("Search hierarchy...")
+        self._search_edit.setClearButtonEnabled(True)
+        self._search_edit.setStyleSheet(
+            """
+            QLineEdit {
+                background-color: #05090b;
+                color: #d7e4e8;
+                border: 1px solid #142127;
+                border-radius: 6px;
+                padding: 7px 10px;
+                font-family: 'Segoe UI';
+                font-size: 9pt;
+            }
+            QLineEdit:focus {
+                border-color: #00e5ff;
+            }
+            QLineEdit::placeholder {
+                color: #64777e;
+            }
+            """
+        )
+        self._search_edit.textChanged.connect(self._on_search_changed)
+        search_layout.addWidget(self._search_edit, 1)
+
+        self._list_btn = self._make_icon_button(icon_list_view(), "Expand/collapse hierarchy")
+        self._list_btn.clicked.connect(self._toggle_tree_expanded)
+        search_layout.addWidget(self._list_btn)
+        layout.addWidget(search_bar)
+
         self.tree = QTreeWidget()
         self.tree.setHeaderHidden(True)
         self.tree.setIndentation(16)
@@ -173,9 +183,9 @@ class DeviceTreePanel(QWidget):
         self.tree.setStyleSheet(
             """
             QTreeWidget {
-                background-color: #0f1318;
+                background-color: #070c0f;
                 border: none;
-                color: #b8c4d4;
+                color: #bfd0d6;
                 font-family: 'Segoe UI';
                 font-size: 11px;
                 padding: 4px;
@@ -186,14 +196,14 @@ class DeviceTreePanel(QWidget):
                 margin: 1px 2px;
             }
             QTreeWidget::item:hover {
-                background-color: #1a2230;
+                background-color: #101b20;
             }
             QTreeWidget::item:selected {
-                background-color: rgba(74, 144, 217, 0.30);
-                color: #ffffff;
+                background-color: rgba(0, 229, 255, 0.18);
+                color: #f4fbfd;
             }
             QTreeWidget::branch {
-                background-color: #0f1318;
+                background-color: #070c0f;
             }
             QTreeWidget::branch:has-children:!has-siblings:closed,
             QTreeWidget::branch:closed:has-children:has-siblings,
@@ -208,12 +218,12 @@ class DeviceTreePanel(QWidget):
                 border-radius: 3px;
             }
             QScrollBar::handle:vertical {
-                background: #2d3548;
+                background: #1b3038;
                 border-radius: 3px;
                 min-height: 24px;
             }
             QScrollBar::handle:vertical:hover {
-                background: #3d5066;
+                background: #00a9bc;
             }
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
                 height: 0px;
@@ -221,7 +231,70 @@ class DeviceTreePanel(QWidget):
             """
         )
         self.tree.itemClicked.connect(self._on_item_clicked)
-        layout.addWidget(self.tree, 1)
+
+        self._empty_state = self._build_empty_state()
+        self._content_stack = QStackedWidget()
+        self._content_stack.addWidget(self.tree)
+        self._content_stack.addWidget(self._empty_state)
+        layout.addWidget(self._content_stack, 1)
+
+    def _make_icon_button(self, icon, tooltip):
+        btn = QToolButton()
+        btn.setIcon(icon)
+        btn.setToolTip(tooltip)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.setFixedSize(30, 30)
+        btn.setStyleSheet(
+            """
+            QToolButton {
+                background-color: #05090b;
+                border: 1px solid #142127;
+                border-radius: 6px;
+                padding: 5px;
+            }
+            QToolButton:hover {
+                background-color: #101b20;
+                border-color: #00e5ff;
+            }
+            QToolButton:pressed {
+                background-color: #092531;
+            }
+            """
+        )
+        return btn
+
+    def _build_empty_state(self):
+        widget = QWidget()
+        widget.setStyleSheet("background-color: #070c0f;")
+        empty_layout = QVBoxLayout(widget)
+        empty_layout.setContentsMargins(24, 24, 24, 36)
+        empty_layout.setSpacing(10)
+        empty_layout.addStretch(1)
+
+        self._empty_icon = QLabel()
+        self._empty_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._empty_icon.setPixmap(icon_empty_layers().pixmap(48, 48))
+        empty_layout.addWidget(self._empty_icon)
+
+        self._empty_title = QLabel("No hierarchy loaded")
+        self._empty_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._empty_title.setStyleSheet(
+            "color: #f4fbfd; font-family: 'Segoe UI'; font-size: 11pt; font-weight: 600;"
+        )
+        empty_layout.addWidget(self._empty_title)
+
+        self._empty_hint = QLabel(
+            "Open a layout or import a netlist\n"
+            "to populate the hierarchy."
+        )
+        self._empty_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._empty_hint.setWordWrap(True)
+        self._empty_hint.setStyleSheet(
+            "color: #c0ccd1; font-family: 'Segoe UI'; font-size: 9.5pt; line-height: 145%;"
+        )
+        empty_layout.addWidget(self._empty_hint)
+        empty_layout.addStretch(2)
+        return widget
 
     def _show_context_menu(self, position):
         item = self.tree.itemAt(position)
@@ -242,16 +315,106 @@ class DeviceTreePanel(QWidget):
                 self.group_delete_requested.emit(group_id)
 
     def _switch_tab(self, tab_name):
+        if tab_name not in {"all", "instances", "nets", "groups"}:
+            tab_name = "all"
         self._active_tab = tab_name
+        self.tab_all.setChecked(tab_name == "all")
         self.tab_instances.setChecked(tab_name == "instances")
         self.tab_nets.setChecked(tab_name == "nets")
         self.tab_groups.setChecked(tab_name == "groups")
         
-        # Show colorize option only in nets tab
-        self.check_colorize_nets.setVisible(tab_name == "nets")
+        self.check_colorize_nets.setVisible(False)
         
         self.load_devices(self._nodes, blocks=self._blocks)
         self.net_view_toggled.emit(tab_name == "nets")
+
+    def _show_filter_menu(self):
+        menu = QMenu(self)
+        menu.setStyleSheet(
+            """
+            QMenu {
+                background-color: #070c0f;
+                color: #d7e4e8;
+                border: 1px solid #1b3038;
+                font-family: 'Segoe UI';
+                font-size: 9pt;
+            }
+            QMenu::item {
+                padding: 6px 24px;
+            }
+            QMenu::item:selected {
+                background-color: #0d2a35;
+                color: #00e5ff;
+            }
+            """
+        )
+        for label, mode in (
+            ("All", "all"),
+            ("Instances", "instances"),
+            ("Nets", "nets"),
+            ("Groups", "groups"),
+        ):
+            action = menu.addAction(label)
+            action.setCheckable(True)
+            action.setChecked(self._active_tab == mode)
+            action.triggered.connect(lambda _checked=False, m=mode: self._switch_tab(m))
+        menu.exec(self._filter_btn.mapToGlobal(self._filter_btn.rect().bottomLeft()))
+
+    def _on_search_changed(self, _text):
+        self._apply_search_filter()
+        self._update_empty_state()
+
+    def _toggle_tree_expanded(self):
+        self._tree_expanded = not self._tree_expanded
+        if self._tree_expanded:
+            self.tree.expandAll()
+        else:
+            self.tree.collapseAll()
+
+    def _apply_search_filter(self):
+        query = self._search_edit.text().strip().lower()
+
+        def visit(item):
+            own_match = query in item.text(0).lower() if query else True
+            child_match = False
+            for idx in range(item.childCount()):
+                if visit(item.child(idx)):
+                    child_match = True
+            visible = own_match or child_match
+            item.setHidden(not visible)
+            if query and child_match:
+                item.setExpanded(True)
+            return visible
+
+        root = self.tree.invisibleRootItem()
+        for idx in range(root.childCount()):
+            visit(root.child(idx))
+
+    def _has_visible_items(self):
+        root = self.tree.invisibleRootItem()
+        for idx in range(root.childCount()):
+            if not root.child(idx).isHidden():
+                return True
+        return False
+
+    def _update_empty_state(self):
+        has_items = self.tree.topLevelItemCount() > 0
+        has_visible = self._has_visible_items()
+        if has_items and has_visible:
+            self._content_stack.setCurrentWidget(self.tree)
+            return
+
+        query = self._search_edit.text().strip()
+        if query and has_items:
+            self._empty_title.setText("No matching items")
+            self._empty_hint.setText("Try a different hierarchy search.")
+        else:
+            self._empty_title.setText("No hierarchy loaded")
+            self._empty_hint.setText(
+                "Open a layout or import a netlist\n"
+                "to populate the hierarchy."
+            )
+        self._content_stack.setCurrentWidget(self._empty_state)
 
     def set_edges(self, edges):
         self._edges = edges or []
@@ -285,12 +448,21 @@ class DeviceTreePanel(QWidget):
         self._nodes = nodes or []
         self._blocks = blocks or {}
 
-        if self._active_tab == "instances":
+        if self._active_tab == "all":
+            self._populate_all_tab()
+        elif self._active_tab == "instances":
             self._populate_instances_tab()
         elif self._active_tab == "nets":
             self._populate_nets_tab()
         else:
             self._populate_groups_tab()
+        self._apply_search_filter()
+        self._update_empty_state()
+
+    def _populate_all_tab(self):
+        self._populate_instances_tab()
+        self._populate_nets_tab()
+        self._populate_groups_tab()
 
     def _populate_instances_tab(self):
         real_nmos = []
