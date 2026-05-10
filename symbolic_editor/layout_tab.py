@@ -267,7 +267,7 @@ class LayoutEditorTab(QWidget):
         self.overlay.cancel_requested.connect(self._cancel_ai_placement)
 
         # Populate panels
-        self._refresh_panels(compact=placement_file is None)
+        self._refresh_panels(compact=True)
         self._init_workspace_shortcuts()
 
         # Fit view after initial load
@@ -963,6 +963,10 @@ class LayoutEditorTab(QWidget):
         self._update_grid_counts()
         self._on_editor_selection_changed()
         self._schedule_live_klayout_update()
+        # Sync canvas positions back to self.nodes after any compaction that may
+        # have run inside set_terminal_nets, so the layout context passed to the
+        # AI always reflects the actual on-canvas positions.
+        self._sync_node_positions(schedule_live=False)
 
     # =================================================================
     #  Selection / grid helpers
@@ -2754,7 +2758,7 @@ class LayoutEditorTab(QWidget):
         self._push_undo()
         self._current_file = file_path
         self._load_data(file_path)
-        self._refresh_panels()
+        self._refresh_panels(compact=True)
         self._sync_klayout_source(source_path=file_path)
         self.title_changed.emit(os.path.basename(file_path))
 
@@ -3055,8 +3059,67 @@ class LayoutEditorTab(QWidget):
                 self._original_data["nodes"] = self.nodes
                 self._refresh_panels(compact=False)
                 self._sync_node_positions()
+                # Apply per-node visual metadata (color, lock state) to canvas items
+                from PySide6.QtWidgets import QGraphicsItem
+                from PySide6.QtGui import QColor as _QColor
+                for _node in self.nodes:
+                    _dev_id = _node.get("id")
+                    _item   = self.editor.device_items.get(_dev_id) if _dev_id else None
+                    if _item is None:
+                        continue
+                    _color = _node.get("color")
+                    if _color and hasattr(_item, "set_custom_color"):
+                        try:
+                            _item.set_custom_color(_QColor(_color))
+                        except Exception:
+                            pass
+                    elif not _color and hasattr(_item, "reset_custom_color"):
+                        try:
+                            _item.reset_custom_color()
+                        except Exception:
+                            pass
+                    _locked = bool(_node.get("locked", False))
+                    _item.setFlag(
+                        QGraphicsItem.GraphicsItemFlag.ItemIsMovable, not _locked
+                    )
+                self.editor.viewport().update()
                 message = cmd.get("message") or "Applied layout tool result."
                 self.chat_panel._append_message("AI", f"✅ {message}", "#e8f4fd", "#1a1a2e")
+                # Tell response_done_deferred that FC tools ran this turn,
+                # and add the result to history for multi-turn context.
+                self.chat_panel._fc_command_received = True
+                self.chat_panel._chat_history.append(
+                    {"role": "assistant", "content": message}
+                )
+
+            elif action == "create_group":
+                _device_ids = cmd.get("device_ids") or []
+                _name       = str(cmd.get("name") or "").strip()
+                if not _name:
+                    _existing = [g.get("name","") for g in self._custom_groups
+                                 if str(g.get("name","")).startswith("GROUP_")]
+                    _num = len(_existing) + 1
+                    _name = f"GROUP_{_num}"
+                if len(_device_ids) >= 2:
+                    if not _skip_undo:
+                        self._push_undo()
+                    new_group = {"name": _name, "devices": list(_device_ids)}
+                    self._custom_groups.append(new_group)
+                    if self._original_data is not None:
+                        self._original_data["custom_groups"] = copy.deepcopy(self._custom_groups)
+                    self.editor.apply_custom_groups(self._custom_groups)
+                    self._on_hierarchy_changed()
+                    _gmsg = f"Created group '{_name}' ({len(_device_ids)} devices)"
+                    self.chat_panel._append_message("AI", f"✅ {_gmsg}", "#e8f4fd", "#1a1a2e")
+                    self.chat_panel._fc_command_received = True
+                    self.chat_panel._chat_history.append(
+                        {"role": "assistant", "content": _gmsg}
+                    )
+                else:
+                    self.chat_panel._append_message(
+                        "AI", f"⚠️ create_group needs at least 2 devices",
+                        "#fde8e8", "#a00"
+                    )
 
             elif action in {"swap", "swap_devices"}:
                 raw_a = cmd.get("device_a", cmd.get("a"))

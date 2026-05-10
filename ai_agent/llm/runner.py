@@ -128,6 +128,109 @@ def run_llm(chat_messages, full_prompt, selected_model="Gemini", task_weight="li
     return last_result
 
 
+def _extract_text_from_response(response) -> str:
+    """Pull text content out of an AIMessage / AIMessageChunk."""
+    if response is None:
+        return ""
+    content = getattr(response, "content", None)
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                parts.append(block.get("text", ""))
+            elif isinstance(block, str):
+                parts.append(block)
+        return "".join(parts)
+    return str(content)
+
+
+def stream_llm(lc_messages, llm, message_id: str, worker):
+    """Stream LLM output, emitting `worker.response_delta` for each chunk.
+
+    Signals fired (all on `worker`):
+        response_delta(message_id, delta_text) — for each text chunk
+        response_done (message_id, full_text)  — once at the end
+
+    Args:
+        lc_messages: LangChain-style messages (list of dicts).
+        llm:         LangChain BaseChatModel-compatible object.
+        message_id:  Unique identifier for this response stream.
+        worker:      QObject exposing the new streaming signals.
+
+    Returns:
+        tuple[str, Any]: (full_text, accumulated_response)
+        accumulated_response is the merged AIMessage (or None on hard failure)
+        — useful for downstream tool_call extraction.
+
+    Behaviour:
+        - If `llm.stream` exists, iterates chunks and emits per-chunk deltas.
+        - If streaming raises ANY exception, silently falls back to llm.invoke()
+          and emits the full text in a single response_delta.
+        - Always emits response_done before returning. Never raises.
+    """
+    full_text = ""
+    accumulated = None
+    streamed_ok = False
+
+    if hasattr(llm, "stream"):
+        try:
+            for chunk in llm.stream(lc_messages):
+                # Merge chunks for downstream tool_call extraction
+                if accumulated is None:
+                    accumulated = chunk
+                else:
+                    try:
+                        accumulated = accumulated + chunk
+                    except Exception:
+                        # Some providers don't support __add__; keep the latest
+                        accumulated = chunk
+                # Emit per-chunk text delta
+                delta = _extract_text_from_response(chunk)
+                if delta:
+                    try:
+                        worker.response_delta.emit(message_id, delta)
+                    except Exception:
+                        pass
+                    full_text += delta
+            streamed_ok = True
+        except Exception as exc:
+            print(f"[stream_llm] streaming failed ({type(exc).__name__}: {exc}); "
+                  f"falling back to invoke()", flush=True)
+            full_text = ""
+            accumulated = None
+            streamed_ok = False
+
+    if not streamed_ok:
+        # One-shot fallback path
+        try:
+            response = llm.invoke(lc_messages)
+            accumulated = response
+            full_text = _extract_text_from_response(response)
+            if full_text:
+                try:
+                    worker.response_delta.emit(message_id, full_text)
+                except Exception:
+                    pass
+        except Exception as exc:
+            print(f"[stream_llm] invoke() also failed: {exc}", flush=True)
+            full_text = f"Error: {exc}"
+            try:
+                worker.response_delta.emit(message_id, full_text)
+            except Exception:
+                pass
+
+    try:
+        worker.response_done.emit(message_id, full_text)
+    except Exception:
+        pass
+
+    return full_text, accumulated
+
+
 def _run_llm_once(chat_messages, full_prompt, selected_model, task_weight="light"):
     """Single-shot LLM call — delegates to llm.factory for model instantiation."""
     try:
