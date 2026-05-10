@@ -411,6 +411,22 @@ class TestCommonCentroid:
         # All four finger IDs must still exist in the result
         assert {"MM1_f0", "MM1_f1", "MM2_f0", "MM2_f1"}.issubset(_ids(r))
 
+    def test_place_common_centroid_2d_accepts_float_finger_args(self, finger_nodes):
+        r = dispatch(
+            "place_common_centroid_2d",
+            {
+                "device_specs": [
+                    {"id": "MM1", "fingers": 2.0},
+                    {"id": "MM2", "fingers": "2.0"},
+                ],
+                "start_x": 0.0,
+                "row_y": 0.0,
+            },
+            finger_nodes,
+        )
+        assert r.success
+        assert r.metrics["placed_count"] == 4
+
     def test_insert_dummies_around_group_success(self, finger_nodes):
         r = dispatch(
             "insert_dummies_around_group",
@@ -450,6 +466,48 @@ class TestCommonCentroid:
         dummies = [n for n in r.nodes if n.get("structural")]
         for d in dummies:
             assert not _is_regenerated_filler_dummy(d)
+
+    def test_place_matched_pair_returns_full_layout(self, finger_nodes):
+        extra = _node("MM3_f0", "nmos", 1.176, 0.0)
+        r = dispatch(
+            "place_matched_pair",
+            {"device_a": "MM1", "device_b": "MM2"},
+            finger_nodes + [extra],
+        )
+        assert r.success
+        assert r.metrics["placed_count"] == 4
+        assert "MM3_f0" in _ids(r)
+
+
+# ---------------------------------------------------------------------------
+# Advanced matching optimizer
+# ---------------------------------------------------------------------------
+
+class TestOptimizeLayoutForMatching:
+    def test_expanded_fingers_are_optimized_as_parent_devices(self):
+        nodes = [
+            _node("MM0_f1", "nmos", 0.000, 0.0),
+            _node("MM0_f2", "nmos", 0.294, 0.0),
+            _node("MM1_f1", "nmos", 0.588, 0.0),
+            _node("MM1_f2", "nmos", 0.882, 0.0),
+        ]
+        terminal_nets = {
+            "MM0_f1": {"D": "BIAS", "G": "BIAS", "S": "VSS"},
+            "MM0_f2": {"D": "BIAS", "G": "BIAS", "S": "VSS"},
+            "MM1_f1": {"D": "OUT", "G": "BIAS", "S": "VSS"},
+            "MM1_f2": {"D": "OUT", "G": "BIAS", "S": "VSS"},
+        }
+        r = dispatch(
+            "optimize_layout_for_matching",
+            {},
+            nodes,
+            terminal_nets=terminal_nets,
+        )
+        assert r.success
+        assert r.changed
+        assert len(r.nodes) == len(nodes)
+        assert "Placed 4 finger(s)" in r.message
+        assert "Placed 0 finger(s)" not in r.message
 
 
 # ---------------------------------------------------------------------------

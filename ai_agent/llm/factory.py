@@ -47,6 +47,40 @@ def _resolve_timeout(task_weight: str) -> int:
         return _DEFAULT_TIMEOUT
 
 
+def _build_vertex_model(cls, **kwargs):
+    """Instantiate Vertex wrappers across minor LangChain kwarg differences."""
+    try:
+        return cls(**kwargs)
+    except TypeError:
+        trimmed = dict(kwargs)
+        trimmed.pop("request_timeout", None)
+        trimmed.pop("timeout", None)
+        try:
+            return cls(**trimmed)
+        except TypeError:
+            if "model_name" in trimmed and "model" not in trimmed:
+                trimmed["model"] = trimmed.pop("model_name")
+                return cls(**trimmed)
+            raise
+
+
+def _load_vertex_claude_class():
+    try:
+        from langchain_google_vertexai.model_garden import ChatAnthropicVertex
+        return ChatAnthropicVertex
+    except ImportError:
+        try:
+            from langchain_google_vertexai import ChatAnthropicVertex
+            return ChatAnthropicVertex
+        except ImportError as exc:
+            raise ImportError(
+                "VertexClaude requires langchain-google-vertexai with "
+                "ChatAnthropicVertex support. Install or upgrade "
+                "langchain-google-vertexai; Claude-on-Vertex cannot be run "
+                "through the Gemini wrapper."
+            ) from exc
+
+
 def get_langchain_llm(selected_model: str, task_weight: str = "light"):
     """
     Dynamically instantiate the appropriate LangChain chat model based on the
@@ -124,13 +158,20 @@ def get_langchain_llm(selected_model: str, task_weight: str = "light"):
         if not project_id:
             raise ValueError("VERTEX_PROJECT_ID environment variable is missing. Please set it in the AI Model Settings.")
 
-        from langchain_google_genai import ChatGoogleGenerativeAI
-        llm = ChatGoogleGenerativeAI(
+        try:
+            from langchain_google_vertexai import ChatVertexAI
+        except ImportError as exc:
+            raise ImportError(
+                "VertexGemini requires langchain-google-vertexai. "
+                "Install it to use Google Gemini through Vertex AI."
+            ) from exc
+        llm = _build_vertex_model(
+            ChatVertexAI,
             project=project_id,
             location=location,
             model=model_name,
             temperature=0.4,
-            timeout=request_timeout,
+            request_timeout=request_timeout,
         )
 
     elif selected_model == "VertexClaude":
@@ -144,13 +185,14 @@ def get_langchain_llm(selected_model: str, task_weight: str = "light"):
         if not project_id:
             raise ValueError("VERTEX_PROJECT_ID environment variable is missing. Please set it in the AI Model Settings.")
 
-        from langchain_google_genai import ChatGoogleGenerativeAI
-        llm = ChatGoogleGenerativeAI(
+        ChatAnthropicVertex = _load_vertex_claude_class()
+        llm = _build_vertex_model(
+            ChatAnthropicVertex,
             project=project_id,
             location=location,
-            model=model_name,
+            model_name=model_name,
             temperature=0.4,
-            timeout=request_timeout,
+            request_timeout=request_timeout,
         )
 
     else:

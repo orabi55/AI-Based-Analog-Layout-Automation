@@ -15,6 +15,7 @@ No new placement algorithms are introduced — these are name/intent shims.
 """
 from __future__ import annotations
 
+import copy
 from typing import List
 
 from ai_agent.core.interfaces import LayoutToolResult, wrap_tool
@@ -23,6 +24,18 @@ from ai_agent.core.common_centroid import (
     place_common_centroid_2d,
     insert_dummies_around_group,
 )
+
+
+def _as_full_layout_result(result: LayoutToolResult, nodes: list) -> LayoutToolResult:
+    """Placement cores return touched nodes; FC tools must return the full layout."""
+    return LayoutToolResult(
+        success=result.success,
+        message=result.message,
+        changed=result.changed,
+        nodes=list(nodes),
+        metrics=dict(result.metrics or {}),
+        warnings=list(result.warnings or []),
+    )
 
 
 def _resolve_finger_ids(parent_id: str, nodes: list) -> List[str]:
@@ -81,6 +94,7 @@ def place_matched_pair(
     device_a / device_b are *parent* device IDs; their fingers are looked up
     automatically from `nodes`.
     """
+    nodes = copy.deepcopy(nodes)
     group_a_ids = _resolve_finger_ids(device_a, nodes)
     group_b_ids = _resolve_finger_ids(device_b, nodes)
     if not group_a_ids or not group_b_ids:
@@ -97,13 +111,14 @@ def place_matched_pair(
     group_a = [id_map[did] for did in group_a_ids if did in id_map]
     group_b = [id_map[did] for did in group_b_ids if did in id_map]
 
-    return place_common_centroid(
+    result = place_common_centroid(
         group_a, group_b,
         start_x = sx,
         row_y   = ry,
         pdk     = pdk,
         pattern = "ABBA",
     )
+    return _as_full_layout_result(result, nodes)
 
 
 # ---------------------------------------------------------------------------
@@ -120,6 +135,7 @@ def place_differential_pair(
     row_y:   float = None,
 ) -> LayoutToolResult:
     """Interdigitate a differential pair (ABAB)."""
+    nodes = copy.deepcopy(nodes)
     group_a_ids = _resolve_finger_ids(device_a, nodes)
     group_b_ids = _resolve_finger_ids(device_b, nodes)
     if not group_a_ids or not group_b_ids:
@@ -136,13 +152,14 @@ def place_differential_pair(
     group_a = [id_map[did] for did in group_a_ids if did in id_map]
     group_b = [id_map[did] for did in group_b_ids if did in id_map]
 
-    return place_common_centroid(
+    result = place_common_centroid(
         group_a, group_b,
         start_x = sx,
         row_y   = ry,
         pdk     = pdk,
         pattern = "ABAB",
     )
+    return _as_full_layout_result(result, nodes)
 
 
 # ---------------------------------------------------------------------------
@@ -161,6 +178,7 @@ def place_current_mirror(
 
     device_ids: list of parent device IDs sharing a gate net.
     """
+    nodes = copy.deepcopy(nodes)
     if not device_ids or len(device_ids) < 2:
         return LayoutToolResult(
             success=False,
@@ -181,12 +199,13 @@ def place_current_mirror(
             "nodes":   dev_nodes,
         })
 
-    return place_common_centroid_2d(
+    result = place_common_centroid_2d(
         devices,
         start_x = sx,
         row_y   = ry,
         pdk     = pdk,
     )
+    return _as_full_layout_result(result, nodes)
 
 
 # ---------------------------------------------------------------------------
@@ -206,6 +225,7 @@ def add_dummy_group(
     surfaced as a separate tool so the LLM can invoke it via the natural
     "add dummies around X" phrasing.
     """
+    nodes = copy.deepcopy(nodes)
     if not group_node_ids:
         return LayoutToolResult(
             success=False,
@@ -222,7 +242,20 @@ def add_dummy_group(
             nodes=list(nodes),
         )
 
-    return insert_dummies_around_group(
+    result = insert_dummies_around_group(
         group_nodes, pdk,
         n_dummies = int(n_dummies),
     )
+    if result.success and result.changed:
+        group_set = set(group_node_ids)
+        full_nodes = [n for n in nodes if str(n.get("id", "")) not in group_set]
+        full_nodes.extend(result.nodes or [])
+        return LayoutToolResult(
+            success=result.success,
+            message=result.message,
+            changed=result.changed,
+            nodes=full_nodes,
+            metrics=dict(result.metrics or {}),
+            warnings=list(result.warnings or []),
+        )
+    return _as_full_layout_result(result, nodes)

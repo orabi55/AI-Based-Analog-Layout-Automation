@@ -18,6 +18,27 @@ Functions:
 from typing import List, Dict, Tuple
 import math
 
+
+def _coerce_int_count(value, field_name: str, default: int = 1) -> int:
+    """Accept integer-valued JSON numbers from tool calls without leaking floats."""
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        raise ValueError(f"{field_name} must be an integer count")
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{field_name} must be an integer count") from exc
+    if not math.isfinite(numeric):
+        raise ValueError(f"{field_name} must be finite")
+    count = int(round(numeric))
+    if abs(numeric - count) > 1e-6:
+        raise ValueError(f"{field_name} must be integer-valued, got {value!r}")
+    if count < 0:
+        raise ValueError(f"{field_name} must be non-negative")
+    return count
+
+
 def generate_common_centroid_matrix(devices: List[Dict]) -> Dict:
     """
     Generate a 2D common centroid placement matrix for a group of devices.
@@ -48,8 +69,20 @@ def generate_common_centroid_matrix(devices: List[Dict]) -> Dict:
     if not devices:
         return {"matrix": [], "rows": 0, "cols": 0}
 
+    normalized_devs = []
+    for dev in devices:
+        dev_id = dev.get("id")
+        normalized_devs.append({
+            **dev,
+            "id": dev_id,
+            "fingers": _coerce_int_count(
+                dev.get("fingers", 1),
+                f"fingers for {dev_id or 'device'}",
+            ),
+        })
+
     # Sort devices by finger count (smallest first)
-    sorted_devs = sorted(devices, key=lambda d: d.get("fingers", 1))
+    sorted_devs = sorted(normalized_devs, key=lambda d: d.get("fingers", 1))
 
     total_fingers = sum(d.get("fingers", 1) for d in sorted_devs)
     if total_fingers == 0:
@@ -260,6 +293,8 @@ def generate_2d_abba_matrix(
 
     if not fingers_a or not fingers_b:
         return {"matrix": [], "rows": 0, "cols": 0, "total_fingers": 0}
+
+    n_rows = max(1, _coerce_int_count(n_rows, "n_rows", default=2))
 
     nf_a = len(fingers_a)
     nf_b = len(fingers_b)

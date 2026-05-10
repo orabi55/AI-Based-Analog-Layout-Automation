@@ -15,6 +15,8 @@ Keyword routing:
 import os
 import re
 import json
+import html
+import uuid
 from datetime import datetime
 
 # Set default Vertex AI env vars so the chat works without opening
@@ -132,6 +134,16 @@ class ChatPanel(QWidget):
 
         self._layout_context = None
         self._chat_history = []  # multi-turn: list of {"role", "content"}
+        self._messages = []
+        self._stage_message_ids = {}
+        self._tool_message_ids = {}
+        self._active_response_id = None
+        self._handled_response_ids = set()
+        self._pending_response_text = ""
+        self._fc_command_received = False
+        self._suppress_next_response_ready_text = ""
+        self._real_stage_events_active = False
+        self._has_real_stage_signals = False
         self._thinking_timer = None
         self._thinking_dots = 0
         self._thinking_stage = 0          # which pipeline stage label to show
@@ -162,8 +174,19 @@ class ChatPanel(QWidget):
         # Shared response signals back to GUI
         self._llm_worker.response_ready.connect(self._on_llm_response)
         self._llm_worker.error_occurred.connect(self._on_llm_error)
-        # FC streaming path — response_done replaces response_ready for that path
-        self._llm_worker.response_done.connect(self._on_response_done)
+        self._connect_worker_signal("response_started", self._on_response_started)
+        self._connect_worker_signal("response_delta", self._on_response_delta)
+        self._connect_worker_signal("response_done", self._on_response_done)
+        self._connect_worker_signal("stage_started", self._on_stage_started)
+        self._connect_worker_signal("stage_delta", self._on_stage_delta)
+        self._connect_worker_signal("stage_done", self._on_stage_done)
+        self._connect_worker_signal("tool_started", self._on_tool_started)
+        self._connect_worker_signal("tool_done", self._on_tool_done)
+        self._connect_worker_signal("tool_progress", self._on_tool_progress)
+        self._has_real_stage_signals = all(
+            hasattr(self._llm_worker, name)
+            for name in ("stage_started", "stage_delta", "stage_done")
+        )
 
         # Human-in-the-loop pause signal
         self._llm_worker.topology_ready_for_review.connect(self._on_topology_review)
@@ -176,6 +199,16 @@ class ChatPanel(QWidget):
 
         self._init_ui()
         self._show_welcome()
+
+    def _connect_worker_signal(self, signal_name, handler):
+        """Connect optional worker signals without breaking older worker builds."""
+        signal = getattr(self._llm_worker, signal_name, None)
+        if signal is None:
+            return
+        try:
+            signal.connect(handler)
+        except Exception:
+            pass
 
     # -----------------------------------------
     # Cleanup
@@ -612,10 +645,175 @@ class ChatPanel(QWidget):
         self._append_bubble("ai", welcome, is_html=True)
 
     # -----------------------------------------
-    # Bubble rendering
+    # Chat model + rendering
     # -----------------------------------------
+    def _new_message_id(self):
+        return str(uuid.uuid4())
+
+    def _add_message(self, role, content="", status="done", meta=None, message_id=None):
+        msg = {
+            "id": message_id or self._new_message_id(),
+            "role": role,
+            "content": content or "",
+            "status": status,
+            "meta": dict(meta or {}),
+        }
+        msg["meta"].setdefault("time", datetime.now().strftime("%H:%M"))
+        self._messages.append(msg)
+        self._render_messages()
+        return msg["id"]
+
+    def _find_message(self, message_id):
+        for msg in self._messages:
+            if msg.get("id") == message_id:
+                return msg
+        return None
+
+    def _message_html(self, msg):
+        role = msg.get("role", "assistant")
+        if role == "stage":
+            return self._stage_message_html(msg)
+        if role == "tool":
+            return self._tool_message_html(msg)
+
+        meta = msg.get("meta", {})
+        is_html = bool(meta.get("is_html"))
+        content = msg.get("content", "")
+        if msg.get("status") == "streaming":
+            if content:
+                content = f"{content}|"
+            else:
+                content = "Thinking" + str(meta.get("dots", ""))
+        content_html = content if is_html else self._md_to_html(content)
+        now = meta.get("time", "")
+
+        if role == "user":
+            return f"""
+            <div style="text-align:right; margin:6px 0;">
+                <div style="display:inline-block; max-width:82%; text-align:left;">
+                    <div style="
+                        background-color: #4a90d9;
+                        color: white;
+                        padding: 10px 16px;
+                        border-radius: 16px 16px 4px 16px;
+                        font-size: 13px;
+                        line-height: 1.45;
+                    ">
+                        {content_html}
+                    </div>
+                    <div style="font-size:10px; color:#556677; text-align:right; margin-top:3px;">
+                        {now}
+                    </div>
+                </div>
+            </div>
+            """
+
+        avatar = "AI" if role == "assistant" else "Info"
+        bg = "#1a2230" if role == "assistant" else "#2a2518"
+        border_col = "#2d3548" if role == "assistant" else "#4a4020"
+        text_col = "#d0d8e0" if role == "assistant" else "#e8ddb8"
+        return f"""
+        <div style="text-align:left; margin:6px 0;">
+            <div style="display:inline-block; max-width:88%; text-align:left;">
+                <div style="font-size:10px; color:#556677; margin-bottom:3px;">
+                    {avatar}
+                </div>
+                <div style="
+                    background: {bg};
+                    color: {text_col};
+                    padding: 10px 16px;
+                    border-radius: 4px 16px 16px 16px;
+                    font-size: 13px;
+                    line-height: 1.5;
+                    border: 1px solid {border_col};
+                ">
+                    {content_html}
+                </div>
+                <div style="font-size:10px; color:#556677; margin-top:3px;">
+                    {now}
+                </div>
+            </div>
+        </div>
+        """
+
+    def _stage_message_html(self, msg):
+        meta = msg.get("meta", {})
+        title = html.escape(str(meta.get("title") or msg.get("content") or "Stage"))
+        updates = [str(u) for u in meta.get("updates", []) if str(u).strip()]
+        status = msg.get("status", "running")
+        symbol = "&#10003;" if status == "done" else "&rarr;"
+        color = "#6fd09a" if status == "done" else "#7cb7ff"
+        dots = "" if status == "done" else html.escape(str(meta.get("dots", "")))
+        body = ""
+        if updates:
+            last = html.escape(updates[-1])
+            body = f"<div style='color:#9aa8b8;font-size:12px;margin-top:5px;'>{last}</div>"
+        return f"""
+        <div style="text-align:left; margin:5px 0;">
+            <div style="display:inline-block; max-width:92%; text-align:left;">
+                <div style="
+                    background:#141d2b;
+                    color:#d0d8e0;
+                    padding:8px 12px;
+                    border-radius:8px;
+                    border:1px solid #2d3548;
+                    font-size:12px;
+                    line-height:1.35;
+                ">
+                    <span style="color:{color};font-weight:bold;">{symbol}</span>
+                    <b style="color:#e8f0ff;">{title}{dots}</b>
+                    {body}
+                </div>
+            </div>
+        </div>
+        """
+
+    def _tool_message_html(self, msg):
+        meta = msg.get("meta", {})
+        status = msg.get("status", "running")
+        color = "#6fd09a" if status == "done" else "#7cb7ff"
+        if status == "error":
+            color = "#ff6b6b"
+        title = html.escape(str(msg.get("content") or "Tool update"))
+        detail = html.escape(str(meta.get("detail") or ""))
+        detail_html = f"<div style='color:#9aa8b8;font-size:12px;margin-top:5px;'>{detail}</div>" if detail else ""
+        dots = "" if status in ("done", "error") else html.escape(str(meta.get("dots", "")))
+        return f"""
+        <div style="text-align:left; margin:5px 0;">
+            <div style="display:inline-block; max-width:92%; text-align:left;">
+                <div style="
+                    background:#121b26;
+                    color:#d0d8e0;
+                    padding:8px 12px;
+                    border-radius:8px;
+                    border:1px solid #273446;
+                    font-size:12px;
+                    line-height:1.35;
+                ">
+                    <span style="color:{color};font-weight:bold;">tool</span>
+                    <span style="margin-left:6px;">{title}{dots}</span>
+                    {detail_html}
+                </div>
+            </div>
+        </div>
+        """
+
+    def _render_messages(self):
+        html_parts = [self._message_html(msg) for msg in self._messages]
+        self.chat_display.setHtml("".join(html_parts))
+        self.chat_display.verticalScrollBar().setValue(
+            self.chat_display.verticalScrollBar().maximum()
+        )
+
     def _append_bubble(self, role, text, is_html=False):
         """Render a modern chat bubble.  role = 'user' | 'ai' | 'system'."""
+        model_role = "assistant" if role in ("ai", "assistant") else role
+        return self._add_message(
+            model_role,
+            text,
+            status="done",
+            meta={"is_html": bool(is_html)},
+        )
         now = datetime.now().strftime("%H:%M")
         content = text if is_html else self._md_to_html(text)
 
@@ -682,6 +880,25 @@ class ChatPanel(QWidget):
         self._append_bubble("user", text)
         self._chat_history.append({"role": "user", "content": text})
         self.input_field.clear()
+        self._fc_command_received = False
+        self._tool_message_ids.clear()
+
+        if self._awaiting_strategy_resume:
+            self._is_orchestrated = True
+            self._awaiting_strategy_resume = False
+            self._real_stage_events_active = False
+            self._stage_message_ids.clear()
+            self.request_resume_strategy.emit(text)
+            return
+
+        if self._awaiting_visual_resume:
+            self._is_orchestrated = True
+            self._awaiting_visual_resume = False
+            approved = bool(re.search(r"\b(yes|approve|approved|ok|okay|done|apply)\b", text, re.IGNORECASE))
+            self._real_stage_events_active = False
+            self._stage_message_ids.clear()
+            self.request_resume_viewer.emit({"approved": approved, "feedback": text})
+            return
 
         # --- Routing logic -----------------------------------------------
         # 1. Pipeline interrupts always resume the orchestrator regardless of mode.
@@ -690,10 +907,9 @@ class ChatPanel(QWidget):
         # 3. Everything else is routed by the user-selected mode:
         #    FC  → function-calling (tools bound, replace_layout)
         #    CMD → MultiAgentOrchestrator text path ([CMD] blocks)
-        awaiting_resume    = self._awaiting_strategy_resume or self._awaiting_visual_resume
         is_pipeline_request = bool(_ORCHESTRATOR_KEYWORDS.search(text))
 
-        if awaiting_resume or (self._layout_context and is_pipeline_request):
+        if self._layout_context and is_pipeline_request:
             self._is_orchestrated = True
             self._call_orchestrator(text)
         elif self._chat_mode == "CMD":
@@ -708,6 +924,15 @@ class ChatPanel(QWidget):
         """Clear the chat display and history."""
         self.chat_display.clear()
         self._chat_history.clear()
+        self._messages.clear()
+        self._stage_message_ids.clear()
+        self._tool_message_ids.clear()
+        self._active_response_id = None
+        self._handled_response_ids.clear()
+        self._pending_response_text = ""
+        self._fc_command_received = False
+        self._suppress_next_response_ready_text = ""
+        self._real_stage_events_active = False
         self._show_welcome()
 
     def _on_model_changed(self, model_name: str):
@@ -732,6 +957,8 @@ class ChatPanel(QWidget):
         For 'abstract' intents, activate the 4-stage pipeline animation.
         For chat/question/concrete, keep the simple 'Thinking...' dots.
         """
+        if self._has_real_stage_signals:
+            return
         if intent == "abstract":
             # Switch to pipeline stage animation
             self._is_orchestrated = True
@@ -754,9 +981,25 @@ class ChatPanel(QWidget):
     # -----------------------------------------
     # Animated thinking indicator
     # -----------------------------------------
+    def _ensure_activity_timer(self, interval=400):
+        if self._thinking_timer is not None:
+            return
+        self._thinking_timer = QTimer(self)
+        self._thinking_timer.timeout.connect(self._animate_thinking)
+        self._thinking_timer.start(interval)
+
     def _start_thinking(self):
         self._thinking_dots = 0
         self._thinking_stage = 0
+        label = "Thinking"
+        self._add_message(
+            "assistant",
+            label,
+            status="running",
+            meta={"kind": "thinking"},
+        )
+        self._ensure_activity_timer()
+        return
         if self._is_orchestrated:
             label = _ORCHESTRATOR_STAGES[0][1]
         else:
@@ -769,6 +1012,23 @@ class ChatPanel(QWidget):
         self._thinking_timer.start(interval)
 
     def _animate_thinking(self):
+        msg = None
+        for candidate in reversed(self._messages):
+            if candidate.get("status") in ("running", "streaming"):
+                msg = candidate
+                break
+        if not msg:
+            self._stop_thinking()
+            return
+        self._thinking_dots = (self._thinking_dots + 1) % 4
+        dots = "." * self._thinking_dots
+        msg.setdefault("meta", {})["dots"] = dots
+        if self._is_orchestrated:
+            self._thinking_stage = (self._thinking_stage + 1) % max(1, len(_ORCHESTRATOR_STAGES))
+        if msg.get("meta", {}).get("kind") == "thinking":
+            msg["content"] = "Thinking" + dots
+        self._render_messages()
+        return
         if self._is_orchestrated:
             # Cycle through pipeline stage labels
             self._thinking_stage = (self._thinking_stage + 1) % len(_ORCHESTRATOR_STAGES)
@@ -805,11 +1065,18 @@ class ChatPanel(QWidget):
             self._thinking_timer.stop()
             self._thinking_timer = None
 
+    def _stop_activity_if_idle(self):
+        if any(msg.get("status") in ("running", "streaming") for msg in self._messages):
+            return
+        self._stop_thinking()
+
     # -----------------------------------------
     # LLM dispatch helpers
     # -----------------------------------------
     def _call_orchestrator(self, user_message):
         """Serialize layout context and dispatch to OrchestratorWorker."""
+        self._real_stage_events_active = False
+        self._stage_message_ids.clear()
         self._start_thinking()
         ctx = self._layout_context or {}
         try:
@@ -928,6 +1195,193 @@ class ChatPanel(QWidget):
         )
         return affirmative is not None
 
+    def _normalise_response_text(self, text):
+        if isinstance(text, dict):
+            if isinstance(text.get("content"), str):
+                return text.get("content", "")
+            return json.dumps(text, ensure_ascii=False, indent=2)
+        if isinstance(text, list):
+            return json.dumps(text, ensure_ascii=False, indent=2)
+        if text is None:
+            return ""
+        return str(text)
+
+    @Slot(str)
+    def _on_response_started(self, message_id: str):
+        self._remove_last_message()
+        self._ensure_activity_timer()
+        self._active_response_id = message_id
+        if self._find_message(message_id) is None:
+            self._add_message(
+                "assistant",
+                "",
+                status="streaming",
+                message_id=message_id,
+            )
+
+    @Slot(str, str)
+    def _on_response_delta(self, message_id: str, delta: str):
+        self._remove_last_message()
+        self._ensure_activity_timer()
+        msg = self._find_message(message_id)
+        if msg is None:
+            self._on_response_started(message_id)
+            msg = self._find_message(message_id)
+        if msg is None:
+            return
+        msg["content"] = msg.get("content", "") + self._normalise_response_text(delta)
+        msg["status"] = "streaming"
+        self._render_messages()
+
+    @Slot(str, str)
+    def _on_stage_started(self, stage_key: str, title: str):
+        self._real_stage_events_active = True
+        self._remove_last_message()
+        self._ensure_activity_timer()
+        stage_key = str(stage_key or "stage")
+        title = str(title or stage_key)
+        message_id = self._stage_message_ids.get(stage_key)
+        msg = self._find_message(message_id) if message_id else None
+        if msg is None:
+            message_id = f"stage:{stage_key}:{len(self._stage_message_ids)}"
+            self._stage_message_ids[stage_key] = message_id
+            self._add_message(
+                "stage",
+                title,
+                status="running",
+                message_id=message_id,
+                meta={"title": title, "updates": []},
+            )
+            return
+        msg["content"] = title
+        msg["status"] = "running"
+        msg.setdefault("meta", {})["title"] = title
+        self._render_messages()
+
+    @Slot(str, str)
+    def _on_stage_delta(self, stage_key: str, update: str):
+        stage_key = str(stage_key or "stage")
+        message_id = self._stage_message_ids.get(stage_key)
+        msg = self._find_message(message_id) if message_id else None
+        if msg is None:
+            self._on_stage_started(stage_key, stage_key)
+            msg = self._find_message(self._stage_message_ids.get(stage_key))
+        if msg is None:
+            return
+        update = self._normalise_response_text(update).strip()
+        if update:
+            updates = msg.setdefault("meta", {}).setdefault("updates", [])
+            if not updates or updates[-1] != update:
+                updates.append(update)
+        self._render_messages()
+
+    @Slot(str, str)
+    def _on_stage_done(self, stage_key: str, summary: str):
+        stage_key = str(stage_key or "stage")
+        message_id = self._stage_message_ids.get(stage_key)
+        msg = self._find_message(message_id) if message_id else None
+        if msg is None:
+            self._on_stage_started(stage_key, stage_key)
+            msg = self._find_message(self._stage_message_ids.get(stage_key))
+        if msg is None:
+            return
+        summary = self._normalise_response_text(summary).strip()
+        if summary:
+            updates = msg.setdefault("meta", {}).setdefault("updates", [])
+            if not updates or updates[-1] != summary:
+                updates.append(summary)
+        msg["status"] = "done"
+        self._render_messages()
+        if self._is_orchestrated and not str(stage_key).endswith("human_viewer"):
+            self._add_message(
+                "assistant",
+                "Thinking",
+                status="running",
+                meta={"kind": "thinking"},
+            )
+            self._ensure_activity_timer()
+        else:
+            self._stop_activity_if_idle()
+
+    @Slot(str, dict)
+    def _on_tool_started(self, tool_name: str, args: dict):
+        self._ensure_activity_timer()
+        tool_name = str(tool_name or "tool")
+        message_id = f"tool:{tool_name}:{uuid.uuid4()}"
+        self._tool_message_ids[tool_name] = message_id
+        detail = ""
+        if isinstance(args, dict) and args:
+            try:
+                detail = json.dumps(args, ensure_ascii=False)
+            except (TypeError, ValueError):
+                detail = str(args)
+        self._add_message(
+            "tool",
+            f"Calling {tool_name}...",
+            status="running",
+            message_id=message_id,
+            meta={"tool_name": tool_name, "detail": detail},
+        )
+
+    @Slot(str, dict)
+    def _on_tool_done(self, tool_name: str, result: dict):
+        tool_name = str(tool_name or "tool")
+        message_id = self._tool_message_ids.get(tool_name)
+        msg = self._find_message(message_id) if message_id else None
+        if msg is None:
+            message_id = f"tool:{tool_name}:{uuid.uuid4()}"
+            self._tool_message_ids[tool_name] = message_id
+            self._add_message("tool", f"Calling {tool_name}...", status="running", message_id=message_id)
+            msg = self._find_message(message_id)
+        if msg is None:
+            return
+        result = result if isinstance(result, dict) else {"message": str(result)}
+        success = bool(result.get("success", True))
+        changed = bool(result.get("changed", False))
+        message = str(result.get("message") or "")
+        detail_message = message
+        if success and message:
+            lines = [line.strip() for line in message.splitlines() if line.strip()]
+            if len(lines) > 3 or len(message) > 240:
+                completed = sum(
+                    1 for line in lines[1:]
+                    if line.startswith("✓") or line.startswith("  ✓")
+                )
+                failed = sum(
+                    1 for line in lines[1:]
+                    if line.startswith("✗") or line.startswith("  ✗")
+                )
+                detail_message = lines[0] if lines else "layout updated."
+                if completed or failed:
+                    detail_message = f"{detail_message} ({completed} step(s)"
+                    if failed:
+                        detail_message += f", {failed} failed"
+                    detail_message += ")."
+        if success:
+            msg["content"] = f"{tool_name} applied successfully."
+            if changed:
+                msg["meta"]["detail"] = detail_message or "layout updated."
+            elif detail_message:
+                msg["meta"]["detail"] = detail_message
+            msg["status"] = "done"
+        else:
+            msg["content"] = f"{tool_name} failed."
+            msg["meta"]["detail"] = message
+            msg["status"] = "error"
+        self._render_messages()
+        self._stop_activity_if_idle()
+
+    @Slot(str, str, str)
+    def _on_tool_progress(self, tool_name: str, state: str, message: str):
+        if hasattr(self._llm_worker, "tool_started"):
+            return
+        if state == "starting":
+            self._on_tool_started(tool_name, {})
+        elif state == "success":
+            self._on_tool_done(tool_name, {"success": True, "message": message})
+        elif state == "failed":
+            self._on_tool_done(tool_name, {"success": False, "message": message})
+
     def _on_llm_response(self, text):
         self._stop_thinking()
         self._remove_last_message()
@@ -947,6 +1401,11 @@ class ChatPanel(QWidget):
             text = ""
         else:
             text = str(text)
+
+        suppress = getattr(self, "_suppress_next_response_ready_text", "")
+        if suppress and text.strip() == suppress.strip():
+            self._suppress_next_response_ready_text = ""
+            return
 
         print(f"[CHAT] Raw LLM response: {text[:300]}")
 
@@ -969,6 +1428,65 @@ class ChatPanel(QWidget):
 
     @Slot(str, str)
     def _on_response_done(self, message_id: str, final_text: str):
+        if message_id in self._handled_response_ids:
+            return
+        self._handled_response_ids.add(message_id)
+        if len(self._handled_response_ids) > 20:
+            self._handled_response_ids.clear()
+
+        text = self._normalise_response_text(final_text).strip()
+        msg = self._find_message(message_id)
+        if msg is None:
+            msg_id = self._add_message(
+                "assistant",
+                "",
+                status="streaming",
+                message_id=message_id,
+            )
+            msg = self._find_message(msg_id)
+
+        if text.startswith("Tool calls executed:") and any(
+            m.get("role") == "tool" for m in self._messages
+        ):
+            self._messages = [m for m in self._messages if m.get("id") != message_id]
+            self._render_messages()
+            self._suppress_next_response_ready_text = text
+            self._pending_response_text = ""
+            self._stop_activity_if_idle()
+            return
+
+        if self._fc_command_received:
+            if msg is not None:
+                if text and msg.get("content", "").strip():
+                    msg["content"] = text
+                    msg["status"] = "done"
+                else:
+                    self._messages = [m for m in self._messages if m.get("id") != message_id]
+                self._render_messages()
+            self._fc_command_received = False
+            self._pending_response_text = ""
+            self._stop_activity_if_idle()
+            return
+
+        display_text, commands = self._parse_commands(text)
+        if commands and not getattr(self, '_user_cmds_executed', False):
+            print(f"[CHAT] Parsed [CMD] blocks from streamed AI: {commands}")
+            for cmd in commands:
+                self.command_requested.emit(cmd)
+        self._user_cmds_executed = False
+
+        clean = display_text.strip()
+        if msg is not None:
+            msg["content"] = clean or text
+            msg["status"] = "done"
+        self._render_messages()
+        if text:
+            self._suppress_next_response_ready_text = text
+        if clean and clean != "(no response)":
+            self._chat_history.append({"role": "assistant", "content": clean})
+        self._pending_response_text = ""
+        self._stop_activity_if_idle()
+        return
         """FC streaming path: workers emit response_done instead of response_ready.
 
         Deduplication: stream_llm and process_request_with_tools both emit
@@ -1078,8 +1596,11 @@ class ChatPanel(QWidget):
         self._append_bubble("ai", question)
 
     def _remove_last_message(self):
-        """Remove the last appended message (the thinking bubble)."""
-        html = self.chat_display.toHtml()
-        idx = html.rfind('<div style="text-align:')
-        if idx != -1:
-            self.chat_display.setHtml(html[:idx])
+        """Remove the transient thinking bubble, if it is still visible."""
+        if not self._messages:
+            return
+        last = self._messages[-1]
+        if last.get("meta", {}).get("kind") != "thinking":
+            return
+        self._messages.pop()
+        self._render_messages()

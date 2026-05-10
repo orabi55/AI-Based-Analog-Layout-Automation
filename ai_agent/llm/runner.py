@@ -148,7 +148,7 @@ def _extract_text_from_response(response) -> str:
     return str(content)
 
 
-def stream_llm(lc_messages, llm, message_id: str, worker):
+def stream_llm(lc_messages, llm, message_id: str, worker, emit_done: bool = True):
     """Stream LLM output, emitting `worker.response_delta` for each chunk.
 
     Signals fired (all on `worker`):
@@ -160,6 +160,8 @@ def stream_llm(lc_messages, llm, message_id: str, worker):
         llm:         LangChain BaseChatModel-compatible object.
         message_id:  Unique identifier for this response stream.
         worker:      QObject exposing the new streaming signals.
+        emit_done:   emit response_done before returning. Tool mode disables
+                     this so tool progress and command_ready can finish first.
 
     Returns:
         tuple[str, Any]: (full_text, accumulated_response)
@@ -223,10 +225,11 @@ def stream_llm(lc_messages, llm, message_id: str, worker):
             except Exception:
                 pass
 
-    try:
-        worker.response_done.emit(message_id, full_text)
-    except Exception:
-        pass
+    if emit_done:
+        try:
+            worker.response_done.emit(message_id, full_text)
+        except Exception:
+            pass
 
     return full_text, accumulated
 

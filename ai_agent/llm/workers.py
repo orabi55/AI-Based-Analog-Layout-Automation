@@ -67,7 +67,7 @@ from PySide6.QtCore import QObject, Signal, Slot
 from ai_agent.utils.logging import vprint
 
 from ai_agent.agents.orchestrator import MultiAgentOrchestrator
-from ai_agent.llm.runner import run_llm
+from ai_agent.llm.runner import run_llm, stream_llm
 
 # Load .env – walk upward from this file to find the repo root .env
 _this_file = Path(__file__).resolve()
@@ -178,6 +178,25 @@ class LLMWorker(QObject):
             if not user_message:
                 user_message = full_prompt
 
+            message_id = str(uuid.uuid4())
+            self.response_started.emit(message_id)
+
+            def _streaming_run_llm(msgs, prompt, model):
+                try:
+                    from ai_agent.llm.factory import get_langchain_llm
+                    llm = get_langchain_llm(model, task_weight="light")
+                    text, _ = stream_llm(
+                        msgs or [{"role": "user", "content": prompt or user_message}],
+                        llm,
+                        message_id,
+                        self,
+                        emit_done=False,
+                    )
+                    return text
+                except Exception as exc:
+                    vprint(f"[LLM Worker] streaming fallback: {exc}", flush=True)
+                    return run_llm(msgs, prompt, model, task_weight="light")
+
             # The layout_context is stored by ChatPanel and injected
             # into the system prompt. We parse it from there for the
             # orchestrator. The ChatPanel sets _layout_context on us
@@ -188,20 +207,21 @@ class LLMWorker(QObject):
                 user_message=user_message,
                 layout_context=layout_context,
                 chat_history=chat_messages,
-                run_llm_fn=lambda sys, msg, sel: run_llm(sys, msg, sel, task_weight="light"),
+                run_llm_fn=_streaming_run_llm,
                 selected_model=selected_model,
             )
 
             reply = result.get("reply", "")
             commands = result.get("commands", [])
 
-            if reply:
-                self.response_ready.emit(reply)
-            else:
-                self.response_ready.emit(
+            if not reply:
+                reply = (
                     "I processed your request but had nothing to say. "
                     "Could you try rephrasing?"
                 )
+
+            self.response_done.emit(message_id, reply)
+            self.response_ready.emit(reply)
 
             for cmd in commands:
                 self.command_ready.emit(cmd)
@@ -268,19 +288,18 @@ class LLMWorker(QObject):
             )
 
             final_text = result.get("text") or "(no response)"
+            if result.get("fc_used") and not result.get("_commands_emitted"):
+                for cmd in result.get("cmd_blocks", []):
+                    self.command_ready.emit(cmd)
+                result["_commands_emitted"] = True
 
-            # response_done is emitted by stream_llm itself; emit a safety
-            # final-text done in case run_llm_with_tools used the no-stream path
-            # (defensive — receivers are idempotent against repeats).
+            # Tool mode suppresses stream_llm's early done event, then
+            # finalizes here after tool execution and command propagation.
             try:
                 self.response_done.emit(message_id, final_text)
             except Exception:
                 pass
 
-            # GUI command propagation — exactly once per cmd_block
-            if result.get("fc_used"):
-                for cmd in result.get("cmd_blocks", []):
-                    self.command_ready.emit(cmd)
         except Exception as exc:
             import traceback
             print(f"[LLM Worker] tool path error:\n{traceback.format_exc()}")
@@ -451,6 +470,9 @@ class OrchestratorWorker(LLMWorker):
         if not isinstance(value, dict):
             return ""
         # Order matters: pick the first populated field
+        target = value.get("router_target")
+        if isinstance(target, str) and target.strip():
+            return f"Routed to {target.strip()}"
         for key in ("Analysis_result", "strategy_result", "placement_text",
                     "general_response"):
             v = value.get(key)
@@ -508,10 +530,15 @@ class OrchestratorWorker(LLMWorker):
                         if not isinstance(pending_cmds, list):
                             pending_cmds = []
 
-                        if interrupt_data.get("last_agent") == "topology_analyst": text = interrupt_data.get("Analysis", "")
-                        elif interrupt_data.get("last_agent") == "strategy_selector": text = interrupt_data.get("Strategy", "")
-                        elif interrupt_data.get("last_agent") == "placement_specialist": text = interrupt_data.get("Placement", "")
-                        elif interrupt_data.get("last_agent") == "general": text = interrupt_data.get("General", "")
+                        last_agent = interrupt_data.get("last_agent")
+                        if last_agent == "topology_analyst": text = interrupt_data.get("Analysis", "")
+                        elif last_agent == "strategy_selector": text = interrupt_data.get("Strategy", "")
+                        elif last_agent == "placement_specialist": text = interrupt_data.get("Placement", "")
+                        elif last_agent == "routing_previewer":
+                            text = self._short_summary({"routing_result": interrupt_data.get("Routing", {})}, 500)
+                        elif last_agent == "drc_critic":
+                            text = self._short_summary({"drc_flags": interrupt_data.get("DRC", [])}, 500)
+                        elif last_agent == "general": text = interrupt_data.get("General", "")
                         else: text = ""
 
                         if text:

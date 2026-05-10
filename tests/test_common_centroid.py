@@ -230,6 +230,16 @@ class TestPlaceCommonCentroid2D:
         result = place_common_centroid_2d(devices, 0.0, 0.0, {})
         assert result.success
 
+    def test_integer_valued_float_fingers_are_accepted(self):
+        devices = [
+            {"id": "MM1", "fingers": 4.0, "nodes": _group("MM1", 4)},
+            {"id": "MM2", "fingers": "2.0", "nodes": _group("MM2", 2)},
+        ]
+        result = place_common_centroid_2d(devices, 0.0, 0.0, {})
+        assert result.success
+        assert isinstance(result.metrics["matrix_rows"], int)
+        assert isinstance(result.metrics["matrix_cols"], int)
+
     def test_empty_devices_returns_failure(self):
         result = place_common_centroid_2d([], 0.0, 0.0, {})
         assert not result.success

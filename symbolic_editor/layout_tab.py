@@ -179,6 +179,7 @@ class LayoutEditorTab(QWidget):
             "QSplitter::handle { background-color: #2d3548; height: 2px; }"
             "QSplitter::handle:hover { background-color: #4a90d9; }"
         )
+        self.schematic_panel.setVisible(False)
 
         # ── Main horizontal splitter ──────────────────────────────
         workspace_header = QFrame()
@@ -433,7 +434,14 @@ class LayoutEditorTab(QWidget):
 
     def _toggle_schematic_panel(self):
         if hasattr(self, 'schematic_panel'):
-            self.schematic_panel.setVisible(not self.schematic_panel.isVisible())
+            show = not self.schematic_panel.isVisible()
+            if show and not self._left_splitter.isVisible():
+                self._left_splitter.setVisible(True)
+                self._tree_reopen_strip.setVisible(False)
+            self.schematic_panel.setVisible(show)
+            if show:
+                self.schematic_panel.set_editor(self.editor)
+                self.schematic_panel.load(self.nodes, self._terminal_nets)
 
     def _toggle_chat_panel(self):
         if self.chat_panel.isVisible():
@@ -940,9 +948,12 @@ class LayoutEditorTab(QWidget):
         self.editor.set_edges(edges)
         self.editor.set_terminal_nets(self._terminal_nets)
         self.editor.set_blocks(blocks)
-        # ── Feed schematic panel with the same data ─────────────────
+        # Keep schematic data current, but only render/AI-layout it after the
+        # user explicitly opens the schematic panel from the toolbar/menu.
         self.schematic_panel.set_editor(self.editor)
-        self.schematic_panel.load(self.nodes, self._terminal_nets, force_ai=force_schematic_ai)
+        self.schematic_panel.set_data(self.nodes, self._terminal_nets)
+        if self.schematic_panel.isVisible():
+            self.schematic_panel.refresh(force_ai=force_schematic_ai)
         self.chat_panel.set_layout_context(
             self.nodes, self._original_data.get("edges"), self._terminal_nets,
         )
@@ -1890,7 +1901,6 @@ class LayoutEditorTab(QWidget):
         self._import_worker.start()
 
     def _on_import_completed(self, data, sp_path):
-        # Do NOT hide overlay here; let schematic_panel hide it after AI layout finishes.
         base_name = os.path.splitext(os.path.basename(sp_path))[0]
         sp_dir = os.path.dirname(os.path.abspath(sp_path))
         out_path = os.path.join(sp_dir, f"{base_name}_graph.json")
@@ -1908,7 +1918,9 @@ class LayoutEditorTab(QWidget):
             logging.warning("Failed to compress graph data, using full format", exc_info=True)
             compressed_path = out_path
             reduction = 0
-        self._load_from_data_dict(data, out_path, compact=False, force_schematic_ai=True)
+        # Match the normal undo/open refresh path immediately after import:
+        # snap to the editor grid, compact rows, and sync node coordinates once.
+        self._load_from_data_dict(data, out_path, compact=True, force_schematic_ai=True)
         self._sync_klayout_source(explicit_oas=self._pending_oas_path, source_path=sp_path)
         self._pending_oas_path = None
         num_nodes = len(data.get("nodes", []))
@@ -1920,6 +1932,8 @@ class LayoutEditorTab(QWidget):
             f"To run AI initial placement: Design > Run AI Initial Placement (Ctrl+P)"
         )
         self.chat_panel._append_message("AI", msg, "#e8f4fd", "#1a1a2e")
+        if not self.schematic_panel.isVisible():
+            self.overlay.hide_overlay()
 
     def _on_import_error(self, err_msg):
         self.overlay.hide_overlay()
