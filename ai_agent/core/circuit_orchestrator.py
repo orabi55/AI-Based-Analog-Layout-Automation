@@ -14,6 +14,8 @@ Tools defined here:
 """
 from __future__ import annotations
 
+import copy
+from collections import defaultdict
 from typing import List
 
 from ai_agent.core.interfaces       import LayoutToolResult, wrap_tool
@@ -33,6 +35,7 @@ from ai_agent.core.group_placer import (
 )
 from ai_agent.core.physical_cells   import insert_all_physical_cells
 from ai_agent.core.common_centroid  import insert_dummies_around_group
+from ai_agent.placement.quality_metrics import _transistor_key
 
 
 # ---------------------------------------------------------------------------
@@ -79,6 +82,72 @@ def _chain(initial_nodes: list, steps: list) -> LayoutToolResult:
         metrics  = metrics_acc,
         warnings = warns,
     )
+
+
+def _bbox_geometry(nodes: list) -> dict:
+    xs = []
+    ys = []
+    xe = []
+    ye = []
+    for n in nodes:
+        geo = n.get("geometry", {}) or {}
+        x = float(geo.get("x", 0.0))
+        y = float(geo.get("y", 0.0))
+        w = float(geo.get("width", 0.0))
+        h = float(geo.get("height", 0.0))
+        xs.append(x)
+        ys.append(y)
+        xe.append(x + w)
+        ye.append(y + h)
+    if not xs:
+        return {"x": 0.0, "y": 0.0, "width": 0.0, "height": 0.0}
+    first_geo = nodes[0].get("geometry", {}) or {}
+    return {
+        **first_geo,
+        "x": min(xs),
+        "y": min(ys),
+        "width": max(xe) - min(xs),
+        "height": max(ye) - min(ys),
+    }
+
+
+def _logical_layout_context(nodes: list, terminal_nets: dict) -> tuple[list, dict]:
+    """Collapse expanded finger nodes to parent devices for topology tools."""
+    buckets: dict[str, list] = defaultdict(list)
+    for n in nodes or []:
+        if n.get("is_dummy"):
+            continue
+        parent_id = _transistor_key(str(n.get("id", "")))
+        if parent_id:
+            buckets[parent_id].append(n)
+
+    logical_nodes: list = []
+    for parent_id, members in sorted(buckets.items()):
+        rep = copy.deepcopy(members[0])
+        rep["id"] = parent_id
+        rep["geometry"] = _bbox_geometry(members)
+        rep["finger_count"] = len(members)
+        logical_nodes.append(rep)
+
+    source_nets = terminal_nets if isinstance(terminal_nets, dict) else {}
+    logical_nets: dict = {}
+    for parent_id, members in buckets.items():
+        if isinstance(source_nets.get(parent_id), dict):
+            logical_nets[parent_id] = dict(source_nets[parent_id])
+            continue
+        child_ids = {str(m.get("id", "")) for m in members}
+        by_pin: dict[str, str] = {}
+        for key, nets in source_nets.items():
+            if key not in child_ids or not isinstance(nets, dict):
+                continue
+            for pin in ("D", "G", "S"):
+                value = str(nets.get(pin, "")).strip()
+                if value and pin not in by_pin:
+                    by_pin[pin] = value
+        if by_pin:
+            logical_nets[parent_id] = by_pin
+
+    return logical_nodes, logical_nets
 
 
 # ---------------------------------------------------------------------------
@@ -216,10 +285,14 @@ def optimize_layout_for_matching(
       3. current mirrors   (ABBA / 2D-CC for clusters > 2)
       4. plain matched pairs (ABBA)
     """
-    diff    = detect_differential_pairs(nodes, terminal_nets).metrics.get("diff_pairs", []) or []
-    cross   = detect_cross_coupled_pairs(nodes, terminal_nets).metrics.get("cross_coupled_pairs", []) or []
-    mirrors = detect_current_mirrors(nodes, terminal_nets).metrics.get("current_mirrors", []) or []
-    matched = detect_matched_pairs(nodes).metrics.get("matched_pairs", []) or []
+    logical_nodes, logical_terminal_nets = _logical_layout_context(nodes, terminal_nets)
+    detection_nodes = logical_nodes or list(nodes)
+    detection_nets = logical_terminal_nets or terminal_nets
+
+    diff    = detect_differential_pairs(detection_nodes, detection_nets).metrics.get("diff_pairs", []) or []
+    cross   = detect_cross_coupled_pairs(detection_nodes, detection_nets).metrics.get("cross_coupled_pairs", []) or []
+    mirrors = detect_current_mirrors(detection_nodes, detection_nets).metrics.get("current_mirrors", []) or []
+    matched = detect_matched_pairs(detection_nodes).metrics.get("matched_pairs", []) or []
 
     used: set = set()
     steps: list = []

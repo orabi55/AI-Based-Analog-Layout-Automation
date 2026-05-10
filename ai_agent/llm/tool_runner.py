@@ -226,7 +226,13 @@ def run_llm_with_tools(
     response = None
     try:
         if worker is not None:
-            text, response = stream_llm(lc_messages, llm, message_id, worker)
+            text, response = stream_llm(
+                lc_messages,
+                llm,
+                message_id,
+                worker,
+                emit_done=False,
+            )
         else:
             response = llm.invoke(lc_messages)
             text     = _extract_text(response)
@@ -349,9 +355,27 @@ def _summarize_calls(tool_calls: List[dict], tool_results: list) -> str:
 
 def _summarize_changed_calls(tool_results: list) -> str:
     """Compact message for the GUI after applying changed tool output."""
-    changed = [r.message for r in tool_results if r.success and r.changed]
+    changed = [_compact_result_message(r.message) for r in tool_results if r.success and r.changed]
     if not changed:
         return "Applied layout tool result."
     if len(changed) == 1:
         return changed[0]
     return f"Applied {len(changed)} layout tool result(s)."
+
+
+def _compact_result_message(message: str) -> str:
+    text = str(message or "").strip()
+    if not text:
+        return "Layout updated."
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if len(lines) <= 3 and len(text) <= 240:
+        return text
+    first = lines[0] if lines else "Layout updated."
+    completed = sum(1 for line in lines[1:] if line.startswith("✓") or line.startswith("  ✓"))
+    failed = sum(1 for line in lines[1:] if line.startswith("✗") or line.startswith("  ✗"))
+    if completed or failed:
+        suffix = f"{completed} step(s)"
+        if failed:
+            suffix += f", {failed} failed"
+        return f"{first} ({suffix})."
+    return first if len(first) <= 240 else first[:237] + "..."

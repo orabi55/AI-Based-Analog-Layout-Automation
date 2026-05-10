@@ -960,13 +960,16 @@ class SchematicPanel(QFrame):
 
     def set_editor(self, editor):  self._editor = editor
 
-    def load(self, nodes, terminal_nets, force_ai=False):
+    def set_data(self, nodes, terminal_nets):
         self._nodes = nodes or []
         self._tnets = terminal_nets or {}
+
+    def load(self, nodes, terminal_nets, force_ai=False):
+        self.set_data(nodes, terminal_nets)
         self.canvas.build_schematic(self._nodes, self._tnets, force_ai=force_ai)
 
-    def refresh(self):
-        self.canvas.build_schematic(self._nodes, self._tnets)
+    def refresh(self, force_ai=False):
+        self.canvas.build_schematic(self._nodes, self._tnets, force_ai=force_ai)
 
     def _on_dev(self, nid: str):
         self.highlight_device.emit(nid)

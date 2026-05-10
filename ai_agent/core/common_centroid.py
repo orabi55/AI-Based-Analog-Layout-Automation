@@ -165,6 +165,19 @@ def place_common_centroid(
         geo["y"] = float(row_y)
         placed.append(node)
 
+    if not placed:
+        return LayoutToolResult(
+            success=False,
+            message=(
+                "Common-centroid generator produced no placeable cells "
+                f"(group_a={len(group_a)}, group_b={len(group_b)})"
+            ),
+            changed=False,
+            nodes=ref_all,
+            metrics={"centroid_error_um": 0.0, "placed_count": 0},
+            warnings=[],
+        )
+
     a_ids = list({_transistor_key(str(n.get("id", ""))) for n in group_a})
     b_ids = list({_transistor_key(str(n.get("id", ""))) for n in group_b})
     centroid_err = evaluate_centroid_error(placed, a_ids, b_ids)
