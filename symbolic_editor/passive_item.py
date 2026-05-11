@@ -135,13 +135,13 @@ class _PassiveBase(QGraphicsRectItem):
 class ResistorItem(_PassiveBase):
     """Visual symbol for a resistor — amber body with zig-zag pattern."""
 
-    _BG_TOP    = QColor("#fff8e1")   # warm cream top
-    _BG_BOT    = QColor("#ffe082")   # amber yellow bottom
-    _ZZ_COLOR  = QColor("#e65100")   # deep burnt orange zig-zag
-    _BORDER    = QColor("#bf360c")   # dark red-orange border
-    _LEAD      = QColor("#795548")   # brown lead lines
-    _LABEL_CLR = QColor("#4e2500")   # name text
-    _PIN_CLR   = QColor("#e65100")   # pin label color
+    _BG_TOP    = QColor("#d32f2f")   # vibrant dark red top
+    _BG_BOT    = QColor("#b71c1c")   # deep dark red bottom
+    _ZZ_COLOR  = QColor("#ffcdd2")   # light red zig-zag
+    _BORDER    = QColor("#7f0000")   # deep dark red border
+    _LEAD      = QColor("#e0e0e0")   # light silver lead lines
+    _LABEL_CLR = QColor("#ffffff")   # white name text
+    _PIN_CLR   = QColor("#ffcdd2")   # light red pin labels
 
     def __init__(self, name, x, y, width, height):
         super().__init__(name, "res", x, y, width, height)

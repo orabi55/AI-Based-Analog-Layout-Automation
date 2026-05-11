@@ -19,7 +19,7 @@ from PySide6.QtCore import Qt, QRectF, QObject, Signal
 class HierarchyGroupSignals(QObject):
     """Helper QObject so HierarchyGroupItem can emit signals."""
     drag_started = Signal()
-    drag_finished = Signal()
+    drag_finished = Signal(object)
     position_changed = Signal(object)
     descend_requested = Signal(object)
     ascend_requested = Signal(object)
@@ -182,7 +182,7 @@ class HierarchyGroupItem(QGraphicsRectItem):
     def mouseReleaseEvent(self, event):
         if self._drag_active:
             self._drag_active = False
-            self.signals.drag_finished.emit()
+            self.signals.drag_finished.emit(self)
             self._drag_start_pos = self.pos()
         super().mouseReleaseEvent(event)
 
