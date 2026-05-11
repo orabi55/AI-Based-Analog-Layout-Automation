@@ -1,6 +1,6 @@
 ---
 name: Common-Centroid Matching
-description: Place matched devices in a symmetric centroid pattern to cancel gradients.
+description: Place matched devices in a symmetric centroid pattern to cancel gradients. Used to match current mirrors
 ---
 
 ────────────────────────────────────

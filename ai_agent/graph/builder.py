@@ -15,7 +15,7 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from ai_agent.agents.classifier import classify_intent
 from ai_agent.graph.state import LayoutState
-from ai_agent.graph.edges import route_after_drc, route_after_human, route_by_mode
+from ai_agent.graph.edges import route_after_drc, route_after_drc_chat, route_after_human, route_by_mode
 from ai_agent.utils.logging import vprint
 from ai_agent.nodes import (
     node_topology_analyst,
@@ -67,8 +67,6 @@ def _node_router(state: LayoutState):
     )
 
     if target not in {
-        "topology_analyst",
-        "strategy_selector",
         "placement_specialist",
         "drc_critic",
         "routing_previewer",
@@ -79,6 +77,7 @@ def _node_router(state: LayoutState):
     return {
         "intent": intent,
         "router_target": target,
+        "pending_cmds": [],
     }
 
 
@@ -141,8 +140,6 @@ def build_chat_graph():
     builder = StateGraph(LayoutState)
 
     builder.add_node("router", _node_router)
-    builder.add_node("topology_analyst", node_topology_analyst)
-    builder.add_node("strategy_selector", node_strategy_selector)
     builder.add_node("placement_specialist", node_placement_specialist_chatbot)
     builder.add_node("drc_critic", node_drc_critic)
     builder.add_node("routing_previewer", node_routing_previewer)
@@ -154,18 +151,21 @@ def build_chat_graph():
         "router",
         _route_after_router,
         {
-            "topology_analyst": "topology_analyst",
-            "strategy_selector": "strategy_selector",
             "placement_specialist": "placement_specialist",
             "drc_critic": "drc_critic",
             "routing_previewer": "routing_previewer",
             "general": "general",
         },
     )
-    builder.add_edge("topology_analyst", "human_viewer")
-    builder.add_edge("strategy_selector", "human_viewer")
-    builder.add_edge("placement_specialist", "human_viewer")
-    builder.add_edge("drc_critic", "human_viewer")
+    builder.add_edge("placement_specialist", "drc_critic")
+    builder.add_conditional_edges(
+        "drc_critic",
+        route_after_drc_chat,
+        {
+            "human_viewer": "human_viewer",
+            "placement_specialist": "placement_specialist",
+        },
+    )
     builder.add_edge("routing_previewer", "human_viewer")
     builder.add_edge("general", "human_viewer")
     builder.add_edge("human_viewer", END)

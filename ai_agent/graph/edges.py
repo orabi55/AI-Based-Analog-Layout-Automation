@@ -34,6 +34,18 @@ def route_after_drc(state: LayoutState):
     return "node_human_viewer"
 
 
+def route_after_drc_chat(state: LayoutState):
+    """After DRC critic in chat mode: retry placement on failure with a cap."""
+    if state.get("drc_pass", False):
+        return "human_viewer"
+
+    retry_count = state.get("drc_retry_count", 0)
+    if retry_count < MAX_DRC_RETRIES:
+        return "placement_specialist"
+
+    return "human_viewer"
+
+
 def route_after_human(state: LayoutState):
     """After human viewer: save if approved, loop back to placement if rejected."""
     if state.get("approved", False):

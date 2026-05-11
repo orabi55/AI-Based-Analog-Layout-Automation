@@ -1036,6 +1036,8 @@ def node_placement_specialist_chatbot(state):
     strategy_result  = state.get("strategy_result", "auto")
     selected_model   = state.get("selected_model", "Gemini")
     no_abutment_flag = state.get("no_abutment", False)
+    drc_passed = state.get("drc_pass", False)
+    drc_violations = state.get("drc_flags", [])
 
     working_nodes = state.get("placement_nodes", []) or copy.deepcopy(nodes)
 
@@ -1058,9 +1060,17 @@ def node_placement_specialist_chatbot(state):
 
     # ── Step 3b: Call LLM via ReAct + SkillMiddleware ───────────────────────
     log_section("Step 3b: Calling LLM (ReAct + SkillMiddleware)")
+    drc_note = ""
+    if not drc_passed:
+        violations_text = "\n".join(str(v) for v in drc_violations) if drc_violations else "(none provided)"
+        drc_note = (
+            "DRC failed in the previous step. Please fix these DRC violations:\n"
+            f"{violations_text}\n\n"
+        )
     placer_user = (
         f"User request: {user_message}\n\n"
         f"Selected Strategy: {strategy_result}\n\n"
+        f"{drc_note}"
         f"{context_text}"
     )
 
