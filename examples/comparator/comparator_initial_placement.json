@@ -8058,18 +8058,18 @@
                 "cross_row": true,
                 "devices": [
                     "MM3",
-                    "MM1",
-                    "MM2",
                     "MM10",
-                    "MM0"
+                    "MM0",
+                    "MM1",
+                    "MM2"
                 ],
                 "nmos_devs": [],
                 "pmos_devs": [
                     "MM3",
-                    "MM1",
-                    "MM2",
                     "MM10",
-                    "MM0"
+                    "MM0",
+                    "MM1",
+                    "MM2"
                 ],
                 "span": 0.294,
                 "wire_length": 2.748003,
@@ -8080,18 +8080,18 @@
                 "criticality": "critical",
                 "cross_row": true,
                 "devices": [
-                    "MM7",
                     "MM6",
                     "MM4",
                     "MM5",
+                    "MM7",
                     "MM1"
                 ],
                 "nmos_devs": [],
                 "pmos_devs": [
-                    "MM7",
                     "MM6",
                     "MM4",
                     "MM5",
+                    "MM7",
                     "MM1"
                 ],
                 "span": 2.058,
@@ -8103,19 +8103,19 @@
                 "criticality": "critical",
                 "cross_row": true,
                 "devices": [
-                    "MM7",
                     "MM6",
-                    "MM2",
+                    "MM4",
                     "MM5",
-                    "MM4"
+                    "MM7",
+                    "MM2"
                 ],
                 "nmos_devs": [],
                 "pmos_devs": [
-                    "MM7",
                     "MM6",
-                    "MM2",
+                    "MM4",
                     "MM5",
-                    "MM4"
+                    "MM7",
+                    "MM2"
                 ],
                 "span": 2.058,
                 "wire_length": 4.512003,
@@ -8126,15 +8126,15 @@
                 "criticality": "signal",
                 "cross_row": true,
                 "devices": [
-                    "MM7",
                     "MM8",
-                    "MM0"
+                    "MM0",
+                    "MM7"
                 ],
                 "nmos_devs": [],
                 "pmos_devs": [
-                    "MM7",
                     "MM8",
-                    "MM0"
+                    "MM0",
+                    "MM7"
                 ],
                 "span": 1.176,
                 "wire_length": 2.812002,
@@ -8145,14 +8145,14 @@
                 "criticality": "signal",
                 "cross_row": true,
                 "devices": [
-                    "MM6",
                     "MM3",
+                    "MM6",
                     "MM9"
                 ],
                 "nmos_devs": [],
                 "pmos_devs": [
-                    "MM6",
                     "MM3",
+                    "MM6",
                     "MM9"
                 ],
                 "span": 1.176,
@@ -8288,5 +8288,83 @@
             "VX"
         ]
     },
-    "chat_response": "[Initial Placement Complete]\n- DRC: \u2713 Clean\n- Nodes: 90 placed\n\n\n==============================================================\n  PLACEMENT SUMMARY\n==============================================================\n  Layout Size  : 5.292um x 4.090um  (aspect 1.29)\n  Total Area   : 21.644 um\u00b2\n  Utilization  : 68.9%\n  DRC Status   : \u2713 Clean\n  PMOS/NMOS    : \u2713 OK\n  Devices      : 90 placed\n  Time Total   : 2m 26s\n==============================================================\n\n================================================================\n  MATCHING & SYMMETRY QUALITY BENCHMARK\n================================================================\n  Matched pairs : 5\n  Metric                     Score   Progress                Grade\n  ------------------------  ------   ----------------------  -----\n  Layout Y Symmetry         100.0%   ####################    A+\n  X Mirror Symmetry         100.0%   ####################    A+\n  Interdigitation           100.0%   ####################    A+\n  Common Centroid (2D)         N/A   (not applicable)      \n  DRC Clean                 100.0%   ####################    A+\n  ------------------------  ------   ----------------------  -----\n  COMPOSITE                 100.0%   ####################    A+\n================================================================\n\n\n9 nets analyzed  (3 critical, 6 signal, 0 bias, 0 power)\nTotal Manhattan HPWL : 21.844 \u00b5m\nEstimated crossings  : 41\nWeighted cost        : 545.0\n\nWorst nets (by weighted HPWL):\n  VOUTN          critical hpwl=4.512\u00b5m  (\u0394x=2.058, \u0394y=2.454)  [CROSS-ROW]\n  VOUTP          critical hpwl=4.512\u00b5m  (\u0394x=2.058, \u0394y=2.454)  [CROSS-ROW]\n  CLK            critical hpwl=2.748\u00b5m  (\u0394x=0.294, \u0394y=2.454)  [CROSS-ROW]\n  VY             signal   hpwl=2.812\u00b5m  (\u0394x=1.176, \u0394y=1.636)  [CROSS-ROW]\n  VX             signal   hpwl=2.812\u00b5m  (\u0394x=1.176, \u0394y=1.636)  [CROSS-ROW]\n\nRouting channels (inter-row bands):\n  band 0  y\u22480.334\u00b5m  0 track(s)  \u2192 widen to 0.134 \u00b5m\n  band 1  y\u22481.002\u00b5m  6 track(s)  \u2192 widen to 0.938 \u00b5m\n  band 2  y\u22482.004\u00b5m  5 track(s)  \u2192 widen to 0.804 \u00b5m\n  band 3  y\u22483.006\u00b5m  3 track(s)  \u2192 widen to 0.536 \u00b5m\n"
+    "chat_response": "[Initial Placement Complete]\n- DRC: \u2713 Clean\n- Nodes: 90 placed\n\n\n==============================================================\n  PLACEMENT SUMMARY\n==============================================================\n  Layout Size  : 5.292um x 4.090um  (aspect 1.29)\n  Total Area   : 21.644 um\u00b2\n  Utilization  : 68.9%\n  DRC Status   : \u2713 Clean\n  PMOS/NMOS    : \u2713 OK\n  Devices      : 90 placed\n  Time Total   : 2m 34s\n==============================================================\n\n================================================================\n  MATCHING & SYMMETRY QUALITY BENCHMARK\n================================================================\n  Matched pairs : 5\n  Metric                     Score   Progress                Grade\n  ------------------------  ------   ----------------------  -----\n  Layout Y Symmetry         100.0%   ####################    A+\n  X Mirror Symmetry         100.0%   ####################    A+\n  Interdigitation           100.0%   ####################    A+\n  Common Centroid (2D)         N/A   (not applicable)      \n  DRC Clean                 100.0%   ####################    A+\n  ------------------------  ------   ----------------------  -----\n  COMPOSITE                 100.0%   ####################    A+\n================================================================\n\n\n9 nets analyzed  (3 critical, 6 signal, 0 bias, 0 power)\nTotal Manhattan HPWL : 21.844 \u00b5m\nEstimated crossings  : 41\nWeighted cost        : 545.0\n\nWorst nets (by weighted HPWL):\n  VOUTN          critical hpwl=4.512\u00b5m  (\u0394x=2.058, \u0394y=2.454)  [CROSS-ROW]\n  VOUTP          critical hpwl=4.512\u00b5m  (\u0394x=2.058, \u0394y=2.454)  [CROSS-ROW]\n  CLK            critical hpwl=2.748\u00b5m  (\u0394x=0.294, \u0394y=2.454)  [CROSS-ROW]\n  VY             signal   hpwl=2.812\u00b5m  (\u0394x=1.176, \u0394y=1.636)  [CROSS-ROW]\n  VX             signal   hpwl=2.812\u00b5m  (\u0394x=1.176, \u0394y=1.636)  [CROSS-ROW]\n\nRouting channels (inter-row bands):\n  band 0  y\u22480.334\u00b5m  0 track(s)  \u2192 widen to 0.134 \u00b5m\n  band 1  y\u22481.002\u00b5m  6 track(s)  \u2192 widen to 0.938 \u00b5m\n  band 2  y\u22482.004\u00b5m  5 track(s)  \u2192 widen to 0.804 \u00b5m\n  band 3  y\u22483.006\u00b5m  3 track(s)  \u2192 widen to 0.536 \u00b5m\n",
+    "groups": {
+        "MM10": [
+            "MM10_m1",
+            "MM10_m2",
+            "MM10_m3",
+            "MM10_m4"
+        ],
+        "MM2_MM1_matched": [
+            "MM1_m1",
+            "MM1_m2",
+            "MM1_m3",
+            "MM1_m4",
+            "MM1_m5",
+            "MM1_m6",
+            "MM1_m7",
+            "MM1_m8",
+            "MM2_m1",
+            "MM2_m2",
+            "MM2_m3",
+            "MM2_m4",
+            "MM2_m5",
+            "MM2_m6",
+            "MM2_m7",
+            "MM2_m8"
+        ],
+        "MM3_MM0_matched": [
+            "MM0_m1",
+            "MM0_m2",
+            "MM0_m3",
+            "MM0_m4",
+            "MM0_m5",
+            "MM0_m6",
+            "MM0_m7",
+            "MM0_m8",
+            "MM3_m1",
+            "MM3_m2",
+            "MM3_m3",
+            "MM3_m4",
+            "MM3_m5",
+            "MM3_m6",
+            "MM3_m7",
+            "MM3_m8"
+        ],
+        "MM5_MM4_matched": [
+            "MM4_m1",
+            "MM4_m2",
+            "MM4_m3",
+            "MM4_m4",
+            "MM5_m1",
+            "MM5_m2",
+            "MM5_m3",
+            "MM5_m4"
+        ],
+        "MM6": [
+            "MM6"
+        ],
+        "MM7": [
+            "MM7"
+        ],
+        "MM8_MM9_matched": [
+            "MM8_m1",
+            "MM8_m2",
+            "MM8_m3",
+            "MM8_m4",
+            "MM8_m5",
+            "MM8_m6",
+            "MM8_m7",
+            "MM8_m8",
+            "MM9_m1",
+            "MM9_m2",
+            "MM9_m3",
+            "MM9_m4",
+            "MM9_m5",
+            "MM9_m6",
+            "MM9_m7",
+            "MM9_m8"
+        ]
+    }
 }

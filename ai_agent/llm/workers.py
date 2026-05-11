@@ -44,16 +44,6 @@ Functions:
     - Role: Extracts the final layout state and emits the combined result summary and commands.
     - Inputs: None
     - Outputs: None
-- OrchestratorWorker.resume_with_strategy:
-    - Role: Resumes pipeline execution after a strategy selection interrupt.
-    - Inputs: 
-        - user_choice (str): The strategy chosen by the user.
-    - Outputs: None
-- OrchestratorWorker.resume_from_viewer:
-    - Role: Resumes pipeline execution after a visual review interrupt.
-    - Inputs: 
-        - viewer_response (dict): Approval and feedback from the visual viewer.
-    - Outputs: None
 """
 
 import os
@@ -314,8 +304,6 @@ class OrchestratorWorker(LLMWorker):
 
     Extends LLMWorker with additional signals and slots for:
     - process_orchestrated_request: start the pipeline
-    - resume_with_strategy: resume after strategy-selection interrupt
-    - resume_from_viewer: resume after visual-review interrupt
     """
 
     stage_completed          = Signal(int, str)   # (stage_index, stage_name)
@@ -630,20 +618,3 @@ class OrchestratorWorker(LLMWorker):
 
         vprint("[FINALIZE] ✓ Pipeline complete — signals emitted.", flush=True)
 
-    @Slot(str)
-    def resume_with_strategy(self, user_choice: str):
-        vprint(f"[ORCH] Resuming graph with strategy: {user_choice}", flush=True)
-        try:
-            from langgraph.types import Command
-            self._stream_graph(Command(resume=user_choice))
-        except Exception as exc:
-            self.error_occurred.emit(f"Resume error: {exc}")
-
-    @Slot(dict)
-    def resume_from_viewer(self, viewer_response: dict):
-        vprint(f"[ORCH] Resuming from visual viewer. Approved: {viewer_response.get('approved')}", flush=True)
-        try:
-            from langgraph.types import Command
-            self._stream_graph(Command(resume=viewer_response))
-        except Exception as exc:
-            self.error_occurred.emit(f"Resume error: {exc}")

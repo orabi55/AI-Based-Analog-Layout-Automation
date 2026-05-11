@@ -262,7 +262,7 @@ class LayoutEditorTab(QWidget):
         self.overlay.cancel_requested.connect(self._cancel_ai_placement)
 
         # Populate panels
-        self._refresh_panels(compact=True)
+        self._refresh_panels(compact= placement_file is None)
         self._init_workspace_shortcuts()
 
         # Fit view after initial load
