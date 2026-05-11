@@ -18,13 +18,6 @@ CLASSIFIER_PROMPT = """\
 You are an intent classifier for an analog IC layout editor.
 Classify the user's message into exactly ONE of these intent targets:
 
-    topology_analyst     - Requests to ANALYZE or EXPLAIN the circuit's
-                           netlist structure, net connections, or device
-                           connectivity. The user wants a structural report
-                           or connectivity trace, not a factual lookup.
-
-    strategy_selector    - High-level floorplanning strategy requests.
-
     placement_specialist - Direct placement / movement / ordering /
                            abutment / interdigitation / row assignment.
                            Usually a command for the placement engine.

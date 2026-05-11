@@ -399,7 +399,7 @@ class OrchestratorWorker(LLMWorker):
             initial_state.setdefault("placement_text", "")
             initial_state.setdefault("general_response", "")
             initial_state.setdefault("drc_flags", [])
-            initial_state.setdefault("drc_pass", False)
+            initial_state.setdefault("drc_pass", True)
             initial_state.setdefault("drc_retry_count", 0)
             initial_state.setdefault("gap_px", layout_context.get("gap_px", 0.0))
             initial_state.setdefault("routing_pass_count", 0)
@@ -473,6 +473,11 @@ class OrchestratorWorker(LLMWorker):
             if log_text:
                 s = str(log_text).strip().replace("\n", " ")
                 return s[:limit] + ("…" if len(s) > limit else "")
+        drc_pass = value.get("drc_pass")
+        if isinstance(drc_pass, bool) and not drc_pass:
+            return "DRC check failed"
+        if isinstance(drc_pass, bool) and drc_pass:
+            return "DRC check passed"
         flags = value.get("drc_flags")
         if isinstance(flags, list) and flags:
             return f"{len(flags)} DRC violation(s)"
@@ -525,7 +530,8 @@ class OrchestratorWorker(LLMWorker):
                         elif last_agent == "routing_previewer":
                             text = self._short_summary({"routing_result": interrupt_data.get("Routing", {})}, 500)
                         elif last_agent == "drc_critic":
-                            text = self._short_summary({"drc_flags": interrupt_data.get("DRC", [])}, 500)
+                            text = self._short_summary({"drc_pass": interrupt_data.get("DRC pass", False)}, 500)
+                            text += "\n" + self._short_summary({"drc_flags": interrupt_data.get("DRC violations", [])}, 500)
                         elif last_agent == "general": text = interrupt_data.get("General", "")
                         else: text = ""
 

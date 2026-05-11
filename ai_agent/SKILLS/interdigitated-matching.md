@@ -1,6 +1,6 @@
 ---
-name: Ratio-Based Interdigitation
-description: Interleave device fingers to preserve ratios and statistical distribution.
+name: Interdigitized Matching
+description: Apply interdigitized matching by interleave device fingers. Used to match differential pairs.
 ---
 
 ────────────────────────────────────
