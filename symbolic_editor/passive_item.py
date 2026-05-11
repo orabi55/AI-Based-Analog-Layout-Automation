@@ -41,6 +41,16 @@ class _PassiveBase(QGraphicsRectItem):
         self._flip_h         = False
         self._flip_v         = False
 
+        self._electrical_value = 0.0
+        if dev_type == "res":
+            self._base_electrical_value = 1e3   # 1k
+        elif dev_type == "cap":
+            self._base_electrical_value = 1e-12 # 1p
+        else:
+            self._base_electrical_value = 1.0
+        self._base_width = width
+        self._base_height = height
+
         self._is_dimmed      = False
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
@@ -65,6 +75,47 @@ class _PassiveBase(QGraphicsRectItem):
     def reset_custom_color(self):
         """Stub for colorization support."""
         pass
+
+    def set_electrical_value(self, val_str):
+        import re
+        val_str = str(val_str).strip()
+        if not val_str:
+            return
+        match = re.match(r'^([\d\.]+)\s*([a-zA-Zµ]*)$', val_str)
+        if not match:
+            return
+        num_str, prefix_str = match.groups()
+        try:
+            val = float(num_str)
+        except ValueError:
+            return
+            
+        p = prefix_str[:1] if prefix_str else ""
+        multipliers = {
+            'f': 1e-15, 'p': 1e-12, 'n': 1e-9, 'u': 1e-6, 'µ': 1e-6,
+            'm': 1e-3, 'k': 1e3, 'M': 1e6, 'G': 1e9, 'T': 1e12
+        }
+        scale = multipliers.get(p, 1.0)
+        self._electrical_value = val * scale
+            
+        if self._base_electrical_value > 0:
+            if self.device_type == "cap":
+                # Capacitors scale much less visually to prevent layout disruption
+                factor = (self._electrical_value / self._base_electrical_value) ** 0.15
+                factor = max(0.75, min(factor, 1.5))
+            else:
+                # Resistors scale a bit more
+                factor = (self._electrical_value / self._base_electrical_value) ** 0.25
+                factor = max(0.5, min(factor, 2.0))
+            
+            new_w = self._base_width * factor
+            new_h = self._base_height * factor
+            self.setRect(0, 0, new_w, new_h)
+            self.update()
+            
+            # Emit geometry changes if any signals depend on it
+            if hasattr(self, "signals"):
+                self.signals.position_changed.emit()
 
     # ── Grid snapping ────────────────────────────────────────────────
     def set_snap_grid(self, grid_x, grid_y=None):
@@ -304,10 +355,25 @@ class ResistorItem(_PassiveBase):
         name_fs = max(6, min(11, int(w * 0.11)))
         painter.setFont(QFont("Segoe UI Variable Display", name_fs, QFont.Weight.ExtraBold))
         painter.setPen(QColor(0,0,0,80)) # shadow
-        name_rect = QRectF(x0 + lead_w, y0 + 1, body_w, h * 0.45)
+        
+        val_str = self._format_si(self._electrical_value, "Ω")
+        if val_str:
+            name_rect = QRectF(x0 + lead_w, y0 + 1, body_w, h * 0.45)
+        else:
+            name_rect = QRectF(x0 + lead_w, y0 + 1, body_w, h * 0.9)
+            
         painter.drawText(name_rect.translated(0.5, 0.5), Qt.AlignmentFlag.AlignCenter, self.device_name)
         painter.setPen(self._label_clr)
         painter.drawText(name_rect, Qt.AlignmentFlag.AlignCenter, self.device_name)
+
+        if val_str:
+            val_fs = max(5, min(10, int(w * 0.10)))
+            painter.setFont(QFont("Segoe UI Variable Display", val_fs, QFont.Weight.Bold))
+            val_rect = QRectF(x0 + lead_w, y0 + h * 0.45, body_w, h * 0.45)
+            painter.setPen(QColor(0,0,0,80))
+            painter.drawText(val_rect.translated(0.5, 0.5), Qt.AlignmentFlag.AlignCenter, val_str)
+            painter.setPen(self._label_clr.lighter(120))
+            painter.drawText(val_rect, Qt.AlignmentFlag.AlignCenter, val_str)
 
         # ── 7. Selection Glow ─────────────────────────────────────────
         self._draw_selection(painter, rect, "#f39c12")
@@ -426,14 +492,28 @@ class CapacitorItem(_PassiveBase):
         # ── 6. Device Name ────────────────────────────────────────────
         name_fs = max(6, min(12, int(w * 0.11)))
         painter.setFont(QFont("Segoe UI Variable Display", name_fs, QFont.Weight.ExtraBold))
-        name_rect = QRectF(x0 + lead_w, y0 + 1, w - 2 * lead_w, h * 0.45)
         
+        val_str = self._format_si(self._electrical_value, "F")
+        if val_str:
+            name_rect = QRectF(x0 + lead_w, y0 + 1, w - 2 * lead_w, h * 0.45)
+        else:
+            name_rect = QRectF(x0 + lead_w, y0 + 1, w - 2 * lead_w, h * 0.9)
+            
         # Text shadow
         painter.setPen(QColor(0,0,0,80))
         painter.drawText(name_rect.translated(0.5, 0.5), Qt.AlignmentFlag.AlignCenter, self.device_name)
         # Text main
         painter.setPen(self._label_clr)
         painter.drawText(name_rect, Qt.AlignmentFlag.AlignCenter, self.device_name)
+
+        if val_str:
+            val_fs = max(5, min(10, int(w * 0.10)))
+            painter.setFont(QFont("Segoe UI Variable Display", val_fs, QFont.Weight.Bold))
+            val_rect = QRectF(x0 + lead_w, y0 + h * 0.45, w - 2 * lead_w, h * 0.45)
+            painter.setPen(QColor(0,0,0,80))
+            painter.drawText(val_rect.translated(0.5, 0.5), Qt.AlignmentFlag.AlignCenter, val_str)
+            painter.setPen(self._label_clr.lighter(120))
+            painter.drawText(val_rect, Qt.AlignmentFlag.AlignCenter, val_str)
 
         # ── 7. Selection Glow ─────────────────────────────────────────
         self._draw_selection(painter, rect, "#1abc9c")

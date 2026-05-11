@@ -784,8 +784,14 @@ class SymbolicEditor(QGraphicsView):
 
             if dtype == "res":
                 item = ResistorItem(node.get("id", "unknown"), x, y, width, height)
+                val = node.get("electrical", {}).get("value")
+                if val:
+                    item.set_electrical_value(str(val))
             elif dtype == "cap":
                 item = CapacitorItem(node.get("id", "unknown"), x, y, width, height)
+                val = node.get("electrical", {}).get("value")
+                if val:
+                    item.set_electrical_value(str(val))
             else:
                 item = DeviceItem(
                     node.get("id", "unknown"),
@@ -2815,7 +2821,7 @@ class SymbolicEditor(QGraphicsView):
         # If no group found, look for the topmost DeviceItem
         if target_group is None:
             for it in items:
-                if isinstance(it, DeviceItem):
+                if isinstance(it, (DeviceItem, ResistorItem, CapacitorItem)):
                     target_item = it
                     # Reverse-lookup device id
                     for dev_id, item in self.device_items.items():
@@ -2879,32 +2885,43 @@ class SymbolicEditor(QGraphicsView):
             menu.addAction(act_create_group)
             menu.addSeparator()
 
-        # Left abutment toggle
-        act_left = QAction("Left Abutment", self)
-        act_left.setCheckable(True)
-        act_left.setChecked(target_item.get_abut_left())
-        act_left.setToolTip(
-            "Enable leftAbut on this device.\n"
-            "The left diffusion strip will be shared with the left neighbour."
-        )
-        menu.addAction(act_left)
+        is_passive = isinstance(target_item, (ResistorItem, CapacitorItem))
+        act_edit_value = None
+        if is_passive:
+            act_edit_value = QAction("Edit Value...", self)
+            menu.addAction(act_edit_value)
+            menu.addSeparator()
 
-        # Right abutment toggle
-        act_right = QAction("Right Abutment", self)
-        act_right.setCheckable(True)
-        act_right.setChecked(target_item.get_abut_right())
-        act_right.setToolTip(
-            "Enable rightAbut on this device.\n"
-            "The right diffusion strip will be shared with the right neighbour."
-        )
-        menu.addAction(act_right)
+        act_left = None
+        act_right = None
+        act_clear = None
+        if not is_passive and hasattr(target_item, "get_abut_left"):
+            # Left abutment toggle
+            act_left = QAction("Left Abutment", self)
+            act_left.setCheckable(True)
+            act_left.setChecked(target_item.get_abut_left())
+            act_left.setToolTip(
+                "Enable leftAbut on this device.\n"
+                "The left diffusion strip will be shared with the left neighbour."
+            )
+            menu.addAction(act_left)
 
-        menu.addSeparator()
+            # Right abutment toggle
+            act_right = QAction("Right Abutment", self)
+            act_right.setCheckable(True)
+            act_right.setChecked(target_item.get_abut_right())
+            act_right.setToolTip(
+                "Enable rightAbut on this device.\n"
+                "The right diffusion strip will be shared with the right neighbour."
+            )
+            menu.addAction(act_right)
 
-        act_clear = QAction("Clear Both", self)
-        menu.addAction(act_clear)
+            menu.addSeparator()
 
-        menu.addSeparator()
+            act_clear = QAction("Clear Both", self)
+            menu.addAction(act_clear)
+
+            menu.addSeparator()
         
         act_change_color = QAction("Change Color...", self)
         menu.addAction(act_change_color)
@@ -2923,6 +2940,24 @@ class SymbolicEditor(QGraphicsView):
 
         if chosen == act_create_group:
             self._create_custom_group(selected_devices)
+        elif act_edit_value and chosen == act_edit_value:
+            unit = "F" if isinstance(target_item, CapacitorItem) else "Ω"
+            current_val_str = target_item._format_si(target_item._electrical_value, unit) if hasattr(target_item, '_electrical_value') and target_item._electrical_value else ""
+            current_val_str = current_val_str.replace(unit, "").strip() # Remove unit for easier editing
+            val_str, ok = QInputDialog.getText(
+                self,
+                "Edit Electrical Value",
+                f"Enter new value (e.g. 1.5p, 100n, 10k):",
+                QLineEdit.EchoMode.Normal,
+                current_val_str
+            )
+            if ok and val_str.strip():
+                target_item.set_electrical_value(val_str)
+                # Apply to all fingers of the same logical device
+                for item in self.scene.items():
+                    if hasattr(item, 'get_logical_name') and item.get_logical_name() == target_item.get_logical_name() and item is not target_item:
+                        if hasattr(item, 'set_electrical_value'):
+                            item.set_electrical_value(val_str)
         elif chosen == act_left:
             target_item.toggle_abut_left()
             self.abutment_changed.emit()
@@ -2934,7 +2969,8 @@ class SymbolicEditor(QGraphicsView):
             target_item.set_abut_right(False)
             self.abutment_changed.emit()
         elif chosen == act_change_color:
-            color = QColorDialog.getColor(target_item._source_color)
+            initial_color = getattr(target_item, "_source_color", QColor(Qt.GlobalColor.white))
+            color = QColorDialog.getColor(initial_color)
             if color.isValid():
                 target_item.set_custom_color(color)
                 # Apply to all fingers of the same logical device
