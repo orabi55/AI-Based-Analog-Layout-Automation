@@ -421,7 +421,7 @@ YOU MUST emit ONE [CMD] per matched block (not one per finger)
 ────────────────────────────────────────────
 
 MAKE SURE ALL COMMANDS STRICTLY FOLLOW THIS FORMAT
-MAKE SURE ALL COMMANDS CONTAIN OPENING AND CLOSING [CMD] TAGS
+MAKE SURE ALL COMMANDS CONTAIN OPENING [CMD] AND CLOSING [/CMD] TAGS
 
 [CMD]{"action":"add_dummy","type":"nmos","x":0.000,"y":0.000}[/CMD]
 [CMD]{"action":"move","device":"BLOCK_ID","x":origin_x,"y":row_y}[/CMD]

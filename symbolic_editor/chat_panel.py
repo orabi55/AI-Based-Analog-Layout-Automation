@@ -125,9 +125,6 @@ class ChatPanel(QWidget):
     request_inference_with_tools = Signal(str, list, str)
     # Multi-agent path (orchestrator pipeline)
     request_orchestrated = Signal(str, str, list, str)
-    # Resume paths for LangGraph interrupts
-    request_resume_strategy = Signal(str)
-    request_resume_viewer = Signal(dict)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -148,8 +145,6 @@ class ChatPanel(QWidget):
         self._thinking_dots = 0
         self._thinking_stage = 0          # which pipeline stage label to show
         self._is_orchestrated = False     # True when orchestrator path is active
-        self._awaiting_strategy_resume = False
-        self._awaiting_visual_resume = False
 
         # Model preferences (synced from MainWindow)
         self.selected_model = "VertexGemini"
@@ -169,8 +164,6 @@ class ChatPanel(QWidget):
         self._llm_worker.command_ready.connect(self.command_requested)
         # Multi-agent (orchestrator) path
         self.request_orchestrated.connect(self._llm_worker.process_orchestrated_request)
-        self.request_resume_strategy.connect(self._llm_worker.resume_with_strategy)
-        self.request_resume_viewer.connect(self._llm_worker.resume_from_viewer)
         # Shared response signals back to GUI
         self._llm_worker.response_ready.connect(self._on_llm_response)
         self._llm_worker.error_occurred.connect(self._on_llm_error)
@@ -882,28 +875,10 @@ class ChatPanel(QWidget):
         self._fc_command_received = False
         self._tool_message_ids.clear()
 
-        if self._awaiting_strategy_resume:
-            self._is_orchestrated = True
-            self._awaiting_strategy_resume = False
-            self._real_stage_events_active = False
-            self._stage_message_ids.clear()
-            self.request_resume_strategy.emit(text)
-            return
-
-        if self._awaiting_visual_resume:
-            self._is_orchestrated = True
-            self._awaiting_visual_resume = False
-            approved = bool(re.search(r"\b(yes|approve|approved|ok|okay|done|apply)\b", text, re.IGNORECASE))
-            self._real_stage_events_active = False
-            self._stage_message_ids.clear()
-            self.request_resume_viewer.emit({"approved": approved, "feedback": text})
-            return
-
         # --- Routing logic -----------------------------------------------
-        # 1. Pipeline interrupts always resume the orchestrator regardless of mode.
-        # 2. Pipeline keywords ("optimize", "auto-layout", "fix DRC", …) always
+        # 1. Pipeline keywords ("optimize", "auto-layout", "fix DRC", …) always
         #    trigger the LangGraph pipeline regardless of mode.
-        # 3. Everything else is routed by the user-selected mode:
+        # 2. Everything else is routed by the user-selected mode:
         #    FC  → function-calling (tools bound, replace_layout)
         #    CMD → MultiAgentOrchestrator text path ([CMD] blocks)
         is_pipeline_request = bool(_ORCHESTRATOR_KEYWORDS.search(text))
@@ -913,7 +888,7 @@ class ChatPanel(QWidget):
             self._call_orchestrator(text)
         elif self._chat_mode == "CMD":
             self._is_orchestrated = False
-            self._call_llm_cmd(text)
+            self._call_orchestrator(text)
         else:  # FC (default)
             self._is_orchestrated = False
             self._call_llm(text)
@@ -1384,8 +1359,6 @@ class ChatPanel(QWidget):
     def _on_llm_response(self, text):
         self._stop_thinking()
         self._remove_last_message()
-        self._awaiting_strategy_resume = False
-        self._awaiting_visual_resume = False
 
         # Normalize payloads defensively: worker/UI integrations may emit
         # dict/list payloads in some paths instead of plain strings.
@@ -1540,8 +1513,6 @@ class ChatPanel(QWidget):
         self._stop_thinking()
         self._remove_last_message()
         self._user_cmds_executed = False          # reset so next turn works
-        self._awaiting_strategy_resume = False
-        self._awaiting_visual_resume = False
         # Show errors in a distinct warning style
         err_html = (
             f'<div style="background:#2d1a1a;border:1px solid #5a2a2a;'
@@ -1557,9 +1528,6 @@ class ChatPanel(QWidget):
         """Handle visual-viewer command payloads directly (no CMD text parsing)."""
         self._stop_thinking()
         self._remove_last_message()
-        self._awaiting_strategy_resume = False
-        # Bug Fix #5: Only set to True if this is an interrupt review request
-        self._awaiting_visual_resume = (payload.get("type") == "visual_review")
 
         cmd_list = []
         if isinstance(payload, dict):
@@ -1587,8 +1555,6 @@ class ChatPanel(QWidget):
         """Handler for when Stage 1 completes and asks for confirmation."""
         self._stop_thinking()
         self._remove_last_message()
-        self._awaiting_strategy_resume = True
-        self._awaiting_visual_resume = False
         
         # Don't reset user cmds here since we are pausing
         self._chat_history.append({"role": "assistant", "content": question})

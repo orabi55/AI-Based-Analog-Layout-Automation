@@ -28,6 +28,8 @@ import logging
 import time
 from typing import Any, List, Tuple
 
+from ai_agent.utils.logging import vprint
+
 logger = logging.getLogger("ai_agent")
 
 # Providers that DO NOT support reliable tool binding — text-only path
@@ -201,10 +203,14 @@ def run_llm_with_tools(
     from ai_agent.tools.tool_executor import ToolExecutor
     from ai_agent.llm.runner import stream_llm
 
+    vprint("[TOOL_RUNNER] run_llm_with_tools start")
+    vprint(f"[TOOL_RUNNER] selected_model={selected_model}, task_weight={task_weight}")
+
     nodes = list(nodes) if nodes is not None else []
 
     # Build LLM with tools (or without, for Alibaba)
     llm, tools_bound = _build_tool_enabled_llm(selected_model, task_weight)
+    vprint(f"[TOOL_RUNNER] tools_bound={tools_bound}")
 
     # Build LangChain-style messages
     lc_messages = []
@@ -219,6 +225,12 @@ def run_llm_with_tools(
             lc_messages.append({"role": role, "content": content})
     if not lc_messages:
         lc_messages = [{"role": "user", "content": full_prompt or "Hello"}]
+
+    vprint("[TOOL_RUNNER] prompts sent to LLM:")
+    for idx, msg in enumerate(lc_messages):
+        role = msg.get("role", "user")
+        content = msg.get("content", "")
+        vprint(f"  [{idx}] {role}: {content}")
 
     # ── 1. Stream the LLM text response (tool_calls land in the merged AIMessage) ──
     t0 = time.time()
@@ -238,6 +250,7 @@ def run_llm_with_tools(
             text     = _extract_text(response)
     except Exception as exc:
         logger.error("[TOOL_RUNNER] llm call failed: %s", exc)
+        vprint(f"[TOOL_RUNNER] llm call failed: {exc}")
         return {
             "text":          f"Error: {exc}",
             "fc_used":       False,
@@ -249,11 +262,16 @@ def run_llm_with_tools(
     elapsed = time.time() - t0
     logger.debug("[TOOL_RUNNER] llm took %.2fs (tools_bound=%s, streamed=%s)",
                  elapsed, tools_bound, worker is not None)
+    vprint(f"[TOOL_RUNNER] llm took {elapsed:.2f}s (streamed={worker is not None})")
+    vprint(f"[TOOL_RUNNER] raw response: {response}")
+    vprint(f"[TOOL_RUNNER] extracted text: {text}")
 
     tool_calls = _extract_tool_calls(response) if tools_bound else []
+    vprint(f"[TOOL_RUNNER] tool_calls extracted: {tool_calls}")
 
     # ── 2. No FC → return streamed text for [CMD]-block fallback ──
     if not tool_calls:
+        vprint("[TOOL_RUNNER] no tool calls; returning text-only response")
         return {
             "text":          text,
             "fc_used":       False,
@@ -273,6 +291,9 @@ def run_llm_with_tools(
         name = tc.get("name", "")
         args = tc.get("args", {}) or {}
 
+        vprint(f"[TOOL_RUNNER] tool call -> {name}")
+        vprint(f"[TOOL_RUNNER] tool args -> {args}")
+
         # Legacy tool_progress callback (string-typed signal)
         if progress_cb:
             try:
@@ -291,6 +312,14 @@ def run_llm_with_tools(
 
         result = executor.execute(name, args)
         tool_results.append(result)
+
+        vprint(
+            "[TOOL_RUNNER] tool response -> "
+            f"success={bool(result.success)} "
+            f"changed={bool(result.changed)} "
+            f"message={result.message} "
+            f"metrics={result.metrics}"
+        )
 
         if progress_cb:
             try:
@@ -324,6 +353,7 @@ def run_llm_with_tools(
             "source_actions": changed_calls,
             "message":        _summarize_changed_calls(tool_results),
         })
+        vprint(f"[TOOL_RUNNER] replace_layout cmd_blocks added: {changed_calls}")
 
     # Any tool can embed extra GUI-only commands via metrics["gui_commands"].
     # Emit them directly so the editor handles them without going through
@@ -332,6 +362,7 @@ def run_llm_with_tools(
         for gui_cmd in (result.metrics.get("gui_commands") or []):
             if isinstance(gui_cmd, dict) and gui_cmd.get("action"):
                 cmd_blocks.append(gui_cmd)
+                vprint(f"[TOOL_RUNNER] gui command emitted: {gui_cmd}")
 
     return {
         "text":          text or _summarize_calls(tool_calls, tool_results),
