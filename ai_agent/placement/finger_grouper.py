@@ -148,6 +148,15 @@ def _node_height_um(node: dict, fallback: float = ROW_HEIGHT_UM) -> float:
     return height if height > 0 else fallback
 
 
+def _node_width_um(node: dict, fallback: float = STD_PITCH) -> float:
+    """Return the physical device width from geometry, with a PDK-safe fallback."""
+    try:
+        width = float(node.get("geometry", {}).get("width", 0.0))
+    except (TypeError, ValueError):
+        width = 0.0
+    return width if width > 0 else fallback
+
+
 def _row_step_um(row_or_nodes: List[dict]) -> float:
     """Origin-to-origin spacing needed after a row of devices.
 
@@ -326,6 +335,11 @@ def aggregate_to_logical_devices(nodes: list, edges: list = None) -> list:
         rep_elec = rep.get("electrical", {})
         dev_type = rep.get("type", "nmos")
 
+        member_widths = [_node_width_um(m, STD_PITCH) for m in members]
+        member_heights = [_node_height_um(m) for m in members]
+        sum_member_width = sum(member_widths) if member_widths else 0.0
+        max_member_height = max(member_heights) if member_heights else _node_height_um(rep)
+
         # Count true fingers (nf per transistor instance) and multiplier copies
         # by looking at how many unique bus indices exist
         bus_indices: set[int] = set()
@@ -358,8 +372,9 @@ def aggregate_to_logical_devices(nodes: list, edges: list = None) -> list:
             "geometry": {
                 "x":           0.0,
                 "y":           PMOS_Y if dev_type == "pmos" else NMOS_Y,
-                "width":       round((total_fingers - 1) * FINGER_PITCH + STD_PITCH, 6),
-                "height":      rep.get("geometry", {}).get("height", 0.568),
+                "width":       round(max((total_fingers - 1) * FINGER_PITCH + STD_PITCH,
+                                          sum_member_width), 6),
+                "height":      round(max_member_height, 6),
                 "orientation": "R0",
             },
         }
@@ -1249,12 +1264,27 @@ def merge_matched_groups(
 
             use_abutment = True
             block_pitch = FINGER_PITCH
-            # Width = cols * pitch, Height = rows * row_height
-            block_width = round(matrix_data["cols"] * block_pitch, 6)
-            block_height = round(matrix_data["rows"] * 0.668, 6)
 
             grp_a_id = members[0]
             grp_a = grp_lookup[grp_a_id]
+
+            # Width = cols * pitch, Height = rows * row_height
+            block_width = round(matrix_data["cols"] * block_pitch, 6)
+            member_heights = [
+                _node_height_um(f)
+                for mid in members
+                for f in finger_map.get(mid, [])
+            ]
+            base_height = max(member_heights, default=_node_height_um(grp_a))
+            block_height = round(matrix_data["rows"] * base_height, 6)
+            member_widths = [
+                _node_width_um(f, block_pitch)
+                for mid in members
+                for f in finger_map.get(mid, [])
+            ]
+            sum_member_width = sum(member_widths)
+            if matrix_data["rows"] > 0:
+                block_width = round(max(block_width, sum_member_width / matrix_data["rows"]), 6)
             block_id = "_".join(members[:2]) + f"_and_{len(members)-2}_more_centroid" if len(members) > 2 else "_".join(members) + "_centroid"
 
             elec_a = grp_a.get("electrical", {})
@@ -1375,6 +1405,9 @@ def merge_matched_groups(
         block_pitch = FINGER_PITCH if use_abutment else STD_PITCH
         total_fingers = len(interleaved)
         block_width = round(total_fingers * block_pitch, 6)
+        member_widths = [_node_width_um(f, block_pitch) for f in interleaved]
+        if member_widths:
+            block_width = round(max(block_width, sum(member_widths)), 6)
 
         # Create a merged block ID
         block_id = f"{grp_a_id}_{grp_b_id}_matched"
@@ -1396,7 +1429,7 @@ def merge_matched_groups(
                 "x":           0.0,
                 "y":           grp_a.get("geometry", {}).get("y", 0.0),
                 "width":       block_width,
-                "height":      grp_a.get("geometry", {}).get("height", 0.568),
+                "height":      round(max(_node_height_um(grp_a), _node_height_um(grp_b)), 6),
                 "orientation": "R0",
             },
             # Propagate connectivity for downstream matching analysts
@@ -1716,7 +1749,8 @@ def _choose_fold_config(
         # smaller than the real row — causing it to underestimate baseline
         # dummies and incorrectly choose to fold.
         layout_w = max(group_max_w, row_width)
-        layout_h = sum(_group_rows(g) * ROW_PITCH_UM for g in groups)
+        row_pitch = max((_node_height_um(g) for g in groups), default=ROW_PITCH_UM) + ROW_GAP_UM
+        layout_h = sum(_group_rows(g) * row_pitch for g in groups)
         if layout_h == 0 or layout_w == 0:
             return 0.0
         # Dummy count
@@ -1780,7 +1814,8 @@ def _choose_fold_config(
         # (prevents over-folding into portrait layouts when Area=High)
         if min_aspect > 0:
             _sim_w = max(_group_width(g) for g in sim) if sim else 0
-            _sim_h = sum(_group_rows(g) * ROW_PITCH_UM for g in sim) if sim else 1
+            _sim_row_pitch = max((_node_height_um(g) for g in sim), default=ROW_PITCH_UM) + ROW_GAP_UM
+            _sim_h = sum(_group_rows(g) * _sim_row_pitch for g in sim) if sim else 1
             if _sim_h > 0 and (_sim_w / _sim_h) < min_aspect:
                 continue  # skip: too portrait
         if s < best_score - 1e-6:
@@ -1802,7 +1837,8 @@ def _choose_fold_config(
             _sim_final.append(g)
 
     _lw = max(_group_width(g) for g in _sim_final) if _sim_final else 0
-    _lh = sum(_group_rows(g) * ROW_PITCH_UM for g in _sim_final) if _sim_final else 0
+    _final_row_pitch = max((_node_height_um(g) for g in _sim_final), default=ROW_PITCH_UM) + ROW_GAP_UM
+    _lh = sum(_group_rows(g) * _final_row_pitch for g in _sim_final) if _sim_final else 0
     _asp = _lw / _lh if _lh > 0 else 0
 
     vprint(
@@ -1932,7 +1968,7 @@ def pre_assign_rows(
             nf = g.get("electrical", {}).get("total_fingers", 1)
             # ABBA merged blocks have 2 extra edge dummy slots
             slots = (nf + 2) if g.get("_matched_block") else nf
-            total += slots * STD_PITCH
+            total += max(g.get("geometry", {}).get("width", 0.0), slots * STD_PITCH)
         total += STD_PITCH * max(0, len(groups) - 1)   # gaps between groups
         return total
 
@@ -1957,12 +1993,12 @@ def pre_assign_rows(
             num_rows_needed = math.ceil(wider / narrow)
             target_width = wider / num_rows_needed
             # Don't go below the single widest device (otherwise it can't fit)
-            widest_device = max(
-                ((g.get("electrical", {}).get("total_fingers", 1) +
-                  (2 if g.get("_matched_block") else 0)) * STD_PITCH
-                 for g in group_nodes),
-                default=0.0,
-            )
+            def _phys_w(g: dict) -> float:
+                nf = g.get("electrical", {}).get("total_fingers", 1)
+                slots = (nf + 2) if g.get("_matched_block") else nf
+                return max(g.get("geometry", {}).get("width", 0.0), slots * STD_PITCH)
+
+            widest_device = max((_phys_w(g) for g in group_nodes), default=0.0)
             balanced_max = max(target_width, widest_device + STD_PITCH)
 
             # Only constrain the wider type
@@ -1984,7 +2020,7 @@ def pre_assign_rows(
         def _phys_width(g: dict) -> float:
             nf = g.get("electrical", {}).get("total_fingers", 1)
             slots = (nf + 2) if g.get("_matched_block") else nf
-            return slots * STD_PITCH
+            return max(g.get("geometry", {}).get("width", 0.0), slots * STD_PITCH)
 
         sorted_g = sorted(groups,
                           key=lambda n: n.get("electrical", {}).get("total_fingers", 1),
@@ -2181,7 +2217,7 @@ def pre_assign_rows(
         """Physical width of a group in layout pitch units."""
         nf = g.get("electrical", {}).get("total_fingers", 1)
         slots = (nf + 2) if g.get("_matched_block") else nf
-        return slots * STD_PITCH
+        return max(g.get("geometry", {}).get("width", 0.0), slots * STD_PITCH)
 
     def _row_total_w(row: list) -> float:
         if not row:
@@ -2358,6 +2394,14 @@ def expand_to_fingers(
     list
         Fully unrolled and geometrically sound list of elemental transistor dicts.
     """
+    def _prefer_member_width(node: dict, fallback: float) -> float:
+        geo = node.get("geometry", {}) if isinstance(node, dict) else {}
+        try:
+            width = float(geo.get("width", 0.0))
+        except (TypeError, ValueError):
+            width = 0.0
+        return width if width > 0.0 else fallback
+
     expanded: List[dict] = []
 
     # Default pitch based on abutment mode
@@ -2508,7 +2552,7 @@ def expand_to_fingers(
                         "x":           fx,
                         "y":           fy,
                         "orientation": orient,
-                        "width":       pitch,
+                        "width":       _prefer_member_width(node, pitch),
                     })
                     
                     node["_matched_block"] = True
@@ -2545,7 +2589,7 @@ def expand_to_fingers(
                 "x":           fx,
                 "y":           final_y,
                 "orientation": orient,
-                "width":       pitch,
+                "width":       _prefer_member_width(node, pitch),
             })
 
             if is_matched_block:
@@ -2765,9 +2809,14 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
                 }
 
     # --- Step 5: Global Centering & Inner/Outer Filler Dummies ---
+    # Only apply centering and filler insertion to MOS rows.
+    # Passives (caps/res) must keep their placed geometry and never get dummy passives.
     row_bounds = {}
     for (y_key, dev_type), row_nodes in type_rows.items():
-        if not row_nodes: continue
+        if not row_nodes:
+            continue
+        if str(dev_type).lower() not in ("nmos", "pmos"):
+            continue
         min_x = min(n.get("geometry", {}).get("x", 0.0) for n in row_nodes)
         max_x = max(n.get("geometry", {}).get("x", 0.0) + n.get("geometry", {}).get("width", pitch_std) for n in row_nodes)
         row_bounds[(y_key, dev_type)] = (min_x, max_x)
@@ -2778,6 +2827,8 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
         global_center = (global_min_x + global_max_x) / 2.0
 
         for (y_key, dev_type), row_nodes in type_rows.items():
+            if (y_key, dev_type) not in row_bounds:
+                continue
             min_x, max_x = row_bounds[(y_key, dev_type)]
             row_center = (min_x + max_x) / 2.0
             
@@ -2805,6 +2856,8 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
         all_xs = []
         all_xe = []
         for (y_key, dev_type), row_nodes in type_rows.items():
+            if (y_key, dev_type) not in row_bounds:
+                continue
             for n in row_nodes:
                 x = n.get("geometry", {}).get("x", 0.0)
                 w = max(n.get("geometry", {}).get("width", pitch_std), pitch_std)
@@ -2818,6 +2871,8 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
         dummy_counter = 0
 
         for (y_key, dev_type), row_nodes in type_rows.items():
+            if (y_key, dev_type) not in row_bounds:
+                continue
             # Recompute footprints after centering
             footprints = []
             for n in row_nodes:

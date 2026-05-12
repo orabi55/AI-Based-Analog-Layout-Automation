@@ -1,5 +1,5 @@
 Traceback (most recent call last):
-  File "C:\Users\youss\University\GP\Automation Phase\Code\AI-Based-Analog-Layout-Automation\symbolic_editor\layout_tab.py", line 2095, in _on_schematic_ai_started
-    self.overlay.show_message("Generating schematic layout with AI...")
-    ^^^^^^^^^^^^
-AttributeError: 'LayoutEditorTab' object has no attribute 'overlay'
+  File "C:\Users\youss\University\GP\Automation Phase\Code\AI-Based-Analog-Layout-Automation\symbolic_editor\widgets\welcome_screen.py", line 28, in paintEvent
+    def paintEvent(self, event):
+    
+KeyboardInterrupt

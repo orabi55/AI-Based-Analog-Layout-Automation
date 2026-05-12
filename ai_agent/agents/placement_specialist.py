@@ -548,6 +548,49 @@ def _compute_matching_and_rows(
         # Step 1: collapse fingers to groups
         group_nodes, group_edges, finger_map = fg_group_fingers(active_nodes, edges or [])
 
+        def _ensure_group_geometry(group_nodes, finger_map):
+            for g in group_nodes:
+                gid = g.get("id")
+                if not gid:
+                    continue
+                geo = g.get("geometry") or {}
+                try:
+                    width = float(geo.get("width", 0.0))
+                except (TypeError, ValueError):
+                    width = 0.0
+                try:
+                    height = float(geo.get("height", 0.0))
+                except (TypeError, ValueError):
+                    height = 0.0
+                if width > 0.0 and height > 0.0:
+                    continue
+                members = finger_map.get(gid, [])
+                sum_w = 0.0
+                max_h = 0.0
+                max_w = 0.0
+                for m in members:
+                    mgeo = (m.get("geometry") or {}) if isinstance(m, dict) else {}
+                    try:
+                        mw = float(mgeo.get("width", 0.0))
+                    except (TypeError, ValueError):
+                        mw = 0.0
+                    try:
+                        mh = float(mgeo.get("height", 0.0))
+                    except (TypeError, ValueError):
+                        mh = 0.0
+                    if mw > 0.0:
+                        sum_w += mw
+                        max_w = max(max_w, mw)
+                    if mh > 0.0:
+                        max_h = max(max_h, mh)
+                if sum_w <= 0.0 and max_w > 0.0:
+                    sum_w = max_w
+                if sum_w > 0.0:
+                    geo["width"] = sum_w
+                if max_h > 0.0:
+                    geo["height"] = max_h
+                g["geometry"] = geo
+
         # Step 2: build group-level terminal nets (needed for matching)
         grp_member_ids: dict = {}
         for gid, members in finger_map.items():
@@ -574,6 +617,9 @@ def _compute_matching_and_rows(
                 "D": _most_common(d_nets),
                 "S": _most_common(s_nets),
             }
+
+        # Ensure geometry widths/heights exist before footprint computations
+        _ensure_group_geometry(group_nodes, finger_map)
 
         # Step 3: detect matching (structural — electrical signatures only)
         matching_info = detect_matching_groups(group_nodes, group_edges)
@@ -615,6 +661,9 @@ def _compute_matching_and_rows(
             already_enriched=True,   # _enrich_matching_info already called above
         )
 
+        # Merged blocks can change sizes; recompute geometry if needed
+        _ensure_group_geometry(group_nodes, finger_map)
+
         # Step 4.5: Update group_terminal_nets for merged blocks
         for gn in group_nodes:
             if gn.get("_matched_block") and "terminal_nets" in gn:
@@ -638,7 +687,7 @@ def _compute_matching_and_rows(
         nmos_groups = [g for g in group_nodes if g.get("type") == "nmos"]
 
         def _footprint(groups):
-            """Physical layout footprint = sum of finger-pitch widths + inter-group gaps."""
+            """Physical layout footprint = sum of device widths + inter-group gaps."""
             if not groups:
                 return 0.0
             total = 0.0
@@ -650,7 +699,8 @@ def _compute_matching_and_rows(
                     slots = nf + 2   # ABBA block has 2 edge dummy slots
                 else:
                     slots = nf
-                total += slots * STD_PITCH
+                pitch_width = slots * STD_PITCH
+                total += max(g.get("geometry", {}).get("width", 0.0), pitch_width)
             total += STD_PITCH * max(0, len(groups) - 1)   # inter-group gaps
             return total
 
@@ -829,6 +879,22 @@ def build_placement_context_chatbot(
         )
     lines.append("")
 
+    lines.append("LOGICAL DEVICE SIZES (um):")
+    for gn in sorted_groups:
+        gid = gn.get("id", "?")
+        gtype = str(gn.get("type", "")).upper()
+        geo = gn.get("geometry", {}) or {}
+        try:
+            w = float(geo.get("width", 0.0))
+        except (TypeError, ValueError):
+            w = 0.0
+        try:
+            h = float(geo.get("height", 0.0))
+        except (TypeError, ValueError):
+            h = 0.0
+        lines.append(f"  {gid:<14} type={gtype:<6} w={w:.6f} h={h:.6f}")
+    lines.append("")
+
 
     # Use existing geometry for row Y references
     pmos_ys = sorted(set(
@@ -873,7 +939,17 @@ def build_placement_context_chatbot(
             y = float(geo.get("y", 0.0))
         except Exception:
             y = 0.0
-        lines.append(f"  {nid:<30} type={ntype:<6} x={x:.6f} y={y:.6f}")
+        try:
+            w = float(geo.get("width", 0.0))
+        except Exception:
+            w = 0.0
+        try:
+            h = float(geo.get("height", 0.0))
+        except Exception:
+            h = 0.0
+        lines.append(
+            f"  {nid:<30} type={ntype:<6} x={x:.6f} y={y:.6f} w={w:.6f} h={h:.6f}"
+        )
     lines.append("")
 
     if constraints_text:
@@ -962,6 +1038,22 @@ def build_placement_context(
         lines.append(
             f"  {gid:<14} fingers={len(f_ids):<2} -> " + ", ".join(f_ids)
         )
+    lines.append("")
+
+    lines.append("LOGICAL DEVICE SIZES (um):")
+    for gn in sorted_groups:
+        gid = gn.get("id", "?")
+        gtype = str(gn.get("type", "")).upper()
+        geo = gn.get("geometry", {}) or {}
+        try:
+            w = float(geo.get("width", 0.0))
+        except (TypeError, ValueError):
+            w = 0.0
+        try:
+            h = float(geo.get("height", 0.0))
+        except (TypeError, ValueError):
+            h = 0.0
+        lines.append(f"  {gid:<14} type={gtype:<6} w={w:.6f} h={h:.6f}")
     lines.append("")
 
     if finger_group_str:
