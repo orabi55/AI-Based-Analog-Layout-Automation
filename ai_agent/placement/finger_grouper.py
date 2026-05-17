@@ -2206,9 +2206,14 @@ def pre_assign_rows(
         max_n_rows = max((g.get("_n_rows", 1) for g in row), default=1)
         current_y += _row_height(row) * max_n_rows
 
-    passive_y = current_y
-    for g in passive_groups:
-        y_map[g["id"]] = passive_y
+    if passive_groups:
+        # Keep passive rows clear of active rows using the tallest passive height.
+        max_passive_h = max(_node_height_um(g) for g in passive_groups)
+        passive_y = current_y + max_passive_h + ROW_GAP_UM
+        for g in passive_groups:
+            y_map[g["id"]] = passive_y
+    else:
+        passive_y = current_y
 
     # --- Deterministic X centering ----------------------------------------
     # Compute the layout width as the widest row total footprint.
@@ -2502,6 +2507,25 @@ def expand_to_fingers(
         final_y  = group_ys[grp_id]
         orient   = grp_geom.get("orientation", "R0")
 
+        # Normalize missing member widths using the widest sibling as fallback.
+        # This prevents single members (e.g., MM3_m1) from reverting to defaults.
+        member_widths = [
+            _prefer_member_width(m, 0.0) for m in members if isinstance(m, dict)
+        ]
+        group_fallback_width = max(member_widths) if member_widths else 0.0
+        if group_fallback_width > 0.0:
+            for m in members:
+                if not isinstance(m, dict):
+                    continue
+                geo = m.get("geometry", {})
+                try:
+                    mw = float(geo.get("width", 0.0))
+                except (TypeError, ValueError):
+                    mw = 0.0
+                if mw <= 0.0:
+                    geo["width"] = group_fallback_width
+                    m["geometry"] = geo
+
         # Determine pitch for this group
         # Prefer original group metadata (LLMs strip private fields)
         orig_meta = original_group_nodes.get(grp_id, {}) if original_group_nodes else {}
@@ -2777,8 +2801,12 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
                 is_last = (dev_idx == len(chain) - 1)
 
                 if not is_last:
-                    # Within chain: abut spacing
-                    chain_start = round(chain_start + pitch_abut, 6)
+                    # Within chain: honor abutment pitch, but never less than device width.
+                    dev_w = geo.get("width", pitch_std)
+                    if dev_w < pitch_std * 0.5:
+                        dev_w = pitch_std
+                    step = pitch_abut if pitch_abut >= dev_w else dev_w
+                    chain_start = round(chain_start + step, 6)
                     dev.setdefault("abutment", {})["abut_right"] = True
                     next_dev = chain[dev_idx + 1]
                     next_dev.setdefault("abutment", {})["abut_left"] = True
