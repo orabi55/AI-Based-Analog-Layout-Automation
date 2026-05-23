@@ -324,6 +324,38 @@ class OrchestratorWorker(LLMWorker):
         except ImportError:
             self.thread_config = {"configurable": {"thread_id": str(uuid.uuid4())}}
 
+    @Slot(dict)
+    def process_routing_preview(self, layout_context: dict | None):
+        """Run the routing preview directly and emit the report once."""
+        try:
+            ctx = layout_context or {}
+            nodes = ctx.get("nodes", []) if isinstance(ctx, dict) else []
+            edges = ctx.get("edges", []) if isinstance(ctx, dict) else []
+            terminal_nets = ctx.get("terminal_nets", {}) if isinstance(ctx, dict) else {}
+
+            if not nodes:
+                self.response_ready.emit("No layout loaded. Load a layout to generate a routing report.")
+                return
+
+            from ai_agent.nodes.routing_previewer import node_routing_previewer
+
+            state = {
+                "placement_nodes": nodes,
+                "edges": edges,
+                "terminal_nets": terminal_nets,
+            }
+            result = node_routing_previewer(state)
+            routing = result.get("routing_result", {}) if isinstance(result, dict) else {}
+            report_text = routing.get("log_text") or routing.get("summary") or ""
+            report_text = report_text.strip() if isinstance(report_text, str) else ""
+            if report_text:
+                self._last_routing_report = report_text
+                self.response_ready.emit(report_text)
+            else:
+                self.response_ready.emit("Routing preview completed, but no report text was produced.")
+        except Exception as exc:
+            self.error_occurred.emit(f"Routing preview failed: {exc}")
+
     @Slot(str, str, list, str)
     def process_orchestrated_request(
         self,
@@ -534,7 +566,8 @@ class OrchestratorWorker(LLMWorker):
                             else:
                                 text = self._short_summary({"routing_result": interrupt_data.get("Routing", {})}, 500)
                         elif last_agent == "drc_critic":
-                            text = self._short_summary({"drc_pass": interrupt_data.get("DRC pass", False)}, 500)
+                            text = interrupt_data.get("Placement", "")
+                            text += "\n" + self._short_summary({"drc_pass": interrupt_data.get("DRC pass", False)}, 500)
                             text += "\n" + self._short_summary({"drc_flags": interrupt_data.get("DRC violations", [])}, 500)
                         elif last_agent == "general": text = interrupt_data.get("General", "")
                         else: text = ""

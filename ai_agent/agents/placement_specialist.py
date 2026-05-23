@@ -911,16 +911,14 @@ def build_placement_context_chatbot(
                      if str(n.get("type", "")).lower().startswith("p")
                      and abs(n.get("geometry", {}).get("y", 0.0) - y) < 1e-4]
         lines.append(
-            f"  PMOS row  y = {y:.6f}   (fingers: {', '.join(sorted(row_nodes)[:10])}"
-            f"{'...' if len(row_nodes)>10 else ''})"
+            f"  PMOS row  y = {y:.6f}   (fingers: {', '.join(sorted(row_nodes))})"
         )
     for y in nmos_ys:
         row_nodes = [n["id"] for n in nodes
                      if str(n.get("type", "")).lower().startswith("n")
                      and abs(n.get("geometry", {}).get("y", 0.0) - y) < 1e-4]
         lines.append(
-            f"  NMOS row  y = {y:.6f}   (fingers: {', '.join(sorted(row_nodes)[:10])}"
-            f"{'...' if len(row_nodes)>10 else ''})"
+            f"  NMOS row  y = {y:.6f}   (fingers: {', '.join(sorted(row_nodes))})"
         )
     lines.append("")
 

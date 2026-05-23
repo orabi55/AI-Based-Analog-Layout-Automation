@@ -19,14 +19,11 @@ You are an intent classifier for an analog IC layout editor.
 Classify the user's message into exactly ONE of these intent targets:
 
     placement_specialist - Direct placement / movement / ordering /
-                           abutment / interdigitation / row assignment.
+                           abutment / interdigitation / row assignment / optimize routing crossings.
                            Usually a command for the placement engine.
 
     drc_critic           - DRC violations, spacing, overlap, clean-up,
                            or fix-and-verify layout requests.
-
-    routing_previewer    - Routing, wire-length, crossings, connectivity,
-                           or parasitic-routing analysis.
 
     general              - Factual lookups, definitions, or knowledge
                            questions about devices, properties, or concepts
@@ -75,7 +72,6 @@ def classify_intent(user_message: str, selected_model: str) -> str:
             "strategy_selector": "strategy_selector",
             "placement_specialist": "placement_specialist",
             "drc_critic": "drc_critic",
-            "routing_previewer": "routing_previewer",
             "general": "general",
         }
         if label in node_labels:
