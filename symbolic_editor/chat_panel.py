@@ -1213,6 +1213,8 @@ class ChatPanel(QWidget):
         self._remove_last_message()
         self._ensure_activity_timer()
         stage_key = str(stage_key or "stage")
+        if stage_key in {"general", "routing_previewer", "node_routing_previewer"}:
+            return
         title = str(title or stage_key)
         message_id = self._stage_message_ids.get(stage_key)
         msg = self._find_message(message_id) if message_id else None
@@ -1235,6 +1237,8 @@ class ChatPanel(QWidget):
     @Slot(str, str)
     def _on_stage_delta(self, stage_key: str, update: str):
         stage_key = str(stage_key or "stage")
+        if stage_key in {"general", "routing_previewer", "node_routing_previewer"}:
+            return
         message_id = self._stage_message_ids.get(stage_key)
         msg = self._find_message(message_id) if message_id else None
         if msg is None:
@@ -1252,6 +1256,8 @@ class ChatPanel(QWidget):
     @Slot(str, str)
     def _on_stage_done(self, stage_key: str, summary: str):
         stage_key = str(stage_key or "stage")
+        if stage_key in {"general", "routing_previewer", "node_routing_previewer"}:
+            return
         message_id = self._stage_message_ids.get(stage_key)
         msg = self._find_message(message_id) if message_id else None
         if msg is None:

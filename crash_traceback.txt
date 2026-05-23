@@ -1,5 +1,5 @@
 Traceback (most recent call last):
-  File "C:\Users\youss\University\GP\Automation Phase\Code\AI-Based-Analog-Layout-Automation\symbolic_editor\widgets\welcome_screen.py", line 28, in paintEvent
-    def paintEvent(self, event):
+  File "C:\Users\youss\University\GP\Automation Phase\Code\AI-Based-Analog-Layout-Automation\symbolic_editor\widgets\welcome_screen.py", line 245, in _tick
+    def _tick(self):
     
 KeyboardInterrupt
