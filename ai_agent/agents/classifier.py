@@ -65,7 +65,7 @@ def classify_intent(user_message: str, selected_model: str) -> str:
         vprint(f"[CLASSIFIER] Requesting Intent Classification from {selected_model}...")
         result = llm.invoke(msgs)
         if not result:
-            return "topology_analyst"
+            return "general"
         label = result.content.strip().lower().split()[0].rstrip(".,;:")
         node_labels = {
             "topology_analyst": "topology_analyst",
@@ -78,5 +78,5 @@ def classify_intent(user_message: str, selected_model: str) -> str:
             vprint(f"[CLASSIFIER] LLM -> {label}: '{stripped[:60]}'")
             return node_labels[label]
     except Exception as exc:
-        vprint(f"[CLASSIFIER] Failed: {exc} — defaulting to topology analyst")
-    return "topology_analyst"
+        vprint(f"[CLASSIFIER] Failed: {exc} — defaulting to general")
+    return "general"
