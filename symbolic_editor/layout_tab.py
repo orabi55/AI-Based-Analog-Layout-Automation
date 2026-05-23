@@ -3163,7 +3163,7 @@ class LayoutEditorTab(QWidget):
                     oa, ob = ga.get("orientation", "R0"), gb.get("orientation", "R0")
                     ga["orientation"], gb["orientation"] = ob, oa
                     self._refresh_panels(compact=False)
-                    self.chat_panel._append_message("AI", f"✅ Swapped {id_a} ↔ {id_b}", "#e8f4fd", "#1a1a2e")
+                    #self.chat_panel._append_message("AI", f"✅ Swapped {id_a} ↔ {id_b}", "#e8f4fd", "#1a1a2e")
 
             elif action == "abut":
                 raw_a = cmd.get("device_a", cmd.get("a"))
@@ -3208,7 +3208,7 @@ class LayoutEditorTab(QWidget):
                 if node:
                     node["geometry"]["x"] = float(x); node["geometry"]["y"] = float(y)
                     self._refresh_panels(compact=False)
-                    self.chat_panel._append_message("AI", f"✅ Moved {dev_id} to ({x}, {y})", "#e8f4fd", "#1a1a2e")
+                    #self.chat_panel._append_message("AI", f"✅ Moved {dev_id} to ({x}, {y})", "#e8f4fd", "#1a1a2e")
 
             elif action in {"move_row", "move_row_devices"}:
                 dev_type = cmd.get("type", "")
@@ -3286,12 +3286,12 @@ class LayoutEditorTab(QWidget):
                 self._original_data["nodes"] = self.nodes
                 self._refresh_panels(compact=False)
                 self._sync_node_positions()
-                self.chat_panel._append_message(
-                    "AI",
-                    f"✅ Added {dev_type} dummy {dummy['id']} at x={target_x}, y={target_y}",
-                    "#e8f4fd",
-                    "#1a1a2e",
-                )
+                # self.chat_panel._append_message(
+                #     "AI",
+                #     f"✅ Added {dev_type} dummy {dummy['id']} at x={target_x}, y={target_y}",
+                #     "#e8f4fd",
+                #     "#1a1a2e",
+                # )
 
             elif action == "net_priority":
                 net = cmd.get("net", "")

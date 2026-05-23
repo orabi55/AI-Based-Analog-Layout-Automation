@@ -40,7 +40,6 @@ def _route_after_router(state: LayoutState):
         "strategy_selector",
         "placement_specialist",
         "drc_critic",
-        "routing_previewer",
         "general",
     }:
         return target
@@ -69,7 +68,6 @@ def _node_router(state: LayoutState):
     if target not in {
         "placement_specialist",
         "drc_critic",
-        "routing_previewer",
         "general",
     }:
         target = "general"
@@ -142,7 +140,6 @@ def build_chat_graph():
     builder.add_node("router", _node_router)
     builder.add_node("placement_specialist", node_placement_specialist_chatbot)
     builder.add_node("drc_critic", node_drc_critic)
-    builder.add_node("routing_previewer", node_routing_previewer)
     builder.add_node("general", node_general_chatbot)
     builder.add_node("human_viewer", node_human_viewer)
 
@@ -153,7 +150,6 @@ def build_chat_graph():
         {
             "placement_specialist": "placement_specialist",
             "drc_critic": "drc_critic",
-            "routing_previewer": "routing_previewer",
             "general": "general",
         },
     )
@@ -166,7 +162,6 @@ def build_chat_graph():
             "placement_specialist": "placement_specialist",
         },
     )
-    builder.add_edge("routing_previewer", "human_viewer")
     builder.add_edge("general", "human_viewer")
     builder.add_edge("human_viewer", END)
 

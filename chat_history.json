@@ -1,7 +1,19 @@
 [
   {
     "role": "user",
-    "content": "add a row of dummies below and above"
+    "content": "what is the matching technique used for MM3 and MM2"
+  },
+  {
+    "role": "assistant",
+    "content": "MM3 and MM2 are matched using a **centroid** technique, as indicated by the `DUMMY_matrix_MM11_MM3_and_1_more_centroid_X` entries. They also share a common gate connection (`IB`)."
+  },
+  {
+    "role": "assistant",
+    "content": "6 nets analyzed  (1 critical, 5 signal, 0 bias, 0 power)\nTotal Manhattan HPWL : 17.880 µm\nEstimated crossings  : 12\nWeighted cost        : 313.9\n\nWorst nets (by weighted HPWL):\n  VOUT           critical hpwl=3.789µm  (Δx=1.801, Δy=1.988)  [CROSS-ROW]\n  net24          signal   hpwl=5.803µm  (Δx=0.905, Δy=4.898)  [CROSS-ROW]\n  net32          signal   hpwl=3.882µm  (Δx=1.824, Δy=2.058)\n  net38          signal   hpwl=2.127µm  (Δx=0.423, Δy=1.704)  [CROSS-ROW]\n  net8           signal   hpwl=1.821µm  (Δx=0.969, Δy=0.852)\n\nRouting channels (inter-row bands):\n  band 0  y≈0.334µm  3 track(s)  → widen to 0.536 µm\n  band 1  y≈1.002µm  4 track(s)  → widen to 0.670 µm\n  band 2  y≈1.670µm  3 track(s)  → widen to 0.536 µm\n  band 3  y≈2.338µm  2 track(s)  → widen to 0.402 µm\n  band 4  y≈3.340µm  2 track(s)  ✓ adequate"
+  },
+  {
+    "role": "user",
+    "content": "add a row of dummies below"
   },
   {
     "role": "system",
@@ -9,11 +21,11 @@
   },
   {
     "role": "user",
-    "content": "add a row of dummies below and above"
+    "content": "add a row of dummies below"
   },
   {
     "role": "assistant",
-    "content": "I will add two rows of dummy devices to your layout.\n\n1.  **Bottom Dummy Row (NMOS):** A new row of NMOS dummies will be placed below the lowest existing NMOS row (Y=0.000000). The new Y-coordinate will be -0.818001.\n2.  **Top Dummy Row (PMOS):** A new row of PMOS dummies will be placed above the highest existing PMOS row (Y=3.272004). The new Y-coordinate will be 4.090005.\n\nBoth rows will span the full width of the current layout, from X=0.000 to X=4.998, to provide a consistent environment."
+    "content": "I will add a new row of NMOS dummies below the existing NMOS devices.\nThis new row will be placed at Y = -0.568001, which is one standard row height below the lowest existing row at Y=0.0.\nThe dummies will span the full width of the current layout, from X=0.0 to X=4.704, to ensure a consistent environment for the devices above. This corresponds to 17 dummy devices."
   },
   {
     "role": "system",

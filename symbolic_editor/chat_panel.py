@@ -125,6 +125,8 @@ class ChatPanel(QWidget):
     request_inference_with_tools = Signal(str, list, str)
     # Multi-agent path (orchestrator pipeline)
     request_orchestrated = Signal(str, str, list, str)
+    # On-demand routing preview
+    request_routing_preview = Signal(dict)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -164,6 +166,7 @@ class ChatPanel(QWidget):
         self._llm_worker.command_ready.connect(self.command_requested)
         # Multi-agent (orchestrator) path
         self.request_orchestrated.connect(self._llm_worker.process_orchestrated_request)
+        self.request_routing_preview.connect(self._llm_worker.process_routing_preview)
         # Shared response signals back to GUI
         self._llm_worker.response_ready.connect(self._on_llm_response)
         self._llm_worker.error_occurred.connect(self._on_llm_error)
@@ -326,6 +329,27 @@ class ChatPanel(QWidget):
         """)
         self._mode_btn.clicked.connect(self._on_mode_toggled)
         header_layout.addWidget(self._mode_btn)
+
+        routing_btn = QPushButton("Route")
+        routing_btn.setFixedHeight(26)
+        routing_btn.setToolTip("Run routing preview")
+        routing_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #0b2b3a;
+                color: #9fe7ff;
+                border: 1px solid #16556e;
+                border-radius: 4px;
+                padding: 2px 8px;
+                font-size: 10px;
+                font-family: 'Segoe UI';
+                font-weight: 600;
+                min-width: 52px;
+            }
+            QPushButton:hover { background-color: #103a4a; }
+            QPushButton:pressed { background-color: #0f4155; }
+        """)
+        routing_btn.clicked.connect(self._call_routing_preview)
+        header_layout.addWidget(routing_btn)
 
         # Clear chat button
         clear_btn = QPushButton("🗑️")
@@ -1080,6 +1104,15 @@ class ChatPanel(QWidget):
             self.selected_model,
         )
 
+    def _call_routing_preview(self):
+        """Dispatch a routing preview without going through the chatbot flow."""
+        if not self._layout_context or not self._layout_context.get("nodes"):
+            self._append_bubble("ai", "Load a layout to generate a routing report.")
+            return
+        self._is_orchestrated = False
+        self._start_thinking()
+        self.request_routing_preview.emit(self._layout_context)
+
     def _call_llm(self, user_message):
         """Build prompts and dispatch the request to the FC-enabled worker thread."""
         self._start_thinking()
@@ -1210,78 +1243,16 @@ class ChatPanel(QWidget):
     @Slot(str, str)
     def _on_stage_started(self, stage_key: str, title: str):
         self._real_stage_events_active = True
-        self._remove_last_message()
-        self._ensure_activity_timer()
-        stage_key = str(stage_key or "stage")
-        if stage_key in {"general", "routing_previewer", "node_routing_previewer"}:
-            return
-        title = str(title or stage_key)
-        message_id = self._stage_message_ids.get(stage_key)
-        msg = self._find_message(message_id) if message_id else None
-        if msg is None:
-            message_id = f"stage:{stage_key}:{len(self._stage_message_ids)}"
-            self._stage_message_ids[stage_key] = message_id
-            self._add_message(
-                "stage",
-                title,
-                status="running",
-                message_id=message_id,
-                meta={"title": title, "updates": []},
-            )
-            return
-        msg["content"] = title
-        msg["status"] = "running"
-        msg.setdefault("meta", {})["title"] = title
-        self._render_messages()
+        return
 
     @Slot(str, str)
     def _on_stage_delta(self, stage_key: str, update: str):
-        stage_key = str(stage_key or "stage")
-        if stage_key in {"general", "routing_previewer", "node_routing_previewer"}:
-            return
-        message_id = self._stage_message_ids.get(stage_key)
-        msg = self._find_message(message_id) if message_id else None
-        if msg is None:
-            self._on_stage_started(stage_key, stage_key)
-            msg = self._find_message(self._stage_message_ids.get(stage_key))
-        if msg is None:
-            return
-        update = self._normalise_response_text(update).strip()
-        if update:
-            updates = msg.setdefault("meta", {}).setdefault("updates", [])
-            if not updates or updates[-1] != update:
-                updates.append(update)
-        self._render_messages()
+        return
 
     @Slot(str, str)
     def _on_stage_done(self, stage_key: str, summary: str):
-        stage_key = str(stage_key or "stage")
-        if stage_key in {"general", "routing_previewer", "node_routing_previewer"}:
-            return
-        message_id = self._stage_message_ids.get(stage_key)
-        msg = self._find_message(message_id) if message_id else None
-        if msg is None:
-            self._on_stage_started(stage_key, stage_key)
-            msg = self._find_message(self._stage_message_ids.get(stage_key))
-        if msg is None:
-            return
-        summary = self._normalise_response_text(summary).strip()
-        if summary:
-            updates = msg.setdefault("meta", {}).setdefault("updates", [])
-            if not updates or updates[-1] != summary:
-                updates.append(summary)
-        msg["status"] = "done"
-        self._render_messages()
-        if self._is_orchestrated and not str(stage_key).endswith("human_viewer"):
-            self._add_message(
-                "assistant",
-                "Thinking",
-                status="running",
-                meta={"kind": "thinking"},
-            )
-            self._ensure_activity_timer()
-        else:
-            self._stop_activity_if_idle()
+        self._stop_activity_if_idle()
+        return
 
     @Slot(str, dict)
     def _on_tool_started(self, tool_name: str, args: dict):
