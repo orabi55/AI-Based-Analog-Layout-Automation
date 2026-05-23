@@ -3273,7 +3273,7 @@ class LayoutEditorTab(QWidget):
                     "geometry": {
                         "x": target_x,
                         "y": target_y,
-                        "width": float(tgeo.get("width", 1)),
+                        "width": 0.294,
                         "height": float(tgeo.get("height", 0.5)),
                         "orientation": "R0",
                     },

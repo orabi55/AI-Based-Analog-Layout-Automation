@@ -567,7 +567,7 @@ class OrchestratorWorker(LLMWorker):
                                 text = self._short_summary({"routing_result": interrupt_data.get("Routing", {})}, 500)
                         elif last_agent == "drc_critic":
                             text = interrupt_data.get("Placement", "")
-                            text += "\n" + self._short_summary({"drc_pass": interrupt_data.get("DRC pass", False)}, 500)
+                            text += "\n\n" + self._short_summary({"drc_pass": interrupt_data.get("DRC pass", False)}, 500)
                             text += "\n" + self._short_summary({"drc_flags": interrupt_data.get("DRC violations", [])}, 500)
                         elif last_agent == "general": text = interrupt_data.get("General", "")
                         else: text = ""

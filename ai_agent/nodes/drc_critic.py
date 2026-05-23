@@ -60,10 +60,18 @@ def node_drc_critic(state):
             chat_history=chat_history, user_content="",
             node_role="DRC Critic Assistant", node_content="Clean placement. No DRC violations found.",
         )
+
+        intent = state.get("intent", "drc_critic")
+        if intent == "placement_specialist":
+            placement_text = state.get("placement_text", "")
+        else:
+            placement_text = ""
+
         return {
             "drc_pass": True, "drc_flags": [],
             "chat_history": updated_chat_history, "drc_retry_count": retry_num + 1,
             "last_agent": "drc_critic",
+            "placement_text": placement_text,
         }
 
     n_violations = len(drc_result['violations'])
@@ -75,10 +83,18 @@ def node_drc_critic(state):
 
     elapsed = time.time() - t0
     ip_step("5/5 DRC Critic", f"fail — attempt {retry_num + 1} ({elapsed:.1f}s)")
+
+    intent = state.get("intent", "drc_critic")
+    if intent == "placement_specialist":
+        placement_text = state.get("placement_text", "")
+    else:
+        placement_text = ""
+
     return {
         "drc_pass": False,
         "drc_flags": list(drc_result.get("violations", [])),
         "chat_history": chat_history,
         "drc_retry_count": retry_num + 1,
         "last_agent": "drc_critic",
+        "placement_text": placement_text,
     }
