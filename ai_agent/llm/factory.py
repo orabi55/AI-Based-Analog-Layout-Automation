@@ -50,6 +50,8 @@ def _resolve_timeout(task_weight: str) -> int:
 def _build_vertex_model(cls, **kwargs):
     """Instantiate Vertex wrappers across minor LangChain kwarg differences."""
     try:
+        if "timeout" not in kwargs and "request_timeout" in kwargs:
+            kwargs["timeout"] = kwargs["request_timeout"]
         return cls(**kwargs)
     except TypeError:
         trimmed = dict(kwargs)
@@ -171,7 +173,7 @@ def get_langchain_llm(selected_model: str, task_weight: str = "light"):
             location=location,
             model=model_name,
             temperature=0.4,
-            request_timeout=request_timeout,
+            timeout=request_timeout,
         )
 
     elif selected_model == "VertexClaude":
@@ -192,7 +194,7 @@ def get_langchain_llm(selected_model: str, task_weight: str = "light"):
             location=location,
             model_name=model_name,
             temperature=0.4,
-            request_timeout=request_timeout,
+            timeout=request_timeout,
         )
 
     else:

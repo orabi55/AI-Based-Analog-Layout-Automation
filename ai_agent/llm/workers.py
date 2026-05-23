@@ -313,6 +313,7 @@ class OrchestratorWorker(LLMWorker):
 
     def __init__(self):
         super().__init__()
+        self._last_routing_report = None
         try:
             from langchain_core.runnables import RunnableConfig
             self.thread_config = cast(RunnableConfig, {
@@ -528,7 +529,10 @@ class OrchestratorWorker(LLMWorker):
                         elif last_agent == "strategy_selector": text = interrupt_data.get("Strategy", "")
                         elif last_agent == "placement_specialist": text = interrupt_data.get("Placement", "")
                         elif last_agent == "routing_previewer":
-                            text = self._short_summary({"routing_result": interrupt_data.get("Routing", {})}, 500)
+                            if self._last_routing_report:
+                                text = ""
+                            else:
+                                text = self._short_summary({"routing_result": interrupt_data.get("Routing", {})}, 500)
                         elif last_agent == "drc_critic":
                             text = self._short_summary({"drc_pass": interrupt_data.get("DRC pass", False)}, 500)
                             text += "\n" + self._short_summary({"drc_flags": interrupt_data.get("DRC violations", [])}, 500)
@@ -584,6 +588,23 @@ class OrchestratorWorker(LLMWorker):
                             self.stage_delta.emit(node_key, summary)
                         except Exception:
                             pass
+
+                    # Emit full routing report as a normal response bubble
+                    if node_key in ("routing_previewer", "node_routing_previewer"):
+                        rr = node_value.get("routing_result") if isinstance(node_value, dict) else None
+                        if isinstance(rr, dict):
+                            report_text = rr.get("log_text")
+                            if isinstance(report_text, str) and report_text.strip():
+                                report_text = report_text.strip()
+                                if report_text == self._last_routing_report:
+                                    report_text = ""
+                                else:
+                                    self._last_routing_report = report_text
+                            if report_text:
+                                try:
+                                    self.response_ready.emit(report_text)
+                                except Exception:
+                                    pass
 
                     # Mark stage done immediately — LangGraph emits each node's
                     # output as a single update, so the node has already finished.
