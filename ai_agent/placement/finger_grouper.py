@@ -2775,7 +2775,7 @@ def _are_abutment_compatible(id_a: str, id_b: str, terminal_nets: dict) -> bool:
     return False
 
 
-def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[dict]:
+def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False, preserve_order: bool = False) -> List[dict]:
     """
     Guarantee no two devices in the same row overlap while preserving hierarchy abutment.
 
@@ -2790,6 +2790,9 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
     no_abutment : bool, optional
         Flag dictating whether intra-device overlaps can use tight diffusion sharing
         pitches. Defaults to False.
+    preserve_order : bool, optional
+        If True, maintains the current relative order and flip states of the devices
+        without running the sequencing solver again. Useful in snapping and post-enforcer passes.
 
     Returns
     -------
@@ -2851,8 +2854,8 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
         blocks.sort(key=lambda b: b["orig_x"])
 
         # --- Step 2: Solve optimal order and flip states to maximize net-sharing ---
-        if no_abutment:
-            # No abutment optimization requested — keep original relative order and no flips
+        if no_abutment or preserve_order:
+            # No abutment optimization or order preservation requested — keep original relative order and no flips
             ordered_blocks = list(blocks)
             best_flips = [0] * len(blocks)
         else:
@@ -2961,27 +2964,29 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
                     }
                 break
 
+        # Mirror flipped blocks first so that net sharing checks are 100% accurate
+        if not no_abutment:
+            for b_idx, b in enumerate(ordered_blocks):
+                if best_flips[b_idx]:
+                    mirrored_nodes = []
+                    for n in reversed(b["nodes"]):
+                        nc = copy.deepcopy(n)
+                        if "net_s" in nc or "net_d" in nc:
+                            nc["net_s"], nc["net_d"] = nc.get("net_d"), nc.get("net_s")
+                        if "abutment" in nc:
+                            abut = nc["abutment"]
+                            nc["abutment"] = {
+                                "abut_left": abut.get("abut_right", False),
+                                "abut_right": abut.get("abut_left", False),
+                            }
+                        mirrored_nodes.append(nc)
+                    b["nodes"] = mirrored_nodes
+
         row_nodes_final = []
         cursor_slot = 0
         dummy_idx = 0
 
         for b_idx, b in enumerate(ordered_blocks):
-            # Apply mirroring if flipped
-            if not no_abutment and best_flips[b_idx]:
-                mirrored_nodes = []
-                for n in reversed(b["nodes"]):
-                    nc = copy.deepcopy(n)
-                    if "net_s" in nc or "net_d" in nc:
-                        nc["net_s"], nc["net_d"] = nc.get("net_d"), nc.get("net_s")
-                    if "abutment" in nc:
-                        abut = nc["abutment"]
-                        nc["abutment"] = {
-                            "abut_left": abut.get("abut_right", False),
-                            "abut_right": abut.get("abut_left", False),
-                        }
-                    mirrored_nodes.append(nc)
-                b["nodes"] = mirrored_nodes
-
             # Place all fingers of the block consecutively
             K = len(b["nodes"])
             for f_idx, n in enumerate(b["nodes"]):
@@ -3008,7 +3013,7 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
                 # Check if they share a net directly
                 if right_net and left_net and right_net == left_net:
                     # Direct abutment is possible!
-                    b["nodes"][-1]["abutment"]["abut_right"] = True
+                    b["nodes"][-1].setdefault("abutment", {})["abut_right"] = True
                     ordered_blocks[b_idx + 1]["nodes"][0].setdefault("abutment", {})["abut_left"] = True
                 else:
                     # No shared net -> insert a bridge dummy to achieve continuous abutment!
@@ -3038,7 +3043,7 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
                         }
                     }
                     # Enable abutment at boundaries with the bridge dummy
-                    b["nodes"][-1]["abutment"]["abut_right"] = True
+                    b["nodes"][-1].setdefault("abutment", {})["abut_right"] = True
                     ordered_blocks[b_idx + 1]["nodes"][0].setdefault("abutment", {})["abut_left"] = True
                     
                     row_nodes_final.append(bridge_dummy)
@@ -3046,6 +3051,11 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
 
         # Replace type-row nodes with our perfectly optimized layout row
         type_rows[(y_key, _dev_type)] = row_nodes_final
+
+    # Rebuild active_nodes from optimized rows including bridge dummies
+    active_nodes = []
+    for row_nodes in type_rows.values():
+        active_nodes.extend(row_nodes)
 
     # --- Step 5: Global Centering & Inner/Outer Filler Dummies ---
     # Only apply centering and filler insertion to MOS rows.
@@ -3168,6 +3178,7 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
             # (which would be off-grid), we enumerate all pitch_std grid
             # positions that fall within the gap and place one filler at each.
             import math as _m
+            row_dummies = []
             for g_start, g_end in gaps:
                 # First grid position at or after the gap start
                 first_slot = int(_m.ceil(g_start / pitch_std - 1e-9))
@@ -3181,17 +3192,21 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
                     if curr_x < g_start - 0.01:
                         continue
                     dummy_counter += 1
-                    new_dummies.append({
+                    row_dummies.append({
                         "id": f"FILLER_DUMMY_{dummy_counter}_{dev_type}",
                         "type": dev_type,
                         "is_dummy": True,
                         "geometry": {"x": curr_x, "y": float(y_key), "width": pitch_std, "height": ref_height, "orientation": "R0"},
                         "electrical": dict(ref_elec)
                     })
+            if row_dummies:
+                row_nodes.extend(row_dummies)
+                vprint(f"[resolve_overlaps] Centered layout & added {len(row_dummies)} filler dummies to row (y={y_key}, {dev_type}) for symmetry & density.")
 
-        if new_dummies:
-            active_nodes.extend(new_dummies)
-            vprint(f"[resolve_overlaps] Centered layout & added {len(new_dummies)} filler dummies for symmetry & density.")
+        # Rebuild active_nodes from final type_rows including bridge and filler dummies
+        active_nodes = []
+        for row_nodes in type_rows.values():
+            active_nodes.extend(row_nodes)
 
     # Final pass: Ensure abutment flags are consistent for ALL touching devices
     # (including dummies) in every row. This guarantees they will compress correctly.
@@ -3205,10 +3220,8 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
         
         # Clear outer edges of the row
         if row:
-            if "abutment" in row[0]:
-                row[0]["abutment"]["abut_left"] = False
-            if "abutment" in row[-1]:
-                row[-1]["abutment"]["abut_right"] = False
+            row[0].setdefault("abutment", {})["abut_left"] = False
+            row[-1].setdefault("abutment", {})["abut_right"] = False
                 
         for i in range(len(row) - 1):
             curr_n = row[i]
@@ -3224,10 +3237,8 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
                 next_n.setdefault("abutment", {})["abut_left"] = True
             else:
                 # If they do NOT touch, they MUST NOT abut.
-                if "abutment" in curr_n:
-                    curr_n["abutment"]["abut_right"] = False
-                if "abutment" in next_n:
-                    next_n["abutment"]["abut_left"] = False
+                curr_n.setdefault("abutment", {})["abut_right"] = False
+                next_n.setdefault("abutment", {})["abut_left"] = False
 
     return active_nodes
 

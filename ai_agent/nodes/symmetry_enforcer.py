@@ -361,7 +361,7 @@ def node_symmetry_enforcer(state: dict) -> dict:
 
     # Snap positions back to grid, regenerate correct fillers, and legalize rows
     no_abutment_flag = state.get("no_abutment", False)
-    working = _resolve_row_overlaps(working, no_abutment_flag)
+    working = _resolve_row_overlaps(working, no_abutment_flag, preserve_order=True)
     working = legalize_vertical_rows(working)
 
     elapsed = time.time() - t0
