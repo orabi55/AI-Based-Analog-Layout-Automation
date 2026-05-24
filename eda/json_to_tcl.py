@@ -99,9 +99,12 @@ class LayoutExporter:
                         
                         valid_params[k] = v
                         
-                    # Format: Name | X Y Orient | Param1=Val1 Param2=Val2
+                    # Format: Name X Y Orient Param1=Val1 Param2=Val2 (space-separated, no trailing space)
                     param_str = " ".join([f"{k}={v}" for k, v in valid_params.items()])
-                    line = f"{inst['name']} | {inst['x']:.3f} {inst['y']:.3f} {inst['orient']} | {param_str}\n"
+                    line_parts = [inst['name'], f"{inst['x']:.3f}", f"{inst['y']:.3f}", inst['orient']]
+                    if param_str:
+                        line_parts.append(param_str)
+                    line = " ".join(line_parts) + "\n"
                     f.write(line)
                     
                     exported_names.add(inst['name'])
