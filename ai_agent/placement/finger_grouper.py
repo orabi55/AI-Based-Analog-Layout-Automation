@@ -2854,10 +2854,60 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False, preserve
         blocks.sort(key=lambda b: b["orig_x"])
 
         # --- Step 2: Solve optimal order and flip states to maximize net-sharing ---
-        if no_abutment or preserve_order:
-            # No abutment optimization or order preservation requested — keep original relative order and no flips
+        if no_abutment:
+            # No abutment optimization requested — keep original relative order and no flips
             ordered_blocks = list(blocks)
             best_flips = [0] * len(blocks)
+        elif preserve_order:
+            # Preserve the block sequence, but optimize their flips/mirroring to maximize abutments!
+            ordered_blocks = list(blocks)
+            M = len(blocks)
+            if M <= 1:
+                best_flips = [0] * M
+            else:
+                block_nets = []
+                for b in blocks:
+                    left = b["nodes"][0].get("net_s")
+                    right = b["nodes"][-1].get("net_d")
+                    block_nets.append((left, right))
+
+                def evaluate_flips(flips):
+                    direct_abuts = 0
+                    for k in range(M - 1):
+                        flip_curr = flips[k]
+                        flip_next = flips[k+1]
+                        right_net = block_nets[k][0] if flip_curr else block_nets[k][1]
+                        left_net = block_nets[k+1][1] if flip_next else block_nets[k+1][0]
+                        if right_net and left_net and right_net == left_net:
+                            direct_abuts += 1
+                    num_flips = sum(flips)
+                    return direct_abuts * 1000 - num_flips * 10
+
+                best_score = -float('inf')
+                best_flips = [0] * M
+                
+                if M <= 10:
+                    import itertools
+                    for flips in itertools.product([0, 1], repeat=M):
+                        score = evaluate_flips(flips)
+                        if score > best_score:
+                            best_score = score
+                            best_flips = list(flips)
+                else:
+                    curr_flips = [0] * M
+                    best_score = evaluate_flips(curr_flips)
+                    improved = True
+                    while improved:
+                        improved = False
+                        for k in range(M):
+                            test_flips = list(curr_flips)
+                            test_flips[k] = 1 - test_flips[k]
+                            s = evaluate_flips(test_flips)
+                            if s > best_score:
+                                best_score = s
+                                best_flips = list(test_flips)
+                                curr_flips = list(test_flips)
+                                improved = True
         else:
             # Optimize sequence and mirroring to maximize diffusion sharing (abutment)
             M = len(blocks)
