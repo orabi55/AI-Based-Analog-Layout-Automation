@@ -3108,16 +3108,48 @@ class LayoutEditorTab(QWidget):
                 Falls back to the parent's nets for unrolled fingers."""
                 nets = terminal_nets.get(dev_id) or terminal_nets.get(_get_parent_id(dev_id)) or {}
                 return nets.get("S"), nets.get("D")
+            
+            # Populate net_s/net_d on export nodes from terminal_nets if missing.
+            # Nodes that already have net_s/net_d (e.g. from _resolve_row_overlaps
+            # with flip state applied) retain their existing values.
+            # For devices with MY orientation (mirrored), swap S↔D to reflect
+            # the physical flip applied by the sequencing solver.
+            for node in export_nodes:
+                if not node.get("net_s") and not node.get("net_d"):
+                    dev_id = node.get("id", "")
+                    s_net, d_net = _sd_nets_for(dev_id)
+                    if s_net or d_net:
+                        orient = node.get("geometry", {}).get("orientation", "R0")
+                        if orient == "MY":
+                            # Mirrored: S↔D are physically swapped
+                            node["net_s"] = d_net
+                            node["net_d"] = s_net
+                        else:
+                            node["net_s"] = s_net
+                            node["net_d"] = d_net
 
             def _adjacent_can_abut(left_node, right_node):
                 """Return True only if the right edge of left_node and
                 the left edge of right_node share a common S/D net
                 (including power nets like VSS/VDD — those are valid
-                for physical diffusion sharing)."""
+                for physical diffusion sharing).
+                
+                Uses node-level net_s/net_d which already reflect
+                orientation flips (MY) from _resolve_row_overlaps."""
+                # Prefer node-level nets (already flip-aware) over raw terminal_nets
                 lid = left_node.get("id", "")
                 rid = right_node.get("id", "")
-                l_s, l_d = _sd_nets_for(lid)
-                r_s, r_d = _sd_nets_for(rid)
+                
+                l_s = left_node.get("net_s")
+                l_d = left_node.get("net_d")
+                r_s = right_node.get("net_s")
+                r_d = right_node.get("net_d")
+                
+                # Fall back to terminal_nets if node-level nets are missing
+                if not l_s and not l_d:
+                    l_s, l_d = _sd_nets_for(lid)
+                if not r_s and not r_d:
+                    r_s, r_d = _sd_nets_for(rid)
                 
                 # No net info → cannot validate, default to no-abut
                 if not (l_s or l_d) or not (r_s or r_d):
