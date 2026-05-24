@@ -3091,6 +3091,47 @@ class LayoutEditorTab(QWidget):
                     "abut_right": (f_idx < total) or bool(parent_abut.get("abut_right", False))
                 }
 
+            # ── Net-aware abutment validation ──────────────────────────
+            # The GUI abutment flags may have been set for the original OAS
+            # layout order.  After AI rearrangement, adjacent devices may no
+            # longer share a Source/Drain net, so we must validate each pair.
+            _POWER_NETS = frozenset({"VDD", "VSS", "GND", "VCC", "AVDD", "AVSS"})
+            terminal_nets = self._terminal_nets or {}
+            
+            def _get_parent_id(dev_id):
+                """Return the logical parent (e.g. MM5 from MM5_m2)."""
+                parent_id, _, _ = _parse_id(dev_id)
+                return parent_id
+
+            def _sd_nets_for(dev_id):
+                """Return (source_net, drain_net) for dev_id.
+                Falls back to the parent's nets for unrolled fingers."""
+                nets = terminal_nets.get(dev_id) or terminal_nets.get(_get_parent_id(dev_id)) or {}
+                return nets.get("S"), nets.get("D")
+
+            def _adjacent_can_abut(left_node, right_node):
+                """Return True only if the right edge of left_node and
+                the left edge of right_node share a common S/D net
+                (including power nets like VSS/VDD — those are valid
+                for physical diffusion sharing)."""
+                lid = left_node.get("id", "")
+                rid = right_node.get("id", "")
+                l_s, l_d = _sd_nets_for(lid)
+                r_s, r_d = _sd_nets_for(rid)
+                
+                # No net info → cannot validate, default to no-abut
+                if not (l_s or l_d) or not (r_s or r_d):
+                    return False
+                
+                # Right edge of left_node can be S or D,
+                # Left edge of right_node can be S or D.
+                # Check all 4 combinations for a shared net.
+                for l_term in (l_s, l_d):
+                    for r_term in (r_s, r_d):
+                        if l_term and r_term and l_term == r_term:
+                            return True
+                return False
+
             # Magic Step: Squeeze 0.3um Symbolic Slots down to 0.070um physical diffusion-sharing pitch GLOBALLY
             max_slot = 0
             for n in export_nodes:
@@ -3120,13 +3161,20 @@ class LayoutEditorTab(QWidget):
                         curr = slot_to_node[k+1]
                         
                         if prev is curr:
+                            # Same device spanning multiple slots (multi-finger internal)
                             abut_boundaries[k] = True
                         else:
                             abut_right = prev.get("abutment", {}).get("abut_right", False)
                             abut_left = curr.get("abutment", {}).get("abut_left", False)
                             
                             if abut_right and abut_left:
-                                abut_boundaries[k] = True
+                                # Both flags say "yes", but verify they share a net
+                                if _adjacent_can_abut(prev, curr):
+                                    abut_boundaries[k] = True
+                                else:
+                                    # Override: clear the flags on this boundary
+                                    prev["abutment"]["abut_right"] = False
+                                    curr["abutment"]["abut_left"] = False
             
             slot_x = [0.0] * (max_slot + 1)
             for k in range(max_slot):
