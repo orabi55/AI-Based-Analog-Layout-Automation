@@ -3147,7 +3147,12 @@ class LayoutEditorTab(QWidget):
                 y = node.get("geometry", {}).get("y", 0.0)
                 orient = node.get("geometry", {}).get("orientation", "R0")
                 # Parameters are stored under 'electrical' in the standard schema
-                params = node.get("electrical", node.get("parameters", {}))
+                params = copy.deepcopy(node.get("electrical", node.get("parameters", {})))
+                
+                # Retrieve resolved physical abutment parameters
+                abut = node.get("abutment", {})
+                params["left_abut"] = 1 if abut.get("abut_left", False) else 0
+                params["right_abut"] = 1 if abut.get("abut_right", False) else 0
                 
                 exporter.add_instance(name, x, y, orient, params=params)
                 
