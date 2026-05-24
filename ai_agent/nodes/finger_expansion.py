@@ -43,12 +43,12 @@ def node_finger_expansion(state):
         log_detail(f"Expanded {len(placement_nodes)} logical → {len(physical_nodes)} physical nodes")
         # MUST run row overlap resolver to snap grid and generate filler dummies
         no_abutment_flag = state.get("no_abutment", False)
-        physical_nodes = _resolve_row_overlaps(physical_nodes, no_abutment_flag)
+        physical_nodes = _resolve_row_overlaps(physical_nodes, no_abutment_flag, preserve_order=True)
     else:
         # Even if already physical, we must run the row overlap resolver to generate filler dummies
         # and pack the layout to the correct standard grid.
         no_abutment_flag = state.get("no_abutment", False)
-        physical_nodes = _resolve_row_overlaps(placement_nodes, no_abutment_flag)
+        physical_nodes = _resolve_row_overlaps(placement_nodes, no_abutment_flag, preserve_order=True)
         log_detail(f"Nodes already physical — skipped expansion, but regenerated fillers ({len(physical_nodes)} devices)")
 
     # Run overlap resolution on expanded nodes
@@ -60,7 +60,7 @@ def node_finger_expansion(state):
         # Re-run _resolve_row_overlaps to snap positions back to grid
         # and regenerate correct filler dummies.
         no_abutment_flag = state.get("no_abutment", False)
-        physical_nodes = _resolve_row_overlaps(physical_nodes, no_abutment_flag)
+        physical_nodes = _resolve_row_overlaps(physical_nodes, no_abutment_flag, preserve_order=True)
     else:
         log_detail("No overlaps detected")
     physical_nodes = legalize_vertical_rows(physical_nodes)
