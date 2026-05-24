@@ -75,6 +75,8 @@ from symbolic_editor.icons import (
     icon_flip_h,
     icon_flip_v,
     icon_add_dummy,
+    icon_vdd,
+    icon_gnd,
     icon_import_file,
     icon_export_file,
     icon_home,
@@ -436,10 +438,14 @@ class MainWindow(QMainWindow):
     def _sync_mode_toggles(self):
         tab = self.current_tab()
         dummy_checked = bool(getattr(tab, "_dummy_mode", False)) if tab else False
+        vdd_checked = bool(getattr(tab, "_vdd_mode", False)) if tab else False
+        gnd_checked = bool(getattr(tab, "_gnd_mode", False)) if tab else False
         abut_checked = bool(getattr(tab, "_abutment_mode", False)) if tab else False
         colorize_checked = bool(getattr(tab, "_colorize_mode", False)) if tab else False
         for action, checked in (
             (self._act_add_dummy, dummy_checked),
+            (self._act_add_vdd, vdd_checked),
+            (self._act_add_gnd, gnd_checked),
             (self._act_abutment, abut_checked),
             (self._act_colorize, colorize_checked),
         ):
@@ -753,6 +759,18 @@ class MainWindow(QMainWindow):
         self._act_add_dummy.setToolTip("Toggle dummy placement mode (D)")
         self._act_add_dummy.toggled.connect(self._on_toggle_dummy)
         tb.addAction(self._act_add_dummy)
+
+        self._act_add_vdd = QAction(icon_vdd(), "Toggle VDD Tap Placement", self)
+        self._act_add_vdd.setCheckable(True)
+        self._act_add_vdd.setToolTip("Toggle VDD tap placement mode (V)")
+        self._act_add_vdd.toggled.connect(self._on_toggle_vdd)
+        tb.addAction(self._act_add_vdd)
+
+        self._act_add_gnd = QAction(icon_gnd(), "Toggle GND Tap Placement", self)
+        self._act_add_gnd.setCheckable(True)
+        self._act_add_gnd.setToolTip("Toggle GND tap placement mode (G)")
+        self._act_add_gnd.toggled.connect(self._on_toggle_gnd)
+        tb.addAction(self._act_add_gnd)
         tb.addSeparator()
 
         self._tb_act_route = QAction(icon_route(), "Toggle Routing Channels", self)
@@ -1005,6 +1023,16 @@ class MainWindow(QMainWindow):
         tab = self.current_tab()
         if tab:
             tab.set_dummy_mode(checked)
+
+    def _on_toggle_vdd(self, checked):
+        tab = self.current_tab()
+        if tab:
+            tab.set_vdd_mode(checked)
+
+    def _on_toggle_gnd(self, checked):
+        tab = self.current_tab()
+        if tab:
+            tab.set_gnd_mode(checked)
 
     def _on_workspace_mode_changed(self, mode):
         tab = self.current_tab()

@@ -230,6 +230,12 @@ class SymbolicEditor(QGraphicsView):
         self._dummy_preview = None
         self._dummy_place_callback = None
 
+        # VDD/GND Tap placement mode
+        self._vdd_mode = False
+        self._gnd_mode = False
+        self._vdd_place_callback = None
+        self._gnd_place_callback = None
+
         # When True, skip compaction in set_terminal_nets
         self._skip_compaction = False
 
@@ -287,14 +293,41 @@ class SymbolicEditor(QGraphicsView):
     def set_dummy_mode(self, enabled):
         """Enable/disable click-to-place dummy mode."""
         self._dummy_mode = bool(enabled)
-        self.setMouseTracking(self._dummy_mode)
-        self.viewport().setMouseTracking(self._dummy_mode)
-        if not self._dummy_mode:
+        track = self._dummy_mode or self._vdd_mode or self._gnd_mode
+        self.setMouseTracking(track)
+        self.viewport().setMouseTracking(track)
+        if not track:
+            self._clear_dummy_preview()
+
+    def set_vdd_mode(self, enabled):
+        """Enable/disable click-to-place VDD tap mode."""
+        self._vdd_mode = bool(enabled)
+        track = self._dummy_mode or self._vdd_mode or self._gnd_mode
+        self.setMouseTracking(track)
+        self.viewport().setMouseTracking(track)
+        if not track:
+            self._clear_dummy_preview()
+
+    def set_gnd_mode(self, enabled):
+        """Enable/disable click-to-place GND tap mode."""
+        self._gnd_mode = bool(enabled)
+        track = self._dummy_mode or self._vdd_mode or self._gnd_mode
+        self.setMouseTracking(track)
+        self.viewport().setMouseTracking(track)
+        if not track:
             self._clear_dummy_preview()
 
     def set_dummy_place_callback(self, callback):
         """Callback called with candidate dict when user places a dummy."""
         self._dummy_place_callback = callback
+
+    def set_vdd_place_callback(self, callback):
+        """Callback called with candidate dict when user places a VDD tap."""
+        self._vdd_place_callback = callback
+
+    def set_gnd_place_callback(self, callback):
+        """Callback called with candidate dict when user places a GND tap."""
+        self._gnd_place_callback = callback
 
     def set_device_render_mode(self, mode):
         self._device_render_mode = mode if mode in {"detailed", "outline"} else "detailed"
@@ -661,6 +694,56 @@ class SymbolicEditor(QGraphicsView):
             "height": height,
         }
 
+    def _compute_tap_candidate(self, scene_pos, tap_type, snap_to_free=True):
+        """Build a tap candidate (ptap or ntap) centered under the cursor.
+        tap_type: 'vdd' or 'gnd'
+        """
+        target_row_type = "pmos" if tap_type == "vdd" else "nmos"
+        
+        type_items = {"nmos": [], "pmos": []}
+        for item in self.device_items.values():
+            dev_type = str(getattr(item, "device_type", "")).strip().lower()
+            if dev_type in type_items:
+                type_items[dev_type].append(item)
+
+        items = type_items[target_row_type]
+        if not items:
+            all_items = type_items["nmos"] + type_items["pmos"]
+            if not all_items:
+                return None
+            items = all_items
+            target_row_type = getattr(items[0], "device_type", "nmos").strip().lower()
+
+        avg_y = sum(it.pos().y() for it in items) / len(items)
+        target_y = avg_y
+        ref_item = items[0]
+        
+        # Tap cells are visually 1.0x width of a reference transistor
+        width = ref_item.rect().width() * 1.0
+        height = ref_item.rect().height()
+        
+        cursor_x = self._snap_value(scene_pos.x() - (width / 2.0))
+        cursor_y = self._snap_row(scene_pos.y() - (height / 2.0))
+        if snap_to_free:
+            x = self.find_nearest_free_x(
+                row_y=cursor_y,
+                width=width,
+                target_x=cursor_x,
+                exclude_id=None,
+            )
+            y = cursor_y
+        else:
+            x = cursor_x
+            y = cursor_y
+        return {
+            "type": "tap",
+            "subtype": "ntap" if tap_type == "vdd" else "ptap",
+            "x": x,
+            "y": y,
+            "width": width,
+            "height": height,
+        }
+
     def _clear_dummy_preview(self):
         if self._dummy_preview is not None:
             try:
@@ -671,17 +754,23 @@ class SymbolicEditor(QGraphicsView):
             self._dummy_preview = None
 
     def _update_dummy_preview(self, scene_pos):
-        # The preview uses the same cursor-snapped position that click placement uses.
-        candidate = self._compute_dummy_candidate(scene_pos, snap_to_free=False)
+        if self._vdd_mode:
+            candidate = self._compute_tap_candidate(scene_pos, "vdd", snap_to_free=False)
+        elif self._gnd_mode:
+            candidate = self._compute_tap_candidate(scene_pos, "gnd", snap_to_free=False)
+        else:
+            candidate = self._compute_dummy_candidate(scene_pos, snap_to_free=False)
+
         if not candidate:
             self._clear_dummy_preview()
             return
 
-        # Use a real DeviceItem as preview so it looks identical to final placement
+        preview_name = "TAP_VDD" if self._vdd_mode else ("TAP_GND" if self._gnd_mode else "DUMMY")
+
         if self._dummy_preview is None or not isinstance(self._dummy_preview, DeviceItem):
             self._clear_dummy_preview()
             self._dummy_preview = DeviceItem(
-                "DUMMY",
+                preview_name,
                 candidate["type"],
                 candidate["x"],
                 candidate["y"],
@@ -691,7 +780,6 @@ class SymbolicEditor(QGraphicsView):
             self._dummy_preview.set_render_mode(self._device_render_mode)
             self._dummy_preview.setOpacity(0.55)
             self._dummy_preview.setZValue(1000)
-            # Disable interaction on the preview ghost
             self._dummy_preview.setFlag(
                 QGraphicsItem.GraphicsItemFlag.ItemIsMovable, False
             )
@@ -701,6 +789,13 @@ class SymbolicEditor(QGraphicsView):
             self._dummy_preview.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
             self.scene.addItem(self._dummy_preview)
         else:
+            # Update attributes of existing preview
+            if getattr(self._dummy_preview, 'device_name', '') != preview_name:
+                self._dummy_preview.device_name = preview_name
+                # Re-evaluate is_tap flag & apply default palette
+                self._dummy_preview._is_tap = True if preview_name.startswith("TAP") else False
+                self._dummy_preview._apply_default_palette()
+            
             if getattr(self._dummy_preview, 'device_type', '') != candidate["type"]:
                 self._dummy_preview.device_type = candidate["type"]
                 if hasattr(self._dummy_preview, "_apply_default_palette"):
@@ -726,6 +821,26 @@ class SymbolicEditor(QGraphicsView):
             return False
         candidate["preserve_position"] = True
         self._dummy_place_callback(candidate)
+        return True
+
+    def _commit_vdd_at(self, scene_pos):
+        if not self._vdd_place_callback:
+            return False
+        candidate = self._compute_tap_candidate(scene_pos, "vdd", snap_to_free=False)
+        if not candidate:
+            return False
+        candidate["preserve_position"] = True
+        self._vdd_place_callback(candidate)
+        return True
+
+    def _commit_gnd_at(self, scene_pos):
+        if not self._gnd_place_callback:
+            return False
+        candidate = self._compute_tap_candidate(scene_pos, "gnd", snap_to_free=False)
+        if not candidate:
+            return False
+        candidate["preserve_position"] = True
+        self._gnd_place_callback(candidate)
         return True
 
     # -------------------------------------------------
@@ -2731,6 +2846,16 @@ class SymbolicEditor(QGraphicsView):
             if self._commit_dummy_at(scene_pos):
                 self._update_dummy_preview(scene_pos)
                 return
+        if self._vdd_mode and event.button() == Qt.MouseButton.LeftButton:
+            scene_pos = self.mapToScene(event.pos())
+            if self._commit_vdd_at(scene_pos):
+                self._update_dummy_preview(scene_pos)
+                return
+        if self._gnd_mode and event.button() == Qt.MouseButton.LeftButton:
+            scene_pos = self.mapToScene(event.pos())
+            if self._commit_gnd_at(scene_pos):
+                self._update_dummy_preview(scene_pos)
+                return
         if event.button() == Qt.MouseButton.MiddleButton:
             self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
             fake_event = type(event)(
@@ -2752,7 +2877,7 @@ class SymbolicEditor(QGraphicsView):
             super().mouseReleaseEvent(event)
 
     def mouseMoveEvent(self, event):
-        if self._dummy_mode:
+        if self._dummy_mode or self._vdd_mode or self._gnd_mode:
             self._update_dummy_preview(self.mapToScene(event.pos()))
         super().mouseMoveEvent(event)
     

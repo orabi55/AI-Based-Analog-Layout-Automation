@@ -81,6 +81,7 @@ class DeviceItem(QGraphicsRectItem):
         # --- Premium color palette per device type ---
         dtype = self.device_type
         name_upper = str(name).upper()
+        self._is_tap = (dtype == "tap" or name_upper.startswith("TAP"))
         self._is_dummy = (name_upper.startswith("DUMMY")
                           or name_upper.startswith("FILLER_DUMMY")
                           or name_upper.startswith("EDGE_DUMMY"))
@@ -92,7 +93,32 @@ class DeviceItem(QGraphicsRectItem):
 
     def _apply_default_palette(self):
         dtype = self.device_type
-        if self._is_dummy:
+        name_upper = str(self.device_name).upper()
+        if self._is_tap:
+            is_ntap = "NTAP" in name_upper or "VDD" in name_upper
+            if is_ntap:
+                # Orange / Amber for VDD tap
+                self._source_color = QColor("#fff3e0")
+                self._gate_color   = QColor("#e65100")
+                self._drain_color  = QColor("#ffe0b2")
+                self._border       = QColor("#ff9800")
+                self._label_color  = QColor("#e65100")
+                self._terminal_label_color = QColor("#fff3e0")
+                self._gradient_top    = QColor("#ffb74d")
+                self._gradient_bottom = QColor("#e65100")
+                self._name_color      = QColor("#ffffff")
+            else:
+                # Blue for GND tap
+                self._source_color = QColor("#e3f2fd")
+                self._gate_color   = QColor("#0d47a1")
+                self._drain_color  = QColor("#bbdefb")
+                self._border       = QColor("#2196f3")
+                self._label_color  = QColor("#0d47a1")
+                self._terminal_label_color = QColor("#e3f2fd")
+                self._gradient_top    = QColor("#64b5f6")
+                self._gradient_bottom = QColor("#0d47a1")
+                self._name_color      = QColor("#ffffff")
+        elif self._is_dummy:
             # Muted slate for dummies — visually distinct but unobtrusive
             self._source_color = QColor("#dfe6e9")
             self._gate_color   = QColor("#636e72")
@@ -578,7 +604,7 @@ class DeviceItem(QGraphicsRectItem):
         cy   = y0 + h / 2.0
         corner_r = min(4.0, w * 0.08, h * 0.08)
 
-        num_fingers = self.nf
+        num_fingers = 0 if self._is_tap else self.nf
         num_sd      = num_fingers + 1   # S/D diffusion regions
 
         # --- Visual proportions ---
@@ -839,7 +865,10 @@ class DeviceItem(QGraphicsRectItem):
         self._draw_r0_notch(painter, rect)
 
         display_name = self.device_name
-        if self._is_dummy:
+        if self._is_tap:
+            is_ntap = "NTAP" in self.device_name.upper() or "VDD" in self.device_name.upper()
+            display_name = "VDD Tap" if is_ntap else "GND Tap"
+        elif self._is_dummy:
             parts = self.device_name.split("_")
             for j, p in enumerate(parts):
                 if p.isdigit():
@@ -880,55 +909,82 @@ class DeviceItem(QGraphicsRectItem):
                          Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
                          display_name)
 
-        # ── Type badge (N / P) bottom of G column ────────────────────
-        type_label = "N" if self.device_type == "nmos" else "P"
-        if self._is_dummy:
-            type_label = "D"
+        if self._is_tap:
+            # Draw a beautiful electrical symbol in the center of the tap cell
+            painter.save()
+            painter.translate(cx, cy + h * 0.12) # position below the name label
+            symbol_pen = QPen(self._gate_color, 2.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
+            painter.setPen(symbol_pen)
+            
+            is_ntap = "NTAP" in self.device_name.upper() or "VDD" in self.device_name.upper()
+            if is_ntap:
+                # VDD: vertical arrow pointing up
+                painter.drawLine(QPointF(0, 10), QPointF(0, -10))
+                # Arrowhead pointing up
+                path_arrow = QPainterPath()
+                path_arrow.moveTo(0, -10)
+                path_arrow.lineTo(-5, -5)
+                path_arrow.lineTo(5, -5)
+                path_arrow.closeSubpath()
+                painter.fillPath(path_arrow, QBrush(self._gate_color))
+            else:
+                # GND: vertical line down to 3 horizontal lines
+                painter.drawLine(QPointF(0, -10), QPointF(0, 2))
+                # Ground lines
+                painter.drawLine(QPointF(-8, 2), QPointF(8, 2))
+                painter.drawLine(QPointF(-5, 5), QPointF(5, 5))
+                painter.drawLine(QPointF(-2, 8), QPointF(2, 8))
+            painter.restore()
+        else:
+            # ── Type badge (N / P) bottom of G column ────────────────────
+            type_label = "N" if self.device_type == "nmos" else "P"
+            if self._is_dummy:
+                type_label = "D"
 
-        badge_h = h * 0.22
-        badge_font = QFont("Segoe UI", max(4, int(badge_h * 0.6)), QFont.Weight.Bold)
-        painter.setFont(badge_font)
-        cursor_x = x0 + sd_w
-        for _ in range(num_fingers):
-            type_rect = QRectF(cursor_x, y0 + h - badge_h - 2, gate_w, badge_h)
-            if self._flip_h or self._flip_v:
-                type_rect = _flip_rect(type_rect)
-            painter.setPen(self._terminal_label_color)
-            painter.drawText(type_rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter, type_label)
-            cursor_x += gate_w + sd_w
-
-        # ── S / D labels on each diffusion column ───────────────────
-        sd_font = QFont("Segoe UI", sd_font_size, QFont.Weight.DemiBold)
-        painter.setFont(sd_font)
-        cursor_x = x0
-        for i in range(num_sd):
-            label = "S" if _is_source_col(i) else "D"
-            col_rect = QRectF(cursor_x, y0, sd_w, h)
-            if self._flip_h or self._flip_v:
-                col_rect = _flip_rect(col_rect)
-            painter.setPen(QColor(self._label_color.red(), self._label_color.green(),
-                                  self._label_color.blue(), 200))
-            painter.drawText(col_rect.adjusted(0, 0, 0, -2),
-                             Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom,
-                             label)
-            cursor_x += sd_w
-            if i < num_fingers:
-                cursor_x += gate_w
-
-        # ── G labels on each gate strip (hidden when nets are shown) ───────
-        if not self._show_net_labels:
-            g_font = QFont("Segoe UI", gate_font_size, QFont.Weight.DemiBold)
-            painter.setFont(g_font)
-            painter.setPen(self._terminal_label_color)
+            badge_h = h * 0.22
+            badge_font = QFont("Segoe UI", max(4, int(badge_h * 0.6)), QFont.Weight.Bold)
+            painter.setFont(badge_font)
             cursor_x = x0 + sd_w
             for _ in range(num_fingers):
-                gate_col_rect = QRectF(cursor_x, y0, gate_w, h)
+                type_rect = QRectF(cursor_x, y0 + h - badge_h - 2, gate_w, badge_h)
                 if self._flip_h or self._flip_v:
-                    gate_col_rect = _flip_rect(gate_col_rect)
-                painter.drawText(gate_col_rect,
-                                 Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
-                                 "G")
+                    type_rect = _flip_rect(type_rect)
+                painter.setPen(self._terminal_label_color)
+                painter.drawText(type_rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter, type_label)
                 cursor_x += gate_w + sd_w
+
+            # ── S / D labels on each diffusion column ───────────────────
+            sd_font = QFont("Segoe UI", sd_font_size, QFont.Weight.DemiBold)
+            painter.setFont(sd_font)
+            cursor_x = x0
+            for i in range(num_sd):
+                label = "S" if _is_source_col(i) else "D"
+                col_rect = QRectF(cursor_x, y0, sd_w, h)
+                if self._flip_h or self._flip_v:
+                    col_rect = _flip_rect(col_rect)
+                painter.setPen(QColor(self._label_color.red(), self._label_color.green(),
+                                      self._label_color.blue(), 200))
+                painter.drawText(col_rect.adjusted(0, 0, 0, -2),
+                                 Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom,
+                                 label)
+                cursor_x += sd_w
+                if i < num_fingers:
+                    cursor_x += gate_w
+
+            # ── G labels on each gate strip (hidden when nets are shown) ───────
+            if not self._show_net_labels:
+                g_font = QFont("Segoe UI", gate_font_size, QFont.Weight.DemiBold)
+                painter.setFont(g_font)
+                painter.setPen(self._terminal_label_color)
+                cursor_x = x0 + sd_w
+                for _ in range(num_fingers):
+                    gate_col_rect = QRectF(cursor_x, y0, gate_w, h)
+                    if self._flip_h or self._flip_v:
+                        gate_col_rect = _flip_rect(gate_col_rect)
+                    painter.drawText(gate_col_rect,
+                                     Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
+                                     "G")
+                    cursor_x += gate_w + sd_w
 
         # ── Manual abutment state (amber solid stripe) ────────────────────
         if self._manual_abut_left or self._manual_abut_right:

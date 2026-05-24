@@ -712,3 +712,48 @@ def icon_route() -> QIcon:
     icon = _icon_from_painter(pm, p)
     _CACHE["route"] = icon
     return icon
+
+
+def icon_vdd() -> QIcon:
+    if "vdd" in _CACHE:
+        return _CACHE["vdd"]
+    pm, p = _make_pixmap()
+    p.setPen(QPen(_ORANGE, 2.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    p.setBrush(QBrush(QColor(243, 156, 18, 40)))
+    p.drawRoundedRect(QRectF(5, 5, 22, 22), 5, 5)
+    
+    p.setPen(QPen(_ORANGE, 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+    p.drawLine(QPointF(10, 10), QPointF(22, 10)) # top bar
+    p.drawLine(QPointF(16, 10), QPointF(16, 21)) # vertical line
+    
+    path = QPainterPath()
+    path.moveTo(16, 10)
+    path.lineTo(12, 14)
+    path.lineTo(20, 14)
+    path.closeSubpath()
+    p.fillPath(path, QBrush(_ORANGE))
+    
+    icon = _icon_from_painter(pm, p)
+    _CACHE["vdd"] = icon
+    return icon
+
+
+def icon_gnd() -> QIcon:
+    if "gnd" in _CACHE:
+        return _CACHE["gnd"]
+    pm, p = _make_pixmap()
+    p.setPen(QPen(_ACCENT, 2.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    p.setBrush(QBrush(QColor(0, 229, 255, 40)))
+    p.drawRoundedRect(QRectF(5, 5, 22, 22), 5, 5)
+    
+    p.setPen(QPen(_ACCENT, 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+    p.drawLine(QPointF(16, 8), QPointF(16, 16)) # vertical line
+    
+    # Ground bars
+    p.drawLine(QPointF(10, 16), QPointF(22, 16)) # top bar
+    p.drawLine(QPointF(12, 19), QPointF(20, 19)) # mid bar
+    p.drawLine(QPointF(14, 22), QPointF(18, 22)) # bottom bar
+    
+    icon = _icon_from_painter(pm, p)
+    _CACHE["gnd"] = icon
+    return icon
