@@ -1,0 +1,16 @@
+M28 0.000 0.000 MY l=0.014 nf=1 nfin=4.0 m=1 left_abut=0 right_abut=1
+M5 0.280 0.000 MY l=0.014 nf=1 nfin=4.0 m=1 left_abut=1 right_abut=1
+M4 0.210 0.000 MY l=0.014 nf=1 nfin=4.0 m=1 left_abut=1 right_abut=1
+M3 0.140 0.000 MY l=0.014 nf=1 nfin=4.0 m=1 left_abut=1 right_abut=1
+M2 0.350 0.000 MY l=0.014 nf=1 nfin=4.0 m=1 left_abut=1 right_abut=1
+M25 0.490 0.000 R0 l=0.014 nf=1 nfin=4.0 m=1 left_abut=1 right_abut=0
+M29 0.000 0.668 MY l=0.014 nf=1 nfin=4.0 m=1 left_abut=0 right_abut=1
+M9 0.280 0.668 MY l=0.014 nf=1 nfin=4.0 m=1 left_abut=1 right_abut=1
+M8 0.210 0.668 MY l=0.014 nf=1 nfin=4.0 m=1 left_abut=1 right_abut=1
+M7 0.350 0.668 R0 l=0.014 nf=1 nfin=4.0 m=1 left_abut=1 right_abut=1
+M6 0.140 0.668 MY l=0.014 nf=1 nfin=4.0 m=1 left_abut=1 right_abut=1
+M24 0.490 0.668 R0 l=0.014 nf=1 nfin=4.0 m=1 left_abut=1 right_abut=0
+FILLER_DUMMY_BRIDGE_0.0_0_nmos 0.070 0.000 R0 l=0.014 multiplier=1 nf_per_device=1 nfin=4.0 left_abut=1 right_abut=1
+FILLER_DUMMY_BRIDGE_0.0_4_nmos 0.420 0.000 R0 l=0.014 multiplier=1 nf_per_device=1 nfin=4.0 left_abut=1 right_abut=1
+FILLER_DUMMY_BRIDGE_0.668001_0_pmos 0.070 0.668 R0 l=0.014 multiplier=1 nf_per_device=1 nfin=4.0 left_abut=1 right_abut=1
+FILLER_DUMMY_BRIDGE_0.668001_4_pmos 0.420 0.668 R0 l=0.014 multiplier=1 nf_per_device=1 nfin=4.0 left_abut=1 right_abut=1
