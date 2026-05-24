@@ -286,6 +286,19 @@ def _transistor_key(node_id: str) -> str:
     return parent
 
 
+def _block_key(node_id: str) -> str:
+    """
+    Return the block name for a finger node, separating multiplier copies.
+
+    "MM9_m3_f4" -> "MM9_m3"  (different multiplier copies are separate blocks)
+    "MM5_f2"    -> "MM5"
+    """
+    parent, m_idx, _ = _parse_id(node_id)
+    if m_idx is not None:
+        return f"{parent}_m{m_idx}"
+    return parent
+
+
 # ---------------------------------------------------------------------------
 # Public API — Step 1: GROUP
 # ---------------------------------------------------------------------------
@@ -2838,7 +2851,7 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False, preserve
         # --- Step 1: Group physical fingers in this row into logical blocks ---
         block_nodes = defaultdict(list)
         for n in row_nodes:
-            bk = n.get("_block_id") or _transistor_key(n["id"])
+            bk = n.get("_block_id") or _block_key(n["id"])
             block_nodes[bk].append(n)
             
         blocks = []
