@@ -1,82 +1,93 @@
-Here is a clean, professional `README.md` file designed for your project. It explains how the script works, how to use it, and what dependencies it expects. 
+# AI-Based Analog Layout Placement & Abutment Synchronization
 
-***
+This directory contains `ai_place.tcl`, a custom high-performance Tcl procedure designed for seamless, instantaneous database integration in OpenAccess (OA) based custom layout design environments (such as Cadence Virtuoso or Synopsys Custom Compiler).
 
-# EDA Task Manager (`run.tcl`)
-
-A lightweight, centralized Tcl script for launching and managing Electronic Design Automation (EDA) extraction tasks directly from the tool console. 
-
-## Overview
-The `run.tcl` script provides a robust Command Line Interface (CLI) wrapper for your localized extraction scripts. Instead of manually sourcing different scripts and hardcoding library/cell names, this manager provides a unified command (`run_extraction`) that handles path resolution, input validation, and execution.
-
-### Key Features
-* **Directory Agnostic:** You can `source` this script from any working directory. It dynamically captures its own absolute path and locates the sub-scripts automatically.
-* **Input Validation:** Prevents typos and gracefully handles invalid extraction requests.
-* **Flexible Syntax:** Supports full words, abbreviations, and flags (e.g., `net`, `netlist`, `-n`).
-* **Safe Execution:** Uses `catch` to prevent sub-script errors from crashing your main EDA session.
-* **Argument Passing:** Automatically packages the Library and Cell inputs into the global `$::argv` list for the sub-scripts to consume.
+It bridges the gap between the AI-based layout optimization engine and active memory-resident physical layout databases.
 
 ---
 
-## Setup & Dependencies
+## Workflow Overview
 
-For this manager to work, the following files must exist in the **exact same directory** as `run.tcl`:
+```mermaid
+graph TD
+    A[Symbolic Editor Layout] -->|1. Squeeze & Unroll| B[TCL Exporter]
+    B -->|2. Generate File| C[cell_ai_placement.txt]
+    C -->|3. Read File| D[ai_place.tcl Procedure]
+    D -->|4. OA Direct Move| E[Layout Instance Origins & Orientations]
+    D -->|5. DB Param Injection| F[Instance PCell leftAbut/rightAbut Parameters]
+    E & F -->|6. Instant Render| G[DRC-Clean Abutted Layout View]
+```
 
-1. `extract_net.tcl` (Your netlist extraction script)
-2. `extract_oasis.tcl` (Your OASIS extraction script)
-
-*Note: The sub-scripts must be configured to read inputs from `$::argv` (e.g., `set lib [lindex $::argv 0]`).*
+1. **AI Synthesis & Squeezing**: The symbolic layout engine unrolls multi-finger devices, groups them for symmetry and common centroid parameters, and squeezes standard $0.3\,\mu\text{m}$ slots down to physical $0.07\,\mu\text{m}$ contact diffusion-sharing boundaries.
+2. **Text Export**: The layout engine exports a space-separated placement file containing device coordinates, orientation, and source/drain abutment properties.
+3. **Database Injection**: The Tcl interpreter in the layout tool runs `ai_place.tcl`, which parses the file and applies the changes directly to active database instances without needing intermediate GDS/OAS streams.
 
 ---
 
-## Usage
+## The AI Placement File Format
 
-### 1. Load the Manager
-In your EDA tool's console, source the file. You only need to do this once per session.
-```tcl
-source /path/to/your/scripts/run.tcl
-```
-#### Example
-```tcl
-source eda/run.tcl
-```
-*Upon successful loading, the console will print a confirmation message along with the registered tool path and available commands.*
+The placement output is exported as a space-separated, delimiter-free text file (`.txt`), where each line represents a unique transistor instance:
 
-### 2. Run an Extraction
-Use the `run_extraction` procedure to launch your tasks.
-
-**Syntax:**
-```tcl
-run_extraction <operation> <library_name> <cell_name>
+```text
+InstanceName X_Microns Y_Microns Orientation PCell_Parameters... left_abut=0/1 right_abut=0/1
 ```
 
-**Arguments:**
-* `<operation>`: Determines which extraction script(s) to run.
-  * **Netlist Only:** `net`, `netlist`, or `-n`
-  * **OASIS Only:** `oa`, `oas`, `oasis`, or `-o`
-  * **Run Both:** `all` or `-a`
-* `<library_name>`: The name of the target design library.
-* `<cell_name>`: The name of the target cell.
+### Sample Placement File
+```text
+M28 0.000 -0.000 R0 l=0.014 nf=1 nfin=4.0 m=1 left_abut=1 right_abut=1
+M5 0.140 -0.000 R0 l=0.014 nf=1 nfin=4.0 m=1 left_abut=0 right_abut=1
+M4 0.210 -0.000 R0 l=0.014 nf=1 nfin=4.0 m=1 left_abut=1 right_abut=0
+M3 0.070 -0.000 R0 l=0.014 nf=1 nfin=4.0 m=1 left_abut=0 right_abut=0
+```
+
+* **Instance Name**: Preserves suffix names (e.g. `_m1`, `_f1`) to align with unrolled fingers in the layout.
+* **X / Y Coordinates**: Explicit coordinates on the physical grid in micrometers.
+* **Orientation**: Rotation/mirroring code (e.g., `R0`, `R90`, `MY`).
+* **PCell Parameters**: Centralized transistor parameters (e.g., channel length `l`, number of fingers `nf`).
+* **Abutment Flags**: Explicitly resolves physical diffusion sharing on both sides:
+  - `left_abut=1` / `right_abut=1`: Direct diffusion sharing with its neighbor (dummy or active).
+  - `left_abut=0` / `right_abut=0`: Isolate terminal boundary (no physical diffusion sharing).
 
 ---
 
-## Examples
+## Procedure Reference
 
-**Extracting a Netlist:**
+### `ai_place {filename target_cell}`
+
+Directly moves and updates parameters for active design instances in OpenAccess memory.
+
+#### Arguments
+* **`filename`** *(string)*: The full or relative file path to the generated placement text file (e.g., `"xor_ai_placement.txt"`).
+* **`target_cell`** *(string)*: The case-sensitive name of the active cell view target in design memory (e.g., `"xor"`).
+
+---
+
+## Step-by-Step Usage Guide
+
+### 1. Open the Layout Editor
+Open your custom layout suite (e.g., Cadence Virtuoso) and open the target cell's layout view in **Edit Mode**.
+
+### 2. Export Placement from Symbolic Editor
+In the GUI of your Symbolic Editor:
+* Click **Export TCL Placement** (or press the appropriate export shortcut).
+* Save the file to your workspace (e.g., `eda/Xor_Automation_ai_placement.txt`).
+
+### 3. Load the Tcl Script
+In your layout tool's Command Interpreter Window (CIW) or console, source the Tcl script:
+
 ```tcl
-# Using the full word
-run_extraction netlist my_analog_lib opamp_top
-
-# Using the shortcut flag
-run_extraction -n my_analog_lib opamp_top
+source eda/ai_place.tcl
 ```
 
-**Extracting an OASIS layout:**
+### 4. Execute the Placement
+Invoke the `ai_place` procedure by passing the placement text file path and the target cell name:
+
 ```tcl
-run_extraction oas my_analog_lib opamp_top
+ai_place "examples/xor/Xor_Automation_ai_placement.txt" "xor"
 ```
 
-**Running both extractions back-to-back:**
-```tcl
-run_extraction all my_analog_lib opamp_top
-```
+### 5. Verify Results
+The design layout will instantly refresh and show:
+1. Every transistor moved to its designated sub-micron coordinate position.
+2. Mirroring and rotation applied directly (such as `MY` orientations for symmetry pairs).
+3. `leftAbut` and `rightAbut` PCell parameters set to `1` or `0`, rendering perfect gapless diffusion sharing.
