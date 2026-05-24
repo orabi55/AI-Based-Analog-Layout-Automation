@@ -3029,6 +3029,7 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False, preserve
                                 "abut_left": abut.get("abut_right", False),
                                 "abut_right": abut.get("abut_left", False),
                             }
+                        nc.setdefault("geometry", {})["orientation"] = "MY"
                         mirrored_nodes.append(nc)
                     b["nodes"] = mirrored_nodes
 
@@ -3043,7 +3044,11 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False, preserve
                 geo = n.setdefault("geometry", {})
                 geo["x"] = round(cursor_slot * STD_PITCH, 6)
                 geo["y"] = round(float(y_key), 6)
-                geo["orientation"] = "R0"
+                
+                # Keep orientation MY if already set (mirrored), otherwise default to R0
+                current_orient = geo.get("orientation", "R0")
+                if current_orient not in ("MY", "MX", "R180"):
+                    geo["orientation"] = "R0"
                 
                 if no_abutment:
                     n["abutment"] = {"abut_left": False, "abut_right": False}
