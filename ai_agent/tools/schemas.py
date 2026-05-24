@@ -780,6 +780,25 @@ _OPTIMIZE_FOR_ROUTING = {
 # Registry — order matches the logical tool-call workflow
 # ---------------------------------------------------------------------------
 
+_PLACE_SEQUENCE = {
+    "name": "place_sequence",
+    "description": (
+        "Place an ordered sequence of devices in a specific row. "
+        "Each device occupies a standard 0.294um slot (no overlaps). "
+        "The tool automatically detects and sets 'abut_left' and 'abut_right' "
+        "flags between adjacent devices if they share a signal potential."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "row_y":      _prop("number", "Row Y coordinate in µm"),
+            "device_ids": _prop("array", "Ordered list of device IDs to place in this row", items={"type": "string"}),
+            "start_x":    _prop("number", "Optional left-edge X coordinate (default 0.0)"),
+        },
+        "required": ["row_y", "device_ids"],
+    },
+}
+
 TOOL_REGISTRY: list = [
     # Layout inspection
     _READ_LAYOUT,
@@ -789,6 +808,7 @@ TOOL_REGISTRY: list = [
     _GET_LAYOUT_BOUNDS,
     # Device manipulation
     _MOVE_DEVICE,
+    _PLACE_SEQUENCE,
     _SWAP_DEVICES,
     _FLIP_DEVICE,
     _DELETE_DEVICE,

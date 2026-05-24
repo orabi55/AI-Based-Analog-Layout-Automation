@@ -366,14 +366,13 @@ def aggregate_to_logical_devices(nodes: list, edges: list = None) -> list:
                 "nfin":           rep_elec.get("nfin", 2),
                 "w":              rep_elec.get("w",    0),
             },
-            # True abutted width = (N-1)*FINGER_PITCH + STD_PITCH
-            # This provides the LLM with an accurate physical footprint to
-            # prevent false overlaps and improve macro-placement precision.
+            # OPTION 1: Symbolic Slot System
+            # Width = total_fingers * STD_PITCH. 
+            # This ensures the logical box covers all its expanded fingers at 0.294 pitch.
             "geometry": {
                 "x":           0.0,
                 "y":           PMOS_Y if dev_type == "pmos" else NMOS_Y,
-                "width":       round(max((total_fingers - 1) * FINGER_PITCH + STD_PITCH,
-                                          sum_member_width), 6),
+                "width":       round(total_fingers * STD_PITCH, 6),
                 "height":      round(max_member_height, 6),
                 "orientation": "R0",
             },
@@ -1078,6 +1077,8 @@ def interdigitate_fingers(
         left_dummy["id"] = "EDGE_DUMMY_L"
         left_dummy["is_dummy"] = True
         left_dummy["_match_owner"] = "edge"
+        left_dummy.pop("layout_index", None)
+        left_dummy.pop("layout_idx", None)
         if "electrical" in left_dummy:
             left_dummy["electrical"] = copy.deepcopy(left_dummy["electrical"])
             for k in ["parent", "m", "multiplier_index", "finger_index", "array_index"]:
@@ -1087,6 +1088,8 @@ def interdigitate_fingers(
         right_dummy["id"] = "EDGE_DUMMY_R"
         right_dummy["is_dummy"] = True
         right_dummy["_match_owner"] = "edge"
+        right_dummy.pop("layout_index", None)
+        right_dummy.pop("layout_idx", None)
         if "electrical" in right_dummy:
             right_dummy["electrical"] = copy.deepcopy(right_dummy["electrical"])
             for k in ["parent", "m", "multiplier_index", "finger_index", "array_index"]:
@@ -2410,7 +2413,8 @@ def expand_to_fingers(
     expanded: List[dict] = []
 
     # Default pitch based on abutment mode
-    default_pitch = STD_PITCH if no_abutment else FINGER_PITCH
+    # Option 1: Symbolic Slot System always uses STD_PITCH for visual clarity
+    default_pitch = STD_PITCH
 
     # Build lookup: group_id -> placed geometry (from LLM output)
     placed = {n["id"]: n for n in group_placement}
@@ -2562,6 +2566,8 @@ def expand_to_fingers(
                         node = copy.deepcopy(rep_node)
                         node["id"] = f"DUMMY_matrix_{grp_id}_{dummy_idx}"
                         node["is_dummy"] = True
+                        node.pop("layout_index", None)
+                        node.pop("layout_idx", None)
                         dummy_idx += 1
                         node["net_d"] = "NC"
                         node["net_g"] = "NC"
@@ -2572,10 +2578,15 @@ def expand_to_fingers(
                     fx = round(origin_x + c * pitch, 6)
                     fy = round(final_y + r * MATRIX_ROW_PITCH, 6)
                     
+                    # Keep all fingers in row-aligned horizontal R0 orientation (no mirroring)
+                    cell_orient = "R0"
+                    if c % 2 != 0:
+                        if "net_d" in node or "net_s" in node:
+                            node["net_d"], node["net_s"] = node["net_s"], node.get("net_d")
                     node["geometry"].update({
                         "x":           fx,
                         "y":           fy,
-                        "orientation": orient,
+                        "orientation": cell_orient,
                         "width":       _prefer_member_width(node, pitch),
                     })
                     
@@ -2587,9 +2598,12 @@ def expand_to_fingers(
                     if no_abutment:
                         node["abutment"] = {"abut_left": False, "abut_right": False}
                     else:
+                        # Abutment flags: 
+                        # - Internal neighbors (c > 0, c < cols-1) always abut
+                        # - Boundary neighbors (c == 0 or c == cols-1) abut if the group itself abuts
                         node["abutment"] = {
-                            "abut_left": c > 0,
-                            "abut_right": c < cols_count - 1
+                            "abut_left":  (c > 0) or grp_placed.get("abutment", {}).get("abut_left", False),
+                            "abut_right": (c < cols_count - 1) or grp_placed.get("abutment", {}).get("abut_right", False)
                         }
                         
                     expanded.append(node)
@@ -2597,7 +2611,9 @@ def expand_to_fingers(
 
         for finger_idx, orig_node in enumerate(members):
             node = copy.deepcopy(orig_node)
-            if node.get("is_dummy"):
+            if node.get("is_dummy") or str(node.get("id", "")).startswith(("DUMMY", "EDGE_DUMMY", "FILLER_DUMMY")):
+                node.pop("layout_index", None)
+                node.pop("layout_idx", None)
                 raw_id = str(node.get("id", "DUMMY"))
                 if raw_id == "EDGE_DUMMY_L":
                     dummy_label = "EDGE_DUMMY_L"
@@ -2609,10 +2625,15 @@ def expand_to_fingers(
             # Place each sibling at consecutive positions with the group's pitch
             # This ensures abutment for all hierarchy leaves within the group
             fx = round(origin_x + finger_idx * pitch, 6)
+            # Keep all fingers in row-aligned horizontal R0 orientation (no mirroring)
+            finger_orient = "R0"
+            if finger_idx % 2 != 0:
+                if "net_d" in node or "net_s" in node:
+                    node["net_d"], node["net_s"] = node["net_s"], node.get("net_d")
             node["geometry"].update({
                 "x":           fx,
                 "y":           final_y,
-                "orientation": orient,
+                "orientation": finger_orient,
                 "width":       _prefer_member_width(node, pitch),
             })
 
@@ -2632,13 +2653,12 @@ def expand_to_fingers(
                 }
             else:
                 # Abutment flags for hierarchy siblings:
-                #   First leaf:  no left neighbor, has right neighbor
-                #   Middle leaf: has both left and right neighbors
-                #   Last leaf:   has left neighbor, no right neighbor
-                # This creates a continuous abutment chain across all siblings
+                #   First leaf:  abuts left IF the logical group abuts left
+                #   Middle leaf: always abuts both
+                #   Last leaf:   abuts right IF the logical group abuts right
                 node["abutment"] = {
-                    "abut_left":  finger_idx > 0,
-                    "abut_right": finger_idx < (total - 1),
+                    "abut_left":  (finger_idx > 0) or grp_placed.get("abutment", {}).get("abut_left", False),
+                    "abut_right": (finger_idx < (total - 1)) or grp_placed.get("abutment", {}).get("abut_right", False),
                 }
 
             expanded.append(node)
@@ -2669,6 +2689,90 @@ def expand_to_fingers(
 expand_groups = expand_to_fingers
 
 
+def detect_abutment_intent(nodes: List[dict], terminal_nets: dict | None) -> None:
+    """
+    Scans logical groups after AI placement and sets abutment flags if they are
+    placed at FINGER_PITCH proximity and share a signal potential.
+    """
+    if not nodes or not terminal_nets:
+        return
+
+    # Group by row
+    rows = defaultdict(list)
+    for n in nodes:
+        geo = n.get("geometry", {})
+        y = round(float(geo.get("y", 0.0)), 4)
+        rows[y].append(n)
+
+    for y_val, row_nodes in rows.items():
+        # Sort by X
+        sorted_row = sorted(row_nodes, key=lambda n: float(n.get("geometry", {}).get("x", 0.0)))
+        
+        for i in range(len(sorted_row) - 1):
+            n1 = sorted_row[i]
+            n2 = sorted_row[i + 1]
+            
+            # Compatibility check: same type and shared signal potential
+            if n1.get("type") != n2.get("type"):
+                continue
+                
+            if _are_abutment_compatible(n1["id"], n2["id"], terminal_nets):
+                x1 = float(n1.get("geometry", {}).get("x", 0.0))
+                x2 = float(n2.get("geometry", {}).get("x", 0.0))
+                
+                # Proactive abutment: if they are neighbors and share a net,
+                # we assume abutment is intended even if they are at standard pitch (0.294).
+                nf1 = n1.get("electrical", {}).get("total_fingers", 1)
+                
+                # Option 1: Symbolic Slot System (Visual gap calculation)
+                n1_last_finger_x = x1 + (nf1 - 1) * STD_PITCH
+                gap = x2 - (n1_last_finger_x + STD_PITCH)
+                
+                # Tolerance 0.1um handles small rounding errors
+                if abs(gap) < 0.1:
+                    n1.setdefault("abutment", {})["abut_right"] = True
+                    n2.setdefault("abutment", {})["abut_left"] = True
+                    vprint(f"[detect_abutment] Enabled flags for {n1['id']} <-> {n2['id']} (gap={gap:.4f})")
+
+
+def _are_abutment_compatible(id_a: str, id_b: str, terminal_nets: dict) -> bool:
+    """Helper to check if two device IDs share a non-power net.
+    Handles both logical group IDs and physical finger IDs.
+    """
+    _POWER = {"VDD", "VSS", "GND", "VCC", "AVDD", "AVSS", "NC", "GND!", "VDD!", ""}
+    
+    # 1. Resolve nets for ID A (handle logical/physical)
+    nets_a = terminal_nets.get(id_a, {})
+    if not nets_a:
+        # Try finding a finger of this group
+        prefix = id_a + "_"
+        for k, v in terminal_nets.items():
+            if k.startswith(prefix):
+                nets_a = v
+                break
+    
+    # 2. Resolve nets for ID B
+    nets_b = terminal_nets.get(id_b, {})
+    if not nets_b:
+        prefix = id_b + "_"
+        for k, v in terminal_nets.items():
+            if k.startswith(prefix):
+                nets_b = v
+                break
+                
+    if not isinstance(nets_a, dict) or not isinstance(nets_b, dict):
+        return False
+        
+    vals_a = set(nets_a.values())
+    vals_b = set(nets_b.values())
+    
+    for net in vals_a:
+        if net and net not in _POWER:
+            if net in vals_b:
+                return True
+    return False
+
+
 def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[dict]:
     """
     Guarantee no two devices in the same row overlap while preserving hierarchy abutment.
@@ -2697,8 +2801,10 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
     # are part of matched/current-mirror blocks and must survive legalization.
     active_nodes = [n for n in nodes if not _is_regenerated_filler_dummy(n)]
     
-    pitch_abut = STD_PITCH if no_abutment else FINGER_PITCH  # 0.294 or 0.070
-    pitch_std  = STD_PITCH     # 0.294
+    # OPTION 1: Symbolic Slot System
+    # Always use standard pitch (0.294um) for visual non-overlap in the editor.
+    pitch_abut = STD_PITCH
+    pitch_std  = STD_PITCH
 
     vprint(f"[resolve_overlaps] Starting with {len(active_nodes)} active devices (stripped {len(nodes) - len(active_nodes)} old dummies)")
 
@@ -2712,33 +2818,58 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
     vprint(f"[resolve_overlaps] Found {len(type_rows)} type-rows")
 
     for (y_key, _dev_type), row_nodes in type_rows.items():
-        # --- Step 1: Identify chains by parent name -----------------------
-        chains: Dict[str, List[dict]] = defaultdict(list)
-        for node in row_nodes:
-            nid = node.get("id", "")
-            # FIX: Use _block_id if present to keep interdigitated fingers in one chain
-            parent = node.get("_block_id", _transistor_key(nid))
-            chains[parent].append(node)
+        # --- Step 1: Identify chains using Union-Find (ID + Abutment Flags) ---
+        id_set = {n["id"] for n in row_nodes}
+        node_map = {n["id"]: n for n in row_nodes}
+        
+        # Initialize Union-Find
+        parent_uf = {nid: nid for nid in id_set}
+        def find(x):
+            if parent_uf[x] != x:
+                parent_uf[x] = find(parent_uf[x])
+            return parent_uf[x]
+        def union(a, b):
+            ra, rb = find(a), find(b)
+            if ra != rb:
+                parent_uf[ra] = rb
 
-        vprint(f"[resolve_overlaps] Row y={y_key} ({_dev_type}): {len(chains)} chains")
+        # Union fingers that share the same parent or block (Intra-device)
+        # Using a O(N) pass for sibling grouping
+        group_buckets = defaultdict(list)
+        for n in row_nodes:
+            pk = n.get("_block_id", _transistor_key(n["id"]))
+            group_buckets[pk].append(n["id"])
+        for members in group_buckets.values():
+            for i in range(len(members) - 1):
+                union(members[i], members[i+1])
+
+        # Union compatible neighbors with explicit abutment flags (Inter-device)
+        row_sorted = sorted(row_nodes, key=lambda n: float(n.get("geometry", {}).get("x", 0.0)))
+        for i in range(len(row_sorted) - 1):
+            n1, n2 = row_sorted[i], row_sorted[i+1]
+            if n1.get("abutment", {}).get("abut_right") and n2.get("abutment", {}).get("abut_left"):
+                union(n1["id"], n2["id"])
+
+        # Construct final chain lists
+        chains_dict = defaultdict(list)
+        for nid in id_set:
+            root = find(nid)
+            chains_dict[root].append(node_map[nid])
+            
+        chains_list = list(chains_dict.values())
+        vprint(f"[resolve_overlaps] Row y={y_key} ({_dev_type}): {len(chains_list)} chains")
 
         # --- Step 2: Sort each chain's devices by their internal index ------
-        for parent, chain_devices in chains.items():
+        for chain_devices in chains_list:
             chain_devices.sort(key=lambda n: n.get("geometry", {}).get("x", 0.0))
 
         # --- Step 3: Sort chains by their leftmost device's original X ------
         sorted_chains = sorted(
-            chains.values(),
+            chains_list,
             key=lambda ch: ch[0].get("geometry", {}).get("x", 0.0),
         )
 
         # --- Step 3b: Redistribute flanking chains around the anchor --------
-        # Anchor = chain with the most fingers (e.g. ABBA block or MM10x4).
-        # Rule:
-        #   - Non-singleton flanking chains (>1 finger) go LEFT of anchor
-        #   - Singleton flanking chains (1 finger, e.g. MM6, MM7) go RIGHT
-        #   - If ALL flanking are singletons: split evenly on both sides
-        # Produces: [MM10, ABBA, MM7, MM6] (3-row) or [MM7, MM10, MM6] (5-row)
         if len(sorted_chains) >= 3:
             anchor_idx = max(range(len(sorted_chains)),
                              key=lambda i: len(sorted_chains[i]))
@@ -2748,11 +2879,9 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
             non_single = [c for c in flanking if len(c) > 1]
             if singletons:
                 if non_single:
-                    # Non-singletons left, all singletons right
                     left_flank  = non_single
                     right_flank = singletons
                 else:
-                    # Only singletons: split evenly on both sides
                     n_left = len(singletons) // 2
                     left_flank  = singletons[:n_left]
                     right_flank = singletons[n_left:]
@@ -2762,8 +2891,6 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
         if not sorted_chains:
             continue
 
-        # Compute original chain footprints (first x -> last x + width)
-        # so we can detect overlaps and preserve intentional LLM gaps.
         chain_footprints: list[Tuple[float, float]] = []
         for chain in sorted_chains:
             xs = [d.get("geometry", {}).get("x", 0.0) for d in chain]
@@ -2774,39 +2901,30 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
             chain_footprints.append((first_x, last_x + last_w))
 
         min_inter_chain_gap = pitch_std
-        cursor = chain_footprints[0][0]  # start at first chain's original X
+        cursor = chain_footprints[0][0]
 
         for chain_idx, chain in enumerate(sorted_chains):
             chain_first_orig, chain_last_orig = chain_footprints[chain_idx]
-
-            # Place chains left-to-right with uniform 1-pitch_std gaps.
-            # For the first chain: snap its original position to the nearest
-            # pitch grid.  For subsequent chains: always use the cursor
-            # (= 1 pitch_std gap after the previous chain), ensuring equal
-            # inter-chain spacing.  Step 5 centering then distributes the
-            # outer fillers symmetrically.
             import math as _m
+            snapped_orig = round(round(chain_first_orig / pitch_std) * pitch_std, 6)
             if chain_idx == 0:
-                chain_start = round(round(chain_first_orig / pitch_std) * pitch_std, 6)
+                chain_start = snapped_orig
             else:
-                chain_start = cursor
+                chain_start = max(cursor, snapped_orig)
             shift = round(chain_start - chain_first_orig, 6)
-            vprint(f"[resolve_overlaps]   chain[{chain_idx}] orig={chain_first_orig:.4f} -> snapped={chain_start:.4f} (shift={shift:.4f}, cursor={cursor:.4f})")
 
             for dev_idx, dev in enumerate(chain):
-                geo = dev.get("geometry", {})
+                geo = dev.setdefault("geometry", {})
                 geo["x"] = round(chain_start, 6)
                 geo["y"] = round(float(y_key), 6)
 
                 is_last = (dev_idx == len(chain) - 1)
-
                 if not is_last:
-                    # Within chain: honor abutment pitch, but never less than device width.
-                    dev_w = geo.get("width", pitch_std)
-                    if dev_w < pitch_std * 0.5:
-                        dev_w = pitch_std
-                    step = pitch_abut if pitch_abut >= dev_w else dev_w
+                    # OPTION 1: Symbolic Slot System
+                    # Advance by standard slot pitch for visual clarity
+                    step = pitch_std
                     chain_start = round(chain_start + step, 6)
+                    # Enforce flags within chain
                     dev.setdefault("abutment", {})["abut_right"] = True
                     next_dev = chain[dev_idx + 1]
                     next_dev.setdefault("abutment", {})["abut_left"] = True
@@ -2817,24 +2935,26 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
                         dev_w = pitch_std
                     chain_start = round(chain_start + dev_w, 6)
 
-            # Update cursor for next chain: enforce minimum gap.
-            # CRITICAL: snap cursor to the next pitch_std grid position so
-            # inter-chain gaps are always exact multiples of pitch_std.
-            # Without this, abutment-pitch chains (FINGER_PITCH=0.070) leave
-            # fractional gaps that the filler engine cannot fill.
-            import math as _m
             raw_cursor = max(chain_start, chain_last_orig + shift) + min_inter_chain_gap
             cursor = round(_m.ceil(raw_cursor / pitch_std) * pitch_std, 6)
 
         # Clean abutment flags for standalone (single-device) chains
-        for chain in chains.values():
+        # Only if they were NOT already set (don't clear intent flags)
+        for chain in sorted_chains:
             if len(chain) == 1:
                 dev = chain[0]
+                # If only one device is in the chain, it should not have abut_left/right 
+                # UNLESS it's at the boundary of a logical group that abuts another group.
+                # However, our Union-Find above already merged such neighbors into the same chain.
+                # So if len(chain) == 1, it truly is standalone.
+                # Wait, if detect_abutment_intent set them but Union-Find didn't group them?
+                # Actually, if we just preserve existing flags instead of blindly clearing them:
                 abut = dev.get("abutment", {})
-                dev["abutment"] = {
-                    "abut_left":  abut.get("abut_left", False),
-                    "abut_right": abut.get("abut_right", False),
-                }
+                if not (abut.get("abut_left") or abut.get("abut_right")):
+                    dev["abutment"] = {
+                        "abut_left":  False,
+                        "abut_right": False,
+                    }
 
     # --- Step 5: Global Centering & Inner/Outer Filler Dummies ---
     # Only apply centering and filler insertion to MOS rows.
@@ -2860,16 +2980,8 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
             min_x, max_x = row_bounds[(y_key, dev_type)]
             row_center = (min_x + max_x) / 2.0
             
-            # Shift the row to align its center with the global center.
-            # CRITICAL: snap to nearest pitch_std multiple so all devices
-            # stay on the pitch grid — prevents fractional-pitch gaps that
-            # cause unequal filler counts across rows.
-            raw_shift = global_center - row_center
-            shift = round(round(raw_shift / pitch_std) * pitch_std, 6)
-            if abs(shift) > 0.0001:
-                for n in row_nodes:
-                    geo = n.get("geometry", {})
-                    geo["x"] = round(geo.get("x", 0.0) + shift, 6)
+            # Do NOT shift rows independently to preserve vertical block alignment across rows
+            shift = 0.0
             
             # Collect and sort all device footprints in the shifted row
             footprints = []
@@ -2990,6 +3102,42 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
             active_nodes.extend(new_dummies)
             vprint(f"[resolve_overlaps] Centered layout & added {len(new_dummies)} filler dummies for symmetry & density.")
 
+    # Final pass: Ensure abutment flags are consistent for ALL touching devices
+    # (including dummies) in every row. This guarantees they will compress correctly.
+    final_rows = {}
+    for n in active_nodes:
+        y_val = round(n.get("geometry", {}).get("y", 0.0), 6)
+        final_rows.setdefault(y_val, []).append(n)
+        
+    for y_val, row in final_rows.items():
+        row.sort(key=lambda n: n.get("geometry", {}).get("x", 0.0))
+        
+        # Clear outer edges of the row
+        if row:
+            if "abutment" in row[0]:
+                row[0]["abutment"]["abut_left"] = False
+            if "abutment" in row[-1]:
+                row[-1]["abutment"]["abut_right"] = False
+                
+        for i in range(len(row) - 1):
+            curr_n = row[i]
+            next_n = row[i+1]
+            curr_w = curr_n.get("geometry", {}).get("width", pitch_std)
+            if curr_w < pitch_std * 0.5:
+                curr_w = pitch_std
+            curr_end = curr_n.get("geometry", {}).get("x", 0.0) + curr_w
+            nxt_start = next_n.get("geometry", {}).get("x", 0.0)
+            
+            if abs(nxt_start - curr_end) < 0.01:
+                curr_n.setdefault("abutment", {})["abut_right"] = True
+                next_n.setdefault("abutment", {})["abut_left"] = True
+            else:
+                # If they do NOT touch, they MUST NOT abut.
+                if "abutment" in curr_n:
+                    curr_n["abutment"]["abut_right"] = False
+                if "abutment" in next_n:
+                    next_n["abutment"]["abut_left"] = False
+
     return active_nodes
 
 
@@ -3020,13 +3168,16 @@ def build_compact_graph(
 def expand_logical_to_fingers(logical_nodes: list, original_nodes: list, pitch: float = 0.294) -> list:
     """Expand logical placement back to physical fingers (backward-compatible).
 
-    This wrapper matches the old ai_chat_bot/finger_grouping.py signature.
+    This wrapper handles the expansion of logical transistor groups back to
+    their constituent physical fingers, while ensuring abutment flags and
+    proper spacing are preserved.
     """
     original_map = {n["id"]: n for n in original_nodes}
     physical_nodes = []
 
     for logical_node in logical_nodes:
         if not logical_node.get("_is_logical"):
+            # Already physical — preserve as-is
             physical_nodes.append(logical_node)
             continue
 
@@ -3034,16 +3185,51 @@ def expand_logical_to_fingers(logical_nodes: list, original_nodes: list, pitch: 
         base_x = float(logical_node["geometry"]["x"])
         base_y = float(logical_node["geometry"]["y"])
         orientation = logical_node["geometry"].get("orientation", "R0")
+        
+        # Determine internal pitch: 
+        # OPTION 1: Symbolic Slot System
+        # Always use standard pitch (0.294um) in the editor for better visualization.
+        # Density is maintained logically via abutment flags.
+        internal_pitch = STD_PITCH
+        
+        # Abutment flags from the logical parent
+        logical_abut = logical_node.get("abutment", {})
+        abut_left_intent = logical_abut.get("abut_left", False)
+        abut_right_intent = logical_abut.get("abut_right", False)
 
+        total = len(finger_ids)
         for i, finger_id in enumerate(finger_ids):
             original = original_map.get(finger_id)
             if not original:
                 continue
-            finger_node = dict(original)
+            
+            finger_node = copy.deepcopy(original)
             finger_node["geometry"] = dict(finger_node["geometry"])
-            finger_node["geometry"]["x"] = base_x + (i * pitch)
+            
+            # Place at consecutive positions
+            fx = round(base_x + (i * internal_pitch), 6)
+            finger_node["geometry"]["x"] = fx
             finger_node["geometry"]["y"] = base_y
-            finger_node["geometry"]["orientation"] = orientation
+            # Keep all expanded fingers in uniform R0 orientation (no mirroring)
+            finger_orient = "R0"
+            finger_node["geometry"]["orientation"] = finger_orient
+            
+            # Swap Source and Drain nets for odd finger indices to alternate terminals
+            if i % 2 != 0:
+                if "net_d" in finger_node or "net_s" in finger_node:
+                    finger_node["net_d"], finger_node["net_s"] = finger_node["net_s"], finger_node.get("net_d")
+            
+            # Propagate and enforce abutment flags:
+            # - Internal fingers always abut neighbors
+            # - First finger abuts left if the logical group abuts left
+            # - Last finger abuts right if the logical group abuts right
+            finger_node["abutment"] = {
+                "abut_left":  (i > 0) or abut_left_intent,
+                "abut_right": (i < (total - 1)) or abut_right_intent,
+            }
+            
+            # Mark as expanded for tracing
+            finger_node["_expanded_from"] = logical_node["id"]
             physical_nodes.append(finger_node)
 
     return physical_nodes

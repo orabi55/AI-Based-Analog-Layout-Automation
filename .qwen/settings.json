@@ -1,5 +1,5 @@
 {
-  "$version": 3,
+  "$version": 4,
   "security": {
     "auth": {
       "selectedType": "openai"
@@ -10,7 +10,6 @@
   },
   "modelProviders": {
     "openai": [
-     
       {
         "id": "claude-opus-4-6",
         "name": "Claude Opus 4.6 (AgentRouter)",
@@ -44,6 +43,6 @@
     ]
   },
   "model": {
-    "name": "qwen-max"
+    "name": "claude-opus-4-6"
   }
 }

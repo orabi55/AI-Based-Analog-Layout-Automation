@@ -41,6 +41,9 @@ def node_finger_expansion(state):
     if has_logical:
         physical_nodes = expand_logical_to_fingers(placement_nodes, original_nodes)
         log_detail(f"Expanded {len(placement_nodes)} logical → {len(physical_nodes)} physical nodes")
+        # MUST run row overlap resolver to snap grid and generate filler dummies
+        no_abutment_flag = state.get("no_abutment", False)
+        physical_nodes = _resolve_row_overlaps(physical_nodes, no_abutment_flag)
     else:
         # Even if already physical, we must run the row overlap resolver to generate filler dummies
         # and pack the layout to the correct standard grid.

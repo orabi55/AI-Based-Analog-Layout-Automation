@@ -68,6 +68,7 @@ def node_drc_critic(state):
             placement_text = ""
 
         return {
+            "placement_nodes": nodes,
             "drc_pass": True, "drc_flags": [],
             "chat_history": updated_chat_history, "drc_retry_count": retry_num + 1,
             "last_agent": "drc_critic",
@@ -91,6 +92,7 @@ def node_drc_critic(state):
         placement_text = ""
 
     return {
+        "placement_nodes": nodes,
         "drc_pass": False,
         "drc_flags": list(drc_result.get("violations", [])),
         "chat_history": chat_history,

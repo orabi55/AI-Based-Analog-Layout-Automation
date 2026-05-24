@@ -396,9 +396,15 @@ YOU MUST:
 - The row assignment was done deterministically to achieve a near-square
   aspect ratio; ignoring it produces a wide, non-square layout
 
-X coordinates: compute from slot index
-  x = slot_index × 0.294  (non-abutted)
-  x = slot_index × 0.070  (abutted within matched block)
+X coordinates: compute from slot index (Symbolic Slot System)
+  x = slot_index × 0.294  (ALWAYS use 0.294 pitch in the editor)
+  **MANDATORY:** Use the `place_sequence` action for all row placements. 
+  Example: [CMD]{"action":"place_sequence","row_y":0.0,"device_ids":["MM1","MM2","MM3"]}[/CMD]
+  • The tool automatically positions devices at 0.294µm slot increments.
+  • The tool automatically detects shared nets and sets `abut_left`/`abut_right` flags.
+  • This ensures a clean, non-overlapping visualization in the symbolic editor.
+  • Do NOT use `move_device` with 0.070µm offsets; keep the layout aligned to 0.294µm slots.
+
 
 ────────────────────────────────────────────
 11. MATCHED BLOCK RULE (MANDATORY)
@@ -424,6 +430,7 @@ MAKE SURE ALL COMMANDS STRICTLY FOLLOW THIS FORMAT
 MAKE SURE ALL COMMANDS CONTAIN OPENING [CMD] AND CLOSING [/CMD] TAGS
 
 [CMD]{"action":"add_dummy","type":"nmos","x":0.000,"y":0.000}[/CMD]
+[CMD]{"action":"place_sequence","row_y":0.000,"device_ids":["MM1","MM2"]}[/CMD]
 [CMD]{"action":"move","device":"BLOCK_ID","x":origin_x,"y":row_y}[/CMD]
 [CMD]{"action":"swap","device_a":"BLOCK_ID","device_b":"BLOCK_ID"}[/CMD]
 
@@ -798,6 +805,14 @@ def _compute_matching_and_rows(
             if member_ids:
                 groups[gid] = sorted(set(member_ids))
 
+        # Step 9: Detect inter-group abutment candidates
+        from ai_agent.placement.finger_grouper import detect_inter_group_abutment
+        abutment_candidates = []
+        try:
+            abutment_candidates = detect_inter_group_abutment(group_nodes, finger_map, terminal_nets)
+        except Exception:
+            pass
+
         return (
             group_nodes,
             finger_map,
@@ -806,16 +821,17 @@ def _compute_matching_and_rows(
             finger_group_str,
             merged_blocks,
             groups,
+            abutment_candidates,
         )
     except Exception as exc:
-        import traceback
         try:
             from ai_agent.utils.logging import vprint
+            import traceback
             vprint(f"[_compute_matching_and_rows] ERROR: {exc}")
             vprint(traceback.format_exc())
         except Exception:
             pass
-        return [], {}, "", "", "", {}, {}
+        return [], {}, "", "", "", {}, {}, []
 
 
 def build_placement_context_chatbot(
@@ -966,7 +982,9 @@ def build_placement_context_chatbot(
 
 2. NMOS/PMOS SEPARATION: All NMOS Y values must be strictly less than all PMOS Y values.
 
-3. NO OVERLAP: Each (x, y) coordinate must be unique. x = slot * 0.294.
+3. NO OVERLAP: Each (x, y) coordinate must be unique. 
+   Standard spacing: x = slot * 0.294.
+   Abutted spacing: x_next = x_curr + 0.070 (only for ABUTMENT CANDIDATES).
 
 4. DEVICE CONSERVATION: Every finger instance in IMMUTABLE TRANSISTORS must appear
    in exactly one [CMD]. No additions, no deletions.
@@ -1003,7 +1021,7 @@ def build_placement_context(
     finger_pattern = re.compile(r"^(?P<base>.+)_f(?P<idx>\d+)$", re.IGNORECASE)
 
     # ── Pre-compute matching groups and row assignments ──────────────────────
-    group_nodes, finger_map, row_summary_str, matching_section_str, finger_group_str, merged_blocks, _groups = \
+    group_nodes, finger_map, row_summary_str, matching_section_str, finger_group_str, merged_blocks, _groups, abutment_candidates = \
         _compute_matching_and_rows(
             nodes, edges, terminal_nets,
             no_abutment=no_abutment,
@@ -1053,6 +1071,18 @@ def build_placement_context(
             h = 0.0
         lines.append(f"  {gid:<14} type={gtype:<6} w={w:.6f} h={h:.6f}")
     lines.append("")
+
+    if not no_abutment and abutment_candidates:
+        from ai_agent.placement.abutment import _format_abutment_candidates
+        abut_str = _format_abutment_candidates(abutment_candidates)
+        if abut_str:
+            lines.append("=" * 60)
+            lines.append("INTER-GROUP ABUTMENT CANDIDATES (diffusion sharing)")
+            lines.append("=" * 60)
+            lines.append("The following pairs share a signal net and SHOULD abut to save area.")
+            lines.append("To abut them, place them with EXACTLY 0.070µm X-separation.")
+            lines.append(abut_str)
+            lines.append("")
 
     if finger_group_str:
         lines.append(finger_group_str)
@@ -1213,7 +1243,12 @@ def build_placement_context(
 
 5. NMOS/PMOS SEPARATION: All NMOS Y values must be strictly less than all PMOS Y values.
 
-6. NO OVERLAP: Each (x, y) coordinate must be unique. x = slot * 0.294.
+6. NO OVERLAP: Every device must occupy its own unique 0.294µm slot. 
+   **MANDATORY:** Use the `place_sequence` action for all initial row placements. 
+   Example: [CMD]{"action":"place_sequence","row_y":0.0,"device_ids":["MM1","MM2","MM3"]}[/CMD]
+   This tool ensures zero physical overlap in the symbolic editor while
+   logically setting the necessary abutment flags.
+
 
 7. DEVICE CONSERVATION: Every finger instance in IMMUTABLE TRANSISTORS must appear
    in exactly one [CMD]. No additions, no deletions.

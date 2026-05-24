@@ -30,6 +30,10 @@ from ai_agent.tools.overlap_resolver import resolve_overlaps
 from ai_agent.tools.inventory import validate_device_count
 from ai_agent.utils.logging import vprint
 from ai_agent.nodes._shared import ip_step
+from ai_agent.placement.finger_grouper import (
+    _resolve_row_overlaps,
+    legalize_vertical_rows,
+)
 
 HALF_PITCH = PITCH_UM / 2.0   # 0.147 um -- snap unit for axis
 
@@ -354,6 +358,11 @@ def node_symmetry_enforcer(state: dict) -> dict:
     moved_ids = resolve_overlaps(working)
     if moved_ids:
         vprint(f"[SYMM] Post-enforcement overlap fix: {len(moved_ids)} device(s) nudged")
+
+    # Snap positions back to grid, regenerate correct fillers, and legalize rows
+    no_abutment_flag = state.get("no_abutment", False)
+    working = _resolve_row_overlaps(working, no_abutment_flag)
+    working = legalize_vertical_rows(working)
 
     elapsed = time.time() - t0
     ip_step(
