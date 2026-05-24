@@ -19,9 +19,7 @@ class LayoutExporter:
         # Ensure name matches the layout database
         clean_name = name[1:] if name.startswith("MM") else name
         
-        # Strip finger/multiplier suffixes (e.g. M2_m1_f1 -> M2)
-        if "_" in clean_name:
-            clean_name = clean_name.split("_")[0]
+        # Keep finger/multiplier suffixes so unrolled devices map to unique placement positions
         
         self.instances.append({
             "name": clean_name,
