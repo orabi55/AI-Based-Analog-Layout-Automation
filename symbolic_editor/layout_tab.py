@@ -3052,12 +3052,96 @@ class LayoutEditorTab(QWidget):
         if proj_root not in sys.path:
             sys.path.insert(0, proj_root)
             
+        self._sync_node_positions()
+        saved_hierarchy_state = self._expand_all_for_export()
         try:
             from eda.json_to_tcl import LayoutExporter
             exporter = LayoutExporter(file_path)
             
-            output = self._build_output_data()
-            for node in output.get("nodes", []):
+            abut_states = self.editor.get_device_abutment_states()
+            
+            import copy
+            export_nodes = copy.deepcopy(self.nodes)
+            
+            from ai_agent.placement.finger_grouper import _parse_id
+            from collections import defaultdict
+            
+            # Count total fingers per parent in the unrolled export_nodes
+            parent_counts = defaultdict(int)
+            for node in export_nodes:
+                parent_id, _, _ = _parse_id(node.get("id", ""))
+                parent_counts[parent_id] += 1
+                
+            for node in export_nodes:
+                dev_id = node.get("id", "")
+                parent_id, m_idx, f_idx_val = _parse_id(dev_id)
+                
+                total = parent_counts[parent_id]
+                f_idx = f_idx_val if f_idx_val is not None else (m_idx if m_idx is not None else 1)
+                
+                if dev_id in abut_states:
+                    parent_abut = abut_states[dev_id]
+                elif parent_id in abut_states:
+                    parent_abut = abut_states[parent_id]
+                else:
+                    parent_abut = {"abut_left": False, "abut_right": False}
+                    
+                node["abutment"] = {
+                    "abut_left":  (f_idx > 1) or bool(parent_abut.get("abut_left", False)),
+                    "abut_right": (f_idx < total) or bool(parent_abut.get("abut_right", False))
+                }
+
+            # Magic Step: Squeeze 0.3um Symbolic Slots down to 0.070um physical diffusion-sharing pitch GLOBALLY
+            max_slot = 0
+            for n in export_nodes:
+                orig_x = n.get("geometry", {}).get("x", 0.0)
+                slot_idx = int(round(orig_x / 0.294))
+                nf = max(1, int(round(n.get("geometry", {}).get("width", 0.294) / 0.294)))
+                if slot_idx + nf - 1 > max_slot:
+                    max_slot = slot_idx + nf - 1
+            
+            abut_boundaries = [False] * max_slot
+            rows = defaultdict(list)
+            for n in export_nodes:
+                y_key = round(n.get("geometry", {}).get("y", 0.0), 4)
+                rows[y_key].append(n)
+                
+            for y_key, row_nodes in rows.items():
+                slot_to_node = {}
+                for n in row_nodes:
+                    start_slot = int(round(n.get("geometry", {}).get("x", 0.0) / 0.294))
+                    nf = max(1, int(round(n.get("geometry", {}).get("width", 0.294) / 0.294)))
+                    for i in range(nf):
+                        slot_to_node[start_slot + i] = n
+                        
+                for k in range(max_slot):
+                    if k in slot_to_node and (k+1) in slot_to_node:
+                        prev = slot_to_node[k]
+                        curr = slot_to_node[k+1]
+                        
+                        if prev is curr:
+                            abut_boundaries[k] = True
+                        else:
+                            abut_right = prev.get("abutment", {}).get("abut_right", False)
+                            abut_left = curr.get("abutment", {}).get("abut_left", False)
+                            
+                            if abut_right and abut_left:
+                                abut_boundaries[k] = True
+            
+            slot_x = [0.0] * (max_slot + 1)
+            for k in range(max_slot):
+                if abut_boundaries[k]:
+                    slot_x[k+1] = slot_x[k] + 0.070
+                else:
+                    slot_x[k+1] = slot_x[k] + 0.294
+            
+            for n in export_nodes:
+                orig_x = n.get("geometry", {}).get("x", 0.0)
+                slot_idx = int(round(orig_x / 0.294))
+                if 0 <= slot_idx <= max_slot:
+                    n["geometry"]["x"] = slot_x[slot_idx]
+
+            for node in export_nodes:
                 name = node["id"]
                 x = node.get("geometry", {}).get("x", 0.0)
                 y = node.get("geometry", {}).get("y", 0.0)
@@ -3074,6 +3158,8 @@ class LayoutEditorTab(QWidget):
                 self.chat_panel._append_message("AI", f"Failed to export TCL placement.", "#fde8e8", "#a00")
         except Exception as e:
             self.chat_panel._append_message("AI", f"Error exporting TCL placement: {str(e)}", "#fde8e8", "#a00")
+        finally:
+            self._restore_hierarchy_state(saved_hierarchy_state)
 
 
     def do_export_oas(self):
