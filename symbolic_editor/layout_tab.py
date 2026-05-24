@@ -100,6 +100,8 @@ class LayoutEditorTab(QWidget):
 
         # Mode flags (toolbar communicates via setters)
         self._dummy_mode = False
+        self._vdd_mode = False
+        self._gnd_mode = False
         self._abutment_mode = False
         self._colorize_mode = False
         self._close_row_gap = False
@@ -295,6 +297,8 @@ class LayoutEditorTab(QWidget):
         )
         self._stage_highlight_timer = None
         self.editor.set_dummy_place_callback(self._add_dummy_device)
+        self.editor.set_vdd_place_callback(self._add_vdd_tap)
+        self.editor.set_gnd_place_callback(self._add_gnd_tap)
 
         # Panel toggles
         self.device_tree.toggle_requested.connect(self._toggle_device_tree)
@@ -529,6 +533,20 @@ class LayoutEditorTab(QWidget):
             self._dummy_mode = False
             self.editor.set_dummy_mode(False)
             self._set_main_action_checked("_act_add_dummy", False)
+            released = True
+
+        vdd_action = getattr(self.window(), "_act_add_vdd", None)
+        if self._vdd_mode or (vdd_action is not None and vdd_action.isChecked()):
+            self._vdd_mode = False
+            self.editor.set_vdd_mode(False)
+            self._set_main_action_checked("_act_add_vdd", False)
+            released = True
+
+        gnd_action = getattr(self.window(), "_act_add_gnd", None)
+        if self._gnd_mode or (gnd_action is not None and gnd_action.isChecked()):
+            self._gnd_mode = False
+            self.editor.set_gnd_mode(False)
+            self._set_main_action_checked("_act_add_gnd", False)
             released = True
 
         if getattr(self, "_move_mode", False):
@@ -1669,10 +1687,40 @@ class LayoutEditorTab(QWidget):
     #  Dummy / Abutment toggles (called by MainWindow toolbar)
     # =================================================================
     def set_dummy_mode(self, enabled):
+        if enabled == self._dummy_mode:
+            return
+        if enabled:
+            self.set_vdd_mode(False)
+            self.set_gnd_mode(False)
         self._dummy_mode = enabled
         self.editor.set_dummy_mode(enabled)
+        self._set_main_action_checked("_act_add_dummy", enabled)
         msg = "Dummy mode ON: move over PMOS/NMOS row and click to place." if enabled else "Dummy mode OFF."
         self.chat_panel._append_message("AI", msg, "#e8f4fd", "#1a1a2e")
+
+    def set_vdd_mode(self, enabled):
+        if enabled == self._vdd_mode:
+            return
+        if enabled:
+            self.set_dummy_mode(False)
+            self.set_gnd_mode(False)
+        self._vdd_mode = enabled
+        self.editor.set_vdd_mode(enabled)
+        self._set_main_action_checked("_act_add_vdd", enabled)
+        msg = "VDD Tap placement mode ON: click on a PMOS row to place a VDD tap." if enabled else "VDD Tap placement mode OFF."
+        self.chat_panel._append_message("AI", msg, "#fff3e0", "#e65100")
+
+    def set_gnd_mode(self, enabled):
+        if enabled == self._gnd_mode:
+            return
+        if enabled:
+            self.set_dummy_mode(False)
+            self.set_vdd_mode(False)
+        self._gnd_mode = enabled
+        self.editor.set_gnd_mode(enabled)
+        self._set_main_action_checked("_act_add_gnd", enabled)
+        msg = "GND Tap placement mode ON: click on an NMOS row to place a GND tap." if enabled else "GND Tap placement mode OFF."
+        self.chat_panel._append_message("AI", msg, "#e3f2fd", "#0d47a1")
 
     def _on_toggle_route(self, checked: bool):
         routing_result = getattr(self, "_routing_result", {})
@@ -1867,6 +1915,72 @@ class LayoutEditorTab(QWidget):
         self._sync_node_positions()
         self.chat_panel._append_message(
             "AI", f"Added dummy {dummy['id']} ({dummy['type']}).", "#e8f4fd", "#1a1a2e",
+        )
+
+    def _next_tap_id(self, subtype):
+        prefix = "TAP_VDD_" if subtype == "ntap" else "TAP_GND_"
+        used = {n.get("id", "") for n in self.nodes}
+        i = 1
+        while f"{prefix}{i}" in used:
+            i += 1
+        return f"{prefix}{i}"
+
+    def _build_tap_node(self, candidate):
+        subtype = candidate.get("subtype", "ptap")
+        row_type = "pmos" if subtype == "ntap" else "nmos"
+        template = next(
+            (n for n in self.nodes if str(n.get("type", "")).strip().lower() == row_type),
+            None,
+        )
+        x = candidate["x"] / self.editor.scale_factor
+        y = -candidate["y"] / self.editor.scale_factor
+        width = candidate["width"] / self.editor.scale_factor
+        height = candidate["height"] / self.editor.scale_factor
+        
+        tap_node = {
+            "id": self._next_tap_id(subtype),
+            "type": "tap",
+            "subtype": subtype,
+            "physical_only": True,
+            "geometry": {
+                "x": x,
+                "y": y,
+                "width": width,
+                "height": height,
+                "orientation": "R0"
+            }
+        }
+        if template:
+            if template.get("layout_index") is not None:
+                tap_node["template_layout_index"] = template.get("layout_index")
+            if template.get("layout_cell"):
+                tap_node["layout_cell"] = template.get("layout_cell")
+        return tap_node
+
+    def _add_vdd_tap(self, candidate):
+        self._add_tap_device(candidate, "ntap")
+
+    def _add_gnd_tap(self, candidate):
+        self._add_tap_device(candidate, "ptap")
+
+    def _add_tap_device(self, candidate, subtype):
+        self._sync_node_positions(); self._push_undo()
+        candidate["subtype"] = subtype
+        candidate["x"] = self.editor.find_nearest_free_x(
+            row_y=candidate["y"],
+            width=candidate["width"],
+            target_x=candidate["x"],
+            exclude_id=None,
+        )
+        tap_node = self._build_tap_node(candidate)
+        self.nodes.append(tap_node)
+        self._original_data["nodes"] = self.nodes
+        self._refresh_panels(compact=False)
+        self._sync_node_positions()
+        
+        label = "VDD Tap" if subtype == "ntap" else "GND Tap"
+        self.chat_panel._append_message(
+            "AI", f"Added {label} {tap_node['id']}.", "#e8f4fd", "#1a1a2e",
         )
 
     # =================================================================
