@@ -117,6 +117,8 @@ from collections import defaultdict
 from typing import Dict, List, Tuple
 
 from ai_agent.utils.logging import vprint
+ 
+_current_terminal_nets = {}
 
 # ---------------------------------------------------------------------------
 # Constants — sourced from centralized design rules config
@@ -2818,143 +2820,232 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False) -> List[
     vprint(f"[resolve_overlaps] Found {len(type_rows)} type-rows")
 
     for (y_key, _dev_type), row_nodes in type_rows.items():
-        # --- Step 1: Identify chains using Union-Find (ID + Abutment Flags) ---
-        id_set = {n["id"] for n in row_nodes}
-        node_map = {n["id"]: n for n in row_nodes}
-        
-        # Initialize Union-Find
-        parent_uf = {nid: nid for nid in id_set}
-        def find(x):
-            if parent_uf[x] != x:
-                parent_uf[x] = find(parent_uf[x])
-            return parent_uf[x]
-        def union(a, b):
-            ra, rb = find(a), find(b)
-            if ra != rb:
-                parent_uf[ra] = rb
-
-        # Union fingers that share the same parent or block (Intra-device)
-        # Using a O(N) pass for sibling grouping
-        group_buckets = defaultdict(list)
+        # Populate net_s/net_d/net_g from global cache if missing
+        global _current_terminal_nets
         for n in row_nodes:
-            pk = n.get("_block_id", _transistor_key(n["id"]))
-            group_buckets[pk].append(n["id"])
-        for members in group_buckets.values():
-            for i in range(len(members) - 1):
-                union(members[i], members[i+1])
+            if not n.get("net_s") or not n.get("net_d"):
+                dev_id = n["id"]
+                parent_id = _transistor_key(dev_id)
+                nets = _current_terminal_nets.get(dev_id) or _current_terminal_nets.get(parent_id) or {}
+                if nets:
+                    n["net_s"] = nets.get("S")
+                    n["net_d"] = nets.get("D")
+                    n["net_g"] = nets.get("G")
 
-        # Union compatible neighbors with explicit abutment flags (Inter-device)
-        row_sorted = sorted(row_nodes, key=lambda n: float(n.get("geometry", {}).get("x", 0.0)))
-        for i in range(len(row_sorted) - 1):
-            n1, n2 = row_sorted[i], row_sorted[i+1]
-            if n1.get("abutment", {}).get("abut_right") and n2.get("abutment", {}).get("abut_left"):
-                union(n1["id"], n2["id"])
-
-        # Construct final chain lists
-        chains_dict = defaultdict(list)
-        for nid in id_set:
-            root = find(nid)
-            chains_dict[root].append(node_map[nid])
+        # --- Step 1: Group physical fingers in this row into logical blocks ---
+        block_nodes = defaultdict(list)
+        for n in row_nodes:
+            bk = n.get("_block_id") or _transistor_key(n["id"])
+            block_nodes[bk].append(n)
             
-        chains_list = list(chains_dict.values())
-        vprint(f"[resolve_overlaps] Row y={y_key} ({_dev_type}): {len(chains_list)} chains")
+        blocks = []
+        for bk, f_nodes in block_nodes.items():
+            f_nodes_sorted = sorted(f_nodes, key=lambda n: float(n.get("geometry", {}).get("x", 0.0)))
+            blocks.append({
+                "key": bk,
+                "nodes": f_nodes_sorted,
+                "orig_x": min(float(n.get("geometry", {}).get("x", 0.0)) for n in f_nodes_sorted),
+            })
+            
+        # Sort blocks by their leftmost finger's original X position to establish base order
+        blocks.sort(key=lambda b: b["orig_x"])
 
-        # --- Step 2: Sort each chain's devices by their internal index ------
-        for chain_devices in chains_list:
-            chain_devices.sort(key=lambda n: n.get("geometry", {}).get("x", 0.0))
-
-        # --- Step 3: Sort chains by their leftmost device's original X ------
-        sorted_chains = sorted(
-            chains_list,
-            key=lambda ch: ch[0].get("geometry", {}).get("x", 0.0),
-        )
-
-        # --- Step 3b: Redistribute flanking chains around the anchor --------
-        if len(sorted_chains) >= 3:
-            anchor_idx = max(range(len(sorted_chains)),
-                             key=lambda i: len(sorted_chains[i]))
-            anchor_chain = sorted_chains[anchor_idx]
-            flanking = [c for i, c in enumerate(sorted_chains) if i != anchor_idx]
-            singletons = [c for c in flanking if len(c) == 1]
-            non_single = [c for c in flanking if len(c) > 1]
-            if singletons:
-                if non_single:
-                    left_flank  = non_single
-                    right_flank = singletons
-                else:
-                    n_left = len(singletons) // 2
-                    left_flank  = singletons[:n_left]
-                    right_flank = singletons[n_left:]
-                sorted_chains = left_flank + [anchor_chain] + right_flank
-
-        # --- Step 4: Place chains left-to-right, gap-preserving -----------
-        if not sorted_chains:
-            continue
-
-        chain_footprints: list[Tuple[float, float]] = []
-        for chain in sorted_chains:
-            xs = [d.get("geometry", {}).get("x", 0.0) for d in chain]
-            widths = [d.get("geometry", {}).get("width", pitch_std) for d in chain]
-            first_x = min(xs) if xs else 0.0
-            last_x = max(xs) if xs else 0.0
-            last_w = widths[xs.index(last_x)] if xs else pitch_std
-            chain_footprints.append((first_x, last_x + last_w))
-
-        min_inter_chain_gap = pitch_std
-        cursor = chain_footprints[0][0]
-
-        for chain_idx, chain in enumerate(sorted_chains):
-            chain_first_orig, chain_last_orig = chain_footprints[chain_idx]
-            import math as _m
-            snapped_orig = round(round(chain_first_orig / pitch_std) * pitch_std, 6)
-            if chain_idx == 0:
-                chain_start = snapped_orig
+        # --- Step 2: Solve optimal order and flip states to maximize net-sharing ---
+        if no_abutment:
+            # No abutment optimization requested — keep original relative order and no flips
+            ordered_blocks = list(blocks)
+            best_flips = [0] * len(blocks)
+        else:
+            # Optimize sequence and mirroring to maximize diffusion sharing (abutment)
+            M = len(blocks)
+            if M <= 1:
+                ordered_blocks = list(blocks)
+                best_flips = [0] * M
             else:
-                chain_start = max(cursor, snapped_orig)
-            shift = round(chain_start - chain_first_orig, 6)
+                block_nets = []
+                for b in blocks:
+                    left = b["nodes"][0].get("net_s")
+                    right = b["nodes"][-1].get("net_d")
+                    block_nets.append((left, right))
 
-            for dev_idx, dev in enumerate(chain):
-                geo = dev.setdefault("geometry", {})
-                geo["x"] = round(chain_start, 6)
-                geo["y"] = round(float(y_key), 6)
+                def evaluate(perm, flips):
+                    direct_abuts = 0
+                    for k in range(M - 1):
+                        idx_curr = perm[k]
+                        idx_next = perm[k+1]
+                        flip_curr = flips[k]
+                        flip_next = flips[k+1]
+                        
+                        right_net = block_nets[idx_curr][0] if flip_curr else block_nets[idx_curr][1]
+                        left_net = block_nets[idx_next][1] if flip_next else block_nets[idx_next][0]
+                        
+                        if right_net and left_net and right_net == left_net:
+                            direct_abuts += 1
+                            
+                    num_flips = sum(flips)
+                    dist = sum(abs(pos_new - idx_orig) for pos_new, idx_orig in enumerate(perm))
+                    score = direct_abuts * 1000 - num_flips * 10 - dist
+                    return score
 
-                is_last = (dev_idx == len(chain) - 1)
-                if not is_last:
-                    # OPTION 1: Symbolic Slot System
-                    # Advance by standard slot pitch for visual clarity
-                    step = pitch_std
-                    chain_start = round(chain_start + step, 6)
-                    # Enforce flags within chain
-                    dev.setdefault("abutment", {})["abut_right"] = True
-                    next_dev = chain[dev_idx + 1]
-                    next_dev.setdefault("abutment", {})["abut_left"] = True
+                best_score = -float('inf')
+                best_perm = None
+                best_flips = None
+
+                if M <= 6:
+                    import itertools
+                    for perm in itertools.permutations(range(M)):
+                        for flips in itertools.product([0, 1], repeat=M):
+                            score = evaluate(perm, flips)
+                            if score > best_score:
+                                best_score = score
+                                best_perm = perm
+                                best_flips = flips
                 else:
-                    # End of chain: advance by device width for next chain
-                    dev_w = geo.get("width", pitch_std)
-                    if dev_w < pitch_std * 0.5:
-                        dev_w = pitch_std
-                    chain_start = round(chain_start + dev_w, 6)
+                    import random
+                    best_perm = list(range(M))
+                    best_flips = [0] * M
+                    best_score = evaluate(best_perm, best_flips)
+                    
+                    seeds = [list(range(M))]
+                    for _ in range(5):
+                        seed = list(range(M))
+                        random.shuffle(seed)
+                        seeds.append(seed)
+                        
+                    for start_perm in seeds:
+                        curr_perm = list(start_perm)
+                        curr_flips = [0] * M
+                        improved = True
+                        while improved:
+                            improved = False
+                            for k in range(M):
+                                test_flips = list(curr_flips)
+                                test_flips[k] = 1 - test_flips[k]
+                                s = evaluate(curr_perm, test_flips)
+                                if s > best_score:
+                                    best_score = s
+                                    best_perm = list(curr_perm)
+                                    best_flips = list(test_flips)
+                                    curr_flips = list(test_flips)
+                                    improved = True
+                            for k in range(M):
+                                for l in range(k + 1, M):
+                                    test_perm = list(curr_perm)
+                                    test_perm[k], test_perm[l] = test_perm[l], test_perm[k]
+                                    s = evaluate(test_perm, curr_flips)
+                                    if s > best_score:
+                                        best_score = s
+                                        best_perm = list(test_perm)
+                                        best_flips = list(curr_flips)
+                                        curr_perm = list(test_perm)
+                                        improved = True
+                                        
+                ordered_blocks = [blocks[idx] for idx in best_perm]
 
-            raw_cursor = max(chain_start, chain_last_orig + shift) + min_inter_chain_gap
-            cursor = round(_m.ceil(raw_cursor / pitch_std) * pitch_std, 6)
-
-        # Clean abutment flags for standalone (single-device) chains
-        # Only if they were NOT already set (don't clear intent flags)
-        for chain in sorted_chains:
-            if len(chain) == 1:
-                dev = chain[0]
-                # If only one device is in the chain, it should not have abut_left/right 
-                # UNLESS it's at the boundary of a logical group that abuts another group.
-                # However, our Union-Find above already merged such neighbors into the same chain.
-                # So if len(chain) == 1, it truly is standalone.
-                # Wait, if detect_abutment_intent set them but Union-Find didn't group them?
-                # Actually, if we just preserve existing flags instead of blindly clearing them:
-                abut = dev.get("abutment", {})
-                if not (abut.get("abut_left") or abut.get("abut_right")):
-                    dev["abutment"] = {
-                        "abut_left":  False,
-                        "abut_right": False,
+        # --- Step 3: Physically mirror flipped blocks and layout sequence ---
+        # Get reference dimensions and electrical parameters from an active device in this row
+        ref_height = 0.568
+        ref_elec = {"nf_per_device": 1, "multiplier": 1, "nfin": 2, "l": 1.4e-8}
+        for n in row_nodes:
+            if not n.get("is_dummy", False):
+                geo = n.get("geometry", {})
+                if "height" in geo:
+                    ref_height = geo["height"]
+                elec = n.get("electrical", {})
+                if elec:
+                    ref_elec = {
+                        "nf_per_device": 1,
+                        "multiplier": 1,
+                        "nfin": elec.get("nfin", 2),
+                        "l": elec.get("l", 1.4e-8)
                     }
+                break
+
+        row_nodes_final = []
+        cursor_slot = 0
+        dummy_idx = 0
+
+        for b_idx, b in enumerate(ordered_blocks):
+            # Apply mirroring if flipped
+            if not no_abutment and best_flips[b_idx]:
+                mirrored_nodes = []
+                for n in reversed(b["nodes"]):
+                    nc = copy.deepcopy(n)
+                    if "net_s" in nc or "net_d" in nc:
+                        nc["net_s"], nc["net_d"] = nc.get("net_d"), nc.get("net_s")
+                    if "abutment" in nc:
+                        abut = nc["abutment"]
+                        nc["abutment"] = {
+                            "abut_left": abut.get("abut_right", False),
+                            "abut_right": abut.get("abut_left", False),
+                        }
+                    mirrored_nodes.append(nc)
+                b["nodes"] = mirrored_nodes
+
+            # Place all fingers of the block consecutively
+            K = len(b["nodes"])
+            for f_idx, n in enumerate(b["nodes"]):
+                geo = n.setdefault("geometry", {})
+                geo["x"] = round(cursor_slot * STD_PITCH, 6)
+                geo["y"] = round(float(y_key), 6)
+                geo["orientation"] = "R0"
+                
+                if no_abutment:
+                    n["abutment"] = {"abut_left": False, "abut_right": False}
+                else:
+                    n["abutment"] = {
+                        "abut_left": (f_idx > 0) or n.get("abutment", {}).get("abut_left", False),
+                        "abut_right": (f_idx < K - 1) or n.get("abutment", {}).get("abut_right", False),
+                    }
+                row_nodes_final.append(n)
+                cursor_slot += 1
+
+            # Insert a bridge dummy if needed between this block and the next
+            if not no_abutment and b_idx < len(ordered_blocks) - 1:
+                right_net = b["nodes"][-1].get("net_d")
+                left_net = ordered_blocks[b_idx + 1]["nodes"][0].get("net_s")
+                
+                # Check if they share a net directly
+                if right_net and left_net and right_net == left_net:
+                    # Direct abutment is possible!
+                    b["nodes"][-1]["abutment"]["abut_right"] = True
+                    ordered_blocks[b_idx + 1]["nodes"][0].setdefault("abutment", {})["abut_left"] = True
+                else:
+                    # No shared net -> insert a bridge dummy to achieve continuous abutment!
+                    dummy_idx += 1
+                    dummy_id = f"FILLER_DUMMY_BRIDGE_{y_key}_{b_idx}_{_dev_type}"
+                    
+                    gate_net = "VSS" if _dev_type == "nmos" else "VDD"
+                    
+                    bridge_dummy = {
+                        "id": dummy_id,
+                        "type": _dev_type,
+                        "is_dummy": True,
+                        "geometry": {
+                            "x": round(cursor_slot * STD_PITCH, 6),
+                            "y": round(float(y_key), 6),
+                            "width": STD_PITCH,
+                            "height": ref_height,
+                            "orientation": "R0"
+                        },
+                        "electrical": dict(ref_elec),
+                        "net_s": right_net,
+                        "net_d": left_net,
+                        "net_g": gate_net,
+                        "abutment": {
+                            "abut_left": True,
+                            "abut_right": True
+                        }
+                    }
+                    # Enable abutment at boundaries with the bridge dummy
+                    b["nodes"][-1]["abutment"]["abut_right"] = True
+                    ordered_blocks[b_idx + 1]["nodes"][0].setdefault("abutment", {})["abut_left"] = True
+                    
+                    row_nodes_final.append(bridge_dummy)
+                    cursor_slot += 1
+
+        # Replace type-row nodes with our perfectly optimized layout row
+        type_rows[(y_key, _dev_type)] = row_nodes_final
 
     # --- Step 5: Global Centering & Inner/Outer Filler Dummies ---
     # Only apply centering and filler insertion to MOS rows.
