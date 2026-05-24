@@ -80,6 +80,15 @@ class PlacementWorker(QObject):
         except (json.JSONDecodeError, ValueError):
             layout_context = {}
 
+        # Populate the global _current_terminal_nets cache for finger_grouper
+        try:
+            from ai_agent.placement.finger_grouper import _current_terminal_nets
+            if isinstance(_current_terminal_nets, dict):
+                _current_terminal_nets.clear()
+                _current_terminal_nets.update(layout_context.get("terminal_nets", {}))
+        except Exception as exc:
+            print(f"[PlacementWorker] Failed to populate terminal nets cache: {exc}")
+
         initial_state = {
             "mode": "initial",  # NEW: unified graph mode
             "user_message": user_message,
