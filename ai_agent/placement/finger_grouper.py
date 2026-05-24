@@ -2878,10 +2878,27 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False, preserve
             if M <= 1:
                 best_flips = [0] * M
             else:
+                # Detect blocks already flipped (orientation=MY) from a previous pass.
+                # For the solver, we need the ORIGINAL (un-flipped) boundary nets so that
+                # flip=0 means "use original S/D order" and flip=1 means "swap S/D".
+                # For already-flipped blocks, net_s/net_d are already swapped, so we
+                # un-swap them to get the original nets.
+                already_flipped = []
                 block_nets = []
                 for b in blocks:
+                    # Check if the representative node is already flipped
+                    rep_orient = b["nodes"][0].get("geometry", {}).get("orientation", "R0")
+                    is_flipped = (rep_orient == "MY")
+                    already_flipped.append(is_flipped)
+                    
                     left = b["nodes"][0].get("net_s")
                     right = b["nodes"][-1].get("net_d")
+                    if is_flipped:
+                        # After flip: net_s = original_D, net_d = original_S
+                        # Original boundary: left = original_S = current net_d,
+                        #                    right = original_D = current net_s
+                        left = b["nodes"][0].get("net_d")
+                        right = b["nodes"][-1].get("net_s")
                     block_nets.append((left, right))
 
                 def evaluate_flips(flips):
@@ -2921,6 +2938,17 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False, preserve
                                 best_flips = list(test_flips)
                                 curr_flips = list(test_flips)
                                 improved = True
+                
+                # Convert absolute flips to CHANGES relative to existing state.
+                # If a block is already flipped (MY) and solver says flip=1, no change needed.
+                # If a block is already flipped (MY) and solver says flip=0, need to un-flip.
+                # If a block is NOT flipped (R0) and solver says flip=1, need to flip.
+                # If a block is NOT flipped (R0) and solver says flip=0, no change needed.
+                for i in range(M):
+                    if already_flipped[i]:
+                        # Currently MY. Solver wants: 1=stay MY (change=0), 0=go to R0 (change=1)
+                        best_flips[i] = 0 if best_flips[i] else 1
+                    # If not already flipped, best_flips[i] stays as-is (0=stay R0, 1=go to MY)
         else:
             # Optimize sequence and mirroring to maximize diffusion sharing (abutment)
             M = len(blocks)
@@ -3042,7 +3070,9 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False, preserve
                                 "abut_left": abut.get("abut_right", False),
                                 "abut_right": abut.get("abut_left", False),
                             }
-                        nc.setdefault("geometry", {})["orientation"] = "MY"
+                        # Toggle orientation: MY→R0 (un-flip) or R0→MY (flip)
+                        cur_orient = nc.get("geometry", {}).get("orientation", "R0")
+                        nc.setdefault("geometry", {})["orientation"] = "R0" if cur_orient == "MY" else "MY"
                         mirrored_nodes.append(nc)
                     b["nodes"] = mirrored_nodes
 
