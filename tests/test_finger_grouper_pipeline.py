@@ -1,13 +1,13 @@
 """Regression tests for the finger grouping → placement → expansion pipeline."""
 
 import pytest
-from ai_agent.ai_initial_placement.finger_grouper import (
+from ai_agent.placement.finger_grouper import (
     group_fingers,
     expand_groups,
     FINGER_PITCH,
     STD_PITCH,
 )
-from ai_agent.ai_initial_placement.placer_utils import _validate_placement
+from ai_agent.placement.validators import _validate_placement
 
 
 def _make_finger_node(dev_id: str, dev_type: str, nfin: int = 2) -> dict:

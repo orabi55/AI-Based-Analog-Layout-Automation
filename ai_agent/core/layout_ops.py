@@ -149,10 +149,12 @@ def abut_devices(nodes: list, device_a: str, device_b: str) -> LayoutToolResult:
     ga = _geo(na)
     gb = _geo(nb)
     ax = float(ga.get("x", 0.0))
-    aw = float(ga.get("width", _STD_PITCH))
+    nfa = na.get("electrical", {}).get("total_fingers", 1)
+    aw = float(nfa * _STD_PITCH)
+    ga["width"] = aw
     y  = float(ga.get("y", 0.0))
 
-    gb["x"] = round(ax + aw - _ABUT_PITCH, 6)
+    gb["x"] = round(ax + aw, 6)
     gb["y"] = y
     na.setdefault("abutment", {})["abut_right"] = True
     nb.setdefault("abutment", {})["abut_left"]  = True
@@ -198,9 +200,11 @@ def merge_shared_source(nodes: list, device_a: str, device_b: str) -> LayoutTool
     gb = _geo(nb)
     y   = float(ga.get("y", 0.0))
     ax  = float(ga.get("x", 0.0))
-    bw  = float(gb.get("width", _STD_PITCH))
+    nfb = nb.get("electrical", {}).get("total_fingers", 1)
+    bw  = float(nfb * _STD_PITCH)
+    gb["width"] = bw
 
-    gb["x"] = round(ax - bw + _ABUT_PITCH, 6)
+    gb["x"] = round(ax - bw, 6)
     gb["y"] = y
     ga["orientation"] = "R0"
     gb["orientation"] = "R0_FH"   # horizontal flip on B so sources face
@@ -241,9 +245,11 @@ def merge_shared_drain(nodes: list, device_a: str, device_b: str) -> LayoutToolR
     gb = _geo(nb)
     y   = float(ga.get("y", 0.0))
     ax  = float(ga.get("x", 0.0))
-    aw  = float(ga.get("width", _STD_PITCH))
+    nfa = na.get("electrical", {}).get("total_fingers", 1)
+    aw  = float(nfa * _STD_PITCH)
+    ga["width"] = aw
 
-    gb["x"] = round(ax + aw - _ABUT_PITCH, 6)
+    gb["x"] = round(ax + aw, 6)
     gb["y"] = y
     ga["orientation"] = "R0"
     gb["orientation"] = "R0_FH"
@@ -402,8 +408,75 @@ def get_layout_bounds(nodes: list) -> LayoutToolResult:
 
 
 # ---------------------------------------------------------------------------
-# match_devices  (data-level: delegates to universal_pattern_generator)
+# place_sequence
 # ---------------------------------------------------------------------------
+
+@wrap_tool
+def place_sequence(
+    nodes: list, 
+    row_y: float, 
+    device_ids: list, 
+    start_x: float = 0.0, 
+    terminal_nets: dict = None
+) -> LayoutToolResult:
+    """Place a sequence of devices in a row using standard 0.294um slots.
+    
+    Automatically detects abutment intent based on shared signal potential
+    between adjacent devices in the sequence and sets flags.
+    This fulfills Option 1: Symbolic Slot System (Visual non-overlap).
+    """
+    from ai_agent.placement.finger_grouper import _are_abutment_compatible
+    
+    updated = copy.deepcopy(nodes)
+    id_map  = {str(n.get("id", "")): n for n in updated}
+    terminal_nets = terminal_nets or {}
+    
+    placed_count = 0
+    cursor_x = start_x
+    
+    for i, dev_id in enumerate(device_ids):
+        node = id_map.get(str(dev_id))
+        if not node:
+            continue
+            
+        nf = node.get("electrical", {}).get("total_fingers", 1)
+        width = nf * _STD_PITCH
+        
+        geo = node.setdefault("geometry", {})
+        geo["x"] = round(cursor_x, 6)
+        geo["y"] = round(row_y, 6)
+        geo["width"] = width
+            
+        # Detect abutment with next device in sequence
+        node.setdefault("abutment", {})
+        if i < len(device_ids) - 1:
+            next_id = device_ids[i+1]
+            if _are_abutment_compatible(dev_id, next_id, terminal_nets):
+                node["abutment"]["abut_right"] = True
+                # Flags for next node will be set when we visit it (as abut_left)
+                next_node = id_map.get(str(next_id))
+                if next_node:
+                    next_node.setdefault("abutment", {})["abut_left"] = True
+            else:
+                node["abutment"]["abut_right"] = False
+        else:
+            node["abutment"]["abut_right"] = False
+            
+        # Ensure first node in sequence has abut_left correctly initialized
+        if i == 0 and "abut_left" not in node["abutment"]:
+            node["abutment"]["abut_left"] = False
+            
+        # Advance by full logical width
+        cursor_x += width
+        placed_count += 1
+        
+    return LayoutToolResult(
+        success=True,
+        message=f"Placed sequence of {placed_count} devices in row y={row_y:.3f} "
+                f"with automatic abutment detection.",
+        changed=placed_count > 0,
+        nodes=updated,
+    )
 
 @wrap_tool
 def match_devices(

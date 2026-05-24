@@ -353,10 +353,19 @@ def update_oas_placement(oas_path, sp_path, nodes, output_path,
             layout_to_nodes[layout_idx].append(node)
             explicit_layout_node_ids.add(node.get("id"))
 
+    layout_idx_to_dev_id = {}
+    for dev_id, l_idx in mapping.items():
+        layout_idx_to_dev_id[l_idx] = dev_id
+
     for dev_id, layout_idx in mapping.items():
         if dev_id in explicit_layout_node_ids:
             continue
         node = node_by_id.get(dev_id)
+        if node is None:
+            # Fallback to parent ID (e.g. MM8_m1 -> MM8)
+            from ai_agent.placement.finger_grouper import _parse_id
+            parent_id, _, _ = _parse_id(dev_id)
+            node = node_by_id.get(parent_id)
         if node is not None:
             layout_to_nodes[layout_idx].append(node)
 
@@ -422,6 +431,7 @@ def update_oas_placement(oas_path, sp_path, nodes, output_path,
         return dummy_template_refs_by_type.get(dtype) or template_refs_by_type.get(dtype)
 
     primary_node_by_layout_idx = {}
+    ref_to_node = {}
 
     for layout_idx, group_nodes in layout_to_nodes.items():
         if layout_idx >= len(layout_devices):
@@ -435,14 +445,30 @@ def update_oas_placement(oas_path, sp_path, nodes, output_path,
         group_nodes = sorted(group_nodes, key=_node_sort_key)
         node = group_nodes[0]
         primary_node_by_layout_idx[layout_idx] = node
+        ref_to_node[id(ref)] = node
         geom = dict(node.get("geometry", {}))
         if len(group_nodes) > 1:
             geom["x"] = min(n.get("geometry", {}).get("x", geom.get("x", 0)) for n in group_nodes)
+
+        # Apply X offset for collapsed fingers
+        dev_id = layout_idx_to_dev_id.get(layout_idx)
+        x_offset = 0.0
+        if dev_id and node.get("id") != dev_id:
+            from ai_agent.placement.finger_grouper import _parse_id
+            parent_id, mult_idx, finger_idx = _parse_id(dev_id)
+            f_idx = 0
+            if finger_idx is not None:
+                f_idx = finger_idx
+            elif mult_idx is not None:
+                f_idx = mult_idx
+            # Since these are internal fingers of the same logical device, they are touch-abutted (0.070um pitch).
+            x_offset = f_idx * 0.070
+
         orient = geom.get("orientation", "R0")
 
         local_x, local_y = invert_transform_point(
             layout_entry.get("parent_transform", (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)),
-            geom.get("x", 0),
+            geom.get("x", 0) + x_offset,
             geom.get("y", 0),
         )
 
@@ -458,7 +484,39 @@ def update_oas_placement(oas_path, sp_path, nodes, output_path,
         abutment  = node.get("abutment")
         target_al = bool(abutment.get("abut_left",  False)) if abutment else False
         target_ar = bool(abutment.get("abut_right", False)) if abutment else False
-        is_manual = (abutment is not None)
+        is_manual = (abutment is not None) or (dev_id and node.get("id") != dev_id)
+
+        # If this is a fallback finger of a multi-finger device, override target_al/target_ar to ensure internal fingers share diffusion:
+        if dev_id and node.get("id") != dev_id:
+            from ai_agent.placement.finger_grouper import _parse_id
+            parent_id, mult_idx, finger_idx = _parse_id(dev_id)
+            f_idx = 0
+            if finger_idx is not None:
+                f_idx = finger_idx
+            elif mult_idx is not None:
+                f_idx = mult_idx
+            
+            # Count how many fingers this parent has in mapping
+            sibling_indices = []
+            for sibling_id in mapping.keys():
+                sib_parent, sib_mult, sib_fing = _parse_id(sibling_id)
+                if sib_parent == parent_id:
+                    sib_idx = sib_fing if sib_fing is not None else (sib_mult if sib_mult is not None else 0)
+                    sibling_indices.append(sib_idx)
+            
+            if sibling_indices:
+                total_sibs = len(sibling_indices)
+                # If this finger is not the first one, it must abut left (shared diffusion)
+                if f_idx > 0:
+                    target_al = True
+                # If this finger is not the last one, it must abut right (shared diffusion)
+                if f_idx < total_sibs - 1:
+                    target_ar = True
+
+        # Swap physical abutment flags under left-right mirrored orientations (e.g., rotation is 180)
+        deg_deg = round(math.degrees(rot_rad)) % 360
+        if deg_deg == 180:
+            target_al, target_ar = target_ar, target_al
 
         base_raw = _get_pcell_prop(ref.cell)
         if not base_raw:
@@ -540,6 +598,7 @@ def update_oas_placement(oas_path, sp_path, nodes, output_path,
         except Exception:
             pass
         top_cell.add(dummy_ref)
+        ref_to_node[id(dummy_ref)] = node
 
     if output_format is None:
         ext = os.path.splitext(output_path)[1].lower()
@@ -588,30 +647,31 @@ def update_oas_placement(oas_path, sp_path, nodes, output_path,
                 )
                 for prop in r.properties:
                     fresh_ref.set_property(prop[0], prop[1:])
+                
+                # Check for abutment properties from the nodes
+                node = ref_to_node.get(id(r))
+                if node:
+                    abut = node.get("abutment")
+                    this_al = bool(abut.get("abut_left", False)) if abut else False
+                    this_ar = bool(abut.get("abut_right", False)) if abut else False
+                    
+                    # Swap physical properties under left-right mirrored orientations (e.g., rotation is 180)
+                    ref_deg = round(math.degrees(r.rotation)) % 360
+                    if ref_deg == 180:
+                        this_al, this_ar = this_ar, this_al
+                    
+                    if this_al:
+                        fresh_ref.set_property("left_abut", [1])
+                    if this_ar:
+                        fresh_ref.set_property("right_abut", [1])
+                
                 fresh_c.add(fresh_ref)
                 
     # Then for top cell
-    for i, r in enumerate(top_cell.references):
+    for r in top_cell.references:
         target_name = r.cell.name if hasattr(r.cell, 'name') else str(r.cell)
         target_cell = cell_map.get(target_name)
         
-        # Determine dev_id and manual abutment for THIS reference index
-        this_dev_id = "UNK"
-        this_al = False
-        this_ar = False
-        node = primary_node_by_layout_idx.get(i)
-        if node is None:
-            for d_id, l_idx in mapping.items():
-                if l_idx == i:
-                    this_dev_id = d_id
-                    node = node_by_id.get(d_id)
-                    break
-        if node:
-            this_dev_id = node.get("id", this_dev_id)
-            abut = node.get("abutment")
-            this_al = bool(abut.get("abut_left", False)) if abut else False
-            this_ar = bool(abut.get("abut_right", False)) if abut else False
-
         if not target_cell:
             orig_variant = next((c for c in lib.cells if c.name == target_name), None)
             if orig_variant:
@@ -630,12 +690,23 @@ def update_oas_placement(oas_path, sp_path, nodes, output_path,
             for prop in r.properties:
                 fresh_ref.set_property(prop[0], prop[1:])
             
-            if this_al:
-                fresh_ref.set_property("left_abut", [1])
-            if this_ar:
-                fresh_ref.set_property("right_abut", [1])
-            
+            # Check for abutment properties from the nodes
+            node = ref_to_node.get(id(r))
+            if node:
+                abut = node.get("abutment")
+                this_al = bool(abut.get("abut_left", False)) if abut else False
+                this_ar = bool(abut.get("abut_right", False)) if abut else False
                 
+                # Swap physical properties under left-right mirrored orientations (e.g., rotation is 180)
+                ref_deg = round(math.degrees(r.rotation)) % 360
+                if ref_deg == 180:
+                    this_al, this_ar = this_ar, this_al
+                
+                if this_al:
+                    fresh_ref.set_property("left_abut", [1])
+                if this_ar:
+                    fresh_ref.set_property("right_abut", [1])
+            
             fresh_top.add(fresh_ref)
 
     if output_format == "gds":

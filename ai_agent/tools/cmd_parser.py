@@ -188,6 +188,25 @@ def apply_cmds_to_nodes(nodes: List[dict], cmds: List[dict]) -> List[dict]:
                     ga.get('orientation', 'R0')
                 )
 
+        elif action == 'place_sequence':
+            row_y      = float(cmd.get('row_y', 0.0))
+            device_ids = cmd.get('device_ids', [])
+            start_x    = float(cmd.get('start_x', 0.0))
+            
+            from ai_agent.tools.dispatcher import dispatch
+            # Use dispatch to reuse the well-tested implementation in layout_ops
+            result = dispatch("place_sequence", {
+                "row_y": row_y,
+                "device_ids": device_ids,
+                "start_x": start_x
+            }, nodes)
+            if result.success:
+                nodes  = result.nodes
+                id_map = {n['id']: n for n in nodes}
+                _log(f"  SEQUENCE: placed {len(device_ids)} devices in row {row_y}")
+            else:
+                _log(f"  SEQUENCE: failed - {result.message}")
+
         elif action in ('move', 'move_device'):
             dev_id = cmd.get('device', cmd.get('device_id', cmd.get('id')))
             if dev_id in id_map:

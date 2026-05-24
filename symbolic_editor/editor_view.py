@@ -977,7 +977,7 @@ class SymbolicEditor(QGraphicsView):
         """Return a dict mapping device id -> (x, y) in original coordinates."""
         positions = {}
         for dev_id, item in self.device_items.items():
-            pos = item.pos()
+            pos = item.scenePos()
             positions[dev_id] = (
                 pos.x() / self.scale_factor,
                 # Un-negate y to restore layout convention (y increases upward)
@@ -1724,15 +1724,9 @@ class SymbolicEditor(QGraphicsView):
                 # Default: move by full width
                 next_step = it.rect().width()
                 
-                # If this device and the NEXT device both have abutment flags on their touching edge,
-                # use the validator's expected 0.070um spacing.
-                if i < len(ordered) - 1:
-                    next_it = ordered[i+1]
-                    abut_right = getattr(it, "get_abut_right", lambda: False)()
-                    abut_left = getattr(next_it, "get_abut_left", lambda: False)()
-                    if abut_right and abut_left:
-                        # 0.070um is the magic "overlap" pitch for shared diffusion in the AI validator
-                        next_step = 0.070 * self.scale_factor
+                # Symbolic Slot System: Abutted devices occupy adjacent slots and do not visually overlap.
+                # The squeezing to 0.070um only happens during GDS/Oasis export.
+                pass
                 
                 x_cursor += next_step
 
@@ -3331,8 +3325,5 @@ class SymbolicEditor(QGraphicsView):
         for dev_id, item in self.device_items.items():
             if not isinstance(item, DeviceItem):
                 continue
-            al = item.get_abut_left()
-            ar = item.get_abut_right()
-            if al or ar:
-                result[dev_id] = {"abut_left": al, "abut_right": ar}
+            result[dev_id] = {"abut_left": item.get_abut_left(), "abut_right": item.get_abut_right()}
         return result

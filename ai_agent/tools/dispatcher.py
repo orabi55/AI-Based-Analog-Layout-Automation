@@ -178,6 +178,15 @@ def _route(tool_name: str, args: dict, nodes: list, pdk: dict,
             nodes=updated,
         )
 
+    if tool_name == "place_sequence":
+        return _lo.place_sequence(
+            nodes,
+            row_y         = float(args["row_y"]),
+            device_ids    = list(args["device_ids"]),
+            start_x       = float(args.get("start_x", 0.0)),
+            terminal_nets = terminal_nets,
+        )
+
     if tool_name == "swap_devices":
         cmd     = {"action": "swap",
                    "device_a": args["device_a"], "device_b": args["device_b"]}

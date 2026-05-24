@@ -329,12 +329,30 @@ def heal_abutment_positions(nodes: list, candidates: list,
             target_start_x = float(segment[0].get("geometry", {}).get("x", 0.0))
             cursor = max(cursor, target_start_x)
 
+            # Track physical terminal nets along the chain segment for dynamic self-healing swap
+            prev_right_net = None
+
             for dev_idx, dev in enumerate(segment):
                 geo = dev.setdefault("geometry", {})
                 geo["x"] = round(cursor, 6)
                 # Force exact Y-alignment: every device in this row
                 # must share the identical Y coordinate
                 geo["y"] = round(float(y_key), 6)
+
+                # Enforce uniform non-flipped R0 orientation
+                geo["orientation"] = "R0"
+
+                # Dynamic pin-swapping to ensure correct shared-net abutment at boundaries
+                curr_left_net = dev.get("net_s")
+                curr_right_net = dev.get("net_d")
+
+                if dev_idx > 0 and prev_right_net is not None:
+                    if curr_left_net != prev_right_net:
+                        # Swap Source and Drain logically
+                        dev["net_d"], dev["net_s"] = curr_left_net, curr_right_net
+                        curr_left_net, curr_right_net = curr_right_net, curr_left_net
+
+                prev_right_net = curr_right_net
 
                 is_last_in_chain = (dev_idx == len(segment) - 1)
 

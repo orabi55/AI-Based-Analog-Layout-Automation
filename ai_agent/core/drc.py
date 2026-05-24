@@ -163,11 +163,11 @@ def _sweep_line_overlaps(
                     req_gap = _effective_gap(
                         box["id"], other["id"], terminal_nets, default_gap
                     )
-                    # Only report as overlap if bounding boxes truly overlap
-                    # (not just edge-touching). Abutted fingers have x2_a == x1_b
-                    # which is legal — use 0.001 um tolerance to avoid false positives.
                     _TOL = 0.001
                     x_overlap_amount = min(box["x2"], other["x2"]) - max(box["x1"], other["x1"])
+
+                    # Only report as overlap if bounding boxes truly overlap
+                    # (not just edge-touching).
                     if x_overlap_amount > _TOL:
                         overlaps.append((box, other, req_gap))
             _active_insert(box)
@@ -274,11 +274,11 @@ def run_drc_check(
         # Determine which device is the anchor (left-most stays put)
         if a["x1"] <= b["x1"]:
             fix_dev = b["id"]
-            fix_x   = round(a["x2"] + req_gap, 4)
+            fix_x = round(a["x2"] + req_gap, 4)
             fix_y   = b["y1"]
         else:
             fix_dev = a["id"]
-            fix_x   = round(b["x2"] + req_gap, 4)
+            fix_x = round(b["x2"] + req_gap, 4)
             fix_y   = a["y1"]
 
         # Annotate if this device is part of a symmetric group
@@ -796,14 +796,14 @@ def compute_prescriptive_fixes(
 
             if cur_xb >= cur_xa:
                 target_dev = v.dev_b
-                raw_x      = round(cur_xa + w_a + req, 4)
+                raw_x = round(cur_xa + w_a + req, 4)
                 old_x      = cur_xb
                 old_y      = cur_yb
                 w_t        = w_b
                 anchor_x2  = cur_xa + w_a
             else:
                 target_dev = v.dev_a
-                raw_x      = round(cur_xb + w_b + req, 4)
+                raw_x = round(cur_xb + w_b + req, 4)
                 old_x      = cur_xa
                 old_y      = cur_ya
                 w_t        = w_a

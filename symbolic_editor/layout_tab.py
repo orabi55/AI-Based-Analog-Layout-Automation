@@ -765,7 +765,8 @@ class LayoutEditorTab(QWidget):
             return None
         if source_path:
             source_base = os.path.splitext(os.path.basename(source_path))[0]
-            for suffix in ("_graph_compressed", "_graph"):
+            for suffix in ("_initial_placement", "_placed",
+                           "_graph_compressed", "_graph"):
                 if source_base.endswith(suffix):
                     source_base = source_base[:-len(suffix)]
             preferred = source_base.lower()
@@ -774,7 +775,7 @@ class LayoutEditorTab(QWidget):
                     return path
         return sp_files[0]
 
-    def _sync_klayout_source(self, explicit_oas=None, source_path=None):
+    def _sync_klayout_source(self, explicit_oas=None, source_path=None, schedule_update=True):
         oas_path = explicit_oas
         sp_path = None
 
@@ -800,7 +801,8 @@ class LayoutEditorTab(QWidget):
         self.klayout_panel.refresh_preview(
             self._klayout_source_oas_path if self._klayout_source_oas_path else None
         )
-        self._schedule_live_klayout_update(delay_ms=0, force=True)
+        if schedule_update:
+            self._schedule_live_klayout_update(delay_ms=0, force=True)
 
     def _make_live_klayout_output_path(self):
         if self._klayout_live_output_path:
@@ -819,8 +821,13 @@ class LayoutEditorTab(QWidget):
         return self._klayout_live_output_path
 
     def _schedule_live_klayout_update(self, delay_ms=650, force=False):
-        if not self.nodes or not self._klayout_source_oas_path or not self._klayout_source_sp_path:
+        if not self.nodes:
             return
+        if not self._klayout_source_oas_path or not self._klayout_source_sp_path:
+            source_path = self._current_file if hasattr(self, "_current_file") else None
+            self._sync_klayout_source(source_path=source_path, schedule_update=False)
+            if not self._klayout_source_oas_path or not self._klayout_source_sp_path:
+                return
         if not force and self._workspace_mode == "symbolic" and not self.klayout_panel.isVisible():
             return
         self._klayout_live_timer.start(max(0, int(delay_ms)))
@@ -832,12 +839,84 @@ class LayoutEditorTab(QWidget):
             abut_states = self.editor.get_device_abutment_states()
         except Exception:
             abut_states = {}
+        from collections import defaultdict
+        from ai_agent.placement.finger_grouper import _parse_id
+        
+        # Count total fingers per parent in the unrolled nodes
+        parent_counts = defaultdict(int)
         for node in nodes:
-            dev_id = node.get("id")
+            parent_id, _, _ = _parse_id(node.get("id", ""))
+            parent_counts[parent_id] += 1
+            
+        for node in nodes:
+            dev_id = node.get("id", "")
+            parent_id, _, finger_idx = _parse_id(dev_id)
+            
+            fi = finger_idx if finger_idx is not None else 1
+            total = parent_counts[parent_id]
+            
             if dev_id in abut_states:
-                node["abutment"] = abut_states[dev_id]
+                parent_abut = abut_states[dev_id]
+            elif parent_id in abut_states:
+                parent_abut = abut_states[parent_id]
             else:
-                node.pop("abutment", None)
+                parent_abut = {"abut_left": False, "abut_right": False}
+                
+            node["abutment"] = {
+                "abut_left":  (fi > 1) or bool(parent_abut.get("abut_left", False)),
+                "abut_right": (fi < total) or bool(parent_abut.get("abut_right", False))
+            }
+
+        # Magic Step: Squeeze 0.3um Symbolic Slots down to 0.070um physical diffusion-sharing pitch GLOBALLY
+        # This completely avoids independent row squeezing drifts, preserving perfect cross-row vertical alignment.
+        if nodes:
+            # 1. Determine maximum slot index across all nodes
+            max_slot = 0
+            for n in nodes:
+                orig_x = n.get("geometry", {}).get("x", 0.0)
+                slot_idx = int(round(orig_x / 0.294))
+                if slot_idx > max_slot:
+                    max_slot = slot_idx
+            
+            # 2. Identify which slot boundaries are touch-abutted globally
+            abut_boundaries = [False] * max_slot
+            
+            # Group by row Y to find adjacent slots in the same row
+            rows = defaultdict(list)
+            for n in nodes:
+                y_key = round(n.get("geometry", {}).get("y", 0.0), 4)
+                rows[y_key].append(n)
+
+            for y_key, row_nodes in rows.items():
+                slot_to_node = {int(round(n.get("geometry", {}).get("x", 0.0) / 0.294)): n for n in row_nodes}
+                for k in range(max_slot):
+                    if k in slot_to_node and (k+1) in slot_to_node:
+                        prev = slot_to_node[k]
+                        curr = slot_to_node[k+1]
+                        
+                        abut_right = prev.get("abutment", {}).get("abut_right", False)
+                        abut_left = curr.get("abutment", {}).get("abut_left", False)
+                        
+                        if abut_right and abut_left:
+                            abut_boundaries[k] = True
+            
+            # 3. Construct global slot coordinate map
+            slot_x = [0.0] * (max_slot + 1)
+            for k in range(max_slot):
+                if abut_boundaries[k]:
+                    # 0.070um is the physical pitch for shared diffusion
+                    slot_x[k+1] = slot_x[k] + 0.070
+                else:
+                    # 0.294um is the standard symbolic pitch
+                    slot_x[k+1] = slot_x[k] + 0.294
+            
+            # 4. Update node positions based on global slot index map
+            for n in nodes:
+                orig_x = n.get("geometry", {}).get("x", 0.0)
+                slot_idx = int(round(orig_x / 0.294))
+                if 0 <= slot_idx <= max_slot:
+                    n["geometry"]["x"] = slot_x[slot_idx]
+
         return nodes
 
     @staticmethod
@@ -1256,6 +1335,7 @@ class LayoutEditorTab(QWidget):
         self._sync_node_positions()
         self._update_grid_counts()
         self.editor.refresh_hierarchy_group_geometry()
+        self._schedule_live_klayout_update(delay_ms=100)
 
     def _on_device_position_changed(self, item):
         if not getattr(self.editor, "_moving_groups_only", False):
@@ -1377,6 +1457,7 @@ class LayoutEditorTab(QWidget):
         self._sync_node_positions()
         self._update_grid_counts()
         self.editor.refresh_hierarchy_group_geometry()
+        self._schedule_live_klayout_update(delay_ms=100)
 
     def _on_hierarchy_changed(self):
         """Refresh the device tree when hierarchy groups are created or deleted."""
@@ -2173,7 +2254,22 @@ class LayoutEditorTab(QWidget):
         if "terminal_nets" not in data:
             data["terminal_nets"] = self._terminal_nets
         if abutment_enabled:
-            data["abutment_candidates"] = getattr(self, "_abutment_candidates", [])
+            candidates = getattr(self, "_abutment_candidates", [])
+            if not candidates:
+                # Auto-detect abutment candidates from netlist data when the
+                # user enables abutment in the AI dialog without having toggled
+                # the toolbar Abutment Analysis button first.
+                try:
+                    from symbolic_editor.abutment_engine import find_abutment_candidates
+                    candidates = find_abutment_candidates(
+                        data.get("nodes", []),
+                        self._terminal_nets or data.get("terminal_nets", {}),
+                    )
+                    print(f"[do_ai_placement] Auto-detected {len(candidates)} abutment candidate(s)")
+                except Exception as exc:
+                    print(f"[do_ai_placement] Auto-detect abutment failed: {exc}")
+                    candidates = []
+            data["abutment_candidates"] = candidates
         else:
             data["abutment_candidates"] = []
         data["no_abutment"] = not abutment_enabled
@@ -2787,8 +2883,14 @@ class LayoutEditorTab(QWidget):
                             node["geometry"]["x"] = geometry["x"]
                         if "y" in geometry:
                             node["geometry"]["y"] = geometry["y"]
+                        if "width" in geometry:
+                            node["geometry"]["width"] = geometry["width"]
+                        if "height" in geometry:
+                            node["geometry"]["height"] = geometry["height"]
                         if "orientation" in geometry:
                             node["geometry"]["orientation"] = geometry["orientation"]
+                    if "abutment" in placed_node:
+                        node["abutment"] = copy.deepcopy(placed_node["abutment"])
                     placed_map.pop(node_id, None)
                     
                 # Append any new nodes generated by the pipeline (e.g. dummies)
@@ -2848,8 +2950,14 @@ class LayoutEditorTab(QWidget):
                                 node["geometry"]["x"] = geometry["x"]
                             if "y" in geometry:
                                 node["geometry"]["y"] = geometry["y"]
+                            if "width" in geometry:
+                                node["geometry"]["width"] = geometry["width"]
+                            if "height" in geometry:
+                                node["geometry"]["height"] = geometry["height"]
                             if "orientation" in geometry:
                                 node["geometry"]["orientation"] = geometry["orientation"]
+                        if "abutment" in placed_node:
+                            node["abutment"] = copy.deepcopy(placed_node["abutment"])
                         placed_map.pop(node["id"], None)
                         
                 for new_node in placed_map.values():
@@ -2997,13 +3105,100 @@ class LayoutEditorTab(QWidget):
         try:
             from export.oas_writer import update_oas_placement
             abut_states = self.editor.get_device_abutment_states()
-            for node in self.nodes:
-                dev_id = node.get("id")
+            
+            import copy
+            export_nodes = copy.deepcopy(self.nodes)
+            
+            from ai_agent.placement.finger_grouper import _parse_id
+            from collections import defaultdict
+            
+            # Count total fingers per parent in the unrolled export_nodes
+            parent_counts = defaultdict(int)
+            for node in export_nodes:
+                parent_id, _, _ = _parse_id(node.get("id", ""))
+                parent_counts[parent_id] += 1
+                
+            for node in export_nodes:
+                dev_id = node.get("id", "")
+                parent_id, m_idx, f_idx_val = _parse_id(dev_id)
+                
+                total = parent_counts[parent_id]
+                f_idx = f_idx_val if f_idx_val is not None else (m_idx if m_idx is not None else 1)
+                
                 if dev_id in abut_states:
-                    node["abutment"] = abut_states[dev_id]
+                    parent_abut = abut_states[dev_id]
+                elif parent_id in abut_states:
+                    parent_abut = abut_states[parent_id]
                 else:
-                    node.pop("abutment", None)
-            update_oas_placement(oas_path=oas_path, sp_path=sp_path, nodes=self.nodes, output_path=output_path)
+                    parent_abut = {"abut_left": False, "abut_right": False}
+                    
+                node["abutment"] = {
+                    "abut_left":  (f_idx > 1) or bool(parent_abut.get("abut_left", False)),
+                    "abut_right": (f_idx < total) or bool(parent_abut.get("abut_right", False))
+                }
+
+            # Magic Step: Squeeze 0.3um Symbolic Slots down to 0.070um physical diffusion-sharing pitch GLOBALLY
+            # This completely avoids independent row squeezing drifts, preserving perfect cross-row vertical alignment.
+            from collections import defaultdict
+            
+            # 1. Determine maximum slot index across all nodes
+            max_slot = 0
+            for n in export_nodes:
+                orig_x = n.get("geometry", {}).get("x", 0.0)
+                slot_idx = int(round(orig_x / 0.294))
+                nf = max(1, int(round(n.get("geometry", {}).get("width", 0.294) / 0.294)))
+                if slot_idx + nf - 1 > max_slot:
+                    max_slot = slot_idx + nf - 1
+            
+            # 2. Identify which slot boundaries are touch-abutted globally
+            abut_boundaries = [False] * max_slot
+            
+            # Group by row Y to find adjacent slots in the same row
+            rows = defaultdict(list)
+            for n in export_nodes:
+                y_key = round(n.get("geometry", {}).get("y", 0.0), 4)
+                rows[y_key].append(n)
+                
+            for y_key, row_nodes in rows.items():
+                slot_to_node = {}
+                for n in row_nodes:
+                    start_slot = int(round(n.get("geometry", {}).get("x", 0.0) / 0.294))
+                    nf = max(1, int(round(n.get("geometry", {}).get("width", 0.294) / 0.294)))
+                    for i in range(nf):
+                        slot_to_node[start_slot + i] = n
+                        
+                for k in range(max_slot):
+                    if k in slot_to_node and (k+1) in slot_to_node:
+                        prev = slot_to_node[k]
+                        curr = slot_to_node[k+1]
+                        
+                        if prev is curr:
+                            abut_boundaries[k] = True
+                        else:
+                            abut_right = prev.get("abutment", {}).get("abut_right", False)
+                            abut_left = curr.get("abutment", {}).get("abut_left", False)
+                            
+                            if abut_right and abut_left:
+                                abut_boundaries[k] = True
+            
+            # 3. Construct global slot coordinate map
+            slot_x = [0.0] * (max_slot + 1)
+            for k in range(max_slot):
+                if abut_boundaries[k]:
+                    # 0.070um is the physical pitch for shared diffusion
+                    slot_x[k+1] = slot_x[k] + 0.070
+                else:
+                    # 0.294um is the standard symbolic pitch
+                    slot_x[k+1] = slot_x[k] + 0.294
+            
+            # 4. Update node positions based on global slot index map
+            for n in export_nodes:
+                orig_x = n.get("geometry", {}).get("x", 0.0)
+                slot_idx = int(round(orig_x / 0.294))
+                if 0 <= slot_idx <= max_slot:
+                    n["geometry"]["x"] = slot_x[slot_idx]
+
+            update_oas_placement(oas_path=oas_path, sp_path=sp_path, nodes=export_nodes, output_path=output_path)
             self.chat_panel._append_message("AI", f"Layout exported to **{os.path.basename(output_path)}**", "#e8f4fd", "#1a1a2e")
             self.klayout_panel.refresh_preview(output_path)
         except Exception as e:
@@ -3496,4 +3691,4 @@ class LayoutEditorTab(QWidget):
         self._update_grid_counts()
         self._on_editor_selection_changed()
         if schedule_live:
-            self._schedule_live_klayout_update()
+            self._schedule_live_klayout_update(delay_ms=100)

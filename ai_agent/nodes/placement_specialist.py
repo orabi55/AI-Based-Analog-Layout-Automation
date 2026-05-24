@@ -42,7 +42,11 @@ from ai_agent.agents.placement_specialist import (
     create_placement_specialist_agent,
 )
 from ai_agent.knowledge.skill_injector import SkillMiddleware
-from ai_agent.placement.finger_grouper import aggregate_to_logical_devices, legalize_vertical_rows
+from ai_agent.placement.finger_grouper import (
+    aggregate_to_logical_devices, 
+    legalize_vertical_rows,
+    detect_abutment_intent
+)
 from ai_agent.tools.cmd_parser import extract_cmd_blocks, apply_cmds_to_nodes
 from ai_agent.tools.overlap_resolver import resolve_overlaps
 from ai_agent.nodes._shared import (
@@ -786,7 +790,7 @@ def node_placement_specialist(state):
     groups     = {}
     try:
         from ai_agent.agents.placement_specialist import _compute_matching_and_rows
-        grp_nodes, finger_map, row_str, match_str, _, merged, groups = _compute_matching_and_rows(
+        grp_nodes, finger_map, row_str, match_str, _, merged, groups, abutment_candidates = _compute_matching_and_rows(
             nodes, edges, terminal_nets,
             no_abutment=no_abutment_flag,
             matching_priority=match_priority,
@@ -891,6 +895,7 @@ def node_placement_specialist(state):
     )
 
     working_nodes = apply_cmds_to_nodes(grp_nodes, stage2_cmds)
+    detect_abutment_intent(working_nodes, terminal_nets)
     working_nodes = enforce_reflection_symmetry(working_nodes)
 
 
@@ -1130,6 +1135,7 @@ def node_placement_specialist_chatbot(state):
     )
 
     working_nodes = apply_cmds_to_nodes(nodes, stage2_cmds)
+    detect_abutment_intent(working_nodes, terminal_nets)
     working_nodes = enforce_reflection_symmetry(working_nodes)
 
     # ── Step 3e: Post-expansion overlap resolution ───────────────────────────

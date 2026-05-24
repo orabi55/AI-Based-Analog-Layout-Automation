@@ -1,12 +1,11 @@
 from pathlib import Path
-from langchain.agents.middleware import AgentMiddleware, ModelRequest, ModelResponse
 from langchain.messages import SystemMessage
 from typing import Callable
 
 import yaml
-from langchain.tools import tool
+from langchain_core.tools import tool
 
-class SkillMiddleware(AgentMiddleware):
+class SkillMiddleware:
     """Middleware that discovers skills on the filesystem and provides
     them to the agent via progressive disclosure.
 
@@ -76,9 +75,9 @@ class SkillMiddleware(AgentMiddleware):
 
     def wrap_model_call(
         self,
-        request: ModelRequest,
-        handler: Callable[[ModelRequest], ModelResponse],
-    ) -> ModelResponse:
+        request,
+        handler: Callable,
+    ):
         """Inject skill catalog into system prompt before every model call."""
         skills_addendum = (
             f"\n\n## Available Skills\n\n{self.skills_prompt}\n\n"
