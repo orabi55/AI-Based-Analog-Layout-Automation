@@ -2950,14 +2950,28 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False, preserve
                         best_flips[i] = 0 if best_flips[i] else 1
                     # If not already flipped, best_flips[i] stays as-is (0=stay R0, 1=go to MY)
         else:
-            # Optimize sequence and mirroring to maximize diffusion sharing (abutment)
-            M = len(blocks)
-            if M <= 1:
-                ordered_blocks = list(blocks)
-                best_flips = [0] * M
-            else:
+            # OPTION 2: Block-Clustered Placement (Hierarchical Partitioning)
+            # Group the row's logical blocks by their parent subcircuit instance
+            # to prevent interleaving devices of different subcircuit blocks.
+            subckt_blocks = defaultdict(list)
+            for b in blocks:
+                inst = (b["nodes"][0].get("block") or {}).get("instance", "")
+                subckt_blocks[inst].append(b)
+
+            # Sort subcircuit block instances by their average original X position 
+            # to preserve the relative lateral floorplan layout
+            sorted_insts = sorted(
+                subckt_blocks.keys(),
+                key=lambda inst: sum(b["orig_x"] for b in subckt_blocks[inst]) / len(subckt_blocks[inst])
+            )
+
+            def solve_subckt_sequence(sub_blocks):
+                M = len(sub_blocks)
+                if M <= 1:
+                    return list(sub_blocks), [0] * M
+
                 block_nets = []
-                for b in blocks:
+                for b in sub_blocks:
                     left = b["nodes"][0].get("net_s")
                     right = b["nodes"][-1].get("net_d")
                     block_nets.append((left, right))
@@ -3033,8 +3047,16 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False, preserve
                                         best_flips = list(curr_flips)
                                         curr_perm = list(test_perm)
                                         improved = True
-                                        
-                ordered_blocks = [blocks[idx] for idx in best_perm]
+                
+                return [sub_blocks[idx] for idx in best_perm], list(best_flips)
+
+            ordered_blocks = []
+            best_flips = []
+            for inst in sorted_insts:
+                sub_blocks = subckt_blocks[inst]
+                sub_ordered, sub_flips = solve_subckt_sequence(sub_blocks)
+                ordered_blocks.extend(sub_ordered)
+                best_flips.extend(sub_flips)
 
         # --- Step 3: Physically mirror flipped blocks and layout sequence ---
         # Get reference dimensions and electrical parameters from an active device in this row
