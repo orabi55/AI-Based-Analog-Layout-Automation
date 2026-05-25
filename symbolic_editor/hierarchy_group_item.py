@@ -248,8 +248,8 @@ class HierarchyGroupItem(QGraphicsRectItem):
         if not items:
             return
 
-        union = items[0].sceneBoundingRect()
-        for item in items[1:]:
+        union = QRectF()
+        for item in items:
             union = union.united(item.sceneBoundingRect())
 
         if union.isNull():
@@ -257,8 +257,10 @@ class HierarchyGroupItem(QGraphicsRectItem):
 
         self._updating_geometry = True
         try:
-            self.setRect(0, 0, union.width(), union.height())
             self.setPos(union.x(), union.y())
+            # The bounding rect needs to be in local coordinates
+            # Since pos is union.topLeft(), the local rect is from 0,0
+            self.setRect(0, 0, union.width(), union.height())
             self._last_pos = self.pos()
             self._drag_start_pos = self.pos()
             self._header_height = min(20.0, union.height() * 0.35)
@@ -340,6 +342,7 @@ class HierarchyGroupItem(QGraphicsRectItem):
         if not self.isVisible():
             return
 
+        painter.save()  # Required: DontSavePainterState optimization is enabled
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         rect = self.rect()
         w = rect.width()
@@ -524,3 +527,5 @@ class HierarchyGroupItem(QGraphicsRectItem):
                         painter.restore()
 
             painter.restore()
+
+        painter.restore()  # Balance top-level save()

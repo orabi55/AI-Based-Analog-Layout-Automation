@@ -46,16 +46,12 @@ from itertools import combinations
 _POWER_NETS = frozenset({"VDD", "VSS", "GND", "VCC", "AVDD", "AVSS"})
 
 def _sd_nets(dev_id: str, terminal_nets: dict) -> tuple[str | None, str | None]:
-    """Return (source_net, drain_net) for dev_id, ignoring power nets."""
+    """Return (source_net, drain_net) for dev_id, including power nets."""
     nets = terminal_nets.get(dev_id, {})
     s = nets.get("S")
     d = nets.get("D")
     
-    # Filter out power nets
-    s_ret = s if (s and s.upper() not in _POWER_NETS) else None
-    d_ret = d if (d and d.upper() not in _POWER_NETS) else None
-    
-    return s_ret, d_ret
+    return s if s else None, d if d else None
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -74,108 +70,126 @@ def find_abutment_candidates(nodes: list, terminal_nets: dict) -> list:
       dev_a.D == dev_b.D  → flip dev_b  (Drains align if dev_b mirrored)
 
     Args:
-        nodes:         list of node dicts [{\"id\", \"type\", ...}, ...]
-        terminal_nets: {dev_id: {\"S\": net, \"D\": net, \"G\": net}}
+        nodes:         list of node dicts [{"id", "type", ...}, ...]
+        terminal_nets: {dev_id: {"S": net, "D": net, "G": net}}
 
     Returns:
         list of candidate dicts (see module docstring).
     """
     candidates = []
 
-    transistors = [n for n in nodes
-                   if n.get("type") in ("nmos", "pmos")]
+    transistors = [n for n in nodes if n.get("type") in ("nmos", "pmos")]
+    
+    # 1. Build a net index: net_name -> dict(type -> list of (dev_id, parent, f_idx, terminal))
+    net_index = {}
+    for node in transistors:
+        dev_id = node["id"]
+        dev_type = node["type"]
+        parent = node.get("electrical", {}).get("parent") or dev_id.split("_f")[0]
+        
+        try:
+            f_idx = int(dev_id.split("_f")[-1]) if "_f" in dev_id else 1
+        except ValueError:
+            f_idx = 1
 
-    for node_a, node_b in combinations(transistors, 2):
-        id_a = node_a["id"]
-        id_b = node_b["id"]
-        type_a = node_a["type"]
-        type_b = node_b["type"]
-
-        # Only same-type pairs can share diffusion
-        if type_a != type_b:
-            continue
-
-        s_a, d_a = _sd_nets(id_a, terminal_nets)
-        s_b, d_b = _sd_nets(id_b, terminal_nets)
-
-        if not (s_a or d_a) or not (s_b or d_b):
-            continue  # missing net info
-
-        parent_a = node_a.get("electrical", {}).get("parent") or id_a.split("_f")[0]
-        parent_b = node_b.get("electrical", {}).get("parent") or id_b.split("_f")[0]
-
-        found = []
-        is_same_parent = (parent_a == parent_b)
-
-        if is_same_parent:
-            # Multi-finger sequential chain: only abut strictly consecutive fingers
-            idx_a = int(id_a.split("_f")[-1]) if "_f" in id_a else 1
-            idx_b = int(id_b.split("_f")[-1]) if "_f" in id_b else 1
+        # Check node's current nets first (which may be logically swapped)
+        s_net = node.get("net_s")
+        d_net = node.get("net_d")
+        if not s_net or not d_net:
+            # Fallback to default schematic terminal nets
+            s_net, d_net = _sd_nets(dev_id, terminal_nets)
+        
+        if s_net:
+            type_dict = net_index.setdefault(s_net, {})
+            type_list = type_dict.setdefault(dev_type, [])
+            type_list.append((dev_id, parent, f_idx, "S"))
             
-            if abs(idx_a - idx_b) != 1:
-                continue  # Skip non-consecutive fingers to avoid overlapping/O(N^2)
+        if d_net:
+            type_dict = net_index.setdefault(d_net, {})
+            type_list = type_dict.setdefault(dev_type, [])
+            type_list.append((dev_id, parent, f_idx, "D"))
 
-            # Order so that lo is the lower-index finger, hi is the higher-index
-            if idx_a < idx_b:
-                lo_id, hi_id = id_a, id_b
-            else:
-                lo_id, hi_id = id_b, id_a
+    # 2. Find pairs within each net group
+    seen_cross_parent = set()
+    seen_candidates = set()
 
-            # Fetch actual terminal nets for both fingers (including power nets)
-            lo_nets = terminal_nets.get(lo_id, {})
-            hi_nets = terminal_nets.get(hi_id, {})
-            lo_s, lo_d = lo_nets.get("S"), lo_nets.get("D")
-            hi_s, hi_d = hi_nets.get("S"), hi_nets.get("D")
+    for net_name, type_dict in net_index.items():
+        for dev_type, devices in type_dict.items():
+            # Check all pairs in this small list
+            for i in range(len(devices)):
+                for j in range(i + 1, len(devices)):
+                    id_a, p_a, idx_a, term_a = devices[i]
+                    id_b, p_b, idx_b, term_b = devices[j]
+                    
+                    if id_a == id_b:
+                        continue # Same device, different terminals (e.g. S and D shorted)
+                        
+                    is_same_parent = (p_a == p_b)
+                    
+                    if is_same_parent:
+                        if abs(idx_a - idx_b) != 1:
+                            continue # Only abut strictly consecutive fingers
+                        
+                        # Order so lo_id is lower index
+                        if idx_a < idx_b:
+                            lo_id, hi_id = id_a, id_b
+                            t_lo, t_hi = term_a, term_b
+                        else:
+                            lo_id, hi_id = id_b, id_a
+                            t_lo, t_hi = term_b, term_a
+                            
+                        # Determine if flip is needed
+                        # The right edge of lo finger faces left edge of hi finger
+                        if t_lo == "D" and t_hi == "S":
+                            needs_flip = False
+                        elif t_lo == "D" and t_hi == "D":
+                            needs_flip = True
+                        elif t_lo == "S" and t_hi == "S":
+                            needs_flip = True
+                        elif t_lo == "S" and t_hi == "D":
+                            needs_flip = False
+                        else:
+                            continue # Should not happen
 
-            # Check all four terminal combinations for a shared net
-            # The right edge of the lo finger faces the left edge of the hi finger
-            if lo_d and hi_s and lo_d == hi_s:
-                found.append({"dev_a": lo_id, "term_a": "D", "dev_b": hi_id, "term_b": "S", "shared_net": lo_d, "type": type_a, "needs_flip": False})
-            elif lo_d and hi_d and lo_d == hi_d:
-                found.append({"dev_a": lo_id, "term_a": "D", "dev_b": hi_id, "term_b": "D", "shared_net": lo_d, "type": type_a, "needs_flip": True})
-            elif lo_s and hi_s and lo_s == hi_s:
-                found.append({"dev_a": lo_id, "term_a": "S", "dev_b": hi_id, "term_b": "S", "shared_net": lo_s, "type": type_a, "needs_flip": True})
-            elif lo_s and hi_d and lo_s == hi_d:
-                found.append({"dev_a": lo_id, "term_a": "S", "dev_b": hi_id, "term_b": "D", "shared_net": lo_s, "type": type_a, "needs_flip": False})
-        else:
-            # Cross-parent checks. To prevent massive identical arrays for cross-parent (e.g. all 16 fingers sharing VDD),
-            # we only attempt to abut the LAST finger of dev_a with the FIRST finger of dev_b
-            # (or vice-versa, assuming a simple block-to-block layout sequence).
-            idx_a = int(id_a.split("_f")[-1]) if "_f" in id_a else 1
-            idx_b = int(id_b.split("_f")[-1]) if "_f" in id_b else 1
-            
-            # Allow cross-parent connection roughly between boundary fingers
-            # For simplicity, if both are f1, or if we want them to link end-to-end, we just take the first matching case.
-            # Here we enforce a strict 1 valid case selection to prevent prompt conflicts.
-            if s_a and s_b and s_a == s_b:
-                found.append({"dev_a": id_a, "term_a": "S", "dev_b": id_b, "term_b": "S", "shared_net": s_a, "type": type_a, "needs_flip": True})
-            elif s_a and d_b and s_a == d_b:
-                found.append({"dev_a": id_b, "term_a": "D", "dev_b": id_a, "term_b": "S", "shared_net": s_a, "type": type_a, "needs_flip": False})
-            elif d_a and s_b and d_a == s_b:
-                found.append({"dev_a": id_a, "term_a": "D", "dev_b": id_b, "term_b": "S", "shared_net": d_a, "type": type_a, "needs_flip": False})
-            elif d_a and d_b and d_a == d_b:
-                found.append({"dev_a": id_a, "term_a": "D", "dev_b": id_b, "term_b": "D", "shared_net": d_a, "type": type_a, "needs_flip": True})
-                
-            # If cross-parent, we randomly got ONE hit. To prevent the permutation explosion
-            # (16x16 = 256 hits between MM1 and MM2), we only keep it if the AI hasn't already been given an abutment for this parent pair!
-            if found:
-                already_linked = any(
-                    (c["dev_a"].split("_f")[0] == parent_a and c["dev_b"].split("_f")[0] == parent_b) or
-                    (c["dev_b"].split("_f")[0] == parent_a and c["dev_a"].split("_f")[0] == parent_b)
-                    for c in candidates
-                )
-                if already_linked:
-                    found = [] # Discard extra cross-parent links
+                        cand_key = (lo_id, hi_id, net_name)
+                        if cand_key not in seen_candidates:
+                            seen_candidates.add(cand_key)
+                            candidates.append({
+                                "dev_a": lo_id, "term_a": t_lo, 
+                                "dev_b": hi_id, "term_b": t_hi, 
+                                "shared_net": net_name, "type": dev_type, "needs_flip": needs_flip
+                            })
+                            
+                    else:
+                        # Cross parent check
+                        parent_pair = tuple(sorted([p_a, p_b]))
+                        if parent_pair in seen_cross_parent:
+                            continue # Already have a link for these two parents
+                            
+                        seen_cross_parent.add(parent_pair)
+                        
+                        if term_a == "S" and term_b == "S":
+                            needs_flip = True
+                        elif term_a == "S" and term_b == "D":
+                            # swap order so D is term_a and S is term_b as per original logic preference
+                            id_a, id_b = id_b, id_a
+                            term_a, term_b = term_b, term_a
+                            needs_flip = False
+                        elif term_a == "D" and term_b == "S":
+                            needs_flip = False
+                        elif term_a == "D" and term_b == "D":
+                            needs_flip = True
+                        else:
+                            continue
 
-        # Deduplicate (same pair, same net can appear in multiple cases)
-        for c in found:
-            duplicate = any(
-                e["dev_a"] == c["dev_a"] and e["dev_b"] == c["dev_b"]
-                and e["shared_net"] == c["shared_net"]
-                for e in candidates
-            )
-            if not duplicate:
-                candidates.append(c)
+                        cand_key = (id_a, id_b, net_name)
+                        if cand_key not in seen_candidates:
+                            seen_candidates.add(cand_key)
+                            candidates.append({
+                                "dev_a": id_a, "term_a": term_a, 
+                                "dev_b": id_b, "term_b": term_b, 
+                                "shared_net": net_name, "type": dev_type, "needs_flip": needs_flip
+                            })
 
     return candidates
 

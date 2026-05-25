@@ -6,7 +6,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 5.0,
+                "nfin": 4.0,
                 "w": 0,
                 "parent": null,
                 "m": 1,
@@ -15,14 +15,12 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 0.15000000000000002,
-                "y": -0.395,
+                "x": 0.0,
+                "y": 0.0,
                 "width": 0.294,
-                "height": 0.718,
+                "height": 0.668,
                 "orientation": "R0"
             },
-            "layout_index": 3,
-            "layout_cell": "pfet_pcell_9f77",
             "block": {
                 "instance": "XI1",
                 "subckt": "Inverter"
@@ -34,7 +32,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 5.0,
+                "nfin": 4.0,
                 "w": 0,
                 "parent": null,
                 "m": 1,
@@ -43,14 +41,12 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 0.877,
-                "y": -1.123,
+                "x": 0.0,
+                "y": 0.668,
                 "width": 0.294,
-                "height": 0.718,
+                "height": 0.668,
                 "orientation": "R0"
             },
-            "layout_index": 2,
-            "layout_cell": "nfet_pcell_9073",
             "block": {
                 "instance": "XI1",
                 "subckt": "Inverter"
@@ -62,7 +58,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 5.0,
+                "nfin": 4.0,
                 "w": 0,
                 "parent": null,
                 "m": 1,
@@ -71,14 +67,12 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 0.15000000000000002,
-                "y": -4.032,
+                "x": 0.8819999999999999,
+                "y": 0.0,
                 "width": 0.294,
-                "height": 0.718,
+                "height": 0.668,
                 "orientation": "R0"
             },
-            "layout_index": 1,
-            "layout_cell": "pfet_pcell_9f77",
             "block": {
                 "instance": "XI0",
                 "subckt": "Inverter"
@@ -90,7 +84,7 @@
             "electrical": {
                 "l": 1.4e-08,
                 "nf": 1,
-                "nfin": 5.0,
+                "nfin": 4.0,
                 "w": 0,
                 "parent": null,
                 "m": 1,
@@ -99,14 +93,12 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 0.877,
-                "y": -4.76,
+                "x": 0.8819999999999999,
+                "y": 0.668,
                 "width": 0.294,
-                "height": 0.718,
+                "height": 0.668,
                 "orientation": "R0"
             },
-            "layout_index": 0,
-            "layout_cell": "nfet_pcell_9073",
             "block": {
                 "instance": "XI0",
                 "subckt": "Inverter"
@@ -127,14 +119,12 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.3930000000000002,
-                "y": -3.012,
-                "width": 0.184,
-                "height": 0.6680000000000001,
-                "orientation": "R180"
+                "x": 1.7639999999999998,
+                "y": 0.668,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
             },
-            "layout_index": 20,
-            "layout_cell": "nfet_pcell_0545",
             "block": {
                 "instance": "XI3",
                 "subckt": "Xor"
@@ -155,14 +145,12 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.5770000000000004,
-                "y": -3.012,
-                "width": 0.184,
-                "height": 0.6680000000000001,
-                "orientation": "R180"
+                "x": 2.058,
+                "y": 0.668,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
             },
-            "layout_index": 20,
-            "layout_cell": "nfet_pcell_0545",
             "block": {
                 "instance": "XI3",
                 "subckt": "Xor"
@@ -183,17 +171,11 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.9649999999999999,
-                "y": -3.012,
-                "width": 0.184,
-                "height": 0.6680000000000001,
-                "orientation": "MX"
-            },
-            "layout_index": 25,
-            "layout_cell": "nfet_pcell_fad5",
-            "abutment": {
-                "abut_left": true,
-                "abut_right": false
+                "x": 2.352,
+                "y": 0.668,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
             },
             "block": {
                 "instance": "XI3",
@@ -215,17 +197,11 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.149,
-                "y": -3.012,
-                "width": 0.184,
-                "height": 0.6680000000000001,
-                "orientation": "MX"
-            },
-            "layout_index": 25,
-            "layout_cell": "nfet_pcell_fad5",
-            "abutment": {
-                "abut_left": false,
-                "abut_right": false
+                "x": 2.646,
+                "y": 0.668,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
             },
             "block": {
                 "instance": "XI3",
@@ -247,17 +223,11 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.9649999999999999,
-                "y": -4.468,
-                "width": 0.184,
-                "height": 0.6680000000000001,
-                "orientation": "MX"
-            },
-            "layout_index": 13,
-            "layout_cell": "nfet_pcell_fad5",
-            "abutment": {
-                "abut_left": true,
-                "abut_right": false
+                "x": 2.94,
+                "y": 0.668,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
             },
             "block": {
                 "instance": "XI3",
@@ -279,17 +249,11 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.149,
-                "y": -4.468,
-                "width": 0.184,
-                "height": 0.6680000000000001,
-                "orientation": "MX"
-            },
-            "layout_index": 13,
-            "layout_cell": "nfet_pcell_fad5",
-            "abutment": {
-                "abut_left": false,
-                "abut_right": false
+                "x": 3.234,
+                "y": 0.668,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
             },
             "block": {
                 "instance": "XI3",
@@ -311,17 +275,11 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.8170000000000002,
-                "y": -3.012,
-                "width": 0.184,
-                "height": 0.6680000000000001,
-                "orientation": "MX"
-            },
-            "layout_index": 21,
-            "layout_cell": "nfet_pcell_72cf",
-            "abutment": {
-                "abut_left": true,
-                "abut_right": false
+                "x": 3.528,
+                "y": 0.668,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
             },
             "block": {
                 "instance": "XI3",
@@ -343,17 +301,11 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.0010000000000003,
-                "y": -3.012,
-                "width": 0.184,
-                "height": 0.6680000000000001,
-                "orientation": "MX"
-            },
-            "layout_index": 21,
-            "layout_cell": "nfet_pcell_72cf",
-            "abutment": {
-                "abut_left": false,
-                "abut_right": true
+                "x": 3.822,
+                "y": 0.668,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
             },
             "block": {
                 "instance": "XI3",
@@ -375,17 +327,11 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.8170000000000002,
-                "y": -4.468,
-                "width": 0.184,
-                "height": 0.6680000000000001,
-                "orientation": "MX"
-            },
-            "layout_index": 9,
-            "layout_cell": "nfet_pcell_72cf",
-            "abutment": {
-                "abut_left": true,
-                "abut_right": false
+                "x": 4.116,
+                "y": 0.668,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
             },
             "block": {
                 "instance": "XI3",
@@ -407,17 +353,11 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.0010000000000003,
-                "y": -4.468,
-                "width": 0.184,
-                "height": 0.6680000000000001,
-                "orientation": "MX"
-            },
-            "layout_index": 9,
-            "layout_cell": "nfet_pcell_72cf",
-            "abutment": {
-                "abut_left": false,
-                "abut_right": true
+                "x": 4.409999999999999,
+                "y": 0.668,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
             },
             "block": {
                 "instance": "XI3",
@@ -439,14 +379,12 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.3930000000000002,
-                "y": -4.468,
-                "width": 0.184,
-                "height": 0.6680000000000001,
-                "orientation": "R180"
+                "x": 4.703999999999999,
+                "y": 0.668,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
             },
-            "layout_index": 8,
-            "layout_cell": "nfet_pcell_0545",
             "block": {
                 "instance": "XI3",
                 "subckt": "Xor"
@@ -467,14 +405,12 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.5770000000000004,
-                "y": -4.468,
-                "width": 0.184,
-                "height": 0.6680000000000001,
-                "orientation": "R180"
+                "x": 4.997999999999998,
+                "y": 0.668,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
             },
-            "layout_index": 8,
-            "layout_cell": "nfet_pcell_0545",
             "block": {
                 "instance": "XI3",
                 "subckt": "Xor"
@@ -495,14 +431,12 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.3049999999999997,
-                "y": -2.114,
-                "width": 0.184,
-                "height": 0.6680000000000001,
+                "x": 1.7639999999999998,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
             },
-            "layout_index": 26,
-            "layout_cell": "pfet_pcell_480f",
             "block": {
                 "instance": "XI3",
                 "subckt": "Xor"
@@ -523,14 +457,12 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.489,
-                "y": -2.114,
-                "width": 0.184,
-                "height": 0.6680000000000001,
+                "x": 2.058,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
             },
-            "layout_index": 26,
-            "layout_cell": "pfet_pcell_480f",
             "block": {
                 "instance": "XI3",
                 "subckt": "Xor"
@@ -551,17 +483,11 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.965,
-                "y": -2.114,
-                "width": 0.184,
-                "height": 0.6680000000000001,
+                "x": 2.352,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
-            },
-            "layout_index": 18,
-            "layout_cell": "pfet_pcell_a6e8",
-            "abutment": {
-                "abut_left": true,
-                "abut_right": false
             },
             "block": {
                 "instance": "XI3",
@@ -583,17 +509,11 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.149,
-                "y": -2.114,
-                "width": 0.184,
-                "height": 0.6680000000000001,
+                "x": 2.646,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
-            },
-            "layout_index": 18,
-            "layout_cell": "pfet_pcell_a6e8",
-            "abutment": {
-                "abut_left": false,
-                "abut_right": false
             },
             "block": {
                 "instance": "XI3",
@@ -615,17 +535,11 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.965,
-                "y": -3.5700000000000003,
-                "width": 0.184,
-                "height": 0.6680000000000001,
+                "x": 2.94,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
-            },
-            "layout_index": 6,
-            "layout_cell": "pfet_pcell_a6e8",
-            "abutment": {
-                "abut_left": true,
-                "abut_right": false
             },
             "block": {
                 "instance": "XI3",
@@ -647,17 +561,11 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.149,
-                "y": -3.5700000000000003,
-                "width": 0.184,
-                "height": 0.6680000000000001,
+                "x": 3.234,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
-            },
-            "layout_index": 6,
-            "layout_cell": "pfet_pcell_a6e8",
-            "abutment": {
-                "abut_left": false,
-                "abut_right": false
             },
             "block": {
                 "instance": "XI3",
@@ -679,17 +587,11 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.8170000000000002,
-                "y": -2.114,
-                "width": 0.184,
-                "height": 0.6680000000000001,
+                "x": 3.528,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
-            },
-            "layout_index": 17,
-            "layout_cell": "pfet_pcell_283c",
-            "abutment": {
-                "abut_left": true,
-                "abut_right": false
             },
             "block": {
                 "instance": "XI3",
@@ -711,17 +613,11 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.0010000000000003,
-                "y": -2.114,
-                "width": 0.184,
-                "height": 0.6680000000000001,
+                "x": 3.822,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
-            },
-            "layout_index": 17,
-            "layout_cell": "pfet_pcell_283c",
-            "abutment": {
-                "abut_left": false,
-                "abut_right": true
             },
             "block": {
                 "instance": "XI3",
@@ -743,17 +639,11 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.8170000000000002,
-                "y": -3.5700000000000003,
-                "width": 0.184,
-                "height": 0.6680000000000001,
+                "x": 4.116,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
-            },
-            "layout_index": 5,
-            "layout_cell": "pfet_pcell_283c",
-            "abutment": {
-                "abut_left": true,
-                "abut_right": false
             },
             "block": {
                 "instance": "XI3",
@@ -775,17 +665,11 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.0010000000000003,
-                "y": -3.5700000000000003,
-                "width": 0.184,
-                "height": 0.6680000000000001,
+                "x": 4.409999999999999,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
-            },
-            "layout_index": 5,
-            "layout_cell": "pfet_pcell_283c",
-            "abutment": {
-                "abut_left": false,
-                "abut_right": true
             },
             "block": {
                 "instance": "XI3",
@@ -807,14 +691,12 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.3049999999999997,
-                "y": -3.5700000000000003,
-                "width": 0.184,
-                "height": 0.6680000000000001,
+                "x": 4.703999999999999,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
             },
-            "layout_index": 14,
-            "layout_cell": "pfet_pcell_480f",
             "block": {
                 "instance": "XI3",
                 "subckt": "Xor"
@@ -835,14 +717,12 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.489,
-                "y": -3.5700000000000003,
-                "width": 0.184,
-                "height": 0.6680000000000001,
+                "x": 4.997999999999998,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
             },
-            "layout_index": 14,
-            "layout_cell": "pfet_pcell_480f",
             "block": {
                 "instance": "XI3",
                 "subckt": "Xor"
@@ -863,17 +743,11 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.669,
-                "y": -3.012,
-                "width": 0.184,
-                "height": 0.6680000000000001,
-                "orientation": "MX"
-            },
-            "layout_index": 22,
-            "layout_cell": "nfet_pcell_72cf",
-            "abutment": {
-                "abut_left": true,
-                "abut_right": false
+                "x": 5.879999999999998,
+                "y": 0.668,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
             },
             "block": {
                 "instance": "XI2",
@@ -895,17 +769,11 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.853,
-                "y": -3.012,
-                "width": 0.184,
-                "height": 0.6680000000000001,
-                "orientation": "MX"
-            },
-            "layout_index": 22,
-            "layout_cell": "nfet_pcell_72cf",
-            "abutment": {
-                "abut_left": false,
-                "abut_right": true
+                "x": 6.173999999999998,
+                "y": 0.668,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
             },
             "block": {
                 "instance": "XI2",
@@ -927,17 +795,11 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.521,
-                "y": -3.012,
-                "width": 0.184,
-                "height": 0.6680000000000001,
-                "orientation": "MX"
-            },
-            "layout_index": 24,
-            "layout_cell": "nfet_pcell_d64b",
-            "abutment": {
-                "abut_left": false,
-                "abut_right": false
+                "x": 6.467999999999997,
+                "y": 0.668,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
             },
             "block": {
                 "instance": "XI2",
@@ -959,17 +821,11 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.7049999999999998,
-                "y": -3.012,
-                "width": 0.184,
-                "height": 0.6680000000000001,
-                "orientation": "MX"
-            },
-            "layout_index": 24,
-            "layout_cell": "nfet_pcell_d64b",
-            "abutment": {
-                "abut_left": false,
-                "abut_right": true
+                "x": 6.761999999999997,
+                "y": 0.668,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
             },
             "block": {
                 "instance": "XI2",
@@ -991,17 +847,11 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.521,
-                "y": -4.468,
-                "width": 0.184,
-                "height": 0.6680000000000001,
-                "orientation": "MX"
-            },
-            "layout_index": 12,
-            "layout_cell": "nfet_pcell_d64b",
-            "abutment": {
-                "abut_left": false,
-                "abut_right": false
+                "x": 7.0559999999999965,
+                "y": 0.668,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
             },
             "block": {
                 "instance": "XI2",
@@ -1023,17 +873,11 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.7049999999999998,
-                "y": -4.468,
-                "width": 0.184,
-                "height": 0.6680000000000001,
-                "orientation": "MX"
-            },
-            "layout_index": 12,
-            "layout_cell": "nfet_pcell_d64b",
-            "abutment": {
-                "abut_left": false,
-                "abut_right": true
+                "x": 7.349999999999996,
+                "y": 0.668,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
             },
             "block": {
                 "instance": "XI2",
@@ -1055,14 +899,12 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.2690000000000001,
-                "y": -3.012,
-                "width": 0.184,
-                "height": 0.6680000000000001,
-                "orientation": "R180"
+                "x": 7.643999999999996,
+                "y": 0.668,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
             },
-            "layout_index": 19,
-            "layout_cell": "nfet_pcell_0545",
             "block": {
                 "instance": "XI2",
                 "subckt": "Xor"
@@ -1083,14 +925,12 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.453,
-                "y": -3.012,
-                "width": 0.184,
-                "height": 0.6680000000000001,
-                "orientation": "R180"
+                "x": 7.937999999999995,
+                "y": 0.668,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
             },
-            "layout_index": 19,
-            "layout_cell": "nfet_pcell_0545",
             "block": {
                 "instance": "XI2",
                 "subckt": "Xor"
@@ -1111,14 +951,12 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.2690000000000001,
-                "y": -4.468,
-                "width": 0.184,
-                "height": 0.6680000000000001,
-                "orientation": "R180"
+                "x": 8.231999999999996,
+                "y": 0.668,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
             },
-            "layout_index": 7,
-            "layout_cell": "nfet_pcell_0545",
             "block": {
                 "instance": "XI2",
                 "subckt": "Xor"
@@ -1139,14 +977,12 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.453,
-                "y": -4.468,
-                "width": 0.184,
-                "height": 0.6680000000000001,
-                "orientation": "R180"
+                "x": 8.525999999999996,
+                "y": 0.668,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
             },
-            "layout_index": 7,
-            "layout_cell": "nfet_pcell_0545",
             "block": {
                 "instance": "XI2",
                 "subckt": "Xor"
@@ -1167,17 +1003,11 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.669,
-                "y": -4.468,
-                "width": 0.184,
-                "height": 0.6680000000000001,
-                "orientation": "MX"
-            },
-            "layout_index": 10,
-            "layout_cell": "nfet_pcell_72cf",
-            "abutment": {
-                "abut_left": true,
-                "abut_right": false
+                "x": 8.819999999999997,
+                "y": 0.668,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
             },
             "block": {
                 "instance": "XI2",
@@ -1199,17 +1029,11 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.853,
-                "y": -4.468,
-                "width": 0.184,
-                "height": 0.6680000000000001,
-                "orientation": "MX"
-            },
-            "layout_index": 10,
-            "layout_cell": "nfet_pcell_72cf",
-            "abutment": {
-                "abut_left": false,
-                "abut_right": true
+                "x": 9.113999999999997,
+                "y": 0.668,
+                "width": 0.294,
+                "height": 0.668,
+                "orientation": "R0"
             },
             "block": {
                 "instance": "XI2",
@@ -1231,17 +1055,11 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.669,
-                "y": -2.114,
-                "width": 0.184,
-                "height": 0.6680000000000001,
+                "x": 5.879999999999998,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
-            },
-            "layout_index": 16,
-            "layout_cell": "pfet_pcell_283c",
-            "abutment": {
-                "abut_left": true,
-                "abut_right": false
             },
             "block": {
                 "instance": "XI2",
@@ -1263,17 +1081,11 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.853,
-                "y": -2.114,
-                "width": 0.184,
-                "height": 0.6680000000000001,
+                "x": 6.173999999999998,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
-            },
-            "layout_index": 16,
-            "layout_cell": "pfet_pcell_283c",
-            "abutment": {
-                "abut_left": false,
-                "abut_right": true
             },
             "block": {
                 "instance": "XI2",
@@ -1295,17 +1107,11 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.521,
-                "y": -2.114,
-                "width": 0.184,
-                "height": 0.6680000000000001,
+                "x": 6.467999999999997,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
-            },
-            "layout_index": 23,
-            "layout_cell": "pfet_pcell_367b",
-            "abutment": {
-                "abut_left": false,
-                "abut_right": false
             },
             "block": {
                 "instance": "XI2",
@@ -1327,17 +1133,11 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.7049999999999998,
-                "y": -2.114,
-                "width": 0.184,
-                "height": 0.6680000000000001,
+                "x": 6.761999999999997,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
-            },
-            "layout_index": 23,
-            "layout_cell": "pfet_pcell_367b",
-            "abutment": {
-                "abut_left": false,
-                "abut_right": true
             },
             "block": {
                 "instance": "XI2",
@@ -1359,17 +1159,11 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.521,
-                "y": -3.5700000000000003,
-                "width": 0.184,
-                "height": 0.6680000000000001,
+                "x": 7.0559999999999965,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
-            },
-            "layout_index": 11,
-            "layout_cell": "pfet_pcell_367b",
-            "abutment": {
-                "abut_left": false,
-                "abut_right": false
             },
             "block": {
                 "instance": "XI2",
@@ -1391,17 +1185,11 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.7049999999999998,
-                "y": -3.5700000000000003,
-                "width": 0.184,
-                "height": 0.6680000000000001,
+                "x": 7.349999999999996,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
-            },
-            "layout_index": 11,
-            "layout_cell": "pfet_pcell_367b",
-            "abutment": {
-                "abut_left": false,
-                "abut_right": true
             },
             "block": {
                 "instance": "XI2",
@@ -1423,14 +1211,12 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.181,
-                "y": -2.114,
-                "width": 0.184,
-                "height": 0.6680000000000001,
+                "x": 7.643999999999996,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
             },
-            "layout_index": 27,
-            "layout_cell": "pfet_pcell_480f",
             "block": {
                 "instance": "XI2",
                 "subckt": "Xor"
@@ -1451,14 +1237,12 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.365,
-                "y": -2.114,
-                "width": 0.184,
-                "height": 0.6680000000000001,
+                "x": 7.937999999999995,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
             },
-            "layout_index": 27,
-            "layout_cell": "pfet_pcell_480f",
             "block": {
                 "instance": "XI2",
                 "subckt": "Xor"
@@ -1479,14 +1263,12 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.181,
-                "y": -3.5700000000000003,
-                "width": 0.184,
-                "height": 0.6680000000000001,
+                "x": 8.231999999999996,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
             },
-            "layout_index": 15,
-            "layout_cell": "pfet_pcell_480f",
             "block": {
                 "instance": "XI2",
                 "subckt": "Xor"
@@ -1507,14 +1289,12 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.365,
-                "y": -3.5700000000000003,
-                "width": 0.184,
-                "height": 0.6680000000000001,
+                "x": 8.525999999999996,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
             },
-            "layout_index": 15,
-            "layout_cell": "pfet_pcell_480f",
             "block": {
                 "instance": "XI2",
                 "subckt": "Xor"
@@ -1535,17 +1315,11 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.669,
-                "y": -3.5700000000000003,
-                "width": 0.184,
-                "height": 0.6680000000000001,
+                "x": 8.819999999999997,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
-            },
-            "layout_index": 4,
-            "layout_cell": "pfet_pcell_283c",
-            "abutment": {
-                "abut_left": true,
-                "abut_right": false
             },
             "block": {
                 "instance": "XI2",
@@ -1567,17 +1341,11 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 1.853,
-                "y": -3.5700000000000003,
-                "width": 0.184,
-                "height": 0.6680000000000001,
+                "x": 9.113999999999997,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.668,
                 "orientation": "R0"
-            },
-            "layout_index": 4,
-            "layout_cell": "pfet_pcell_283c",
-            "abutment": {
-                "abut_left": false,
-                "abut_right": true
             },
             "block": {
                 "instance": "XI2",

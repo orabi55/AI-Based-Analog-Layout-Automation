@@ -1017,7 +1017,94 @@ class LayoutEditorTab(QWidget):
             self._klayout_live_pending = False
             self._schedule_live_klayout_update(delay_ms=250, force=True)
 
+    def _update_dummy_biasing_nets(self):
+        if not self.nodes:
+            return
+            
+        from ai_agent.placement.finger_grouper import _parse_id
+        from collections import defaultdict
+        
+        # Group all current nodes by row Y
+        rows = defaultdict(list)
+        for node in self.nodes:
+            geo = node.get("geometry")
+            if not isinstance(geo, dict):
+                continue
+            y_val = round(float(geo.get("y", 0.0)), 6)
+            rows[y_val].append(node)
+            
+        for y_val, row in rows.items():
+            # Sort horizontally by X coordinate
+            row.sort(key=lambda n: float(n.get("geometry", {}).get("x", 0.0)))
+            
+            for i, node in enumerate(row):
+                dev_id = node.get("id", "")
+                is_dummy = node.get("is_dummy") or dev_id.startswith(("DUMMY", "EDGE_DUMMY", "FILLER_DUMMY", "MATCH_DUMMY"))
+                if not is_dummy:
+                    continue
+                    
+                # Search leftwards for the nearest non-dummy device in the same row
+                left_non_dummy = None
+                for idx in range(i - 1, -1, -1):
+                    n = row[idx]
+                    nid = n.get("id", "")
+                    n_is_dummy = n.get("is_dummy") or nid.startswith(("DUMMY", "EDGE_DUMMY", "FILLER_DUMMY", "MATCH_DUMMY"))
+                    if not n_is_dummy:
+                        left_non_dummy = (n, i - idx)
+                        break
+                        
+                # Search rightwards for the nearest non-dummy device in the same row
+                right_non_dummy = None
+                for idx in range(i + 1, len(row)):
+                    n = row[idx]
+                    nid = n.get("id", "")
+                    n_is_dummy = n.get("is_dummy") or nid.startswith(("DUMMY", "EDGE_DUMMY", "FILLER_DUMMY", "MATCH_DUMMY"))
+                    if not n_is_dummy:
+                        right_non_dummy = (n, idx - i)
+                        break
+                        
+                # Choose the nearest neighbor
+                selected_device = None
+                is_right = False
+                if left_non_dummy and right_non_dummy:
+                    if left_non_dummy[1] <= right_non_dummy[1]:
+                        selected_device = left_non_dummy[0]
+                        is_right = False
+                    else:
+                        selected_device = right_non_dummy[0]
+                        is_right = True
+                elif left_non_dummy:
+                    selected_device = left_non_dummy[0]
+                    is_right = False
+                elif right_non_dummy:
+                    selected_device = right_non_dummy[0]
+                    is_right = True
+                    
+                # Extract boundary net
+                bias_net = None
+                if selected_device:
+                    if is_right:
+                        if selected_device.get("swapped_sd"):
+                            bias_net = selected_device.get("net_d")
+                        else:
+                            bias_net = selected_device.get("net_s")
+                    else:
+                        if selected_device.get("swapped_sd"):
+                            bias_net = selected_device.get("net_s")
+                        else:
+                            bias_net = selected_device.get("net_d")
+                            
+                # Fallback to supply rail based on device type (VDD for PMOS, VSS for NMOS)
+                if not bias_net or bias_net == "NC":
+                    dev_type = str(node.get("type", "nmos")).strip().lower()
+                    bias_net = "VDD" if dev_type == "pmos" else "VSS"
+                    
+                node["net_s"] = bias_net
+                node["net_d"] = bias_net
+                node["net_g"] = bias_net
+
     def _refresh_panels(self, compact=False, force_schematic_ai=False):
+        self._update_dummy_biasing_nets()
         if not self._original_data:
             return
         edges = self._original_data.get("edges")
@@ -1068,6 +1155,13 @@ class LayoutEditorTab(QWidget):
                 )
         self._update_grid_counts()
         self._on_editor_selection_changed()
+        if getattr(self, "_abutment_mode", False):
+            try:
+                candidates = self.editor.apply_abutment()
+                self._abutment_candidates = candidates
+            except Exception:
+                import logging
+                logging.debug("Failed to auto-apply abutment in refresh_panels", exc_info=True)
         self._schedule_live_klayout_update()
         # Sync canvas positions back to self.nodes after any compaction that may
         # have run inside set_terminal_nets, so the layout context passed to the
@@ -1624,6 +1718,33 @@ class LayoutEditorTab(QWidget):
         self._push_undo()
         self.editor.swap_devices(selected[0], selected[1])
         self._sync_node_positions()
+
+    def do_swap_sd(self):
+        selected = self.editor.selected_device_ids()
+        if not selected:
+            self.chat_panel._append_message("AI", "Select at least 1 device to swap S/D.", "#fde8e8", "#a00")
+            return
+        self._sync_node_positions()
+        self._push_undo()
+        swapped_count = 0
+        for dev_id in selected:
+            for node in self.nodes:
+                if node.get("id") == dev_id:
+                    # Ensure net_s and net_d are populated from schematic fallback if missing
+                    if not node.get("net_s") or not node.get("net_d"):
+                        orig = self.editor._schematic_nets_for_device(dev_id)
+                        node.setdefault("net_s", orig.get("S", ""))
+                        node.setdefault("net_d", orig.get("D", ""))
+                    # Logically swap the net_s and net_d
+                    node["net_s"], node["net_d"] = node.get("net_d"), node.get("net_s")
+                    node["swapped_sd"] = not node.get("swapped_sd", False)
+                    swapped_count += 1
+        
+        self._original_data["nodes"] = self.nodes
+        self._refresh_panels(compact=True)
+        self.editor.viewport().update()
+        self.chat_panel._append_message("AI", f"Swapped Source/Drain nets for {swapped_count} device(s).", "#e8f4fd", "#1a1a2e")
+
 
     def do_merge_ss(self):
         self._merge_selected_devices(mode="SS")
@@ -2343,21 +2464,10 @@ class LayoutEditorTab(QWidget):
             data["terminal_nets"] = self._terminal_nets
         if abutment_enabled:
             candidates = getattr(self, "_abutment_candidates", [])
-            if not candidates:
-                # Auto-detect abutment candidates from netlist data when the
-                # user enables abutment in the AI dialog without having toggled
-                # the toolbar Abutment Analysis button first.
-                try:
-                    from symbolic_editor.abutment_engine import find_abutment_candidates
-                    candidates = find_abutment_candidates(
-                        data.get("nodes", []),
-                        self._terminal_nets or data.get("terminal_nets", {}),
-                    )
-                    print(f"[do_ai_placement] Auto-detected {len(candidates)} abutment candidate(s)")
-                except Exception as exc:
-                    print(f"[do_ai_placement] Auto-detect abutment failed: {exc}")
-                    candidates = []
-            data["abutment_candidates"] = candidates
+            if candidates:
+                data["abutment_candidates"] = candidates
+            else:
+                data["abutment_candidates"] = []
         else:
             data["abutment_candidates"] = []
         data["no_abutment"] = not abutment_enabled
@@ -2921,6 +3031,7 @@ class LayoutEditorTab(QWidget):
             no_abutment = not abutment_enabled
             abutment_candidates = data.get("abutment_candidates", [])
 
+
             graph_worker = PlacerGraphWorker()
             graph_worker.visual_viewer_signal.connect(_on_visual)
             graph_worker.error_occurred.connect(_on_error)
@@ -2979,6 +3090,14 @@ class LayoutEditorTab(QWidget):
                             node["geometry"]["orientation"] = geometry["orientation"]
                     if "abutment" in placed_node:
                         node["abutment"] = copy.deepcopy(placed_node["abutment"])
+                    if "net_s" in placed_node:
+                        node["net_s"] = placed_node["net_s"]
+                    if "net_d" in placed_node:
+                        node["net_d"] = placed_node["net_d"]
+                    if "net_g" in placed_node:
+                        node["net_g"] = placed_node["net_g"]
+                    if "swapped_sd" in placed_node:
+                        node["swapped_sd"] = placed_node["swapped_sd"]
                     placed_map.pop(node_id, None)
                     
                 # Append any new nodes generated by the pipeline (e.g. dummies)
@@ -3046,6 +3165,14 @@ class LayoutEditorTab(QWidget):
                                 node["geometry"]["orientation"] = geometry["orientation"]
                         if "abutment" in placed_node:
                             node["abutment"] = copy.deepcopy(placed_node["abutment"])
+                        if "net_s" in placed_node:
+                            node["net_s"] = placed_node["net_s"]
+                        if "net_d" in placed_node:
+                            node["net_d"] = placed_node["net_d"]
+                        if "net_g" in placed_node:
+                            node["net_g"] = placed_node["net_g"]
+                        if "swapped_sd" in placed_node:
+                            node["swapped_sd"] = placed_node["swapped_sd"]
                         placed_map.pop(node["id"], None)
                         
                 for new_node in placed_map.values():

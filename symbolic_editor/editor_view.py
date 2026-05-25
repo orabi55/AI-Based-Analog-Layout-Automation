@@ -94,13 +94,13 @@ from PySide6.QtGui import QPainter, QPen, QPainterPath, QColor, QBrush, QAction,
 try:
     from .device_item import DeviceItem
     from .passive_item import ResistorItem, CapacitorItem
-    from .block_item import BlockItem
+    from .block_item import BlockItem, get_colors_for_subckt
     from .hierarchy_group_item import HierarchyGroupItem
     from .abutment_engine import find_abutment_candidates, build_edge_highlight_map
 except ImportError:
     from device_item import DeviceItem
     from passive_item import ResistorItem, CapacitorItem
-    from block_item import BlockItem
+    from block_item import BlockItem, get_colors_for_subckt
     from hierarchy_group_item import HierarchyGroupItem
     try:
         from abutment_engine import find_abutment_candidates, build_edge_highlight_map
@@ -192,8 +192,17 @@ class SymbolicEditor(QGraphicsView):
         self.scene.selectionChanged.connect(self._on_selection_changed)
         self.scene.changed.connect(self._on_scene_changed)
 
+        # ── Performance: use NoIndex for large designs (avoids O(n) BSP rebalance) ──
+        self.scene.setItemIndexMethod(QGraphicsScene.ItemIndexMethod.NoIndex)
+
         # Better rendering
         self.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # ── Performance: only repaint changed regions, skip antialiasing adjustment ──
+        self.setViewportUpdateMode(QGraphicsView.ViewportUpdateMode.MinimalViewportUpdate)
+        self.setOptimizationFlags(
+            QGraphicsView.OptimizationFlag.DontAdjustForAntialiasing
+        )
 
         # Enable caching to speed up grid drawing
         self.setCacheMode(QGraphicsView.CacheModeFlag.CacheBackground)
@@ -301,6 +310,14 @@ class SymbolicEditor(QGraphicsView):
         self._overlay_refresh_timer.setSingleShot(True)
         self._overlay_refresh_timer.setInterval(80)
         self._overlay_refresh_timer.timeout.connect(self._refresh_block_overlays)
+
+        # ── Performance: throttle background invalidation ──
+        self._bg_invalidation_timer = QTimer(self)
+        self._bg_invalidation_timer.setSingleShot(True)
+        self._bg_invalidation_timer.setInterval(120)
+        self._bg_invalidation_timer.timeout.connect(self._do_invalidate_layout_background)
+        # Cached device bounds for drawBackground (avoid iterating all items every frame)
+        self._cached_device_bounds = None  # (min_x, max_x, min_y, max_y) or None
 
         # Moving groups only mode
         self._moving_groups_only = False  # when True, moving a device moves its entire group
@@ -429,8 +446,8 @@ class SymbolicEditor(QGraphicsView):
                 item.set_net_colorize_enabled(enabled, self._color_seed)
         self.viewport().update()
 
-    def _terminal_nets_for_device(self, dev_id):
-        """Return terminal nets for exact, hierarchical, or finger-expanded ids."""
+    def _schematic_nets_for_device(self, dev_id):
+        """Return the default, unswapped schematic/reference nets for a device ID."""
         if not dev_id:
             return {}
         if dev_id in self._terminal_nets:
@@ -455,6 +472,33 @@ class SymbolicEditor(QGraphicsView):
             if normalized.endswith(f"_{key_text}") or f"_{key_text}_" in normalized:
                 return nets
         return {}
+
+    def _terminal_nets_for_device(self, dev_id):
+        """Return terminal nets for exact, hierarchical, or finger-expanded ids."""
+        if not dev_id:
+            return {}
+
+        # First, check custom node-level nets (swapped for layout abutment)
+        for node in getattr(self, "nodes", []):
+            if node.get("id") == dev_id:
+                n_s = node.get("net_s")
+                n_d = node.get("net_d")
+                n_g = node.get("net_g", "")
+                if n_s or n_d:
+                    # Detect if swapped relative to original schematic reference nets
+                    orig_nets = self._schematic_nets_for_device(dev_id)
+                    is_swapped = False
+                    if orig_nets:
+                        orig_s = orig_nets.get("S")
+                        orig_d = orig_nets.get("D")
+                        if (n_s == orig_d and n_d == orig_s and orig_s != orig_d) or node.get("swapped_sd", False):
+                            is_swapped = True
+                    else:
+                        if node.get("swapped_sd", False):
+                            is_swapped = True
+                    return {"S": n_s, "D": n_d, "G": n_g, "is_swapped": is_swapped}
+
+        return self._schematic_nets_for_device(dev_id)
 
     @staticmethod
     def _restore_item_orientation(item, orient):
@@ -613,6 +657,8 @@ class SymbolicEditor(QGraphicsView):
         self.viewport().update()
 
     def clear_highlighted_net(self):
+        if getattr(self, '_highlighted_net', None) is None:
+            return  # Nothing highlighted, skip iterating all items
         self._highlighted_net = None
         for item in self.device_items.values():
             if hasattr(item, "clear_highlighted_net"):
@@ -636,7 +682,11 @@ class SymbolicEditor(QGraphicsView):
 
     def _on_scene_changed(self, _regions):
         """Keep occupancy guides fresh while avoiding heavy live redraws."""
-        self._invalidate_layout_background()
+        # Invalidate cached device bounds (lightweight)
+        self._cached_device_bounds = None
+        # Throttle the expensive background invalidation
+        if not self._bg_invalidation_timer.isActive():
+            self._bg_invalidation_timer.start()
 
         if (
             not self._refreshing_block_overlays
@@ -660,8 +710,8 @@ class SymbolicEditor(QGraphicsView):
         finally:
             self._refreshing_block_overlays = False
 
-    def _invalidate_layout_background(self):
-        """Force the cached layout panel to redraw around current item bounds."""
+    def _do_invalidate_layout_background(self):
+        """Actually perform the expensive background invalidation (called by timer)."""
         self.resetCachedContent()
         try:
             self.invalidateScene(
@@ -670,7 +720,12 @@ class SymbolicEditor(QGraphicsView):
             )
         except Exception:
             logging.debug("Background cache invalidation failed", exc_info=True)
-        self.viewport().update()
+
+    def _invalidate_layout_background(self):
+        """Schedule a throttled background invalidation."""
+        self._cached_device_bounds = None
+        if not self._bg_invalidation_timer.isActive():
+            self._bg_invalidation_timer.start()
     def _compute_dummy_candidate(self, scene_pos, snap_to_free=True):
         """Build a dummy candidate centered under the cursor.
 
@@ -883,11 +938,15 @@ class SymbolicEditor(QGraphicsView):
     # Load AI JSON Placement
     # -------------------------------------------------
     def load_placement(self, nodes, compact=False):
+        self.nodes = nodes
         self._rebuilding_scene = True
         try:
             self._load_placement_impl(nodes, compact=compact)
         finally:
             self._rebuilding_scene = False
+        
+        # Ensure net labels are correctly displayed for newly created items
+        self.set_net_labels_visible(self._net_labels_visible)
 
     def _load_placement_impl(self, nodes, compact=False):
         """Load placement from a list of node dicts.
@@ -921,14 +980,22 @@ class SymbolicEditor(QGraphicsView):
             # NMOS (layout y < 0) renders BELOW PMOS.
             y = -geom.get("y", 0) * self.scale_factor
 
-            width = geom.get("width", 1) * self.scale_factor
-            height = geom.get("height", 0.5) * self.scale_factor
-            widths.append(width)
-            heights.append(height)
+            raw_width = geom.get("width", 1) * self.scale_factor
+            raw_height = geom.get("height", 0.5) * self.scale_factor
+            
+            # Enforce standard minimum uniform symbolic visual width for transistors to prevent squeezing
+            width = raw_width
+            height = raw_height
             dtype_tmp = node.get("type", "nmos")
             if dtype_tmp not in ("res", "cap"):
-                xtor_widths.append(width)
-                xtor_heights.append(height)
+                # Remove min-width constraint to prevent artificial squeezing
+                # Keep height exactly raw to prevent vertical row overlapping and resolver crasheses
+                # Keep snap grid and row pitch calculation fine-grained using raw widths/heights
+                # to prevent coarse grids from causing infinite loop cascades in resolve_overlaps.
+                xtor_widths.append(raw_width)
+                xtor_heights.append(raw_height)
+            widths.append(raw_width)
+            heights.append(raw_height)
 
             nf   = node.get("electrical", {}).get("nf", 1)
             dtype = node.get("type", "nmos")
@@ -956,10 +1023,15 @@ class SymbolicEditor(QGraphicsView):
                 if abut:
                     item.set_abut_left(abut.get("abut_left", False))
                     item.set_abut_right(abut.get("abut_right", False))
-            self._restore_item_orientation(item, geom.get("orientation", "R0"))
+            orient = geom.get("orientation", "R0")
+            print(f"[DEBUG GUI] Loading {node.get('id')} with orientation {orient}")
+            self._restore_item_orientation(item, orient)
 
             self.scene.addItem(item)
             self.device_items[node.get("id", "unknown")] = item
+            # Tag the item with its block instance for isolated compaction
+            block_info = node.get("block", {}) or {}
+            item.block_instance = block_info.get("instance")
 
             # Apply custom color stored on the node (e.g. set by the AI color tool)
             _node_color = node.get("color")
@@ -1354,17 +1426,53 @@ class SymbolicEditor(QGraphicsView):
     def _on_hierarchy_ascend(self, group):
         pass
 
+    def _descend_recursive(self, group):
+        """Recursively descend a group and all its children to reach the leaf transistor level."""
+        if not group._is_descended:
+            group._is_descended = True
+        # Recurse into children first
+        for child in getattr(group, '_child_groups', []):
+            self._descend_recursive(child)
+        # After all children are descended, update visibility from the bottom up
+        group._update_child_visibility()
+
+    def _ascend_recursive(self, group):
+        """Recursively ascend a group and all its children back to collapsed state."""
+        for child in getattr(group, '_child_groups', []):
+            self._ascend_recursive(child)
+        if group._is_descended:
+            group._is_descended = False
+        group._update_child_visibility()
+
     def _apply_hierarchy_view_mode(self):
         self.refresh_hierarchy_group_geometry()
         groups = self._iter_live_hierarchy_groups()
+        
+        # Build set of devices in collapsed blocks if in symbol view
+        collapsed_devices = set()
+        if self._view_level == "symbol":
+            for bitm in self._block_items:
+                if bitm._collapsed:
+                    collapsed_devices.update(bitm._device_items)
+                    
         if self._hierarchy_view_mode == "detailed":
             for group in groups:
-                if not group._is_descended:
-                    group.descend()
+                has_collapsed_dev = any(dev in collapsed_devices for dev in group._all_descendant_devices)
+                if has_collapsed_dev:
+                    group.hide()
+                    for dev in group._all_descendant_devices:
+                        dev.hide()
+                else:
+                    self._descend_recursive(group)
         else:
             for group in groups:
-                if group._is_descended:
-                    group.ascend()
+                has_collapsed_dev = any(dev in collapsed_devices for dev in group._all_descendant_devices)
+                if has_collapsed_dev:
+                    group.hide()
+                    for dev in group._all_descendant_devices:
+                        dev.hide()
+                else:
+                    self._ascend_recursive(group)
 
     def set_hierarchy_view_mode(self, mode):
         if mode not in {"symbolic", "detailed"}:
@@ -1373,9 +1481,11 @@ class SymbolicEditor(QGraphicsView):
         self._apply_hierarchy_view_mode()
 
     def show_symbolic_hierarchy(self):
+        self.set_view_level("symbol")
         self.set_hierarchy_view_mode("symbolic")
 
     def show_detailed_hierarchy(self):
+        self.set_view_level("transistor")
         self.set_hierarchy_view_mode("detailed")
 
     def find_group_by_name(self, group_name):
@@ -1609,8 +1719,7 @@ class SymbolicEditor(QGraphicsView):
         self._hierarchy_view_mode = "symbolic"
         try:
             for group in self._iter_live_hierarchy_groups():
-                if group._is_descended:
-                    group.ascend()
+                self._ascend_recursive(group)
         except Exception:
             logging.warning("Failed to ascend all hierarchies", exc_info=True)
 
@@ -1619,8 +1728,7 @@ class SymbolicEditor(QGraphicsView):
         self._hierarchy_view_mode = "detailed"
         try:
             for group in self._iter_live_hierarchy_groups():
-                if not group._is_descended:
-                    group.descend()
+                self._descend_recursive(group)
         except Exception:
             logging.warning("Failed to descend all hierarchies", exc_info=True)
 
@@ -1741,23 +1849,24 @@ class SymbolicEditor(QGraphicsView):
             if not isinstance(item, DeviceItem):
                 continue  # skip caps / resistors
             row_y = self._snap_row(item.pos().y())
-            key = (getattr(item, "device_type", ""), row_y)
+            block_inst = getattr(item, "block_instance", None) or ""
+            key = (block_inst, getattr(item, "device_type", ""), row_y)
             rows.setdefault(key, []).append(item)
 
         if not rows:
             return
 
-        occupied_rows = sorted({row_y for _, row_y in rows.keys()})
+        occupied_rows = sorted({(block_inst, row_y) for block_inst, _, row_y in rows.keys()})
         row_y_map = {
-            row_y: index * self._row_pitch
-            for index, row_y in enumerate(occupied_rows)
+            (block_inst, row_y): index * self._row_pitch
+            for index, (block_inst, row_y) in enumerate(occupied_rows)
         }
 
         for key, items in rows.items():
             if not items:
                 continue
-            _, row_y = key
-            target_row_y = row_y_map[row_y]
+            block_inst, _, row_y = key
+            target_row_y = row_y_map[(block_inst, row_y)]
             if row_keys is not None and key not in row_keys:
                 for it in items:
                     it.setPos(it.pos().x(), target_row_y)
@@ -1794,7 +1903,8 @@ class SymbolicEditor(QGraphicsView):
         """Move a device to an absolute position (in layout coordinates)."""
         item = self.device_items.get(dev_id)
         if item:
-            old_row_key = (getattr(item, "device_type", ""), self._snap_row(item.pos().y()))
+            block_inst = getattr(item, "block_instance", None) or ""
+            old_row_key = (block_inst, getattr(item, "device_type", ""), self._snap_row(item.pos().y()))
             pt = self._snap_point(x * self.scale_factor, y * self.scale_factor)
             free_x = self.find_nearest_free_x(
                 row_y=pt.y(),
@@ -1803,7 +1913,7 @@ class SymbolicEditor(QGraphicsView):
                 exclude_id=dev_id,
             )
             item.setPos(free_x, pt.y())
-            new_row_key = (getattr(item, "device_type", ""), self._snap_row(pt.y()))
+            new_row_key = (block_inst, getattr(item, "device_type", ""), self._snap_row(pt.y()))
             self._compact_rows_abutted({old_row_key, new_row_key})
             return True
         return False
@@ -1813,7 +1923,8 @@ class SymbolicEditor(QGraphicsView):
         item = self.device_items.get(dev_id)
         if not item:
             return False
-        old_row_key = (getattr(item, "device_type", ""), self._snap_row(item.pos().y()))
+        block_inst = getattr(item, "block_instance", None) or ""
+        old_row_key = (block_inst, getattr(item, "device_type", ""), self._snap_row(item.pos().y()))
         x = col * self._snap_grid
         y = row * self._row_pitch
         pt = self._snap_point(x, y)
@@ -1824,7 +1935,7 @@ class SymbolicEditor(QGraphicsView):
             exclude_id=dev_id,
         )
         item.setPos(free_x, pt.y())
-        new_row_key = (getattr(item, "device_type", ""), self._snap_row(pt.y()))
+        new_row_key = (block_inst, getattr(item, "device_type", ""), self._snap_row(pt.y()))
         self._compact_rows_abutted({old_row_key, new_row_key})
         return True
 
@@ -1929,11 +2040,17 @@ class SymbolicEditor(QGraphicsView):
         anchors = set(anchor_ids or [])
         rows = {}
         for item in self.device_items.values():
+            if not isinstance(item, (DeviceItem, CapacitorItem, ResistorItem)):
+                continue
+            # Note: For compaction, we usually only care about transistors, but here we process all
+            if not isinstance(item, DeviceItem) and compact:
+                continue
             row_y = self._snap_row(item.pos().y())
-            key = (getattr(item, "device_type", ""), row_y)
+            block_inst = getattr(item, "block_instance", None) or ""
+            key = (block_inst, getattr(item, "device_type", ""), row_y)
             rows.setdefault(key, []).append(item)
 
-        for (_, row_y), items in rows.items():
+        for (block_inst, _, row_y), items in rows.items():
             if not items:
                 continue
 
@@ -1941,34 +2058,44 @@ class SymbolicEditor(QGraphicsView):
                 row_anchors = [it for it in items if it.device_name in anchors]
                 if not row_anchors:
                     continue
+                queue = list(row_anchors)
+                seen = set()
+                while queue:
+                    current = queue.pop(0)
+                    cur_start, cur_end, _ = self._item_slot_span(current)
+                    cur_x = current.pos().x()
+                    for other in items:
+                        if other is current:
+                            continue
+                        oth_start, oth_end, oth_span = self._item_slot_span(other)
+                        if not self._interval_overlap(cur_start, cur_end, oth_start, oth_end):
+                            continue
+
+                        # Push overlapped neighbors away from the collision side.
+                        if other.pos().x() >= cur_x:
+                            new_start = cur_end + 1
+                        else:
+                            new_start = cur_start - oth_span
+
+                        target_x = new_start * self._snap_grid
+                        if abs(other.pos().x() - target_x) > 1e-6:
+                            other.setPos(target_x, row_y)
+                            if other not in seen:
+                                queue.append(other)
+                    seen.add(current)
             else:
-                row_anchors = sorted(items, key=lambda it: it.device_name)
-
-            queue = list(row_anchors)
-            seen = set()
-            while queue:
-                current = queue.pop(0)
-                cur_start, cur_end, _ = self._item_slot_span(current)
-                cur_x = current.pos().x()
-                for other in items:
-                    if other is current:
-                        continue
-                    oth_start, oth_end, oth_span = self._item_slot_span(other)
-                    if not self._interval_overlap(cur_start, cur_end, oth_start, oth_end):
-                        continue
-
-                    # Push overlapped neighbors away from the collision side.
-                    if other.pos().x() >= cur_x:
-                        new_start = cur_end + 1
+                # Fast sweep for global overlap resolution
+                items.sort(key=lambda it: it.pos().x())
+                x_cursor = None
+                for it in items:
+                    start, end, span = self._item_slot_span(it)
+                    if x_cursor is None or start >= x_cursor:
+                        x_cursor = end + 1
                     else:
-                        new_start = cur_start - oth_span
+                        target_x = x_cursor * self._snap_grid
+                        it.setPos(target_x, row_y)
+                        x_cursor += span
 
-                    target_x = new_start * self._snap_grid
-                    if abs(other.pos().x() - target_x) > 1e-6:
-                        other.setPos(target_x, row_y)
-                        if other not in seen:
-                            queue.append(other)
-                seen.add(current)
         if compact:
             self._compact_rows_abutted()
 
@@ -1998,6 +2125,9 @@ class SymbolicEditor(QGraphicsView):
             self._wire_matched_group_locking(
                 self._last_parent_groups, self._last_raw_nodes)
 
+        # Ensure net labels are correctly displayed and updated with net data
+        self.set_net_labels_visible(self._net_labels_visible)
+
         # Re-pack with net-aware adjacency — but NOT if compact was suppressed.
         if self._skip_compaction:
             self._skip_compaction = False
@@ -2023,15 +2153,23 @@ class SymbolicEditor(QGraphicsView):
         if find_abutment_candidates is None or not self._terminal_nets:
             return []
 
-        # Build nodes from current items (type info only — position not needed)
+        # Build nodes from self.nodes to preserve the logically swapped net_s/net_d fields!
         nodes = []
         for dev_id, item in self.device_items.items():
             if isinstance(item, (ResistorItem, CapacitorItem)):
                 continue
-            nodes.append({
-                "id":   dev_id,
-                "type": getattr(item, "device_type", "nmos"),
-            })
+            # Find the full node dict from self.nodes
+            found_node = None
+            for n in getattr(self, "nodes", []):
+                if n.get("id") == dev_id:
+                    found_node = copy.deepcopy(n)
+                    break
+            if not found_node:
+                found_node = {
+                    "id":   dev_id,
+                    "type": getattr(item, "device_type", "nmos"),
+                }
+            nodes.append(found_node)
 
         candidates = find_abutment_candidates(nodes, self._terminal_nets)
         edge_map   = build_edge_highlight_map(candidates)   # {dev_id: {left: net, right: net}}
@@ -2102,19 +2240,10 @@ class SymbolicEditor(QGraphicsView):
 
     @staticmethod
     def _connection_path(p1, p2, index=0, offset_factor=0.25):
+        """Use straight lines instead of complex bezier curves to dramatically improve rendering performance and reduce visual clutter."""
         path = QPainterPath()
         path.moveTo(p1)
-        dx = p2.x() - p1.x()
-        dy = p2.y() - p1.y()
-        offset = max(abs(dx), abs(dy)) * offset_factor
-        sign = 1.0 if index % 2 == 0 else -1.0
-        if abs(dx) > abs(dy):
-            ctrl1 = QPointF(p1.x() + dx * 0.33, p1.y() + sign * offset)
-            ctrl2 = QPointF(p1.x() + dx * 0.66, p2.y() + sign * offset)
-        else:
-            ctrl1 = QPointF(p1.x() + sign * offset, p1.y() + dy * 0.33)
-            ctrl2 = QPointF(p2.x() + sign * offset, p1.y() + dy * 0.66)
-        path.cubicTo(ctrl1, ctrl2, p2)
+        path.lineTo(p2)
         return path
 
     def _iter_drawable_edges(self):
@@ -2171,36 +2300,13 @@ class SymbolicEditor(QGraphicsView):
             self.scene.blockSignals(False)
 
     def _show_connections(self, dev_id):
-        """Draw curved lines from dev_id terminals to connected device terminals."""
-        if getattr(self, "_rebuilding_scene", False):
-            return
-        self.clear_highlighted_net()
-        self._reset_dimming()
-        self._clear_connections()
-        connections = self._conn_map.get(dev_id, [])
-        if not connections:
-            return
-
-        src_item = self.device_items.get(dev_id)
-        if not src_item:
-            return
-
-        self.scene.blockSignals(True)
-        try:
-            for i, (other_id, net_name) in enumerate(connections):
-                if other_id not in self.device_items:
-                    continue
-                color = self._get_net_color(net_name)
-                self._add_connection_line(
-                    dev_id, other_id, net_name, i,
-                    color, 1.4,
-                    style=Qt.PenStyle.DashLine,
-                    alpha=210,
-                    z=10,
-                )
-        finally:
-            self.scene.blockSignals(False)
-        self.scene.update()
+        """Draw curved lines from dev_id terminals to connected device terminals.
+        
+        NOTE: Disabled for performance on large designs (3000+ devices).
+        Connection curves are very expensive to render and cause significant lag.
+        Net highlighting via the tree panel still works.
+        """
+        return
 
     def highlight_net_simple(self, net_name: str):
         """Highlight a net via terminal color + dimming only — no flight lines.
@@ -2420,6 +2526,7 @@ class SymbolicEditor(QGraphicsView):
 
     def _apply_dimming_for_selection(self, selected_items):
         """Dim all devices EXCEPT the selected ones to create a 'Focus Mode'."""
+        self._dimming_active = True
         self.scene.blockSignals(True)
         # Convert list to set for faster lookup
         selected_set = set(selected_items)
@@ -2429,6 +2536,9 @@ class SymbolicEditor(QGraphicsView):
 
     def _reset_dimming(self):
         """Restore full opacity to all devices."""
+        if not getattr(self, '_dimming_active', False):
+            return  # Nothing is dimmed, skip iterating all items
+        self._dimming_active = False
         self.scene.blockSignals(True)
         for item in self.device_items.values():
             item.set_dimmed(False)
@@ -2630,6 +2740,10 @@ class SymbolicEditor(QGraphicsView):
                 border_color = QColor(self._block_border_solid)
 
                 bitm = BlockItem(inst_name, subckt, member_items, fill_color, border_color)
+                bitm.signals.hover_entered.connect(self._on_block_hover_entered)
+                bitm.signals.hover_left.connect(self._on_block_hover_left)
+                bitm.signals.double_clicked.connect(self._on_block_double_clicked)
+                bitm.signals.position_changed.connect(self._on_block_position_changed)
                 bitm.set_snap_grid(self._snap_grid, self._row_pitch)
                 self.scene.addItem(bitm)
                 self._block_items.append(bitm)
@@ -2643,12 +2757,33 @@ class SymbolicEditor(QGraphicsView):
         self.scene.blockSignals(True)
         
         if level == "symbol":
-            # Show BlockItems, hide block overlays, hide internal DeviceItems
+            # Collect devices inside collapsed blocks
+            collapsed_devices = set()
             for bitm in self._block_items:
                 bitm.show()
-                # Hide devices managed by this block
+                # Re-sync bounds based on current device coordinates
+                bitm.recalculate_bounds()
+                if bitm._collapsed:
+                    collapsed_devices.update(bitm._device_items)
+            
+            # Show BlockItems, hide block overlays, hide internal DeviceItems
+            for bitm in self._block_items:
                 for dev in bitm._device_items:
-                    dev.hide()
+                    if bitm._collapsed:
+                        dev.hide()
+                    else:
+                        dev.show()
+            
+            # Hide hierarchy groups belonging to collapsed blocks
+            for group in self._hierarchy_groups:
+                has_collapsed_dev = any(dev in collapsed_devices for dev in group._all_descendant_devices)
+                if has_collapsed_dev:
+                    group.hide()
+                    for dev in group._all_descendant_devices:
+                        dev.hide()
+                else:
+                    # Respect its own descent state
+                    group._update_child_visibility()
                     
             self._clear_block_overlays()
             
@@ -2659,6 +2794,10 @@ class SymbolicEditor(QGraphicsView):
                 # Re-sync their bounds before showing devices (in case they moved)
                 for dev in bitm._device_items:
                     dev.show()
+            
+            # Show hierarchy groups normally in transistor view
+            for group in self._hierarchy_groups:
+                group._update_child_visibility()
                     
             if self._block_overlays_visible:
                 self._draw_block_overlays()
@@ -2667,6 +2806,130 @@ class SymbolicEditor(QGraphicsView):
         # Force a refresh of connections
         self.resetCachedContent()
 
+    def _on_block_hover_entered(self, block_item):
+        """Isolates the active block by dimming non-constituent devices and other blocks."""
+        if self._view_level != "symbol":
+            return
+        for item in self.scene.items():
+            if isinstance(item, (BlockItem, DeviceItem)):
+                if item is block_item:
+                    continue
+                if hasattr(item, 'device_name') and item in block_item._device_items:
+                    continue
+                item.setOpacity(0.35)
+
+    def _on_block_hover_left(self, block_item):
+        """Restores regular opacity to all layout elements."""
+        for item in self.scene.items():
+            if isinstance(item, (BlockItem, DeviceItem)):
+                item.setOpacity(1.0)
+
+    def _on_block_double_clicked(self, block_item):
+        """Toggles visibility of internal transistors and hierarchy groups for this specific block in Symbol View."""
+        if self._view_level != "symbol":
+            return
+            
+        self.set_view_level(self._view_level)
+        self.viewport().update()
+
+    def _show_block_context_menu(self, block_item, global_pos):
+        """Right-click menu for BlockItems (subcircuits) to allow dissolving/breaking them."""
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: #0b0f16;
+                color: #e2e8f0;
+                border: 1px solid #1e293b;
+                border-radius: 6px;
+                padding: 4px;
+                font-family: 'Segoe UI';
+                font-size: 11px;
+            }
+            QMenu::item {
+                padding: 6px 20px;
+                border-radius: 4px;
+            }
+            QMenu::item:selected {
+                background-color: #0284c7;
+                color: #ffffff;
+            }
+        """)
+
+        # Option: Toggle Collapse/Expand
+        status_text = "Expand Block Details" if block_item._collapsed else "Collapse Block to Macro"
+        act_toggle = QAction(f"⚡ {status_text}", self)
+        act_toggle.triggered.connect(lambda: self._toggle_block_state(block_item))
+        menu.addAction(act_toggle)
+        
+        menu.addSeparator()
+
+        # Option: Break/Dissolve block
+        act_break = QAction(f"🔓 Break Block: {block_item.inst_name} ({block_item.subckt})", self)
+        act_break.triggered.connect(lambda: self._dissolve_block(block_item))
+        menu.addAction(act_break)
+
+        menu.exec(global_pos)
+
+    def _toggle_block_state(self, block_item):
+        block_item._collapsed = not block_item._collapsed
+        block_item.recalculate_bounds()
+        self._on_block_double_clicked(block_item)
+
+    def _dissolve_block(self, block_item):
+        """Dissolves the subcircuit block, deleting its BlockItem/overlays and freeing all of its transistors."""
+        self.scene.blockSignals(True)
+        try:
+            # 1. Remove the BlockItem from the scene
+            if block_item.scene() is self.scene:
+                self.scene.removeItem(block_item)
+            
+            # 2. Remove it from active tracking list
+            if block_item in self._block_items:
+                self._block_items.remove(block_item)
+                
+            # 3. Remove it from self._blocks dictionary so overlays are not drawn
+            if block_item.inst_name in self._blocks:
+                del self._blocks[block_item.inst_name]
+                
+            # 4. Make all constituent devices independent, visible and movable
+            for dev in block_item._device_items:
+                dev.show()
+                # Ensure the devices don't have block metadata or that they are freed
+                if hasattr(dev, "group_item") and dev.group_item:
+                    dev.group_item.show()
+                    
+            # 5. Clear active block overlays & redraw remaining ones
+            self._clear_block_overlays()
+            if self._view_level == "transistor":
+                self._draw_block_overlays()
+        finally:
+            self.scene.blockSignals(False)
+            
+        # Re-apply view level to update visibility states
+        self.set_view_level(self._view_level)
+        self.viewport().update()
+
+    def _on_block_position_changed(self, block_item):
+        """Called in real-time when a subcircuit block is dragged.
+        Keeps overlapping red hierarchy group boundaries perfectly synchronized.
+        """
+        if getattr(self, "_rebuilding_scene", False):
+            return
+            
+        # Identify devices inside this block
+        block_devices = set(block_item._device_items)
+        
+        # Trigger geometry refresh in real-time for any affected groups
+        for group in self._hierarchy_groups:
+            has_overlap = any(dev in block_devices for dev in group._all_descendant_devices)
+            if has_overlap:
+                try:
+                    group.update_geometry()
+                except RuntimeError:
+                    pass
+                    
+        self._invalidate_layout_background()
+        self.scene.update()
 
     def _clear_block_overlays(self):
         """Remove all block overlay items from the scene."""
@@ -2707,13 +2970,14 @@ class SymbolicEditor(QGraphicsView):
             for item in member_items[1:]:
                 union = union.united(item.sceneBoundingRect())
 
-            # --- Fix 2: Uniform color for all overlays ---
-            fill_color = self._block_fill_color
-            border_color = self._block_border_color
+            # Dynamic color coding per subcircuit type
+            fill_color, border_color, _ = get_colors_for_subckt(subckt)
+            overlay_fill = QColor(fill_color)
+            overlay_fill.setAlpha(25) # Soft translucent overlay wash
 
             # Draw overlay rectangle flush around devices
             rect_item = QGraphicsRectItem(union)
-            rect_item.setBrush(QBrush(fill_color))
+            rect_item.setBrush(QBrush(overlay_fill))
             rect_item.setPen(QPen(border_color, 1.5, Qt.PenStyle.DashLine))
             rect_item.setZValue(-10)  # behind devices
             rect_item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
@@ -2792,6 +3056,12 @@ class SymbolicEditor(QGraphicsView):
         right = rect.right()
         bottom = rect.bottom()
 
+        # Performance: cap dots to avoid drawing millions when zoomed out
+        cols = int((right - left) / spacing) + 1
+        rows = int((bottom - top) / spacing) + 1
+        if cols * rows > 40000:
+            return  # Skip dots when too many to draw
+
         painter.save()
         painter.setPen(QPen(self._canvas_dot_color, 0))
         y = top
@@ -2815,14 +3085,19 @@ class SymbolicEditor(QGraphicsView):
             return
 
         if has_devices:
-            all_items = list(self.device_items.values())
-            ref_min_x = min(it.pos().x() for it in all_items)
-            ref_max_x = max(it.pos().x() + it.rect().width() for it in all_items)
-            ref_min_y = min(self._snap_row(it.pos().y()) for it in all_items)
-            ref_max_y = max(
-                self._snap_row(it.pos().y()) + it.rect().height()
-                for it in all_items
-            )
+            # Performance: use cached bounds to avoid iterating all items every frame
+            if self._cached_device_bounds is None:
+                all_items = list(self.device_items.values())
+                ref_min_x = min(it.pos().x() for it in all_items)
+                ref_max_x = max(it.pos().x() + it.rect().width() for it in all_items)
+                ref_min_y = min(self._snap_row(it.pos().y()) for it in all_items)
+                ref_max_y = max(
+                    self._snap_row(it.pos().y()) + it.rect().height()
+                    for it in all_items
+                )
+                self._cached_device_bounds = (ref_min_x, ref_max_x, ref_min_y, ref_max_y)
+            else:
+                ref_min_x, ref_max_x, ref_min_y, ref_max_y = self._cached_device_bounds
         else:
             ref_min_x = 0.0
             ref_max_x = 0.0
@@ -3025,24 +3300,26 @@ class SymbolicEditor(QGraphicsView):
                 self._centroid_items.append(txt)
 
     def contextMenuEvent(self, event):
-        """Show a right-click menu for devices or groups."""
+        """Show a right-click menu for devices, groups, or blocks."""
         scene_pos = self.mapToScene(event.pos())
         items = self.scene.items(scene_pos)
 
-        # Find the topmost item under the cursor (prioritize HierarchyGroupItem)
         target_item = None
         target_id   = None
         target_group = None
+        target_block = None
         
-        # First, scan for HierarchyGroupItem (since it's below DeviceItems in z-order,
-        # we need to explicitly look for it)
+        # Prioritize scanning for BlockItem or HierarchyGroupItem
         for it in items:
-            if isinstance(it, HierarchyGroupItem):
+            if isinstance(it, BlockItem):
+                target_block = it
+                break
+            elif isinstance(it, HierarchyGroupItem):
                 target_group = it
                 break
         
-        # If no group found, look for the topmost DeviceItem
-        if target_group is None:
+        # If no block or group, look for the topmost DeviceItem
+        if target_block is None and target_group is None:
             for it in items:
                 if isinstance(it, (DeviceItem, ResistorItem, CapacitorItem)):
                     target_item = it
@@ -3052,6 +3329,14 @@ class SymbolicEditor(QGraphicsView):
                             target_id = dev_id
                             break
                     break
+
+        # Handle block context menu
+        if target_block is not None:
+            if not target_block.isSelected():
+                self.scene.clearSelection()
+                target_block.setSelected(True)
+            self._show_block_context_menu(target_block, event.globalPos())
+            return
 
         # Handle group context menu
         if target_group is not None:

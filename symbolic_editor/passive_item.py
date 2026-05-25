@@ -253,6 +253,7 @@ class ResistorItem(_PassiveBase):
         self.update()
 
     def paint(self, painter: QPainter, option, widget=None):
+        painter.save()  # Required: DontSavePainterState optimization is enabled
         if self._is_dimmed:
             painter.setOpacity(0.15)
         else:
@@ -377,6 +378,7 @@ class ResistorItem(_PassiveBase):
 
         # ── 7. Selection Glow ─────────────────────────────────────────
         self._draw_selection(painter, rect, "#f39c12")
+        painter.restore()  # Balance top-level save()
 
 
 # =============================================================================
@@ -423,6 +425,7 @@ class CapacitorItem(_PassiveBase):
         self.update()
 
     def paint(self, painter: QPainter, option, widget=None):
+        painter.save()  # Required: DontSavePainterState optimization is enabled
         if self._is_dimmed:
             painter.setOpacity(0.15)
         else:
@@ -517,3 +520,4 @@ class CapacitorItem(_PassiveBase):
 
         # ── 7. Selection Glow ─────────────────────────────────────────
         self._draw_selection(painter, rect, "#1abc9c")
+        painter.restore()  # Balance top-level save()

@@ -1061,6 +1061,8 @@ def build_placement_context(
         gid = gn.get("id", "?")
         gtype = str(gn.get("type", "")).upper()
         geo = gn.get("geometry", {}) or {}
+        elec = gn.get("electrical", {}) or {}
+        total_f = elec.get("total_fingers", 1)
         try:
             w = float(geo.get("width", 0.0))
         except (TypeError, ValueError):
@@ -1069,12 +1071,22 @@ def build_placement_context(
             h = float(geo.get("height", 0.0))
         except (TypeError, ValueError):
             h = 0.0
-        lines.append(f"  {gid:<14} type={gtype:<6} w={w:.6f} h={h:.6f}")
+        lines.append(f"  {gid:<14} type={gtype:<6} m={total_f:<3} w={w:.6f} h={h:.6f}")
     lines.append("")
 
     if not no_abutment and abutment_candidates:
+        MAX_ABUT_PROMPT_ENTRIES = 30
+        if len(abutment_candidates) > MAX_ABUT_PROMPT_ENTRIES:
+            from ai_agent.utils.logging import vprint
+            vprint(f"[PLACEMENT] Truncating {len(abutment_candidates)} abutment candidates to {MAX_ABUT_PROMPT_ENTRIES} for prompt.")
+            abutment_candidates_capped = abutment_candidates[:MAX_ABUT_PROMPT_ENTRIES]
+            truncated_note = f"\n[Note: {len(abutment_candidates) - MAX_ABUT_PROMPT_ENTRIES} more candidates exist but were omitted for brevity]"
+        else:
+            abutment_candidates_capped = abutment_candidates
+            truncated_note = ""
+
         from ai_agent.placement.abutment import _format_abutment_candidates
-        abut_str = _format_abutment_candidates(abutment_candidates)
+        abut_str = _format_abutment_candidates(abutment_candidates_capped)
         if abut_str:
             lines.append("=" * 60)
             lines.append("INTER-GROUP ABUTMENT CANDIDATES (diffusion sharing)")
@@ -1082,6 +1094,8 @@ def build_placement_context(
             lines.append("The following pairs share a signal net and SHOULD abut to save area.")
             lines.append("To abut them, place them with EXACTLY 0.070µm X-separation.")
             lines.append(abut_str)
+            if truncated_note:
+                lines.append(truncated_note)
             lines.append("")
 
     if finger_group_str:

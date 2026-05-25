@@ -146,6 +146,7 @@ def build_abutment_chains(nodes: list, candidates: list) -> list[list[str]]:
 
 
 def heal_abutment_positions(nodes: list, candidates: list,
+                              terminal_nets: dict = None,
                               no_abutment: bool = False) -> list:
     """
     Robust post-placement geometry reconstruction with chain-based topological clustering.
@@ -339,20 +340,37 @@ def heal_abutment_positions(nodes: list, candidates: list,
                 # must share the identical Y coordinate
                 geo["y"] = round(float(y_key), 6)
 
-                # Enforce uniform non-flipped R0 orientation
+                # Enforce orientation strictly to R0
+                current_orient = "R0"
+
+                # Dynamically determine the actual physical nets on the left and right edges
+                if terminal_nets is not None:
+                    dev_id = dev["id"]
+                    tn = terminal_nets.get(dev_id, {})
+                    if not tn:
+                        # Fallback for physical fingers (e.g. MM3_f1 -> MM3)
+                        prefix = dev_id.rsplit("_f", 1)[0] if "_f" in dev_id else dev_id
+                        tn = terminal_nets.get(prefix, {})
+                    
+                    logic_s = tn.get("S")
+                    logic_d = tn.get("D")
+                    
+                    # Read from the node if already assigned/swapped, fallback to SPICE
+                    curr_left_net = dev.get("net_s") or logic_s
+                    curr_right_net = dev.get("net_d") or logic_d
+
+                    if dev_idx > 0 and prev_right_net is not None:
+                        # If the physical nets don't match, we logically swap them to heal abutment
+                        if curr_left_net != prev_right_net:
+                            if curr_right_net == prev_right_net:
+                                dev["net_s"] = curr_right_net
+                                dev["net_d"] = curr_left_net
+                                curr_left_net, curr_right_net = curr_right_net, curr_left_net
+
+                    prev_right_net = curr_right_net
+                
+                # Apply the orientation back to the geometry (strictly R0)
                 geo["orientation"] = "R0"
-
-                # Dynamic pin-swapping to ensure correct shared-net abutment at boundaries
-                curr_left_net = dev.get("net_s")
-                curr_right_net = dev.get("net_d")
-
-                if dev_idx > 0 and prev_right_net is not None:
-                    if curr_left_net != prev_right_net:
-                        # Swap Source and Drain logically
-                        dev["net_d"], dev["net_s"] = curr_left_net, curr_right_net
-                        curr_left_net, curr_right_net = curr_right_net, curr_left_net
-
-                prev_right_net = curr_right_net
 
                 is_last_in_chain = (dev_idx == len(segment) - 1)
 
