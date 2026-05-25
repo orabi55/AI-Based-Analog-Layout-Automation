@@ -156,8 +156,18 @@ class DeviceItem(QGraphicsRectItem):
 
     def get_logical_name(self):
         display_name = self.device_name
-        if "_" in display_name and not self._is_dummy:
-            return display_name.split("_")[-1]
+        if not display_name:
+            return ""
+        if self._is_dummy:
+            return display_name
+            
+        import re
+        m = re.match(r'^([^_<]+)', display_name)
+        if m:
+            return m.group(1)
+            
+        if "_" in display_name:
+            return display_name.split("_")[0]
         return display_name
 
     def set_custom_color(self, base_color: QColor):
@@ -843,6 +853,8 @@ class DeviceItem(QGraphicsRectItem):
                                  QPointF(x_cursor + h * 0.3, y0 + h))
                 x_cursor += spacing
 
+        # (Tap crosshatch removed for simple rectangle design)
+
         # ── Text labels (always readable, no flip) ──────────────────
         sd_font_size   = max(4, min(9,  int(min(sd_w * 0.40, h * 0.22))))
         gate_font_size = max(4, min(9,  int(min(gate_w * 0.50, h * 0.22))))
@@ -904,30 +916,31 @@ class DeviceItem(QGraphicsRectItem):
                          display_name)
 
         if self._is_tap:
-            # Draw a beautiful electrical symbol in the center of the tap cell
+            # Draw a beautiful, clean, simple electrical symbol in the center of the tap cell
             painter.save()
-            painter.translate(cx, cy + h * 0.12) # position below the name label
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            painter.translate(cx, cy + h * 0.1) # center vertically below the name label
             symbol_pen = QPen(self._gate_color, 2.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
             painter.setPen(symbol_pen)
             
             is_ntap = "NTAP" in self.device_name.upper() or "VDD" in self.device_name.upper()
             if is_ntap:
-                # VDD: vertical arrow pointing up
-                painter.drawLine(QPointF(0, 10), QPointF(0, -10))
+                # VDD: small vertical arrow pointing up
+                painter.drawLine(QPointF(0, 6), QPointF(0, -5))
                 # Arrowhead pointing up
                 path_arrow = QPainterPath()
-                path_arrow.moveTo(0, -10)
-                path_arrow.lineTo(-5, -5)
-                path_arrow.lineTo(5, -5)
+                path_arrow.moveTo(0, -5)
+                path_arrow.lineTo(-3, -1)
+                path_arrow.lineTo(3, -1)
                 path_arrow.closeSubpath()
                 painter.fillPath(path_arrow, QBrush(self._gate_color))
             else:
-                # GND: vertical line down to 3 horizontal lines
-                painter.drawLine(QPointF(0, -10), QPointF(0, 2))
+                # GND: vertical line down to 3 horizontal ground lines
+                painter.drawLine(QPointF(0, -5), QPointF(0, 1))
                 # Ground lines
-                painter.drawLine(QPointF(-8, 2), QPointF(8, 2))
-                painter.drawLine(QPointF(-5, 5), QPointF(5, 5))
-                painter.drawLine(QPointF(-2, 8), QPointF(2, 8))
+                painter.drawLine(QPointF(-5, 1), QPointF(5, 1))
+                painter.drawLine(QPointF(-3, 3.5), QPointF(3, 3.5))
+                painter.drawLine(QPointF(-1.5, 6), QPointF(1.5, 6))
             painter.restore()
         else:
             # ── Type badge (N / P) bottom of G column ────────────────────

@@ -297,6 +297,27 @@ def update_oas_placement(oas_path, sp_path, nodes, output_path,
     else:
         lib = gdstk.read_oas(oas_path)
 
+    # Load and import all cells from tests/taps.oas if it exists
+    taps_oas_path = "tests/taps.oas"
+    if not os.path.exists(taps_oas_path):
+        project_root = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+        taps_oas_path = os.path.join(project_root, "tests", "taps.oas")
+    if os.path.exists(taps_oas_path):
+        try:
+            taps_lib = gdstk.read_oas(taps_oas_path)
+            for c in taps_lib.cells:
+                # Remove any existing cell with the same name first to avoid conflicts
+                existing = [cell for cell in lib.cells if cell.name == c.name]
+                for cell in existing:
+                    try:
+                        lib.remove(cell)
+                    except ValueError:
+                        pass
+                lib.add(c)
+        except Exception as e:
+            import logging
+            logging.warning(f"Failed to read taps from {taps_oas_path}: {e}")
+
     top_cells = lib.top_level()
     if not top_cells:
         raise ValueError("OAS file has no top-level cells.")
@@ -380,8 +401,10 @@ def update_oas_placement(oas_path, sp_path, nodes, output_path,
 
     def _node_is_dummy(node):
         node_id = str(node.get("id", "")).upper()
-        return bool(node.get("is_dummy")) or node_id.startswith(
-            ("DUMMY", "FILLER_DUMMY", "EDGE_DUMMY")
+        return (
+            bool(node.get("is_dummy"))
+            or node_id.startswith(("DUMMY", "FILLER_DUMMY", "EDGE_DUMMY", "TAP_"))
+            or node.get("type") == "tap"
         )
 
     def _layout_entry_type(entry):
@@ -573,6 +596,34 @@ def update_oas_placement(oas_path, sp_path, nodes, output_path,
         except (TypeError, ValueError):
             layout_idx = None
         if layout_idx is not None and 0 <= layout_idx < len(layout_devices):
+            continue
+
+        if node.get("type") == "tap" or str(node.get("id", "")).upper().startswith("TAP_"):
+            subtype = node.get("subtype", "ptap")
+            cell_name = "Ntap" if subtype == "ntap" else "Ptap"
+            target_cell = next((c for c in lib.cells if c.name == cell_name), None)
+            if target_cell is None:
+                # Fallback case-insensitively
+                target_cell = next((c for c in lib.cells if c.name.lower() == cell_name.lower()), None)
+            if target_cell is None:
+                logging.warning(f"Could not find cell {cell_name} for tap node {node.get('id')}")
+                continue
+            
+            geom = dict(node.get("geometry", {}))
+            rot_rad, x_mirror = _orient_to_gdstk(geom.get("orientation", "R0"))
+            dummy_ref = gdstk.Reference(
+                target_cell,
+                (geom.get("x", 0), geom.get("y", 0)),
+                rot_rad,
+                1.0,
+                x_mirror,
+            )
+            try:
+                dummy_ref.set_property("symbolic_tap", [str(node.get("id", ""))])
+            except Exception:
+                pass
+            top_cell.add(dummy_ref)
+            ref_to_node[id(dummy_ref)] = node
             continue
 
         template_ref = _template_ref_for_dummy_node(node)

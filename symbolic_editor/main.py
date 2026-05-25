@@ -482,19 +482,33 @@ class MainWindow(QMainWindow):
         # ── File ─────────────────────────────────────────────────
         file_menu = mb.addMenu("&File")
         self._top_level_menus.append(file_menu)
-        file_menu.addAction("New Tab", self._on_new_tab, QKeySequence("Ctrl+T"))
+        act_new_tab = file_menu.addAction("New Tab", self._on_new_tab, QKeySequence("Ctrl+T"))
+        self.addAction(act_new_tab)
+        
         file_menu.addSeparator()
-        file_menu.addAction("Import Netlist + Layout…", self._on_import, QKeySequence("Ctrl+I"))
-        file_menu.addAction("&Open JSON…", self._on_open_file, QKeySequence.StandardKey.Open)
+        act_import = file_menu.addAction("Import Netlist + Layout…", self._on_import, QKeySequence("Ctrl+I"))
+        self.addAction(act_import)
+        
+        act_open = file_menu.addAction("&Open JSON…", self._on_open_file, QKeySequence.StandardKey.Open)
+        self.addAction(act_open)
+        
         file_menu.addSeparator()
-        file_menu.addAction("&Save", lambda: self._fwd("do_save"), QKeySequence.StandardKey.Save)
-        file_menu.addAction("Save &As…", lambda: self._fwd("do_save_as"), QKeySequence("Ctrl+Shift+S"))
+        act_save = file_menu.addAction("&Save", lambda: self._fwd("do_save"), QKeySequence.StandardKey.Save)
+        self.addAction(act_save)
+        
+        act_save_as = file_menu.addAction("Save &As…", lambda: self._fwd("do_save_as"), QKeySequence("Ctrl+Shift+S"))
+        self.addAction(act_save_as)
+        
         file_menu.addAction("Export JSON…", lambda: self._fwd("do_export_json"))
         file_menu.addAction("Export to OAS…", lambda: self._fwd("do_export_oas"))
         file_menu.addAction("Export TCL Placement.", lambda: self._fwd("do_export_tcl"))
-        file_menu.addAction("Export && Deploy to Custom Compiler", lambda: self._fwd("do_export_and_deploy"), QKeySequence("Ctrl+Shift+D"))
+        
+        act_deploy = file_menu.addAction("Export && Deploy to Custom Compiler", lambda: self._fwd("do_export_and_deploy"), QKeySequence("Ctrl+Shift+D"))
+        self.addAction(act_deploy)
+        
         file_menu.addSeparator()
-        file_menu.addAction("Close Tab", self._close_current_tab, QKeySequence("Ctrl+W"))
+        act_close_tab = file_menu.addAction("Close Tab", self._close_current_tab, QKeySequence("Ctrl+W"))
+        self.addAction(act_close_tab)
 
         # Quick-start examples sub-menu
         examples_menu = file_menu.addMenu("Quick Start Examples")
@@ -518,7 +532,8 @@ class MainWindow(QMainWindow):
                 )
 
         file_menu.addSeparator()
-        file_menu.addAction("Reload App", self._on_reload_app, QKeySequence("Ctrl+Shift+R"))
+        act_reload = file_menu.addAction("Reload App", self._on_reload_app, QKeySequence("Ctrl+Shift+R"))
+        self.addAction(act_reload)
 
         # ── Edit ─────────────────────────────────────────────────
         edit_menu = mb.addMenu("&Edit")
@@ -527,18 +542,30 @@ class MainWindow(QMainWindow):
         self._act_redo = edit_menu.addAction("&Redo", lambda: self._fwd("do_redo"), QKeySequence.StandardKey.Redo)
         self._act_undo.setEnabled(False)
         self._act_redo.setEnabled(False)
+        self.addAction(self._act_undo)
+        self.addAction(self._act_redo)
+        
         edit_menu.addSeparator()
         self._act_select_all = edit_menu.addAction("Select &All", lambda: self._fwd("do_select_all"), QKeySequence.StandardKey.SelectAll)
         self._act_select_all.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
-        edit_menu.addAction("&Delete Selected", lambda: self._fwd("do_delete"), QKeySequence("Del"))
+        self.addAction(self._act_select_all)
+        
+        act_delete = edit_menu.addAction("&Delete Selected", lambda: self._fwd("do_delete"), QKeySequence("Del"))
+        self.addAction(act_delete)
+        
         edit_menu.addSeparator()
 
         # ── View ─────────────────────────────────────────────────
         view_menu = mb.addMenu("&View")
         self._top_level_menus.append(view_menu)
         view_menu.addAction("Fit to View", lambda: self._fwd_editor("fit_to_view"))
-        view_menu.addAction("Zoom In", lambda: self._fwd_editor("zoom_in"), QKeySequence("Ctrl+="))
-        view_menu.addAction("Zoom Out", lambda: self._fwd_editor("zoom_out"), QKeySequence("Ctrl+-"))
+        
+        act_zoom_in = view_menu.addAction("Zoom In", lambda: self._fwd_editor("zoom_in"), QKeySequence("Ctrl+="))
+        self.addAction(act_zoom_in)
+        
+        act_zoom_out = view_menu.addAction("Zoom Out", lambda: self._fwd_editor("zoom_out"), QKeySequence("Ctrl+-"))
+        self.addAction(act_zoom_out)
+        
         view_menu.addAction("Reset Zoom", lambda: self._fwd_editor("zoom_reset"))
         view_menu.addSeparator()
         view_menu.addAction("Toggle Device Tree", lambda: self._fwd("_toggle_device_tree"))
@@ -550,25 +577,49 @@ class MainWindow(QMainWindow):
         view_menu.addAction("Outline Device View", lambda: self._fwd_editor("show_outline_devices"))
         view_menu.addAction("Block Symbols", lambda: self._fwd_editor("set_view_level", "symbol"))
         view_menu.addSeparator()
-        view_menu.addAction("Symbolic Workspace", lambda: self._fwd("set_workspace_mode", "symbolic"), QKeySequence("Ctrl+1"))
-        view_menu.addAction("KLayout Workspace", lambda: self._fwd("set_workspace_mode", "klayout"), QKeySequence("Ctrl+2"))
-        view_menu.addAction("Both Views", lambda: self._fwd("set_workspace_mode", "both"), QKeySequence("Ctrl+3"))
+        
+        act_ws1 = view_menu.addAction("Symbolic Workspace", lambda: self._fwd("set_workspace_mode", "symbolic"), QKeySequence("Ctrl+1"))
+        self.addAction(act_ws1)
+        
+        act_ws2 = view_menu.addAction("KLayout Workspace", lambda: self._fwd("set_workspace_mode", "klayout"), QKeySequence("Ctrl+2"))
+        self.addAction(act_ws2)
+        
+        act_ws3 = view_menu.addAction("Both Views", lambda: self._fwd("set_workspace_mode", "both"), QKeySequence("Ctrl+3"))
+        self.addAction(act_ws3)
 
         # ── Design ───────────────────────────────────────────────
         design_menu = mb.addMenu("&Design")
         self._top_level_menus.append(design_menu)
-        design_menu.addAction("Swap Selected (2)", lambda: self._fwd("do_swap"), QKeySequence("Ctrl+Shift+X"))
-        design_menu.addAction("Swap Source/Drain", lambda: self._fwd("do_swap_sd"), QKeySequence("Ctrl+D"))
+        
+        act_swap = design_menu.addAction("Swap Selected (2)", lambda: self._fwd("do_swap"), QKeySequence("Ctrl+Shift+X"))
+        self.addAction(act_swap)
+        
+        act_swap_sd = design_menu.addAction("Swap Source/Drain", lambda: self._fwd("do_swap_sd"), QKeySequence("Ctrl+D"))
+        self.addAction(act_swap_sd)
+        
         design_menu.addAction("Merge Shared Source", lambda: self._fwd("do_merge_ss"))
         design_menu.addAction("Merge Shared Drain", lambda: self._fwd("do_merge_dd"))
-        design_menu.addAction("Flip Horizontal", lambda: self._fwd("do_flip_h"), QKeySequence("Ctrl+H"))
-        design_menu.addAction("Flip Vertical", lambda: self._fwd("do_flip_v"), QKeySequence("Ctrl+J"))
+        
+        act_flip_h = design_menu.addAction("Flip Horizontal", lambda: self._fwd("do_flip_h"), QKeySequence("Ctrl+H"))
+        self.addAction(act_flip_h)
+        
+        act_flip_v = design_menu.addAction("Flip Vertical", lambda: self._fwd("do_flip_v"), QKeySequence("Ctrl+J"))
+        self.addAction(act_flip_v)
+        
         design_menu.addAction("Toggle Dummy Placement", self._toggle_dummy_action)
         design_menu.addSeparator()
-        design_menu.addAction("Match Devices…", lambda: self._fwd("do_match"), QKeySequence("Ctrl+M"))
-        design_menu.addAction("Unlock Matched", lambda: self._fwd("do_unlock_match"), QKeySequence("Ctrl+U"))
+        
+        act_match = design_menu.addAction("Match Devices…", lambda: self._fwd("do_match"), QKeySequence("Ctrl+M"))
+        self.addAction(act_match)
+        
+        act_unlock = design_menu.addAction("Unlock Matched", lambda: self._fwd("do_unlock_match"), QKeySequence("Ctrl+U"))
+        self.addAction(act_unlock)
+        
         design_menu.addSeparator()
-        design_menu.addAction("Run AI Placement…", lambda: self._fwd("do_ai_placement"), QKeySequence("Ctrl+P"))
+        
+        act_ai = design_menu.addAction("Run AI Placement…", lambda: self._fwd("do_ai_placement"), QKeySequence("Ctrl+P"))
+        self.addAction(act_ai)
+        
         design_menu.addSeparator()
         design_menu.addAction("View in KLayout", lambda: self._fwd("on_view_in_klayout"))
 

@@ -186,3 +186,32 @@ def test_expand_groups_abutment_flags_first_and_last():
     for mid in expanded[1:-1]:
         assert mid["abutment"]["abut_left"] is True
         assert mid["abutment"]["abut_right"] is True
+
+
+def test_huge_transistor_autofolds_to_2d_matrix():
+    """Any transistor with total_fingers >= 12 must automatically fold into a 2D matrix."""
+    # 24 fingers of the same transistor
+    nodes = [_make_finger_node(f"MM0_f{i}", "nmos") for i in range(1, 25)]
+    edges = []
+    group_nodes, group_edges, finger_map = group_fingers(nodes, edges)
+
+    assert len(group_nodes) == 1
+    g = group_nodes[0]
+    assert g["id"] == "MM0"
+    assert g["electrical"]["total_fingers"] == 24
+    
+    # It must have been auto-folded to 2D
+    assert g.get("_n_rows", 1) >= 2
+    assert "_matrix_data" in g
+    matrix_data = g["_matrix_data"]
+    assert matrix_data["rows"] >= 2
+    assert matrix_data["cols"] >= 2
+    
+    # Expanding it must result in 2D coordinates (multiple rows used)
+    placed_groups = [
+        {"id": "MM0", "type": "nmos", "geometry": {"x": 0.0, "y": 0.0, "width": g["geometry"]["width"]}},
+    ]
+    orig_lookup = {g["id"]: g for g in group_nodes}
+    expanded = expand_groups(placed_groups, finger_map, original_group_nodes=orig_lookup)
+    ys = {n["geometry"]["y"] for n in expanded if not n.get("is_dummy")}
+    assert len(ys) == matrix_data["rows"]

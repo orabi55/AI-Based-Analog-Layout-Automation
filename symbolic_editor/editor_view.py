@@ -172,6 +172,49 @@ class DeleteGroupCommand(QUndoCommand):
             m.group_item = self.group_item
         self.group_item.update_geometry()
 
+
+def _get_taps_info():
+    """Analyze tests/taps.oas to get cell names and dimensions (in microns) of Ptap and Ntap.
+    Returns:
+        dict: {
+            "vdd": {"name": "Ntap", "width": 0.294, "height": 0.200},
+            "gnd": {"name": "Ptap", "width": 0.294, "height": 0.200}
+        }
+    """
+    import os
+    import gdstk
+    
+    info = {
+        "vdd": {"name": "Ntap", "width": 0.294, "height": 0.200},
+        "gnd": {"name": "Ptap", "width": 0.294, "height": 0.200}
+    }
+    
+    oas_path = "tests/taps.oas"
+    if not os.path.exists(oas_path):
+        project_root = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+        oas_path = os.path.join(project_root, "tests", "taps.oas")
+        
+    if os.path.isfile(oas_path):
+        try:
+            lib = gdstk.read_oas(oas_path)
+            for cell in lib.cells:
+                name = cell.name
+                bbox = cell.bounding_box()
+                if bbox is not None:
+                    xmin, ymin = bbox[0]
+                    xmax, ymax = bbox[1]
+                    w = round(float(xmax - xmin), 6)
+                    h = round(float(ymax - ymin), 6)
+                    
+                    if name.lower() == "ntap":
+                        info["vdd"] = {"name": name, "width": w, "height": h}
+                    elif name.lower() == "ptap":
+                        info["gnd"] = {"name": name, "width": w, "height": h}
+        except Exception:
+            pass
+    return info
+
+
 class SymbolicEditor(QGraphicsView):
 
     device_clicked = Signal(str)
@@ -270,6 +313,7 @@ class SymbolicEditor(QGraphicsView):
         self._gnd_mode = False
         self._vdd_place_callback = None
         self._gnd_place_callback = None
+        self._taps_info_cache = None
 
         # When True, skip compaction in set_terminal_nets
         self._skip_compaction = False
@@ -780,52 +824,50 @@ class SymbolicEditor(QGraphicsView):
             "height": height,
         }
 
+    def _get_taps_info(self):
+        if self._taps_info_cache is None:
+            self._taps_info_cache = _get_taps_info()
+        return self._taps_info_cache
+
     def _compute_tap_candidate(self, scene_pos, tap_type, snap_to_free=True):
         """Build a tap candidate (ptap or ntap) centered under the cursor.
         tap_type: 'vdd' or 'gnd'
         """
-        target_row_type = "pmos" if tap_type == "vdd" else "nmos"
-        
-        type_items = {"nmos": [], "pmos": []}
+        # Dynamically load the sizes and names of Ptap and Ntap from tests/taps.oas
+        t_info = self._get_taps_info()["vdd" if tap_type == "vdd" else "gnd"]
+        width = t_info["width"] * self.scale_factor
+        height = t_info["height"] * self.scale_factor
+
+        # Find all active/passive device items to compute boundary rows
+        active_items = []
         for item in self.device_items.values():
             dev_type = str(getattr(item, "device_type", "")).strip().lower()
-            if dev_type in type_items:
-                type_items[dev_type].append(item)
+            if dev_type and dev_type != "tap":
+                active_items.append(item)
 
-        items = type_items[target_row_type]
-        if not items:
-            all_items = type_items["nmos"] + type_items["pmos"]
-            if not all_items:
-                return None
-            items = all_items
-            target_row_type = getattr(items[0], "device_type", "nmos").strip().lower()
+        if active_items:
+            if tap_type == "vdd":
+                # VDD tap (Ntap) right above all devices
+                topmost_y = min(self._snap_row(it.pos().y()) for it in active_items)
+                y = topmost_y - self._row_pitch
+            else:
+                # GND tap (Ptap) right below all devices
+                bottommost_y = max(self._snap_row(it.pos().y()) for it in active_items)
+                y = bottommost_y + self._row_pitch
+        else:
+            y = self._snap_row(scene_pos.y() - (height / 2.0))
 
-        # Group into individual row bands so multiple rows of the same type
-        # map to distinct candidates rather than an averaged mid-point.
-        tap_row_bands: dict = {}
-        for it in items:
-            ry = self._snap_row(it.pos().y())
-            tap_row_bands.setdefault(ry, []).append(it)
-        target_y = min(tap_row_bands.keys(), key=lambda ry: abs(scene_pos.y() - ry))
-        ref_item = tap_row_bands[target_y][0]
-        
-        # Tap cells are visually 1.0x width of a reference transistor
-        width = ref_item.rect().width() * 1.0
-        height = ref_item.rect().height()
-        
         cursor_x = self._snap_value(scene_pos.x() - (width / 2.0))
-        cursor_y = self._snap_row(scene_pos.y() - (height / 2.0))
         if snap_to_free:
             x = self.find_nearest_free_x(
-                row_y=cursor_y,
+                row_y=y,
                 width=width,
                 target_x=cursor_x,
                 exclude_id=None,
             )
-            y = cursor_y
         else:
             x = cursor_x
-            y = cursor_y
+
         return {
             "type": "tap",
             "subtype": "ntap" if tap_type == "vdd" else "ptap",

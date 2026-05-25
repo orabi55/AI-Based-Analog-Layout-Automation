@@ -393,6 +393,16 @@ def aggregate_to_logical_devices(nodes: list, edges: list = None) -> list:
             },
         }
 
+        # If this is a huge transistor (total_fingers >= 12), fold it automatically into a 2D matrix
+        if total_fingers >= 12:
+            from ai_agent.placement.centroid_generator import generate_common_centroid_matrix
+            matrix_data = generate_common_centroid_matrix([{"id": group_id, "fingers": total_fingers}])
+            rows = matrix_data["rows"]
+            cols = matrix_data["cols"]
+            group_node["_n_rows"] = rows
+            group_node["_matrix_data"] = matrix_data
+            group_node["geometry"]["width"] = round(cols * STD_PITCH, 6)
+
         # Copy block membership from rep if present
         if "block" in rep:
             group_node["block"] = rep["block"]
@@ -1991,10 +2001,14 @@ def pre_assign_rows(
             return 0.0
         total = 0.0
         for g in groups:
-            nf = g.get("electrical", {}).get("total_fingers", 1)
-            # ABBA merged blocks have 2 extra edge dummy slots
-            slots = (nf + 2) if g.get("_matched_block") else nf
-            total += max(g.get("geometry", {}).get("width", 0.0), slots * STD_PITCH)
+            if g.get("_n_rows", 1) >= 2 and "_matrix_data" in g:
+                cols = g["_matrix_data"]["cols"]
+                total += cols * STD_PITCH
+            else:
+                nf = g.get("electrical", {}).get("total_fingers", 1)
+                # ABBA merged blocks have 2 extra edge dummy slots
+                slots = (nf + 2) if g.get("_matched_block") else nf
+                total += max(g.get("geometry", {}).get("width", 0.0), slots * STD_PITCH)
         total += STD_PITCH * max(0, len(groups) - 1)   # gaps between groups
         return total
 
@@ -2044,6 +2058,9 @@ def pre_assign_rows(
         if not groups:
             return []
         def _phys_width(g: dict) -> float:
+            if g.get("_n_rows", 1) >= 2 and "_matrix_data" in g:
+                cols = g["_matrix_data"]["cols"]
+                return cols * STD_PITCH
             nf = g.get("electrical", {}).get("total_fingers", 1)
             slots = (nf + 2) if g.get("_matched_block") else nf
             return max(g.get("geometry", {}).get("width", 0.0), slots * STD_PITCH)
@@ -2246,6 +2263,9 @@ def pre_assign_rows(
     # CRITICAL: use physical finger-pitch widths, NOT geometry.width (logical).
     def _phys_w(g: dict) -> float:
         """Physical width of a group in layout pitch units."""
+        if g.get("_n_rows", 1) >= 2 and "_matrix_data" in g:
+            cols = g["_matrix_data"]["cols"]
+            return cols * STD_PITCH
         nf = g.get("electrical", {}).get("total_fingers", 1)
         slots = (nf + 2) if g.get("_matched_block") else nf
         return max(g.get("geometry", {}).get("width", 0.0), slots * STD_PITCH)
@@ -2565,7 +2585,7 @@ def expand_to_fingers(
         total = len(members)
 
         matrix_data = orig_meta.get("_matrix_data", grp_placed.get("_matrix_data"))
-        if matrix_data and is_matched_block and matrix_data.get("matrix"):
+        if matrix_data and matrix_data.get("matrix"):
             matrix = matrix_data["matrix"]
             rows_count = len(matrix)
             cols_count = len(matrix[0]) if rows_count > 0 else 0
@@ -3218,28 +3238,6 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False, preserve
         row_bounds[(y_key, dev_type)] = (min_x, max_x)
 
     if row_bounds:
-        global_min_x = min(b[0] for b in row_bounds.values())
-        global_max_x = max(b[1] for b in row_bounds.values())
-        global_center = (global_min_x + global_max_x) / 2.0
-
-        for (y_key, dev_type), row_nodes in type_rows.items():
-            if (y_key, dev_type) not in row_bounds:
-                continue
-            min_x, max_x = row_bounds[(y_key, dev_type)]
-            row_center = (min_x + max_x) / 2.0
-            
-            # Do NOT shift rows independently to preserve vertical block alignment across rows
-            shift = 0.0
-            
-            # Collect and sort all device footprints in the shifted row
-            footprints = []
-            for n in row_nodes:
-                x = n.get("geometry", {}).get("x", 0.0)
-                w = max(n.get("geometry", {}).get("width", pitch_std), pitch_std)
-                footprints.append((x, x + w))
-
-        # Recompute global bounds AFTER all centering shifts have been applied,
-        # and snap to pitch grid so filler filling produces equal-width rows.
         import math as _math
         all_xs = []
         all_xe = []
@@ -3252,63 +3250,26 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False, preserve
                 all_xs.append(x)
                 all_xe.append(x + w)
         if all_xs:
-            global_min_x = _math.floor(min(all_xs) / pitch_std) * pitch_std
+            global_min_x = 0.0
             global_max_x = _math.ceil(max(all_xe) / pitch_std) * pitch_std
 
-        new_dummies = []
+        total_slots = int(round((global_max_x - global_min_x) / pitch_std))
+        import os
+        skip_fillers = os.environ.get("DISABLE_FILLER_DUMMIES", "1").lower() in ("1", "true", "yes")
         dummy_counter = 0
 
         for (y_key, dev_type), row_nodes in type_rows.items():
             if (y_key, dev_type) not in row_bounds:
                 continue
-            # Recompute footprints after centering
-            footprints = []
-            for n in row_nodes:
-                x = n.get("geometry", {}).get("x", 0.0)
-                w = max(n.get("geometry", {}).get("width", pitch_std), pitch_std)
-                footprints.append((x, x + w))
             
-            footprints.sort(key=lambda f: f[0])
-
-            # Merge overlapping or touching footprints to find true gaps
-            merged_footprints = []
-            if footprints:
-                curr_start, curr_end = footprints[0]
-                for f_start, f_end in footprints[1:]:
-                    if f_start <= curr_end + 0.001:  # Touch or overlap
-                        curr_end = max(curr_end, f_end)
-                    else:
-                        merged_footprints.append((curr_start, curr_end))
-                        curr_start, curr_end = f_start, f_end
-                merged_footprints.append((curr_start, curr_end))
-
-            # Identify all gaps from global_min_x to global_max_x.
-            gaps = []
-            if not merged_footprints:
-                gaps.append((global_min_x, global_max_x))
-            else:
-                if global_min_x < merged_footprints[0][0] - 0.001:
-                    gaps.append((global_min_x, merged_footprints[0][0]))
-                
-                for i in range(len(merged_footprints) - 1):
-                    gap_start = merged_footprints[i][1]
-                    gap_end = merged_footprints[i+1][0]
-                    if gap_end - gap_start > 0.001:
-                        gaps.append((gap_start, gap_end))
-                        
-                if merged_footprints[-1][1] < global_max_x - 0.001:
-                    gaps.append((merged_footprints[-1][1], global_max_x))
-
             # Get reference dimensions and electrical parameters from an active device in this row
             ref_height = 0.568
             ref_elec = {"nf_per_device": 1, "multiplier": 1, "nfin": 2, "l": 1.4e-8}
-            
             for n in row_nodes:
                 if not n.get("is_dummy", False):
                     geo = n.get("geometry", {})
                     if "height" in geo:
                         ref_height = geo["height"]
-                    
                     elec = n.get("electrical", {})
                     if elec:
                         ref_elec = {
@@ -3319,36 +3280,55 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False, preserve
                         }
                     break
 
-            # Fill each gap with dummies placed at pitch-grid-aligned positions.
-            # Abutment-pitch chains create gap boundaries that are NOT on the
-            # pitch_std grid.  Instead of placing fillers at g_start + i*pitch
-            # (which would be off-grid), we enumerate all pitch_std grid
-            # positions that fall within the gap and place one filler at each.
-            import math as _m
-            row_dummies = []
-            for g_start, g_end in gaps:
-                # First grid position at or after the gap start
-                first_slot = int(_m.ceil(g_start / pitch_std - 1e-9))
-                # Last grid position whose filler fits entirely within the gap
-                last_slot  = int(_m.floor((g_end - pitch_std) / pitch_std + 1e-9))
-                for slot in range(first_slot, last_slot + 1):
-                    curr_x = round(slot * pitch_std, 6)
-                    # Guard: filler must not overlap with existing devices
-                    if curr_x + pitch_std > g_end + 0.01:
-                        break
-                    if curr_x < g_start - 0.01:
-                        continue
+            active_slots = len(row_nodes)
+            if skip_fillers:
+                left_slots = 0
+                right_slots = 0
+                empty_slots = 0
+            else:
+                empty_slots = max(0, total_slots - active_slots)
+                left_slots = empty_slots // 2
+                right_slots = empty_slots - left_slots
+
+            # 1. Reposition active nodes to be perfectly centered in the row
+            for idx, n in enumerate(row_nodes):
+                n["geometry"]["x"] = round((left_slots + idx) * pitch_std, 6)
+                n["geometry"]["y"] = round(float(y_key), 6)
+
+            # 2. Generate left filler dummies
+            left_dummies = []
+            if not skip_fillers:
+                for slot in range(left_slots):
                     dummy_counter += 1
-                    row_dummies.append({
+                    curr_x = round(slot * pitch_std, 6)
+                    left_dummies.append({
                         "id": f"FILLER_DUMMY_{dummy_counter}_{dev_type}",
                         "type": dev_type,
                         "is_dummy": True,
                         "geometry": {"x": curr_x, "y": float(y_key), "width": pitch_std, "height": ref_height, "orientation": "R0"},
                         "electrical": dict(ref_elec)
                     })
-            if row_dummies:
-                row_nodes.extend(row_dummies)
-                vprint(f"[resolve_overlaps] Centered layout & added {len(row_dummies)} filler dummies to row (y={y_key}, {dev_type}) for symmetry & density.")
+
+            # 3. Generate right filler dummies
+            right_dummies = []
+            if not skip_fillers:
+                for slot in range(left_slots + active_slots, total_slots):
+                    dummy_counter += 1
+                    curr_x = round(slot * pitch_std, 6)
+                    right_dummies.append({
+                        "id": f"FILLER_DUMMY_{dummy_counter}_{dev_type}",
+                        "type": dev_type,
+                        "is_dummy": True,
+                        "geometry": {"x": curr_x, "y": float(y_key), "width": pitch_std, "height": ref_height, "orientation": "R0"},
+                        "electrical": dict(ref_elec)
+                    })
+
+            # Reconstruct the row perfectly with centered active nodes and balanced dummies
+            type_rows[(y_key, dev_type)] = left_dummies + row_nodes + right_dummies
+            if skip_fillers:
+                vprint(f"[resolve_overlaps] Centered layout symmetrically in row (y={y_key}, {dev_type}): fillers skipped by user preference.")
+            else:
+                vprint(f"[resolve_overlaps] Centered layout symmetrically in row (y={y_key}, {dev_type}): {left_slots} left fillers, {active_slots} active slots, {right_slots} right fillers.")
 
         # Rebuild active_nodes from final type_rows including bridge and filler dummies
         active_nodes = []
@@ -3458,39 +3438,7 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False, preserve
             if left_non_dummy and right_non_dummy:
                 if left_non_dummy[1] <= right_non_dummy[1]:
                     selected_device = left_non_dummy[0]
-                    is_right = False
-                else:
-                    selected_device = right_non_dummy[0]
-                    is_right = True
-            elif left_non_dummy:
-                selected_device = left_non_dummy[0]
-                is_right = False
-            elif right_non_dummy:
-                selected_device = right_non_dummy[0]
-                is_right = True
-                
-            bias_net = None
-            if selected_device:
-                if is_right:
-                    if selected_device.get("swapped_sd"):
-                        bias_net = selected_device.get("net_d")
-                    else:
-                        bias_net = selected_device.get("net_s")
-                else:
-                    if selected_device.get("swapped_sd"):
-                        bias_net = selected_device.get("net_s")
-                    else:
-                        bias_net = selected_device.get("net_d")
-                        
-            if not bias_net or bias_net == "NC":
-                dev_type = str(node.get("type", "nmos")).strip().lower()
-                bias_net = "VDD" if dev_type == "pmos" else "VSS"
-                
-            node["net_s"] = bias_net
-            node["net_d"] = bias_net
-            node["net_g"] = bias_net
-
-        # Clear outer edges of the row
+                         # Clear outer edges of the row
         if row:
             row[0].setdefault("abutment", {})["abut_left"] = False
             row[-1].setdefault("abutment", {})["abut_right"] = False
@@ -3504,14 +3452,40 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False, preserve
             curr_end = curr_n.get("geometry", {}).get("x", 0.0) + curr_w
             nxt_start = next_n.get("geometry", {}).get("x", 0.0)
             
-            if abs(nxt_start - curr_end) < 0.01:
+            # Check if touching geometrically
+            touching = abs(nxt_start - curr_end) < 0.01
+            
+            # Precise abutment validation
+            is_abutment_allowed = False
+            if touching:
+                curr_id = curr_n.get("id", "")
+                next_id = next_n.get("id", "")
+                curr_is_dummy = curr_n.get("is_dummy") or curr_id.startswith(("DUMMY", "EDGE_DUMMY", "FILLER_DUMMY", "MATCH_DUMMY"))
+                next_is_dummy = next_n.get("is_dummy") or next_id.startswith(("DUMMY", "EDGE_DUMMY", "FILLER_DUMMY", "MATCH_DUMMY"))
+                
+                if curr_is_dummy and next_is_dummy:
+                    is_abutment_allowed = True
+                elif not curr_is_dummy and not next_is_dummy:
+                    # Check if sibling fingers of the same transistor
+                    import re
+                    curr_base = re.sub(r'(_[mf]\d+)+$', '', str(curr_id))
+                    next_base = re.sub(r'(_[mf]\d+)+$', '', str(next_id))
+                    if curr_base and next_base and curr_base == next_base:
+                        is_abutment_allowed = True
+                    else:
+                        # Different transistors — check shared net
+                        c_net = curr_n.get("net_d")
+                        n_net = next_n.get("net_s")
+                        if c_net and n_net and c_net != "NC" and n_net != "NC" and c_net == n_net:
+                            is_abutment_allowed = True
+            
+            if is_abutment_allowed:
                 curr_n.setdefault("abutment", {})["abut_right"] = True
                 next_n.setdefault("abutment", {})["abut_left"] = True
             else:
-                # If they do NOT touch, they MUST NOT abut.
                 curr_n.setdefault("abutment", {})["abut_right"] = False
                 next_n.setdefault("abutment", {})["abut_left"] = False
-
+ 
     return active_nodes
 
 
