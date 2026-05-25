@@ -10,7 +10,7 @@ Tools defined here:
     place_tx_driver                 — current mirror chain placement
     run_full_layout_pipeline        — physical cells + matching + DRC + score
     optimize_layout_for_matching    — common-centroid every detected group
-    optimize_layout_for_routing     — legalize + structural dummy band
+    optimize_layout_for_routing     — legalize + DRC clean
 """
 from __future__ import annotations
 
@@ -31,10 +31,8 @@ from ai_agent.core.group_placer import (
     place_matched_pair,
     place_differential_pair,
     place_current_mirror,
-    add_dummy_group,
 )
 from ai_agent.core.physical_cells   import insert_all_physical_cells
-from ai_agent.core.common_centroid  import insert_dummies_around_group
 from ai_agent.placement.quality_metrics import _transistor_key
 
 
@@ -366,22 +364,6 @@ def optimize_layout_for_routing(
     else:
         msgs.append("  ✓ legalize: DRC already clean")
         metrics["legalize_fixes"] = 0
-
-    # 2. Wrap each matched cluster in structural dummies (one per side)
-    matched_clusters = detect_matched_pairs(cur).metrics.get("matched_clusters", [])
-    dummy_inserted   = 0
-    for cluster in matched_clusters:
-        group_nodes = [n for n in cur if str(n.get("id", "")) in set(cluster)]
-        if not group_nodes:
-            continue
-        result = insert_dummies_around_group(group_nodes, pdk, n_dummies=1)
-        if result.success and result.changed:
-            non_group = [n for n in cur if str(n.get("id", "")) not in set(cluster)]
-            cur = non_group + result.nodes
-            dummy_inserted += len(result.nodes) - len(group_nodes)
-
-    msgs.append(f"  ✓ structural dummies: inserted {dummy_inserted}")
-    metrics["dummies_inserted"] = dummy_inserted
 
     return LayoutToolResult(
         success  = True,

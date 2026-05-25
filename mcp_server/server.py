@@ -31,6 +31,44 @@ from ai_agent.core.layout_state import load_layout_state, save_layout_state
 from ai_agent.tools.schemas import TOOL_REGISTRY
 from ai_agent.tools.tool_executor import ToolExecutor
 
+# Maximum DRC violation entries returned to the external LLM per response.
+# A layout that goes off-grid can produce 100+ violations; without capping,
+# a single call_tool response can exhaust the external LLM's context window.
+_MAX_VIOLATIONS_IN_RESPONSE: int = 10
+_MAX_MESSAGE_LINES: int = 20
+
+
+def _cap_payload_violations(
+    payload: dict,
+    max_violations: int = _MAX_VIOLATIONS_IN_RESPONSE,
+    max_msg_lines: int = _MAX_MESSAGE_LINES,
+) -> dict:
+    """Truncate DRC violation data in the MCP response payload.
+
+    Operates on a shallow copy so the original result objects are not mutated.
+    """
+    capped = dict(payload)
+
+    warnings = capped.get("warnings")
+    if isinstance(warnings, list) and len(warnings) > max_violations:
+        n_extra = len(warnings) - max_violations
+        capped["warnings"] = list(warnings[:max_violations]) + [
+            f"... {n_extra} more violations truncated "
+            f"(see layout_state.json for full list)"
+        ]
+
+    message = capped.get("message")
+    if isinstance(message, str):
+        lines = message.splitlines()
+        if len(lines) > max_msg_lines:
+            remaining = len(lines) - max_msg_lines
+            capped["message"] = "\n".join(lines[:max_msg_lines]) + (
+                f"\n... ({remaining} lines truncated)"
+            )
+
+    return capped
+
+
 server = Server("analog-layout-tools")
 
 
@@ -114,6 +152,7 @@ async def call_tool(name: str, arguments: dict[str, Any] | None) -> list[TextCon
         "metrics": result.metrics,
         "warnings": result.warnings,
     }
+    payload = _cap_payload_violations(payload)
     if name == "read_layout":
         payload["nodes"] = executor.nodes
     elif name == "save_layout" and result.metrics.get("serialized"):
