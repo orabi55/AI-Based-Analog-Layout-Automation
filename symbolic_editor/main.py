@@ -558,6 +558,7 @@ class MainWindow(QMainWindow):
         design_menu = mb.addMenu("&Design")
         self._top_level_menus.append(design_menu)
         design_menu.addAction("Swap Selected (2)", lambda: self._fwd("do_swap"), QKeySequence("Ctrl+Shift+X"))
+        design_menu.addAction("Swap Source/Drain", lambda: self._fwd("do_swap_sd"), QKeySequence("Ctrl+D"))
         design_menu.addAction("Merge Shared Source", lambda: self._fwd("do_merge_ss"))
         design_menu.addAction("Merge Shared Drain", lambda: self._fwd("do_merge_dd"))
         design_menu.addAction("Flip Horizontal", lambda: self._fwd("do_flip_h"), QKeySequence("Ctrl+H"))
@@ -728,6 +729,11 @@ class MainWindow(QMainWindow):
         self._tb_act_swap.setToolTip("Swap selected devices (Ctrl+Shift+X)")
         self._tb_act_swap.triggered.connect(lambda: self._fwd("do_swap"))
         tb.addAction(self._tb_act_swap)
+
+        self._tb_act_swap_sd = QAction(icon_swap(), "Swap S/D", self)
+        self._tb_act_swap_sd.setToolTip("Swap S/D nets logically (Ctrl+D)")
+        self._tb_act_swap_sd.triggered.connect(lambda: self._fwd("do_swap_sd"))
+        tb.addAction(self._tb_act_swap_sd)
 
         self._tb_act_flip_h = QAction(icon_flip_h(), "Flip Horizontal", self)
         self._tb_act_flip_h.setToolTip("Flip horizontal (Ctrl+H)")

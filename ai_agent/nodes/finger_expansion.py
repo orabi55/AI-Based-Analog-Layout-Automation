@@ -38,17 +38,19 @@ def node_finger_expansion(state):
     # that still need expansion (detected by _is_logical flag).
     has_logical = any(n.get("_is_logical") for n in placement_nodes)
 
+    terminal_nets = state.get("terminal_nets", {}) or {}
+
     if has_logical:
-        physical_nodes = expand_logical_to_fingers(placement_nodes, original_nodes)
+        physical_nodes = expand_logical_to_fingers(placement_nodes, original_nodes, terminal_nets=terminal_nets)
         log_detail(f"Expanded {len(placement_nodes)} logical → {len(physical_nodes)} physical nodes")
         # MUST run row overlap resolver to snap grid and generate filler dummies
         no_abutment_flag = state.get("no_abutment", False)
-        physical_nodes = _resolve_row_overlaps(physical_nodes, no_abutment_flag, preserve_order=True)
+        physical_nodes = _resolve_row_overlaps(physical_nodes, no_abutment_flag, preserve_order=True, terminal_nets=terminal_nets)
     else:
         # Even if already physical, we must run the row overlap resolver to generate filler dummies
         # and pack the layout to the correct standard grid.
         no_abutment_flag = state.get("no_abutment", False)
-        physical_nodes = _resolve_row_overlaps(placement_nodes, no_abutment_flag, preserve_order=True)
+        physical_nodes = _resolve_row_overlaps(placement_nodes, no_abutment_flag, preserve_order=True, terminal_nets=terminal_nets)
         log_detail(f"Nodes already physical — skipped expansion, but regenerated fillers ({len(physical_nodes)} devices)")
 
     # Run overlap resolution on expanded nodes
@@ -60,10 +62,23 @@ def node_finger_expansion(state):
         # Re-run _resolve_row_overlaps to snap positions back to grid
         # and regenerate correct filler dummies.
         no_abutment_flag = state.get("no_abutment", False)
-        physical_nodes = _resolve_row_overlaps(physical_nodes, no_abutment_flag, preserve_order=True)
+        physical_nodes = _resolve_row_overlaps(physical_nodes, no_abutment_flag, preserve_order=True, terminal_nets=terminal_nets)
     else:
         log_detail("No overlaps detected")
     physical_nodes = legalize_vertical_rows(physical_nodes)
+
+    if not state.get("no_abutment", False):
+        abutment_candidates = state.get("abutment_candidates", [])
+        if abutment_candidates:
+            from ai_agent.placement.abutment import heal_abutment_positions
+            log_detail(f"Enforcing abutment spacing for {len(abutment_candidates)} candidates")
+            physical_nodes = heal_abutment_positions(
+                physical_nodes, 
+                abutment_candidates, 
+                terminal_nets=terminal_nets,
+                no_abutment=False
+            )
+
 
     # Re-apply critical signal-flow optimization AFTER deterministic row
     # legalization.  This keeps the critical-net path effective while the

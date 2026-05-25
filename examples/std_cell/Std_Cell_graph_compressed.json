@@ -27,7 +27,7 @@
             "type": "pmos",
             "m": 1,
             "nf": 1,
-            "nfin": 5.0,
+            "nfin": 4.0,
             "l": 1.4e-08,
             "terminal_nets": {
                 "D": "VIN2b",
@@ -43,7 +43,7 @@
             "type": "nmos",
             "m": 1,
             "nf": 1,
-            "nfin": 5.0,
+            "nfin": 4.0,
             "l": 1.4e-08,
             "terminal_nets": {
                 "D": "VIN2b",
@@ -59,7 +59,7 @@
             "type": "pmos",
             "m": 1,
             "nf": 1,
-            "nfin": 5.0,
+            "nfin": 4.0,
             "l": 1.4e-08,
             "terminal_nets": {
                 "D": "VIN1b",
@@ -75,7 +75,7 @@
             "type": "nmos",
             "m": 1,
             "nf": 1,
-            "nfin": 5.0,
+            "nfin": 4.0,
             "l": 1.4e-08,
             "terminal_nets": {
                 "D": "VIN1b",

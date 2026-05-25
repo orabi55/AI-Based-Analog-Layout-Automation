@@ -13,8 +13,8 @@
 ********************************************************************************
 .subckt Inverter VDD VIN VOUT VSS
 *.PININFO VDD:B VIN:I VOUT:O VSS:B
-MM7 VOUT VIN VDD VDD p08 l=0.014u nf=1 m=1 nfin=5
-MM8 VOUT VIN VSS VSS n08 l=0.014u nf=1 m=1 nfin=5
+MM7 VOUT VIN VDD VDD p08 l=0.014u nf=1 m=1 nfin=4
+MM8 VOUT VIN VSS VSS n08 l=0.014u nf=1 m=1 nfin=4
 .ends Inverter
 
 ********************************************************************************

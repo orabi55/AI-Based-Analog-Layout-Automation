@@ -47,6 +47,7 @@ class DeviceItem(QGraphicsRectItem):
         # Net label overlay (toggled from Nets tab)
         self._show_net_labels = False
         self._net_names = {}       # {"D": "VDD", "G": "clk", "S": "VSS"}
+        self._is_swapped_sd = False
         self._colorize_nets = False
         self._net_color_seed = 0
         self._highlighted_net = None
@@ -156,7 +157,7 @@ class DeviceItem(QGraphicsRectItem):
     def get_logical_name(self):
         display_name = self.device_name
         if "_" in display_name and not self._is_dummy:
-            return display_name.split("_")[0]
+            return display_name.split("_")[-1]
         return display_name
 
     def set_custom_color(self, base_color: QColor):
@@ -226,12 +227,14 @@ class DeviceItem(QGraphicsRectItem):
         self._net_names = nets or {}
         self._show_net_labels = bool(self._net_names)
         self._net_color_seed = seed
+        self._is_swapped_sd = self._net_names.get("is_swapped", False)
         self.update()
 
     def clear_net_labels(self):
         """Hide net name labels."""
         self._show_net_labels = False
         self._net_names = {}
+        self._is_swapped_sd = False
         self.update()
 
     def set_net_colorize_enabled(self, enabled: bool, seed: int = 0):
@@ -470,6 +473,7 @@ class DeviceItem(QGraphicsRectItem):
     # Painting — Premium Multi-finger MOS layout
     # --------------------------------------------------
     def paint(self, painter: QPainter, option, widget=None):
+        painter.save()  # Required: DontSavePainterState optimization is enabled
         if self._is_dimmed:
             painter.setOpacity(0.15)
         else:
@@ -494,7 +498,7 @@ class DeviceItem(QGraphicsRectItem):
             # ── Draw name text in screen coordinates so it always fits ──
             display_name = self.device_name
             if "_" in display_name and not self._is_dummy:
-                display_name = display_name.split("_")[0]
+                display_name = display_name.split("_")[-1]
 
             # Map the item rect to screen (device) coordinates
             xform = painter.transform()
@@ -594,6 +598,7 @@ class DeviceItem(QGraphicsRectItem):
                         painter.restore()
 
             self._draw_r0_notch(painter, rect)
+            painter.restore()  # Balance top-level save()
             return
 
         w    = rect.width()
@@ -652,8 +657,13 @@ class DeviceItem(QGraphicsRectItem):
         painter.setPen(Qt.PenStyle.NoPen)
         cursor_x = x0
         for i in range(num_sd):
-            term = "S" if _is_source_col(i) else "D"
-            net = self._net_names.get(term)
+            if self._is_swapped_sd:
+                term = "D" if _is_source_col(i) else "S"
+            else:
+                term = "S" if _is_source_col(i) else "D"
+            
+            physical_term = "S" if _is_source_col(i) else "D"
+            net = self._net_names.get(physical_term)
             
             # Use net color if colorize_nets is on and it's not a dummy
             if self._colorize_nets and net and not self._is_dummy:
@@ -676,7 +686,7 @@ class DeviceItem(QGraphicsRectItem):
             
             # --- Net Label (Detailed) ---
             if self._show_net_labels and self._net_names:
-                net = self._net_names.get(term)
+                net = self._net_names.get(physical_term)
                 if net:
                     # Use the center of the actual drawn rectangle for perfect alignment
                     col_center = draw_rect.center()
@@ -857,7 +867,12 @@ class DeviceItem(QGraphicsRectItem):
                 display_name = "D"
         else:
             if "_" in display_name:
-                display_name = display_name.split("_")[0]
+                parts = display_name.split("_")
+                # If first part is a subcircuit instance name prefix (e.g. XI2, X1), show the actual device name (second part)
+                if parts[0].upper().startswith("X") and len(parts) > 1:
+                    display_name = parts[1]
+                else:
+                    display_name = parts[0]
 
         max_name_w = w * 0.85 - 8
         name_font = QFont("Segoe UI", name_font_size, QFont.Weight.Bold)
@@ -937,7 +952,10 @@ class DeviceItem(QGraphicsRectItem):
             painter.setFont(sd_font)
             cursor_x = x0
             for i in range(num_sd):
-                label = "S" if _is_source_col(i) else "D"
+                if self._is_swapped_sd:
+                    label = "D" if _is_source_col(i) else "S"
+                else:
+                    label = "S" if _is_source_col(i) else "D"
                 col_rect = QRectF(cursor_x, y0, sd_w, h)
                 if self._flip_h or self._flip_v:
                     col_rect = _flip_rect(col_rect)
@@ -1002,6 +1020,31 @@ class DeviceItem(QGraphicsRectItem):
                 painter.drawLine(QPointF(x0 + w - abut_w - 1, mid2),
                                  QPointF(x0 + w - abut_w - 6, mid2))
 
+        # ── Candidate abutment highlight (neon green glow) ───────────────
+        if self._hl_left or self._hl_right:
+            CAND_COLOR = QColor("#2ecc71")    # neon green
+            CAND_FILL  = QColor("#2ecc71")
+            CAND_FILL.setAlpha(60)
+            glow_w = max(4.0, sd_w * 0.25)
+
+            if self._hl_left:
+                painter.save()
+                painter.setBrush(QBrush(CAND_FILL))
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.drawRect(QRectF(x0, y0, glow_w, h))
+                painter.setPen(QPen(CAND_COLOR, 3.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+                painter.drawLine(QPointF(x0 + 1.5, y0 + 2), QPointF(x0 + 1.5, y0 + h - 2))
+                painter.restore()
+
+            if self._hl_right:
+                painter.save()
+                painter.setBrush(QBrush(CAND_FILL))
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.drawRect(QRectF(x0 + w - glow_w, y0, glow_w, h))
+                painter.setPen(QPen(CAND_COLOR, 3.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+                painter.drawLine(QPointF(x0 + w - 1.5, y0 + 2), QPointF(x0 + w - 1.5, y0 + h - 2))
+                painter.restore()
+
         # ── Selection highlight ──────────────────────────────────────
         if self.isSelected():
             sel_pen = QPen(QColor("#4fc3f7"), 2.5, Qt.PenStyle.SolidLine)
@@ -1026,6 +1069,8 @@ class DeviceItem(QGraphicsRectItem):
             painter.setPen(self._match_color)
             painter.drawText(QRectF(bx, by, lock_size, lock_size),
                              Qt.AlignmentFlag.AlignCenter, "\U0001F512")
+
+        painter.restore()  # Balance top-level save()
 
     def terminal_anchors(self):
         """Return scene positions for S, G, D terminal centers."""

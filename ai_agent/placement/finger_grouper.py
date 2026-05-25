@@ -1546,7 +1546,7 @@ def detect_inter_group_abutment(
     list of abutment candidate dicts:
         {"dev_a": grpA_id, "dev_b": grpB_id, "shared_net": net_name, "terminal": "S/D"}
     """
-    _POWER = frozenset({"VDD", "VSS", "GND", "VCC", "AVDD", "AVSS", ""})
+    _POWER = frozenset({"VDD", "VSS", "GND", "VCC", "AVDD", "AVSS"})
 
     # Build group-level terminal net summary
     grp_nets: Dict[str, Dict[str, set]] = {}   # grp_id -> {"S": {nets}, "D": {nets}}
@@ -1562,9 +1562,9 @@ def detect_inter_group_abutment(
             tn = terminal_nets.get(mid, {})
             s = tn.get("S", "")
             d = tn.get("D", "")
-            if s and s.upper() not in _POWER:
+            if s:
                 s_nets.add(s)
-            if d and d.upper() not in _POWER:
+            if d:
                 d_nets.add(d)
         grp_nets[gid] = {"S": s_nets, "D": d_nets}
 
@@ -1593,6 +1593,14 @@ def detect_inter_group_abutment(
                                 "shared_net": net,
                                 "terminal": f"{ta}/{tb}",
                             })
+                            
+    # Prioritize signal nets over power nets so that truncation (MAX_ABUT_PROMPT_ENTRIES)
+    # doesn't discard critical signal routing abutments.
+    def sort_key(c):
+        is_power = 1 if c["shared_net"].upper() in _POWER else 0
+        return (is_power, c["shared_net"], c["dev_a"], c["dev_b"])
+
+    candidates.sort(key=sort_key)
 
     return candidates
 
@@ -2593,7 +2601,7 @@ def expand_to_fingers(
                     fx = round(origin_x + c * pitch, 6)
                     fy = round(final_y + r * MATRIX_ROW_PITCH, 6)
                     
-                    # Keep all fingers in row-aligned horizontal R0 orientation (no mirroring)
+                    # Keep all fingers in R0 orientation with alternating S/D net swapping
                     cell_orient = "R0"
                     if c % 2 != 0:
                         if "net_d" in node or "net_s" in node:
@@ -2640,7 +2648,7 @@ def expand_to_fingers(
             # Place each sibling at consecutive positions with the group's pitch
             # This ensures abutment for all hierarchy leaves within the group
             fx = round(origin_x + finger_idx * pitch, 6)
-            # Keep all fingers in row-aligned horizontal R0 orientation (no mirroring)
+            # Set orientation strictly to R0, but logically swap S and D nets for odd fingers
             finger_orient = "R0"
             if finger_idx % 2 != 0:
                 if "net_d" in node or "net_s" in node:
@@ -2750,45 +2758,57 @@ def detect_abutment_intent(nodes: List[dict], terminal_nets: dict | None) -> Non
                     vprint(f"[detect_abutment] Enabled flags for {n1['id']} <-> {n2['id']} (gap={gap:.4f})")
 
 
+def _get_nets_for_id(node_id: str, terminal_nets: dict) -> dict:
+    if not node_id or not terminal_nets:
+        return {}
+    if node_id in terminal_nets:
+        return terminal_nets[node_id]
+        
+    normalized = str(node_id).replace("/", "_").replace("\\", "_").replace(".", "_").replace(":", "_")
+    tokens = [tok for tok in normalized.split("_") if tok]
+    
+    # Sort keys by length descending to match longest specific prefix first
+    sorted_keys = sorted(terminal_nets.keys(), key=lambda k: len(str(k)), reverse=True)
+    
+    for key in sorted_keys:
+        key_text = str(key)
+        if key_text in tokens:
+            return terminal_nets[key]
+        if normalized.endswith(f"_{key_text}") or f"_{key_text}_" in normalized:
+            return terminal_nets[key]
+        # Also check if the dict key is a finger and we are a group
+        if key_text.startswith(normalized + "_"):
+            return terminal_nets[key]
+            
+    # Try removing _fX suffix
+    if "_f" in normalized:
+        base_part = normalized.rsplit("_f", 1)[0]
+        if base_part in terminal_nets:
+            return terminal_nets[base_part]
+            
+    return {}
+
 def _are_abutment_compatible(id_a: str, id_b: str, terminal_nets: dict) -> bool:
-    """Helper to check if two device IDs share a non-power net.
+    """Helper to check if two device IDs share a net.
     Handles both logical group IDs and physical finger IDs.
     """
-    _POWER = {"VDD", "VSS", "GND", "VCC", "AVDD", "AVSS", "NC", "GND!", "VDD!", ""}
+    nets_a = _get_nets_for_id(id_a, terminal_nets)
+    nets_b = _get_nets_for_id(id_b, terminal_nets)
     
-    # 1. Resolve nets for ID A (handle logical/physical)
-    nets_a = terminal_nets.get(id_a, {})
-    if not nets_a:
-        # Try finding a finger of this group
-        prefix = id_a + "_"
-        for k, v in terminal_nets.items():
-            if k.startswith(prefix):
-                nets_a = v
-                break
-    
-    # 2. Resolve nets for ID B
-    nets_b = terminal_nets.get(id_b, {})
-    if not nets_b:
-        prefix = id_b + "_"
-        for k, v in terminal_nets.items():
-            if k.startswith(prefix):
-                nets_b = v
-                break
-                
-    if not isinstance(nets_a, dict) or not isinstance(nets_b, dict):
+    if not nets_a or not nets_b:
         return False
         
     vals_a = set(nets_a.values())
     vals_b = set(nets_b.values())
     
     for net in vals_a:
-        if net and net not in _POWER:
+        if net:
             if net in vals_b:
                 return True
     return False
 
 
-def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False, preserve_order: bool = False) -> List[dict]:
+def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False, preserve_order: bool = False, terminal_nets: dict = None) -> List[dict]:
     """
     Guarantee no two devices in the same row overlap while preserving hierarchy abutment.
 
@@ -2819,6 +2839,14 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False, preserve
     # are part of matched/current-mirror blocks and must survive legalization.
     active_nodes = [n for n in nodes if not _is_regenerated_filler_dummy(n)]
     
+    if terminal_nets:
+        for n in active_nodes:
+            tn = _get_nets_for_id(n["id"], terminal_nets)
+            if tn:
+                n.setdefault("net_s", tn.get("S"))
+                n.setdefault("net_d", tn.get("D"))
+                n.setdefault("net_g", tn.get("G"))
+
     # OPTION 1: Symbolic Slot System
     # Always use standard pitch (0.294um) for visual non-overlap in the editor.
     pitch_abut = STD_PITCH
@@ -2939,16 +2967,10 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False, preserve
                                 curr_flips = list(test_flips)
                                 improved = True
                 
-                # Convert absolute flips to CHANGES relative to existing state.
-                # If a block is already flipped (MY) and solver says flip=1, no change needed.
-                # If a block is already flipped (MY) and solver says flip=0, need to un-flip.
-                # If a block is NOT flipped (R0) and solver says flip=1, need to flip.
-                # If a block is NOT flipped (R0) and solver says flip=0, no change needed.
-                for i in range(M):
-                    if already_flipped[i]:
-                        # Currently MY. Solver wants: 1=stay MY (change=0), 0=go to R0 (change=1)
-                        best_flips[i] = 0 if best_flips[i] else 1
-                    # If not already flipped, best_flips[i] stays as-is (0=stay R0, 1=go to MY)
+                # best_flips is already a relative toggle mask because block_nets was
+                # built using the current physical orientation. 
+                # 0 = keep current orientation, 1 = toggle orientation.
+                # No conversion needed.
         else:
             # OPTION 2: Block-Clustered Placement (Hierarchical Partitioning)
             # Group the row's logical blocks by their parent subcircuit instance
@@ -2971,9 +2993,16 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False, preserve
                     return list(sub_blocks), [0] * M
 
                 block_nets = []
+                already_flipped_sub = []
                 for b in sub_blocks:
+                    is_flipped = b["nodes"][0].get("geometry", {}).get("orientation", "R0") in ("MY", "R180")
+                    already_flipped_sub.append(is_flipped)
+                    
                     left = b["nodes"][0].get("net_s")
                     right = b["nodes"][-1].get("net_d")
+                    if is_flipped:
+                        left = b["nodes"][0].get("net_d")
+                        right = b["nodes"][-1].get("net_s")
                     block_nets.append((left, right))
 
                 def evaluate(perm, flips):
@@ -3047,7 +3076,8 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False, preserve
                                         best_flips = list(curr_flips)
                                         curr_perm = list(test_perm)
                                         improved = True
-                
+                # best_flips is already a relative toggle mask because block_nets was
+                # built using the current physical orientation.
                 return [sub_blocks[idx] for idx in best_perm], list(best_flips)
 
             ordered_blocks = []
@@ -3084,17 +3114,16 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False, preserve
                     mirrored_nodes = []
                     for n in reversed(b["nodes"]):
                         nc = copy.deepcopy(n)
-                        if "net_s" in nc or "net_d" in nc:
-                            nc["net_s"], nc["net_d"] = nc.get("net_d"), nc.get("net_s")
                         if "abutment" in nc:
                             abut = nc["abutment"]
                             nc["abutment"] = {
                                 "abut_left": abut.get("abut_right", False),
                                 "abut_right": abut.get("abut_left", False),
                             }
-                        # Toggle orientation: MY→R0 (un-flip) or R0→MY (flip)
-                        cur_orient = nc.get("geometry", {}).get("orientation", "R0")
-                        nc.setdefault("geometry", {})["orientation"] = "R0" if cur_orient == "MY" else "MY"
+                        # Swap net_s and net_d logically to represent mirroring without physical flip
+                        if "net_d" in nc or "net_s" in nc:
+                            nc["net_d"], nc["net_s"] = nc["net_s"], nc.get("net_d")
+                        nc.setdefault("geometry", {})["orientation"] = "R0"
                         mirrored_nodes.append(nc)
                     b["nodes"] = mirrored_nodes
 
@@ -3110,10 +3139,8 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False, preserve
                 geo["x"] = round(cursor_slot * STD_PITCH, 6)
                 geo["y"] = round(float(y_key), 6)
                 
-                # Keep orientation MY if already set (mirrored), otherwise default to R0
-                current_orient = geo.get("orientation", "R0")
-                if current_orient not in ("MY", "MX", "R180"):
-                    geo["orientation"] = "R0"
+                # Enforce R0 orientation strictly
+                geo["orientation"] = "R0"
                 
                 if no_abutment:
                     n["abutment"] = {"abut_left": False, "abut_right": False}
@@ -3338,6 +3365,131 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False, preserve
     for y_val, row in final_rows.items():
         row.sort(key=lambda n: n.get("geometry", {}).get("x", 0.0))
         
+        # Ensure S/D nets alternate correctly for all consecutive fingers of the same parent device
+        i_idx = 0
+        while i_idx < len(row):
+            node = row[i_idx]
+            dev_id = node.get("id", "")
+            if node.get("is_dummy") or dev_id.startswith(("DUMMY", "EDGE_DUMMY", "FILLER_DUMMY", "MATCH_DUMMY", "TAP")):
+                i_idx += 1
+                continue
+            
+            parent_id, _, _ = _parse_id(dev_id)
+            if not parent_id:
+                i_idx += 1
+                continue
+                
+            # Find the contiguous chain of fingers belonging to this parent_id
+            chain = [node]
+            j_idx = i_idx + 1
+            while j_idx < len(row):
+                next_node = row[j_idx]
+                next_id = next_node.get("id", "")
+                if next_node.get("is_dummy") or next_id.startswith(("DUMMY", "EDGE_DUMMY", "FILLER_DUMMY", "MATCH_DUMMY", "TAP")):
+                    break
+                next_parent_id, _, _ = _parse_id(next_id)
+                if next_parent_id == parent_id:
+                    chain.append(next_node)
+                    j_idx += 1
+                else:
+                    break
+            
+            # Apply alternating swap logic
+            for idx, chain_node in enumerate(chain):
+                # First ensure we have reference/schematic S/D nets for this finger
+                nets = {}
+                if terminal_nets:
+                    nets = terminal_nets.get(chain_node["id"]) or terminal_nets.get(parent_id) or {}
+                if not nets:
+                    nets = _current_terminal_nets.get(chain_node["id"]) or _current_terminal_nets.get(parent_id) or {}
+                
+                if nets:
+                    chain_node.setdefault("net_s", nets.get("S"))
+                    chain_node.setdefault("net_d", nets.get("D"))
+                    chain_node.setdefault("net_g", nets.get("G"))
+                
+                orig_s = chain_node.get("net_s")
+                orig_d = chain_node.get("net_d")
+                if chain_node.get("swapped_sd") and orig_s and orig_d:
+                    # Reverse back to baseline first to avoid double swapping
+                    orig_s, orig_d = orig_d, orig_s
+                
+                if idx % 2 == 1:
+                    # Swap S/D nets logically
+                    if orig_s and orig_d:
+                        chain_node["net_s"] = orig_d
+                        chain_node["net_d"] = orig_s
+                    chain_node["swapped_sd"] = True
+                else:
+                    if orig_s and orig_d:
+                        chain_node["net_s"] = orig_s
+                        chain_node["net_d"] = orig_d
+                    chain_node["swapped_sd"] = False
+                    
+            i_idx = j_idx
+
+        # Bias all dummies in this row based on their nearest neighboring non-dummy device
+        for i_itm, node in enumerate(row):
+            dev_id = node.get("id", "")
+            is_dummy = node.get("is_dummy") or dev_id.startswith(("DUMMY", "EDGE_DUMMY", "FILLER_DUMMY", "MATCH_DUMMY"))
+            if not is_dummy:
+                continue
+                
+            left_non_dummy = None
+            for idx in range(i_itm - 1, -1, -1):
+                n = row[idx]
+                nid = n.get("id", "")
+                n_is_dummy = n.get("is_dummy") or nid.startswith(("DUMMY", "EDGE_DUMMY", "FILLER_DUMMY", "MATCH_DUMMY"))
+                if not n_is_dummy:
+                    left_non_dummy = (n, i_itm - idx)
+                    break
+                    
+            right_non_dummy = None
+            for idx in range(i_itm + 1, len(row)):
+                n = row[idx]
+                nid = n.get("id", "")
+                n_is_dummy = n.get("is_dummy") or nid.startswith(("DUMMY", "EDGE_DUMMY", "FILLER_DUMMY", "MATCH_DUMMY"))
+                if not n_is_dummy:
+                    right_non_dummy = (n, idx - i_itm)
+                    break
+                    
+            selected_device = None
+            is_right = False
+            if left_non_dummy and right_non_dummy:
+                if left_non_dummy[1] <= right_non_dummy[1]:
+                    selected_device = left_non_dummy[0]
+                    is_right = False
+                else:
+                    selected_device = right_non_dummy[0]
+                    is_right = True
+            elif left_non_dummy:
+                selected_device = left_non_dummy[0]
+                is_right = False
+            elif right_non_dummy:
+                selected_device = right_non_dummy[0]
+                is_right = True
+                
+            bias_net = None
+            if selected_device:
+                if is_right:
+                    if selected_device.get("swapped_sd"):
+                        bias_net = selected_device.get("net_d")
+                    else:
+                        bias_net = selected_device.get("net_s")
+                else:
+                    if selected_device.get("swapped_sd"):
+                        bias_net = selected_device.get("net_s")
+                    else:
+                        bias_net = selected_device.get("net_d")
+                        
+            if not bias_net or bias_net == "NC":
+                dev_type = str(node.get("type", "nmos")).strip().lower()
+                bias_net = "VDD" if dev_type == "pmos" else "VSS"
+                
+            node["net_s"] = bias_net
+            node["net_d"] = bias_net
+            node["net_g"] = bias_net
+
         # Clear outer edges of the row
         if row:
             row[0].setdefault("abutment", {})["abut_left"] = False
@@ -3387,7 +3539,7 @@ def build_compact_graph(
 # Backward-compatible wrapper for old expand_logical_to_fingers signature
 # ---------------------------------------------------------------------------
 
-def expand_logical_to_fingers(logical_nodes: list, original_nodes: list, pitch: float = 0.294) -> list:
+def expand_logical_to_fingers(logical_nodes: list, original_nodes: list, pitch: float = 0.294, terminal_nets: dict = None) -> list:
     """Expand logical placement back to physical fingers (backward-compatible).
 
     This wrapper handles the expansion of logical transistor groups back to
@@ -3432,14 +3584,19 @@ def expand_logical_to_fingers(logical_nodes: list, original_nodes: list, pitch: 
             fx = round(base_x + (i * internal_pitch), 6)
             finger_node["geometry"]["x"] = fx
             finger_node["geometry"]["y"] = base_y
-            # Keep all expanded fingers in uniform R0 orientation (no mirroring)
+            # Set orientation strictly to R0, but logically swap S and D nets for odd fingers
             finger_orient = "R0"
-            finger_node["geometry"]["orientation"] = finger_orient
+            if terminal_nets:
+                tn = _get_nets_for_id(finger_id, terminal_nets)
+                if tn:
+                    finger_node["net_s"] = tn.get("S", finger_node.get("net_s"))
+                    finger_node["net_d"] = tn.get("D", finger_node.get("net_d"))
+                    finger_node["net_g"] = tn.get("G", finger_node.get("net_g"))
             
-            # Swap Source and Drain nets for odd finger indices to alternate terminals
             if i % 2 != 0:
                 if "net_d" in finger_node or "net_s" in finger_node:
                     finger_node["net_d"], finger_node["net_s"] = finger_node["net_s"], finger_node.get("net_d")
+            finger_node["geometry"]["orientation"] = finger_orient
             
             # Propagate and enforce abutment flags:
             # - Internal fingers always abut neighbors

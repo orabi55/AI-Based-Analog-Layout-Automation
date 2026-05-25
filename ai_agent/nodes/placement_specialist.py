@@ -1016,6 +1016,7 @@ def node_placement_specialist(state):
         "placement_quality":       quality_report,
         "placement_text":          placement_text,
         "groups":                  groups,
+        "abutment_candidates":     abutment_candidates if 'abutment_candidates' in locals() else [],
         "last_agent":              "placement_specialist",
     }
 
