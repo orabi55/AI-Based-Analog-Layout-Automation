@@ -37,6 +37,7 @@ import time
 
 from ai_agent.agents.placement_specialist import (
     PLACEMENT_SPECIALIST_PROMPT,
+    PLACEMENT_SPECIALIST_PROMPT_CHATBOT,
     build_placement_context,
     build_placement_context_chatbot,
     create_placement_specialist_agent,
@@ -1093,7 +1094,7 @@ def node_placement_specialist_chatbot(state):
     try:
         llm_t0 = time.time()
         placement_result = _invoke_react_agent_with_retry(
-            system_prompt=_PLACEMENT_SYSTEM_PROMPT,
+            system_prompt=PLACEMENT_SPECIALIST_PROMPT_CHATBOT,
             chat_history=chat_history,
             user_prompt=placer_user,
             selected_model=selected_model,
