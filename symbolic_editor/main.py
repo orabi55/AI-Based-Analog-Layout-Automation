@@ -90,6 +90,7 @@ from symbolic_editor.icons import (
     icon_group,
     icon_schematic,
     icon_route,
+    icon_deploy_cc,
 )
 from symbolic_editor.widgets.welcome_screen import WelcomeScreen, circuit_icon_for_name
 
@@ -491,6 +492,7 @@ class MainWindow(QMainWindow):
         file_menu.addAction("Export JSON…", lambda: self._fwd("do_export_json"))
         file_menu.addAction("Export to OAS…", lambda: self._fwd("do_export_oas"))
         file_menu.addAction("Export TCL Placement.", lambda: self._fwd("do_export_tcl"))
+        file_menu.addAction("Export && Deploy to Custom Compiler", lambda: self._fwd("do_export_and_deploy"), QKeySequence("Ctrl+Shift+D"))
         file_menu.addSeparator()
         file_menu.addAction("Close Tab", self._close_current_tab, QKeySequence("Ctrl+W"))
 
@@ -709,6 +711,11 @@ class MainWindow(QMainWindow):
         self._tb_act_export.setToolTip("Export placement JSON")
         self._tb_act_export.triggered.connect(lambda: self._fwd("do_export_json"))
         tb.addAction(self._tb_act_export)
+
+        self._tb_act_deploy = QAction(icon_deploy_cc(), "Deploy to Custom Compiler", self)
+        self._tb_act_deploy.setToolTip("Export TCL placement and upload to Custom Compiler (Ctrl+Shift+D)")
+        self._tb_act_deploy.triggered.connect(lambda: self._fwd("do_export_and_deploy"))
+        tb.addAction(self._tb_act_deploy)
         tb.addSeparator()
 
         self._tb_act_schematic = QAction(icon_schematic(), "Toggle Schematic Assistant", self)

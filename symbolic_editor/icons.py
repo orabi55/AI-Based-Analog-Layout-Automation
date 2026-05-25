@@ -534,6 +534,30 @@ def icon_export_file() -> QIcon:
     return icon
 
 
+def icon_deploy_cc() -> QIcon:
+    if "deploy_cc" in _CACHE:
+        return _CACHE["deploy_cc"]
+    pm, p = _make_pixmap()
+    # Server box at top
+    p.setPen(QPen(_FG, 1.6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawRoundedRect(QRectF(7, 4, 18, 10), 2, 2)
+    p.drawLine(QPointF(7, 10), QPointF(25, 10))
+    # Server LED dot
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QBrush(_GREEN))
+    p.drawEllipse(QRectF(21, 6, 2.5, 2.5))
+    # Upload arrow in green
+    p.setPen(QPen(_GREEN, 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawLine(QPointF(16, 27), QPointF(16, 16))
+    p.drawLine(QPointF(16, 16), QPointF(11, 21))
+    p.drawLine(QPointF(16, 16), QPointF(21, 21))
+    icon = _icon_from_painter(pm, p)
+    _CACHE["deploy_cc"] = icon
+    return icon
+
+
 def icon_home() -> QIcon:
     if "home" in _CACHE:
         return _CACHE["home"]

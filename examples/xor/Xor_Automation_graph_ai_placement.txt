@@ -1,0 +1,12 @@
+M28 0.882 -2.004 R0 l=0.014 nf=1 nfin=4.0 m=1 left_abut=0 right_abut=0
+M5 0.588 -2.004 R0 l=0.014 nf=1 nfin=4.0 m=1 left_abut=0 right_abut=0
+M4 0.588 -2.672 R0 l=0.014 nf=1 nfin=4.0 m=1 left_abut=0 right_abut=0
+M3 0.294 -1.336 R0 l=0.014 nf=1 nfin=4.0 m=1 left_abut=0 right_abut=0
+M2 0.294 -2.672 R0 l=0.014 nf=1 nfin=4.0 m=1 left_abut=0 right_abut=0
+M25 0.882 -2.672 R0 l=0.014 nf=1 nfin=4.0 m=1 left_abut=0 right_abut=0
+M29 0.882 -0.000 R0 l=0.014 nf=1 nfin=4.0 m=1 left_abut=0 right_abut=0
+M9 0.588 -0.000 R0 l=0.014 nf=1 nfin=4.0 m=1 left_abut=0 right_abut=0
+M8 0.588 -1.336 R0 l=0.014 nf=1 nfin=4.0 m=1 left_abut=0 right_abut=0
+M7 0.294 -0.668 R0 l=0.014 nf=1 nfin=4.0 m=1 left_abut=0 right_abut=0
+M6 0.294 -2.004 R0 l=0.014 nf=1 nfin=4.0 m=1 left_abut=0 right_abut=0
+M24 0.882 -1.336 R0 l=0.014 nf=1 nfin=4.0 m=1 left_abut=0 right_abut=0

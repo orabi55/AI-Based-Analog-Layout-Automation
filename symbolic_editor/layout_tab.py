@@ -3106,57 +3106,59 @@ class LayoutEditorTab(QWidget):
         if self._current_file:
             json_dir = os.path.dirname(os.path.abspath(self._current_file))
             base = os.path.splitext(os.path.basename(self._current_file))[0]
-            
-            # Clean up the base name to get just the design name
             design_name = base.replace("_initial_placement", "").replace("_placement", "")
-            file_name = f"{design_name}_ai_placement.txt"
-            
-            default_path = os.path.join(json_dir, file_name)
-            
+            default_path = os.path.join(json_dir, f"{design_name}_ai_placement.txt")
+
         file_path, _ = QFileDialog.getSaveFileName(self, "Export TCL Placement", default_path, "Text Files (*.txt);;All Files (*)")
         if not file_path:
             return
-            
-        import sys
-        # Ensure we can import from the eda package
+
+        success = self._run_tcl_export(file_path)
+        if success:
+            self.chat_panel._append_message("AI", f"TCL placement exported to {os.path.basename(file_path)}", "#e8f4fd", "#1a1a2e")
+        else:
+            self.chat_panel._append_message("AI", "Failed to export TCL placement.", "#fde8e8", "#a00")
+
+    def _run_tcl_export(self, file_path: str) -> bool:
+        """Core export logic shared by do_export_tcl and do_export_and_deploy. Returns True on success."""
+        import sys, os, copy
         proj_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         if proj_root not in sys.path:
             sys.path.insert(0, proj_root)
-            
+
         self._sync_node_positions()
         saved_hierarchy_state = self._expand_all_for_export()
         try:
             from eda.json_to_tcl import LayoutExporter
             exporter = LayoutExporter(file_path)
-            
+
             abut_states = self.editor.get_device_abutment_states()
-            
-            import copy
+
             export_nodes = copy.deepcopy(self.nodes)
-            
+
             from ai_agent.placement.finger_grouper import _parse_id
             from collections import defaultdict
-            
+
             # Count total fingers per parent in the unrolled export_nodes
             parent_counts = defaultdict(int)
             for node in export_nodes:
                 parent_id, _, _ = _parse_id(node.get("id", ""))
                 parent_counts[parent_id] += 1
-                
+
             for node in export_nodes:
                 dev_id = node.get("id", "")
                 parent_id, m_idx, f_idx_val = _parse_id(dev_id)
-                
+
                 total = parent_counts[parent_id]
                 f_idx = f_idx_val if f_idx_val is not None else (m_idx if m_idx is not None else 1)
-                
+
                 if dev_id in abut_states:
                     parent_abut = abut_states[dev_id]
                 elif parent_id in abut_states:
                     parent_abut = abut_states[parent_id]
                 else:
                     parent_abut = {"abut_left": False, "abut_right": False}
-                    
+
                 node["abutment"] = {
                     "abut_left":  (f_idx > 1) or bool(parent_abut.get("abut_left", False)),
                     "abut_right": (f_idx < total) or bool(parent_abut.get("abut_right", False))
@@ -3168,18 +3170,15 @@ class LayoutEditorTab(QWidget):
             # longer share a Source/Drain net, so we must validate each pair.
             _POWER_NETS = frozenset({"VDD", "VSS", "GND", "VCC", "AVDD", "AVSS"})
             terminal_nets = self._terminal_nets or {}
-            
+
             def _get_parent_id(dev_id):
-                """Return the logical parent (e.g. MM5 from MM5_m2)."""
                 parent_id, _, _ = _parse_id(dev_id)
                 return parent_id
 
             def _sd_nets_for(dev_id):
-                """Return (source_net, drain_net) for dev_id.
-                Falls back to the parent's nets for unrolled fingers."""
                 nets = terminal_nets.get(dev_id) or terminal_nets.get(_get_parent_id(dev_id)) or {}
                 return nets.get("S"), nets.get("D")
-            
+
             # Populate net_s/net_d on export nodes from terminal_nets if missing.
             # Nodes that already have net_s/net_d (e.g. from _resolve_row_overlaps
             # with flip state applied) retain their existing values.
@@ -3204,28 +3203,27 @@ class LayoutEditorTab(QWidget):
                 the left edge of right_node share a common S/D net
                 (including power nets like VSS/VDD — those are valid
                 for physical diffusion sharing).
-                
+
                 Uses node-level net_s/net_d which already reflect
                 orientation flips (MY) from _resolve_row_overlaps."""
-                # Prefer node-level nets (already flip-aware) over raw terminal_nets
                 lid = left_node.get("id", "")
                 rid = right_node.get("id", "")
-                
+
                 l_s = left_node.get("net_s")
                 l_d = left_node.get("net_d")
                 r_s = right_node.get("net_s")
                 r_d = right_node.get("net_d")
-                
+
                 # Fall back to terminal_nets if node-level nets are missing
                 if not l_s and not l_d:
                     l_s, l_d = _sd_nets_for(lid)
                 if not r_s and not r_d:
                     r_s, r_d = _sd_nets_for(rid)
-                
+
                 # No net info → cannot validate, default to no-abut
                 if not (l_s or l_d) or not (r_s or r_d):
                     return False
-                
+
                 # Right edge of left_node can be S or D,
                 # Left edge of right_node can be S or D.
                 # Check all 4 combinations for a shared net.
@@ -3243,13 +3241,13 @@ class LayoutEditorTab(QWidget):
                 nf = max(1, int(round(n.get("geometry", {}).get("width", 0.294) / 0.294)))
                 if slot_idx + nf - 1 > max_slot:
                     max_slot = slot_idx + nf - 1
-            
+
             abut_boundaries = [False] * max_slot
             rows = defaultdict(list)
             for n in export_nodes:
                 y_key = round(n.get("geometry", {}).get("y", 0.0), 4)
                 rows[y_key].append(n)
-                
+
             for y_key, row_nodes in rows.items():
                 slot_to_node = {}
                 for n in row_nodes:
@@ -3257,19 +3255,19 @@ class LayoutEditorTab(QWidget):
                     nf = max(1, int(round(n.get("geometry", {}).get("width", 0.294) / 0.294)))
                     for i in range(nf):
                         slot_to_node[start_slot + i] = n
-                        
+
                 for k in range(max_slot):
                     if k in slot_to_node and (k+1) in slot_to_node:
                         prev = slot_to_node[k]
                         curr = slot_to_node[k+1]
-                        
+
                         if prev is curr:
                             # Same device spanning multiple slots (multi-finger internal)
                             abut_boundaries[k] = True
                         else:
                             abut_right = prev.get("abutment", {}).get("abut_right", False)
                             abut_left = curr.get("abutment", {}).get("abut_left", False)
-                            
+
                             if abut_right and abut_left:
                                 # Both flags say "yes", but verify they share a net
                                 if _adjacent_can_abut(prev, curr):
@@ -3278,14 +3276,14 @@ class LayoutEditorTab(QWidget):
                                     # Override: clear the flags on this boundary
                                     prev["abutment"]["abut_right"] = False
                                     curr["abutment"]["abut_left"] = False
-            
+
             slot_x = [0.0] * (max_slot + 1)
             for k in range(max_slot):
                 if abut_boundaries[k]:
                     slot_x[k+1] = slot_x[k] + 0.070
                 else:
                     slot_x[k+1] = slot_x[k] + 0.294
-            
+
             for n in export_nodes:
                 orig_x = n.get("geometry", {}).get("x", 0.0)
                 slot_idx = int(round(orig_x / 0.294))
@@ -3299,23 +3297,61 @@ class LayoutEditorTab(QWidget):
                 orient = node.get("geometry", {}).get("orientation", "R0")
                 # Parameters are stored under 'electrical' in the standard schema
                 params = copy.deepcopy(node.get("electrical", node.get("parameters", {})))
-                
+
                 # Retrieve resolved physical abutment parameters
                 abut = node.get("abutment", {})
                 params["left_abut"] = 1 if abut.get("abut_left", False) else 0
                 params["right_abut"] = 1 if abut.get("abut_right", False) else 0
-                
+
                 exporter.add_instance(name, x, y, orient, params=params)
-                
-            success = exporter.export_for_tcl()
-            if success:
-                self.chat_panel._append_message("AI", f"TCL placement exported to {os.path.basename(file_path)}", "#e8f4fd", "#1a1a2e")
-            else:
-                self.chat_panel._append_message("AI", f"Failed to export TCL placement.", "#fde8e8", "#a00")
+
+            return exporter.export_for_tcl()
         except Exception as e:
             self.chat_panel._append_message("AI", f"Error exporting TCL placement: {str(e)}", "#fde8e8", "#a00")
+            return False
         finally:
             self._restore_hierarchy_state(saved_hierarchy_state)
+
+    def do_export_and_deploy(self):
+        """One-click: export placement .txt then upload to Custom Compiler server via pscp."""
+        import os, sys
+        if not self._current_file:
+            self.chat_panel._append_message("AI", "No layout loaded. Open a design first.", "#fde8e8", "#a00")
+            return
+
+        json_dir = os.path.dirname(os.path.abspath(self._current_file))
+        base = os.path.splitext(os.path.basename(self._current_file))[0]
+        design_name = base.replace("_initial_placement", "").replace("_placement", "")
+        local_path = os.path.join(json_dir, f"{design_name}_ai_placement.txt")
+
+        self.chat_panel._append_message("AI", f"Exporting placement for '{design_name}'…", "#e8f4fd", "#1a1a2e")
+        if not self._run_tcl_export(local_path):
+            return
+
+        proj_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if proj_root not in sys.path:
+            sys.path.insert(0, proj_root)
+
+        from eda.ssh_deploy import SSHDeployer
+        deployer = SSHDeployer()
+        if not deployer.is_configured():
+            self.chat_panel._append_message(
+                "AI",
+                "Exported locally but SSH is not configured.\n"
+                "Add CC_SSH_HOST, CC_SSH_USER, CC_SSH_PASSWORD, CC_REMOTE_DIR to your .env file.",
+                "#fff3cd", "#856404",
+            )
+            return
+
+        ok, result = deployer.upload(local_path)
+        if ok:
+            self.chat_panel._append_message(
+                "AI",
+                f"Deployed → `{result}`\nCustom Compiler watcher will apply the placement automatically.",
+                "#e8f4fd", "#1a1a2e",
+            )
+        else:
+            self.chat_panel._append_message("AI", f"Export OK but upload failed: {result}", "#fde8e8", "#a00")
 
 
     def do_export_oas(self):
