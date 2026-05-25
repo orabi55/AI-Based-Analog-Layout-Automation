@@ -217,7 +217,7 @@ State flows through `LayoutState` TypedDict. Key fields: `nodes`, `placement_nod
 
 | File | Fix |
 |------|-----|
-| `symbolic_editor/editor_view.py` | **Mouse scroll**: removed `event.inverted()` flip. Scroll up = zoom in, scroll down = zoom out. The inverted check was firing on Windows and reversing direction. |
+| `symbolic_editor/editor_view.py` | **Mouse scroll**: EDA-style cursor-anchored zoom. `setTransformationAnchor(AnchorUnderMouse)` wraps `_apply_zoom_factor` in `wheelEvent` so the scene point under the cursor stays fixed. `event.inverted()` also removed (was misfiring on Windows). Toolbar zoom buttons keep `AnchorViewCenter`. |
 | `ai_agent/core/circuit_orchestrator.py` | **Structural dummies removed**: the auto-insertion loop around matched clusters has been deleted. It produced wrong geometry. Use GUI dummy mode or `add_dummy` tool instead. |
 | `ai_agent/tools/dispatcher.py` | **`add_dummy` upgraded**: now mirrors `_build_dummy_node` — sequential `DUMMYP`/`DUMMYN` IDs, copies `electrical` + `layout_cell` + `template_layout_index` from real device template, sets `dummy_source: "tool"`. UUID-based IDs removed. |
 | `ai_agent/llm/tool_runner.py` | **DRC history scrubber**: `_scrub_drc_from_messages()` truncates old violation blocks to 5 entries before each LLM call. |

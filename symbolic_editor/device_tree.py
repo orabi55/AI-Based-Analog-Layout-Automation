@@ -866,7 +866,6 @@ class DeviceTreePanel(QWidget):
             net_name = item.data(0, Qt.ItemDataRole.UserRole + 1)
             devices = item.data(0, Qt.ItemDataRole.UserRole + 4) or []
             if net_name and devices:
-                self.device_selected.emit(devices[0])
                 self.connection_selected.emit(devices[0], net_name, "")
             item.setExpanded(not item.isExpanded())
             return

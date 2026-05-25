@@ -662,15 +662,20 @@ class SymbolicEditor(QGraphicsView):
         if not type_items["nmos"] and not type_items["pmos"]:
             return None
 
-        rows = []
+        # Group devices into individual row bands (cluster by snapped Y per type)
+        # so that two PMOS rows are treated as two separate candidates rather than
+        # averaged into a single mid-point that may not match the cursor.
+        row_bands = {}
         for dev_type, items in type_items.items():
-            if not items:
-                continue
-            avg_y = sum(it.pos().y() for it in items) / len(items)
-            rows.append((dev_type, avg_y))
+            for item in items:
+                ry = self._snap_row(item.pos().y())
+                row_bands.setdefault((dev_type, ry), []).append(item)
 
-        target_type, target_y = min(rows, key=lambda r: abs(scene_pos.y() - r[1]))
-        ref_item = type_items[target_type][0]
+        if not row_bands:
+            return None
+
+        (target_type, target_y) = min(row_bands.keys(), key=lambda k: abs(scene_pos.y() - k[1]))
+        ref_item = row_bands[(target_type, target_y)][0]
         width = ref_item.rect().width()
         height = ref_item.rect().height()
         cursor_x = self._snap_value(scene_pos.x() - (width / 2.0))
@@ -714,9 +719,14 @@ class SymbolicEditor(QGraphicsView):
             items = all_items
             target_row_type = getattr(items[0], "device_type", "nmos").strip().lower()
 
-        avg_y = sum(it.pos().y() for it in items) / len(items)
-        target_y = avg_y
-        ref_item = items[0]
+        # Group into individual row bands so multiple rows of the same type
+        # map to distinct candidates rather than an averaged mid-point.
+        tap_row_bands: dict = {}
+        for it in items:
+            ry = self._snap_row(it.pos().y())
+            tap_row_bands.setdefault(ry, []).append(it)
+        target_y = min(tap_row_bands.keys(), key=lambda ry: abs(scene_pos.y() - ry))
+        ref_item = tap_row_bands[target_y][0]
         
         # Tap cells are visually 1.0x width of a reference transistor
         width = ref_item.rect().width() * 1.0
@@ -1370,6 +1380,18 @@ class SymbolicEditor(QGraphicsView):
         )
         group_item.signals.descend_requested.connect(self._on_hierarchy_descend)
         group_item.signals.ascend_requested.connect(self._on_hierarchy_ascend)
+        group_item.signals.clicked.connect(self._on_hierarchy_group_clicked)
+
+    def _on_hierarchy_group_clicked(self, group_item):
+        dev_ids = self._custom_group_device_ids(group_item)
+        if not dev_ids:
+            dev_item_to_id = {v: k for k, v in self.device_items.items()}
+            dev_ids = [
+                dev_item_to_id[d]
+                for d in getattr(group_item, "_all_descendant_devices", [])
+                if d in dev_item_to_id
+            ]
+        self.highlight_device_list(dev_ids)
 
     def refresh_hierarchy_group_geometry(self):
         for group in self._iter_live_hierarchy_groups():
@@ -2155,6 +2177,35 @@ class SymbolicEditor(QGraphicsView):
             self.scene.blockSignals(False)
         self.scene.update()
 
+    def highlight_net_simple(self, net_name: str):
+        """Highlight a net via terminal color + dimming only — no flight lines.
+
+        Used by tree-click net selection so the view stays calm (no crossing
+        dotted lines that confuse the user when many terminals share a power net).
+        """
+        self.scene.blockSignals(True)
+        self.scene.clearSelection()
+        self.scene.blockSignals(False)
+        self._clear_connections()
+
+        if not net_name or net_name == "?":
+            self.clear_highlighted_net()
+            return
+
+        self.set_highlighted_net(net_name)
+
+        net_up = net_name.strip().upper()
+        connected_items = [
+            item
+            for dev_id, item in self.device_items.items()
+            if any(
+                str(v).strip().upper() == net_up
+                for v in self._terminal_nets_for_device(dev_id).values()
+            )
+        ]
+        self._apply_dimming_for_selection(connected_items)
+        self.scene.update()
+
     def _show_net_connections(self, dev_id, net_name):
         """Highlight and route a selected net from tree/schematic interactions."""
         self.highlight_net_by_name(net_name)
@@ -2429,6 +2480,32 @@ class SymbolicEditor(QGraphicsView):
         if matched_items:
             self._show_connections(matched_items[0].device_name)
         # Trigger visual repaint
+        self.scene.update()
+
+    def highlight_device_list(self, dev_ids):
+        """Select and dim-focus a list of devices (group member highlighting)."""
+        if not dev_ids:
+            self._reset_dimming()
+            self._clear_connections()
+            return
+        matched_items = []
+        id_set = set(dev_ids)
+        for dev_id, item in self.device_items.items():
+            if dev_id in id_set:
+                matched_items.append(item)
+            else:
+                for did in id_set:
+                    if dev_id.startswith(did + "_"):
+                        matched_items.append(item)
+                        break
+        self.scene.blockSignals(True)
+        self.scene.clearSelection()
+        for item in matched_items:
+            item.setSelected(True)
+        self.scene.blockSignals(False)
+        self.clear_highlighted_net()
+        self._clear_connections()
+        self._apply_dimming_for_selection(matched_items)
         self.scene.update()
 
     def keyPressEvent(self, event):

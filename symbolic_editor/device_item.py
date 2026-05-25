@@ -682,41 +682,29 @@ class DeviceItem(QGraphicsRectItem):
                     col_center = draw_rect.center()
                     
                     # Dynamic font size
-                    fs = max(0.2, sd_w * 0.5)
-                    net_font = QFont("Segoe UI", fs, QFont.Weight.ExtraBold)
-                    net_font.setStretch(120)
+                    # Screen-space rendering — text reads correctly regardless of flip transform
+                    col_scr = painter.transform().mapRect(draw_rect)
                     painter.save()
+                    painter.resetTransform()
+                    fs_px = max(4.0, min(11.0, col_scr.width() * 0.55))
+                    net_font = QFont("Segoe UI", fs_px, QFont.Weight.ExtraBold)
+                    net_font.setStretch(120)
                     painter.setFont(net_font)
                     fm = painter.fontMetrics()
-                    while fs > 0.05 and (fm.horizontalAdvance(net) > h * 0.8 or fm.height() > sd_w * 0.9):
-                        fs *= 0.9
-                        net_font.setPointSizeF(fs)
+                    while fs_px > 1.0 and (fm.horizontalAdvance(net) > col_scr.height() * 0.8
+                                           or fm.height() > col_scr.width() * 0.9):
+                        fs_px *= 0.9
+                        net_font.setPointSizeF(fs_px)
                         painter.setFont(net_font)
                         fm = painter.fontMetrics()
-
-                    label_center = col_center
-                    painter.save()
-                    if self._flip_h or self._flip_v:
-                        label_center = QPointF(
-                            2*cx - col_center.x() if self._flip_h else col_center.x(),
-                            2*cy - col_center.y() if self._flip_v else col_center.y(),
-                        )
-                        painter.translate(cx, cy)
-                        painter.scale(-1.0 if self._flip_h else 1.0,
-                                       -1.0 if self._flip_v else 1.0)
-                        painter.translate(-cx, -cy)
-
-                    painter.translate(label_center)
+                    painter.translate(col_scr.center())
                     painter.rotate(-90)
-                    
-                    # Full column rect for alignment
-                    rect_lbl = QRectF(-h*0.45, -sd_w/2, h*0.9, sd_w)
-                    
-                    glow_off = fs * 0.05
+                    rect_lbl = QRectF(-col_scr.height() * 0.45, -col_scr.width() / 2,
+                                      col_scr.height() * 0.9, col_scr.width())
+                    glow_off = fs_px * 0.05
                     painter.setPen(QColor(0, 0, 0, 200))
-                    for dx, dy in [(-glow_off,0), (glow_off,0), (0,-glow_off), (0,glow_off)]:
+                    for dx, dy in [(-glow_off, 0), (glow_off, 0), (0, -glow_off), (0, glow_off)]:
                         painter.drawText(rect_lbl.translated(dx, dy), Qt.AlignmentFlag.AlignCenter, net)
-                    
                     painter.setPen(self._net_display_color(net))
                     painter.drawText(rect_lbl, Qt.AlignmentFlag.AlignCenter, net)
                     painter.restore()
@@ -761,38 +749,29 @@ class DeviceItem(QGraphicsRectItem):
                     g_net = self._net_names.get("G")
                     if g_net:
                         gate_center = draw_gate_rect.center()
-                        fs = max(0.2, gate_w * 0.7)
-                        net_font = QFont("Segoe UI", fs, QFont.Weight.ExtraBold)
-                        net_font.setStretch(120)
+                        # Screen-space rendering — text reads correctly regardless of flip transform
+                        gate_scr = painter.transform().mapRect(draw_gate_rect)
                         painter.save()
+                        painter.resetTransform()
+                        fs_px = max(4.0, min(11.0, gate_scr.width() * 0.7))
+                        net_font = QFont("Segoe UI", fs_px, QFont.Weight.ExtraBold)
+                        net_font.setStretch(120)
                         painter.setFont(net_font)
                         fm = painter.fontMetrics()
-                        while fs > 0.05 and (fm.horizontalAdvance(g_net) > h * 0.8 or fm.height() > gate_w * 0.9):
-                            fs *= 0.9
-                            net_font.setPointSizeF(fs)
+                        while fs_px > 1.0 and (fm.horizontalAdvance(g_net) > gate_scr.height() * 0.8
+                                               or fm.height() > gate_scr.width() * 0.9):
+                            fs_px *= 0.9
+                            net_font.setPointSizeF(fs_px)
                             painter.setFont(net_font)
                             fm = painter.fontMetrics()
-
-                        label_center = gate_center
-                        if self._flip_h or self._flip_v:
-                            label_center = QPointF(
-                                2*cx - gate_center.x() if self._flip_h else gate_center.x(),
-                                2*cy - gate_center.y() if self._flip_v else gate_center.y(),
-                            )
-                            painter.translate(cx, cy)
-                            painter.scale(-1.0 if self._flip_h else 1.0,
-                                           -1.0 if self._flip_v else 1.0)
-                            painter.translate(-cx, -cy)
-
-                        painter.translate(label_center)
+                        painter.translate(gate_scr.center())
                         painter.rotate(-90)
-                        rect_lbl = QRectF(-h*0.45, -gate_w/2, h*0.9, gate_w)
-                        
-                        glow_off = fs * 0.05
+                        rect_lbl = QRectF(-gate_scr.height() * 0.45, -gate_scr.width() / 2,
+                                          gate_scr.height() * 0.9, gate_scr.width())
+                        glow_off = fs_px * 0.05
                         painter.setPen(QColor(0, 0, 0, 200))
-                        for dx, dy in [(-glow_off,0), (glow_off,0), (0,-glow_off), (0,glow_off)]:
+                        for dx, dy in [(-glow_off, 0), (glow_off, 0), (0, -glow_off), (0, glow_off)]:
                             painter.drawText(rect_lbl.translated(dx, dy), Qt.AlignmentFlag.AlignCenter, g_net)
-
                         painter.setPen(self._net_display_color(g_net))
                         painter.drawText(rect_lbl, Qt.AlignmentFlag.AlignCenter, g_net)
                         painter.restore()

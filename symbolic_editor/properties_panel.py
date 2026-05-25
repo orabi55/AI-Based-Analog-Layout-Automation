@@ -2,10 +2,10 @@
 """
 Properties panel for the symbolic editor.
 
-Shows read-only details for the currently selected device or hierarchy block.
+Shows device properties; terminal-net fields are editable for dummies.
 """
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QFormLayout,
@@ -22,10 +22,17 @@ from PySide6.QtWidgets import (
 
 
 class PropertiesPanel(QWidget):
-    """Read-only inspector for devices and hierarchy blocks."""
+    """Inspector for devices and hierarchy blocks.
+
+    Terminal net fields are editable for dummy devices; emits
+    ``terminal_net_changed(dev_id, terminal, new_net)`` when edited.
+    """
+
+    terminal_net_changed = Signal(str, str, str)  # (dev_id, terminal, new_net)
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._current_dev_id = None
         self._init_ui()
 
     def _init_ui(self):
@@ -160,6 +167,29 @@ class PropertiesPanel(QWidget):
         else:
             group.deleteLater()
 
+    def _add_editable_connections_group(self, nets, dev_id):
+        """Editable G/D/S fields for dummy devices."""
+        group = QGroupBox("Connections  ✎")
+        group.setStyleSheet(self._group_style())
+        form = QFormLayout(group)
+        form.setContentsMargins(8, 10, 8, 8)
+        form.setHorizontalSpacing(10)
+        form.setVerticalSpacing(8)
+        editable_style = (
+            self._field_style()
+            + " background-color: #1a2a18; border-color: #4caf50;"
+        )
+        for terminal, label in [("G", "Gate"), ("D", "Drain"), ("S", "Source")]:
+            field = QLineEdit(str(nets.get(terminal) or ""))
+            field.setStyleSheet(editable_style)
+            field.setPlaceholderText("net name")
+            t = terminal
+            field.editingFinished.connect(
+                lambda f=field, t=t, d=dev_id: self.terminal_net_changed.emit(d, t, f.text().strip())
+            )
+            form.addRow(self._make_label(label), field)
+        self._content_layout.addWidget(group)
+
     def clear_properties(self, message="Select a device or block to inspect its properties."):
         self._clear_content()
         placeholder = QLabel(message)
@@ -174,6 +204,7 @@ class PropertiesPanel(QWidget):
 
     def show_device_properties(self, dev_id, node_data, terminal_nets=None, block_data=None):
         self._clear_content()
+        self._current_dev_id = dev_id
 
         if not node_data:
             self.clear_properties(f"No properties found for {dev_id}.")
@@ -183,13 +214,14 @@ class PropertiesPanel(QWidget):
         geometry = node_data.get("geometry", {})
         nets = (terminal_nets or {}).get(dev_id, {})
         block_info = node_data.get("block", {}) or {}
+        is_dummy = bool(node_data.get("is_dummy", False))
 
         self._add_group(
             "Device",
             [
                 ("Name", dev_id),
                 ("Type", str(node_data.get("type", "")).upper()),
-                ("Dummy", "Yes" if node_data.get("is_dummy") else "No"),
+                ("Dummy", "Yes" if is_dummy else "No"),
             ],
         )
         self._add_group(
@@ -213,14 +245,17 @@ class PropertiesPanel(QWidget):
                 ("Subckt", block_info.get("subckt") or (block_data or {}).get("subckt")),
             ],
         )
-        self._add_group(
-            "Connections",
-            [
-                ("Gate", nets.get("G")),
-                ("Drain", nets.get("D")),
-                ("Source", nets.get("S")),
-            ],
-        )
+        if is_dummy:
+            self._add_editable_connections_group(nets, dev_id)
+        else:
+            self._add_group(
+                "Connections",
+                [
+                    ("Gate", nets.get("G")),
+                    ("Drain", nets.get("D")),
+                    ("Source", nets.get("S")),
+                ],
+            )
         self._add_group(
             "Geometry",
             [
