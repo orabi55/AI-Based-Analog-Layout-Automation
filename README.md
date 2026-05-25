@@ -5,7 +5,7 @@
 
 A state-of-the-art symbolic analog layout editor and automation framework. This project leverages a **LangGraph-driven multi-agent pipeline** to transform circuit netlists into production-ready, DRC-clean analog layouts through LLM-assisted placement and deterministic geometric expansion.
 
-![Canvas view — PMOS and NMOS rows with dummy devices](docs/images/editor_canvas.png)
+![AI-Based Analog Layout Automation - Completed Comparator Layout](docs/images/comparator.png)
 
 ---
 
@@ -23,8 +23,15 @@ graph TD
     C -->|Calculates Fingers & Spacing| D["DRC Validation & Connectivity Scoring"]
     D -->|Identifies Violations| E{"DRC Clean?"}
     E -->|No: Self-Healing Feedback| B
-    E -->|Yes| F["OASIS / GDS / TCL Export Pipeline"]
+E -->|Yes| F["OASIS / GDS / TCL Export Pipeline"]
 ```
+
+---
+
+### 📂 Stage 1: SPICE Netlist Parsing & Subgraph Extraction
+The system parses native SPICE netlists (`.sp`), builds an abstract topological graph, and matches structural subgraphs to identify matched transistor groups (differential pairs, current mirrors, cascodes):
+
+![SPICE Netlist Graph Matching and Parser Architecture](docs/images/parser.png)
 
 ---
 
@@ -86,6 +93,11 @@ stateDiagram-v2
     Export --> [*] : Final Layout JSON
 ```
 
+### 🤖 Multi-Agent LangGraph Choreography
+The strategic floorplanning is managed by cooperative AI agents that orchestrate logical moves, check routing quality, and automatically self-heal placement overlaps:
+
+![Multi-Agent LangGraph Orchestration Flowchart](docs/images/AI_Placement.png)
+
 ### LangGraph Agent Roles & Responsibilities
 
 | Stage | Responsibility | Detailed Output |
@@ -128,6 +140,21 @@ During initial placement, dummy padding can be enabled or suppressed (`DISABLE_F
 * **Interactive Co-Pilot:** Real-time chat panel displaying LLM placement suggestions and pipeline reports.
 * **Live Layout Preview:** Integrated panel running KLayout in a background thread to render sub-micron live placements on the fly.
 * **Isolated Undo Contexts:** Multi-tab layout configuration; each tab holds its own independent AI context, command buffer, and undo histories.
+
+### 💬 Real-Time AI Co-Pilot Panel
+The interactive chat panel allows direct dialogue with the layout strategist, streaming real-time self-healing feedback, geometric compacting details, and DRC validation reports:
+
+![PySide6 Interactive AI Co-Pilot Canvas Panel](docs/images/ChatBot.png)
+
+---
+
+## 🔌 Headless OASIS Compiler & EDA Integrations
+
+The deterministic layout backend operates both as an on-the-fly PySide6 graphics viewer and a high-performance database exporter:
+- **TCL Coordinate Injection:** Generates space-separated physical coordinate placement scripts for downstream OpenAccess-resident tools (e.g. Synopsys Custom Compiler, Cadence Virtuoso).
+- **Headless OASIS/GDS Compiler:** Programmatically compiles hierarchical placements, touch-abutment physical spacings, and custom-infilled tap cells directly into binary `.oas` layout streams.
+
+![TCL Exporter and Headless OASIS Compilation Flowchart](docs/images/tcl_oas.png)
 
 ---
 
@@ -183,6 +210,26 @@ python symbolic_editor/main.py
 * **`parser/`**: The Design Reader (SPICE topological parsers and OASIS layout parsers).
 * **`export/`**: Stream Writers (OASIS binary compiler and GDS-like layout assembly engines).
 * **`eda/`**: EDA Integrations (OpenAccess Tcl radar synchronizers and Live watchdogs).
+
+---
+
+## 📊 Layout Symmetry & Optimization Results
+
+Below are before/after comparisons showing how the strategic agent optimizer and geometric compaction engine organize layouts from random starting states into perfectly symmetric, DRC-clean, compact analog blocks:
+
+### 1. Differential Pair (Comparator Block)
+The AI placement specialist and symmetry enforcer interleave active devices and center them symmetrically with outer balanced dummy pads:
+
+| Before Optimization (Unsymmetrical & Unaligned) | After Optimization (Perfectly Symmetric & Packed) |
+| :---: | :---: |
+| ![Comparator Layout Before Optimization](docs/images/comparator_old.png) | ![Symmetric Comparator Layout After Optimization](docs/images/comparator.png) |
+
+### 2. High-Performance Current Mirror
+Active matched rows are aligned with alternating source/drain terminals and grid-aligned dummies to guarantee uniform spatial gradients:
+
+| Before Optimization (Randomly Spaced) | After Optimization (Unified Symmetry & Compaction) |
+| :---: | :---: |
+| ![Current Mirror Before Optimization](docs/images/current_mirror_old.png) | ![Symmetric Current Mirror After Optimization](docs/images/current_mirror.png) |
 
 ---
 
