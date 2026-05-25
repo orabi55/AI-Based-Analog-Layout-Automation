@@ -39,11 +39,17 @@ def _fmt_param_val(k, v):
     return str(v)
 
 
+_GLOBAL_NETS = {"gnd", "vdd", "vss", "vcc", "avdd", "avss"}
+
 def _net_suffix(net):
     """Append '!' for global nets that don't already have it."""
-    if net and not net.endswith("!"):
-        return net + "!"
-    return net or ""
+    if not net:
+        return ""
+    net_str = str(net).strip()
+    net_lower = net_str.lower().rstrip("!")
+    if net_lower in _GLOBAL_NETS:
+        return net_lower + "!"
+    return net_str
 
 
 class LayoutExporter:
@@ -82,12 +88,17 @@ class LayoutExporter:
         clean_name = re.sub(r'_[fF](\d+)', r'.f\1', clean_name)
         clean_name = re.sub(r'_[mM](\d+)', r'.m\1', clean_name)
 
+        params_dict = dict(params or {})
+        if not is_tap:
+            params_dict["m"] = 1
+            params_dict["nf"] = 1
+
         self.instances.append({
             "name":        clean_name,
             "x":           float(x),
             "y":           float(y),
             "orient":      orient or "R0",
-            "params":      dict(params or {}),
+            "params":      params_dict,
             "is_dummy":    bool(is_dummy),
             "is_tap":      bool(is_tap),
             "device_type": device_type or "",
