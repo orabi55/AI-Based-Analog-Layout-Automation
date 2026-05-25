@@ -23,6 +23,7 @@ class HierarchyGroupSignals(QObject):
     position_changed = Signal(object)
     descend_requested = Signal(object)
     ascend_requested = Signal(object)
+    clicked = Signal(object)  # emitted on release when not dragging
 
 
 class HierarchyGroupItem(QGraphicsRectItem):
@@ -298,6 +299,9 @@ class HierarchyGroupItem(QGraphicsRectItem):
             self._drag_active = False
             self.signals.drag_finished.emit()
             self._drag_start_pos = self.pos()
+        else:
+            if event.button() == Qt.MouseButton.LeftButton:
+                self.signals.clicked.emit(self)
         super().mouseReleaseEvent(event)
 
     def mouseDoubleClickEvent(self, event):

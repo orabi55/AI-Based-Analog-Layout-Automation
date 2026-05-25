@@ -39,6 +39,7 @@ try:
     from .device_tree import DeviceTreePanel
     from .editor_view import SymbolicEditor, DeleteGroupCommand
     from .hierarchy_group_item import HierarchyGroupItem
+    from .hierarchy_detector import detect_functional_groups
     from .klayout_panel import KLayoutPanel
     from .properties_panel import PropertiesPanel
     from .schematic_view import SchematicPanel
@@ -53,6 +54,7 @@ except ImportError:
     from device_tree import DeviceTreePanel
     from editor_view import SymbolicEditor, DeleteGroupCommand
     from hierarchy_group_item import HierarchyGroupItem
+    from hierarchy_detector import detect_functional_groups
     from klayout_panel import KLayoutPanel
     from properties_panel import PropertiesPanel
     from schematic_view import SchematicPanel
@@ -282,6 +284,7 @@ class LayoutEditorTab(QWidget):
         self.editor.hierarchy_drag_finished.connect(self._on_hierarchy_drag_end)
         self.editor.cancel_tools_requested.connect(self._cancel_active_tools)
         self.editor.device_clicked.connect(self._on_canvas_device_clicked)
+        self.properties_panel.terminal_net_changed.connect(self._on_terminal_net_changed)
         self.editor.hierarchy_changed.connect(self._on_hierarchy_changed)
         self.editor.abutment_changed.connect(
             lambda: self._schedule_live_klayout_update(delay_ms=100)
@@ -338,6 +341,10 @@ class LayoutEditorTab(QWidget):
         self._shortcut_show_props = QShortcut(QKeySequence("Q"), self._workspace_shell)
         self._shortcut_show_props.setContext(Qt.ShortcutContext.ApplicationShortcut)
         self._shortcut_show_props.activated.connect(self._show_selected_device_properties)
+
+        self._shortcut_auto_hierarchy = QShortcut(QKeySequence("Ctrl+H"), self._workspace_shell)
+        self._shortcut_auto_hierarchy.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        self._shortcut_auto_hierarchy.activated.connect(self._auto_detect_hierarchy)
 
     # ── Public convenience properties ────────────────────────────
     @property
@@ -1132,6 +1139,9 @@ class LayoutEditorTab(QWidget):
     def _on_tree_block_selected(self, block_id):
         block_data = self._blocks.get(block_id, {})
         self.properties_panel.show_block_properties(block_id, block_data)
+        devices = list(block_data.get("devices", []) or [])
+        if devices:
+            self.editor.highlight_device_list(devices)
 
     def _on_connection_selected(self, dev_id, net_name, _other):
         if net_name and net_name != "?":
@@ -1139,6 +1149,37 @@ class LayoutEditorTab(QWidget):
         else:
             self.editor.highlight_device(dev_id)
         self._show_device_properties(dev_id)
+
+    def _on_terminal_net_changed(self, dev_id, terminal, new_net):
+        """Update terminal_nets when user edits a dummy's connection in Properties."""
+        if dev_id and terminal in ("G", "D", "S"):
+            self._terminal_nets.setdefault(dev_id, {})[terminal] = new_net
+            self.editor.set_terminal_nets(self._terminal_nets)
+            self.editor.viewport().update()
+
+    def _detect_power_nets(self):
+        """Scan terminal_nets to find the VDD and VSS net names in this circuit.
+
+        Heuristic: PMOS source/drain most-common net → VDD candidate;
+        NMOS source/drain most-common net → VSS candidate.
+        """
+        vdd_cands: dict = {}
+        vss_cands: dict = {}
+        for dev_id, nets in self._terminal_nets.items():
+            node = self._find_node(dev_id)
+            if not node:
+                continue
+            dev_type = str(node.get("type", "")).lower()
+            for terminal, net in nets.items():
+                if not net or net == "?":
+                    continue
+                if dev_type == "pmos" and terminal in ("S", "D"):
+                    vdd_cands[net] = vdd_cands.get(net, 0) + 1
+                elif dev_type == "nmos" and terminal in ("S", "D"):
+                    vss_cands[net] = vss_cands.get(net, 0) + 1
+        vdd = max(vdd_cands, key=vdd_cands.get) if vdd_cands else "vdd"
+        vss = max(vss_cands, key=vss_cands.get) if vss_cands else "gnd"
+        return vdd, vss
 
     def _on_canvas_device_clicked(self, dev_id):
         self._show_device_properties(dev_id)
@@ -1527,6 +1568,29 @@ class LayoutEditorTab(QWidget):
         target_group = self.editor.find_group_by_name(group_name)
         if target_group:
             self.editor._delete_group(target_group)
+
+    def _auto_detect_hierarchy(self):
+        """Detect functional groups (Ctrl+H) and apply them as custom groups."""
+        try:
+            groups = detect_functional_groups(self.nodes, self._terminal_nets)
+        except Exception as e:
+            import logging
+            logging.warning("Hierarchy detection failed: %s", e, exc_info=True)
+            return
+        if not groups:
+            return
+        self._push_undo()
+        self._custom_groups = groups
+        if self._original_data is not None:
+            self._original_data["custom_groups"] = copy.deepcopy(groups)
+        self.editor.apply_custom_groups(groups)
+        try:
+            self.device_tree.set_custom_groups(groups)
+        except Exception:
+            pass
+        self.device_tree.load_devices(self.nodes)
+        self._on_hierarchy_changed()
+
     # =================================================================
     #  Select All / Swap / Merge / Flip / Delete
     # =================================================================
@@ -1990,6 +2054,13 @@ class LayoutEditorTab(QWidget):
         self._sync_node_positions(); self._push_undo()
         candidate = self._legalize_dummy_candidate(candidate)
         dummy = self._build_dummy_node(candidate)
+        # Wire all dummy terminals to the supply rail detected from this circuit
+        # (e.g. "VDD"/"VSS" rather than generic "vdd"/"gnd").
+        vdd_net, vss_net = self._detect_power_nets()
+        default_net = vdd_net if dummy["type"] == "pmos" else vss_net
+        self._terminal_nets[dummy["id"]] = {
+            "G": default_net, "D": default_net, "S": default_net
+        }
         self.nodes.append(dummy)
         self._original_data["nodes"] = self.nodes
         self._refresh_panels(compact=False)
@@ -3556,8 +3627,15 @@ class LayoutEditorTab(QWidget):
                 if self._original_data is None:
                     self._original_data = {}
                 self._original_data["nodes"] = self.nodes
+                # Preserve viewport so the canvas stays still after AI changes.
+                _saved_transform = self.editor.transform()
+                _saved_h = self.editor.horizontalScrollBar().value()
+                _saved_v = self.editor.verticalScrollBar().value()
                 self._refresh_panels(compact=False)
                 self._sync_node_positions()
+                self.editor.setTransform(_saved_transform)
+                self.editor.horizontalScrollBar().setValue(_saved_h)
+                self.editor.verticalScrollBar().setValue(_saved_v)
                 # Apply per-node visual metadata (color, lock state) to canvas items
                 from PySide6.QtWidgets import QGraphicsItem
                 from PySide6.QtGui import QColor as _QColor
