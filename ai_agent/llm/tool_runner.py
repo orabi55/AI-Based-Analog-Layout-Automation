@@ -25,6 +25,7 @@ Provider matrix
 from __future__ import annotations
 
 import logging
+import re
 import time
 from typing import Any, List, Tuple
 
@@ -34,6 +35,77 @@ logger = logging.getLogger("ai_agent")
 
 # Providers that DO NOT support reliable tool binding — text-only path
 PROVIDERS_WITHOUT_TOOLS: frozenset = frozenset({"Alibaba"})
+
+# Maximum DRC violation entries kept per block when scrubbing chat history.
+# Older violation lists in accumulated context can fill the LLM context window
+# on iterative tool-calling loops; this hard cap prevents that.
+_MAX_DRC_VIOLATIONS_IN_HISTORY: int = 5
+
+# Pre-compiled pattern: numbered violation lines produced by format_drc_violations_for_llm
+# look like "  [1] OVERLAP: ..." or "  [12] ROW_ERROR: ..."
+_DRC_VIOLATION_LINE_RE = re.compile(r"^\s+\[\d+\]")
+
+
+# ---------------------------------------------------------------------------
+# DRC context guard
+# ---------------------------------------------------------------------------
+
+def _scrub_drc_from_messages(
+    messages: list,
+    max_violations: int = _MAX_DRC_VIOLATIONS_IN_HISTORY,
+) -> list:
+    """Truncate DRC violation blocks in accumulated chat history.
+
+    Iterative tool-calling loops append check_overlaps results to chat_messages
+    on every pass. Without trimming, hundreds of violation strings from prior
+    passes fill the LLM context window and pollute the chat window display.
+    This keeps at most *max_violations* numbered entries per DRC block and
+    replaces the rest with a single suppression note.
+    """
+    _DRC_HEADER = "═══ DRC VIOLATIONS"
+    scrubbed = []
+    for msg in messages:
+        content = msg.get("content", "")
+        if not isinstance(content, str) or _DRC_HEADER not in content:
+            scrubbed.append(msg)
+            continue
+
+        lines = content.splitlines()
+        out_lines: list[str] = []
+        in_block = False
+        kept = 0
+        suppressed = 0
+
+        for line in lines:
+            if _DRC_HEADER in line:
+                in_block = True
+                kept = 0
+                suppressed = 0
+                out_lines.append(line)
+                continue
+
+            if in_block and _DRC_VIOLATION_LINE_RE.match(line):
+                kept += 1
+                if kept <= max_violations:
+                    out_lines.append(line)
+                else:
+                    suppressed += 1
+            else:
+                if in_block and suppressed:
+                    out_lines.append(
+                        f"  ... ({suppressed} more suppressed from context history)"
+                    )
+                    suppressed = 0
+                    in_block = False
+                out_lines.append(line)
+
+        if suppressed:
+            out_lines.append(
+                f"  ... ({suppressed} more suppressed from context history)"
+            )
+
+        scrubbed.append({**msg, "content": "\n".join(out_lines)})
+    return scrubbed
 
 
 # ---------------------------------------------------------------------------
@@ -226,6 +298,7 @@ def run_llm_with_tools(
     if not lc_messages:
         lc_messages = [{"role": "user", "content": full_prompt or "Hello"}]
 
+    lc_messages = _scrub_drc_from_messages(lc_messages)
     vprint("[TOOL_RUNNER] prompts sent to LLM:")
     for idx, msg in enumerate(lc_messages):
         role = msg.get("role", "user")

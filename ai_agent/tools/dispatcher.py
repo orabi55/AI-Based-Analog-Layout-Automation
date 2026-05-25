@@ -23,7 +23,6 @@ from __future__ import annotations
 import copy
 import json
 import logging
-import uuid
 from typing import List
 
 from ai_agent.core.interfaces import LayoutToolResult
@@ -55,6 +54,16 @@ def _is_dummy(node: dict) -> bool:
         return True
     nid = str(node.get("id", ""))
     return nid.startswith(("FILLER_DUMMY_", "DUMMY_matrix_", "EDGE_DUMMY", "FILLER_"))
+
+
+def _next_dummy_id(nodes: list, dev_type: str) -> str:
+    """Sequential dummy ID matching the GUI convention: DUMMYP1, DUMMYN2, …"""
+    prefix = "DUMMYP" if str(dev_type).lower() == "pmos" else "DUMMYN"
+    used = {str(n.get("id", "")) for n in nodes}
+    i = 1
+    while f"{prefix}{i}" in used:
+        i += 1
+    return f"{prefix}{i}"
 
 
 def _merge_back(original_copy: list, updated_subset: list) -> list:
@@ -211,22 +220,42 @@ def _route(tool_name: str, args: dict, nodes: list, pdk: dict,
         )
 
     if tool_name == "add_dummy":
-        dummy_id = f"FILLER_DUMMY_{uuid.uuid4().hex[:8]}"
-        dummy = {
-            "id":       dummy_id,
-            "type":     args.get("type", "nmos"),
-            "is_dummy": True,
+        dev_type = str(args.get("type", "nmos")).strip().lower()
+        # Mirror _build_dummy_node in layout_tab.py: copy geometry and electrical
+        # from the first real (non-dummy) device of the same type so the placed
+        # dummy is physically identical to a GUI-placed dummy.
+        template = next(
+            (n for n in nodes
+             if str(n.get("type", "")).strip().lower() == dev_type
+             and not n.get("is_dummy")),
+            None,
+        )
+        electrical = {"l": 1.4e-08, "nf": 1, "nfin": 1}
+        if template:
+            electrical = copy.deepcopy(template.get("electrical", electrical))
+        dummy_id = _next_dummy_id(list(nodes), dev_type)
+        dummy: dict = {
+            "id":           dummy_id,
+            "type":         dev_type,
+            "is_dummy":     True,
+            "dummy_source": "tool",
+            "electrical":   electrical,
             "geometry": {
-                "x":      float(args["x"]),
-                "y":      float(args["y"]),
-                "width":  float(args.get("width",  0.294)),
-                "height": float(args.get("height", 0.568)),
+                "x":           float(args["x"]),
+                "y":           float(args["y"]),
+                "width":       float(args.get("width",  0.294)),
+                "height":      float(args.get("height", 0.568)),
                 "orientation": "R0",
             },
         }
+        if template:
+            if template.get("layout_index") is not None:
+                dummy["template_layout_index"] = template["layout_index"]
+            if template.get("layout_cell"):
+                dummy["layout_cell"] = template["layout_cell"]
         return LayoutToolResult(
             success=True,
-            message=f"Added dummy {dummy_id}",
+            message=f"Added dummy {dummy_id} ({dev_type})",
             changed=True,
             nodes=list(nodes) + [dummy],
             metrics={"added_id": dummy_id},

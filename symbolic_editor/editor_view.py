@@ -2780,11 +2780,13 @@ class SymbolicEditor(QGraphicsView):
             event.ignore()
             return
 
-        if event.inverted():
-            delta = -delta
-
+        # EDA-style zoom: scroll inward (up) → zoom in, scroll outward (down) → zoom out,
+        # anchored to the point under the cursor so the scene stays fixed under the mouse.
+        # AnchorUnderMouse is set only for the wheel event; toolbar buttons keep AnchorViewCenter.
         zoom_step = float(delta) / 120.0
+        self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self._apply_zoom_factor(self.zoom_factor ** zoom_step)
+        self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
         event.accept()
 
     def _apply_zoom_factor(self, factor):
