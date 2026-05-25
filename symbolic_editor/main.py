@@ -688,12 +688,12 @@ class MainWindow(QMainWindow):
         tb.setAllowedAreas(Qt.ToolBarArea.LeftToolBarArea)
         tb.setOrientation(Qt.Orientation.Vertical)
         tb.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
-        tb.setIconSize(QSize(15, 15))
+        tb.setIconSize(QSize(18, 18))
         tb.setStyleSheet(
-            "QToolBar { background-color: #05090b; border-right: 1px solid #142127; spacing: 2px; padding: 5px 4px; }"
+            "QToolBar { background-color: #05090b; border-right: 1px solid #142127; spacing: 1px; padding: 5px 2px; }"
             "QToolBar::separator { background-color: #17252b; height: 1px; margin: 3px 3px; }"
             "QToolButton { background: transparent; border: 1px solid transparent; border-radius: 6px; "
-            "padding: 2px; color: #e3ecef; min-width: 22px; min-height: 22px; }"
+            "padding: 1px; color: #e3ecef; min-width: 24px; min-height: 24px; }"
             "QToolButton:hover { background-color: #101b20; border-color: #22414b; color: #00e5ff; }"
             "QToolButton:pressed { background-color: #092531; }"
             "QToolButton:checked { background-color: #092531; border-color: #00e5ff; color: #00e5ff; }"
@@ -722,27 +722,6 @@ class MainWindow(QMainWindow):
         self._tb_act_schematic.setToolTip("Toggle Schematic Assistant")
         self._tb_act_schematic.triggered.connect(lambda: self._fwd("_toggle_schematic_panel"))
         tb.addAction(self._tb_act_schematic)
-        tb.addSeparator()
-
-        self._tb_act_fit = QAction(icon_fit_view(), "Fit View", self)
-        self._tb_act_fit.setToolTip("Fit to view (F)")
-        self._tb_act_fit.triggered.connect(lambda: self._fwd_editor("fit_to_view"))
-        tb.addAction(self._tb_act_fit)
-
-        self._tb_act_zoom_in = QAction(icon_zoom_in(), "Zoom In", self)
-        self._tb_act_zoom_in.setToolTip("Zoom in")
-        self._tb_act_zoom_in.triggered.connect(lambda: self._fwd_editor("zoom_in"))
-        tb.addAction(self._tb_act_zoom_in)
-
-        self._tb_act_zoom_out = QAction(icon_zoom_out(), "Zoom Out", self)
-        self._tb_act_zoom_out.setToolTip("Zoom out")
-        self._tb_act_zoom_out.triggered.connect(lambda: self._fwd_editor("zoom_out"))
-        tb.addAction(self._tb_act_zoom_out)
-
-        self._tb_act_zoom_reset = QAction(icon_zoom_reset(), "Reset Zoom", self)
-        self._tb_act_zoom_reset.setToolTip("Reset zoom")
-        self._tb_act_zoom_reset.triggered.connect(lambda: self._fwd_editor("zoom_reset"))
-        tb.addAction(self._tb_act_zoom_reset)
         tb.addSeparator()
 
         self._tb_act_swap = QAction(icon_swap(), "Swap", self)
@@ -870,6 +849,27 @@ class MainWindow(QMainWindow):
             "border-radius: 4px; padding: 2px 3px; min-width: 42px; max-width: 42px;"
         )
         tb.addWidget(self._sel_label)
+        tb.addSeparator()
+
+        self._tb_act_fit = QAction(icon_fit_view(), "Fit View", self)
+        self._tb_act_fit.setToolTip("Fit to view (F)")
+        self._tb_act_fit.triggered.connect(lambda: self._fwd_editor("fit_to_view"))
+        tb.addAction(self._tb_act_fit)
+
+        self._tb_act_zoom_in = QAction(icon_zoom_in(), "Zoom In", self)
+        self._tb_act_zoom_in.setToolTip("Zoom in")
+        self._tb_act_zoom_in.triggered.connect(lambda: self._fwd_editor("zoom_in"))
+        tb.addAction(self._tb_act_zoom_in)
+
+        self._tb_act_zoom_out = QAction(icon_zoom_out(), "Zoom Out", self)
+        self._tb_act_zoom_out.setToolTip("Zoom out")
+        self._tb_act_zoom_out.triggered.connect(lambda: self._fwd_editor("zoom_out"))
+        tb.addAction(self._tb_act_zoom_out)
+
+        self._tb_act_zoom_reset = QAction(icon_zoom_reset(), "Reset Zoom", self)
+        self._tb_act_zoom_reset.setToolTip("Reset zoom")
+        self._tb_act_zoom_reset.triggered.connect(lambda: self._fwd_editor("zoom_reset"))
+        tb.addAction(self._tb_act_zoom_reset)
         return
 
         tb.addAction("⬅", lambda: self._fwd("do_undo")).setToolTip("Undo (Ctrl+Z)")
