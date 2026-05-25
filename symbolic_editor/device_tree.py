@@ -39,6 +39,7 @@ class DeviceTreePanel(QWidget):
     device_selected = Signal(str)
     connection_selected = Signal(str, str, str)
     block_selected = Signal(str)
+    group_selected = Signal(str)  # custom-group name
     toggle_requested = Signal()
     net_view_toggled = Signal(bool)  # True when Nets tab is active
     net_colorize_toggled = Signal(bool)
@@ -860,6 +861,12 @@ class DeviceTreePanel(QWidget):
             block_inst = item.data(0, Qt.ItemDataRole.UserRole + 3)
             if block_inst:
                 self.block_selected.emit(block_inst)
+            return
+
+        if role == "__group_header__":
+            group_name = item.data(0, Qt.ItemDataRole.UserRole + 3)
+            if group_name:
+                self.group_selected.emit(group_name)
             return
 
         if role == "__net__":

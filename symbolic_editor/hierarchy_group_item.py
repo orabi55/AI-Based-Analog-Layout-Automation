@@ -158,6 +158,23 @@ class HierarchyGroupItem(QGraphicsRectItem):
             devices.extend(child_group._all_descendant_devices)
         return devices
 
+    def _compute_mosfet_type_label(self):
+        """Inspect descendants and return 'N', 'P', 'N+P', or ''."""
+        kinds = set()
+        for d in self._all_descendant_devices:
+            t = str(getattr(d, "device_type", "")).lower()
+            if t == "nmos":
+                kinds.add("N")
+            elif t == "pmos":
+                kinds.add("P")
+            if len(kinds) == 2:
+                break
+        if not kinds:
+            return ""
+        if len(kinds) == 1:
+            return next(iter(kinds))
+        return "N+P"
+
     def get_all_descendant_devices(self):
         """Return all device items that are descendants of this group."""
         return self._all_descendant_devices
@@ -329,18 +346,22 @@ class HierarchyGroupItem(QGraphicsRectItem):
         h = rect.height()
         is_selected = self.isSelected()
 
-        # Simple empty rectangle with RED border (cosmetic pen = constant px on screen)
-        border_color = QColor(220, 60, 60, 255)  # Pure red
+        # Use the stored border color (per-group palette); fall back to red.
+        base_border = QColor(self._border_color) if self._border_color else QColor(220, 60, 60, 255)
+        base_border.setAlpha(255)
+        border_color = base_border
         border_width = 2.5
 
         if is_selected:
-            border_color = QColor(255, 100, 100, 255)  # Lighter red when selected
+            border_color = base_border.lighter(135)
+            border_color.setAlpha(255)
             border_width = 3.5
 
-        # Empty fill (transparent inside)
-        painter.setBrush(QBrush(Qt.BrushStyle.NoBrush))
+        # Translucent fill from stored palette color (more opaque when selected).
+        fill = QColor(self._fill_color) if self._fill_color else QColor(base_border)
+        fill.setAlpha(85 if is_selected else 55)
+        painter.setBrush(QBrush(fill))
 
-        # Red border — cosmetic so it stays constant pixel width on screen
         pen = QPen(border_color, border_width, Qt.PenStyle.SolidLine)
         pen.setCosmetic(True)
         painter.setPen(pen)
@@ -361,15 +382,70 @@ class HierarchyGroupItem(QGraphicsRectItem):
             font = QFont("Segoe UI", font_size, QFont.Weight.Bold)
             painter.setFont(font)
             fm = painter.fontMetrics()
-            while font_size > 5 and (fm.horizontalAdvance(self._parent_name) > text_rect.width()
+            type_label = self._compute_mosfet_type_label()
+            badge_size = max(6, int(font_size * 0.72))
+            badge_font = QFont("Segoe UI", badge_size, QFont.Weight.Bold)
+
+            def _combined_width():
+                if not type_label:
+                    return fm.horizontalAdvance(self._parent_name)
+                painter.setFont(badge_font)
+                bw = painter.fontMetrics().horizontalAdvance(type_label) + 10
+                painter.setFont(font)
+                return fm.horizontalAdvance(self._parent_name) + 8 + bw
+
+            while font_size > 5 and (_combined_width() > text_rect.width()
                                      or fm.height() > text_rect.height()):
                 font_size -= 1
                 font = QFont("Segoe UI", font_size, QFont.Weight.Bold)
+                badge_size = max(6, int(font_size * 0.72))
+                badge_font = QFont("Segoe UI", badge_size, QFont.Weight.Bold)
                 painter.setFont(font)
                 fm = painter.fontMetrics()
 
-            painter.setPen(QPen(QColor("#ffffff")))
-            painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, self._parent_name)
+            if not type_label:
+                painter.setPen(QPen(QColor("#ffffff")))
+                painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, self._parent_name)
+            else:
+                # Layout name + pill side-by-side, centered together.
+                name_w = fm.horizontalAdvance(self._parent_name)
+                painter.setFont(badge_font)
+                bfm = painter.fontMetrics()
+                pill_w = bfm.horizontalAdvance(type_label) + 10
+                pill_h = bfm.height() + 2
+                spacing = 8
+                total_w = name_w + spacing + pill_w
+                start_x = text_rect.center().x() - total_w / 2
+
+                painter.setFont(font)
+                painter.setPen(QPen(QColor("#ffffff")))
+                from PySide6.QtCore import QRectF as _QR
+                name_rect = _QR(start_x, text_rect.y(), name_w, text_rect.height())
+                painter.drawText(
+                    name_rect,
+                    Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                    self._parent_name,
+                )
+
+                if type_label == "N":
+                    pill_color = QColor("#3a7bd5")
+                elif type_label == "P":
+                    pill_color = QColor("#d54a4a")
+                else:
+                    pill_color = QColor("#9b85d6")
+
+                pill_rect = _QR(
+                    start_x + name_w + spacing,
+                    text_rect.center().y() - pill_h / 2,
+                    pill_w,
+                    pill_h,
+                )
+                painter.setBrush(QBrush(pill_color))
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.drawRoundedRect(pill_rect, pill_h / 2, pill_h / 2)
+                painter.setFont(badge_font)
+                painter.setPen(QPen(QColor("#ffffff")))
+                painter.drawText(pill_rect, Qt.AlignmentFlag.AlignCenter, type_label)
 
             # ── Net labels centered and rotated (Scene-space, auto-scale) ─────────────
             if self._show_net_labels and self._net_names:

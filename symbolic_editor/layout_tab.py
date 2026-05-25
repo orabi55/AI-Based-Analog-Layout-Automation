@@ -276,6 +276,7 @@ class LayoutEditorTab(QWidget):
         self.device_tree.device_selected.connect(self._on_tree_device_selected)
         self.device_tree.connection_selected.connect(self._on_connection_selected)
         self.device_tree.block_selected.connect(self._on_tree_block_selected)
+        self.device_tree.group_selected.connect(self._on_tree_group_selected)
         self.device_tree.group_delete_requested.connect(self._handle_group_delete)
         self.editor.device_clicked.connect(self.device_tree.highlight_device)
         self.editor.dummy_toggle_requested.connect(self._toggle_dummy_shortcut)
@@ -341,10 +342,6 @@ class LayoutEditorTab(QWidget):
         self._shortcut_show_props = QShortcut(QKeySequence("Q"), self._workspace_shell)
         self._shortcut_show_props.setContext(Qt.ShortcutContext.ApplicationShortcut)
         self._shortcut_show_props.activated.connect(self._show_selected_device_properties)
-
-        self._shortcut_auto_hierarchy = QShortcut(QKeySequence("Ctrl+H"), self._workspace_shell)
-        self._shortcut_auto_hierarchy.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-        self._shortcut_auto_hierarchy.activated.connect(self._auto_detect_hierarchy)
 
     # ── Public convenience properties ────────────────────────────
     @property
@@ -1076,6 +1073,9 @@ class LayoutEditorTab(QWidget):
         # have run inside set_terminal_nets, so the layout context passed to the
         # AI always reflects the actual on-canvas positions.
         self._sync_node_positions(schedule_live=False)
+        # Auto-detect functional hierarchy (Latch, Precharge, InputPair, …) when
+        # no user/AI groups exist. Detected groups are deletable via right-click.
+        self._auto_detect_hierarchy(auto=True)
 
     # =================================================================
     #  Selection / grid helpers
@@ -1142,6 +1142,15 @@ class LayoutEditorTab(QWidget):
         devices = list(block_data.get("devices", []) or [])
         if devices:
             self.editor.highlight_device_list(devices)
+
+    def _on_tree_group_selected(self, group_name):
+        """Highlight all members of a custom group when its tree row is clicked."""
+        for grp in self._custom_groups:
+            if grp.get("name") == group_name:
+                devices = list(grp.get("devices", []) or [])
+                if devices:
+                    self.editor.highlight_device_list(devices)
+                return
 
     def _on_connection_selected(self, dev_id, net_name, _other):
         if net_name and net_name != "?":
@@ -1569,8 +1578,16 @@ class LayoutEditorTab(QWidget):
         if target_group:
             self.editor._delete_group(target_group)
 
-    def _auto_detect_hierarchy(self):
-        """Detect functional groups (Ctrl+H) and apply them as custom groups."""
+    def _auto_detect_hierarchy(self, auto=False):
+        """Detect functional groups and apply them as custom groups.
+
+        When auto=True, skip if user/AI groups already exist (avoids clobbering).
+        Groups are deletable via right-click 'Ungroup' on the canvas or tree.
+        """
+        if auto and self._custom_groups:
+            return
+        if not self.nodes or not self._terminal_nets:
+            return
         try:
             groups = detect_functional_groups(self.nodes, self._terminal_nets)
         except Exception as e:
@@ -1579,7 +1596,8 @@ class LayoutEditorTab(QWidget):
             return
         if not groups:
             return
-        self._push_undo()
+        if not auto:
+            self._push_undo()
         self._custom_groups = groups
         if self._original_data is not None:
             self._original_data["custom_groups"] = copy.deepcopy(groups)
@@ -1589,7 +1607,6 @@ class LayoutEditorTab(QWidget):
         except Exception:
             pass
         self.device_tree.load_devices(self.nodes)
-        self._on_hierarchy_changed()
 
     # =================================================================
     #  Select All / Swap / Merge / Flip / Delete

@@ -33,6 +33,32 @@ def _dev_diag_print(*args, **kwargs) -> None:
     print(*args, **kwargs)
 
 
+_CUSTOM_GROUP_PALETTE = [
+    "#5fa8d3",  # blue
+    "#e07b5f",  # coral
+    "#7ec77b",  # green
+    "#c77bb3",  # pink
+    "#d4b85a",  # amber
+    "#9b85d6",  # purple
+    "#5fc7b3",  # teal
+    "#d6705f",  # tomato
+    "#7ac7d4",  # cyan
+    "#d49b5f",  # orange
+]
+
+
+def _color_for_group_name(name):
+    """Deterministic per-name (border, fill) QColor pair from the palette."""
+    from PySide6.QtGui import QColor as _QC
+    s = sum(ord(c) for c in str(name)) if name else 0
+    hex_color = _CUSTOM_GROUP_PALETTE[s % len(_CUSTOM_GROUP_PALETTE)]
+    border = _QC(hex_color)
+    border.setAlpha(220)
+    fill = _QC(hex_color)
+    fill.setAlpha(45)
+    return border, fill
+
+
 def _qt_object_is_valid(obj) -> bool:
     """Return False when a PySide wrapper points at a deleted C++ object."""
     if obj is None:
@@ -1440,8 +1466,7 @@ class SymbolicEditor(QGraphicsView):
                 union = union.united(item.sceneBoundingRect())
 
         hierarchy_info = {"m": 1, "nf": len(device_items), "is_array": False}
-        fill_color = QColor(100, 80, 40, 50)
-        border_color = QColor(220, 160, 80, 200)
+        border_color, fill_color = _color_for_group_name(group_name)
         group_item = HierarchyGroupItem(
             group_name,
             [] if child_groups else direct_items,
@@ -3366,8 +3391,23 @@ class SymbolicEditor(QGraphicsView):
         title_act.setEnabled(False)
         menu.addAction(title_act)
         menu.addSeparator()
-        
+
         is_custom_group = self._is_custom_group_item(group_item)
+        selected_groups = [
+            it for it in self.scene.selectedItems()
+            if isinstance(it, HierarchyGroupItem)
+        ]
+
+        act_create_supergroup = None
+        if len(selected_groups) >= 2:
+            act_create_supergroup = QAction(
+                f"Create Group from {len(selected_groups)} Selected", self
+            )
+            act_create_supergroup.setToolTip(
+                "Wrap the selected groups into a new parent group"
+            )
+            menu.addAction(act_create_supergroup)
+            menu.addSeparator()
 
         act_rename = None
         act_ungroup = None
@@ -3382,10 +3422,20 @@ class SymbolicEditor(QGraphicsView):
             info_act = QAction("Built-in hierarchy group", self)
             info_act.setEnabled(False)
             menu.addAction(info_act)
-        
+
         chosen = menu.exec(global_pos)
-        
-        if act_rename is not None and chosen == act_rename:
+
+        if act_create_supergroup is not None and chosen == act_create_supergroup:
+            member_devices = []
+            seen = set()
+            for grp in selected_groups:
+                for dev_item in getattr(grp, "_all_descendant_devices", []):
+                    if id(dev_item) not in seen:
+                        seen.add(id(dev_item))
+                        member_devices.append(dev_item)
+            if len(member_devices) >= 2:
+                self._create_custom_group(member_devices)
+        elif act_rename is not None and chosen == act_rename:
             self._rename_group(group_item)
         elif act_ungroup is not None and chosen == act_ungroup:
             self._delete_group(group_item)
