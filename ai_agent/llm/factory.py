@@ -15,6 +15,15 @@ Functions:
 
 import os
 import time
+import warnings
+
+# Suppress noisy framework deprecation warnings from LangChain / Vertex
+try:
+    from langchain_core.exceptions import LangChainDeprecationWarning
+    warnings.filterwarnings("ignore", category=LangChainDeprecationWarning)
+except ImportError:
+    pass
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="langchain")
 
 
 # Default timeout in seconds for LLM API calls

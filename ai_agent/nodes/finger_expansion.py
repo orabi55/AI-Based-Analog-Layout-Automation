@@ -67,17 +67,7 @@ def node_finger_expansion(state):
         log_detail("No overlaps detected")
     physical_nodes = legalize_vertical_rows(physical_nodes)
 
-    if not state.get("no_abutment", False):
-        abutment_candidates = state.get("abutment_candidates", [])
-        if abutment_candidates:
-            from ai_agent.placement.abutment import heal_abutment_positions
-            log_detail(f"Enforcing abutment spacing for {len(abutment_candidates)} candidates")
-            physical_nodes = heal_abutment_positions(
-                physical_nodes, 
-                abutment_candidates, 
-                terminal_nets=terminal_nets,
-                no_abutment=False
-            )
+
 
 
     # Re-apply critical signal-flow optimization AFTER deterministic row

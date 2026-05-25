@@ -23,10 +23,10 @@ _SAED14_DEFAULTS: dict = {
     "tap_max_distance_um": 2.5,     # Max substrate-tap spacing (yield-critical)
     "endcap_cell_names":   ["ENDCAP"],
     "endcap_width_um":     0.294,   # matches PITCH_UM (non-abutted device pitch)
-    "tap_cell_nmos":       "PTAP",  # p-substrate tap used in NMOS rows
-    "tap_cell_pmos":       "NTAP",  # n-well tap used in PMOS rows
+    "tap_cell_nmos":       "Ptap",  # p-substrate tap used in NMOS rows
+    "tap_cell_pmos":       "Ntap",  # n-well tap used in PMOS rows
     "tap_width_um":        0.294,
-    "tap_height_um":       0.568,
+    "tap_height_um":       0.200,
 }
 
 # These keys are yield-limiting constraints — always warn when falling back

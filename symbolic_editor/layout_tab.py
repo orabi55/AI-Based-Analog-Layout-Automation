@@ -511,11 +511,117 @@ class LayoutEditorTab(QWidget):
         if not self._current_file:
             return
         json_dir = os.path.dirname(os.path.abspath(self._current_file))
-        oas_files = glob.glob(os.path.join(json_dir, "*.oas"))
-        if oas_files:
-            self.klayout_panel.set_oas_path(oas_files[0])
+        oas_files = sorted(glob.glob(os.path.join(json_dir, "*.oas")))
+        if not oas_files:
+            return
+        base_oas = [f for f in oas_files if "_updated" not in os.path.basename(f).lower()]
+        oas_path = base_oas[0] if base_oas else oas_files[0]
+        sp_files = glob.glob(os.path.join(json_dir, "*.sp"))
+        if not sp_files:
+            return
+        sp_path = sp_files[0]
+        base_name = os.path.splitext(os.path.basename(oas_path))[0]
+        updated_path = os.path.join(json_dir, base_name + "_updated.oas")
+
+        self._sync_node_positions()
+        saved_hierarchy_state = self._expand_all_for_export()
+        try:
+            from export.oas_writer import update_oas_placement
+            abut_states = self.editor.get_device_abutment_states()
+            
+            import copy
+            export_nodes = copy.deepcopy(self.nodes)
+            
+            from ai_agent.placement.finger_grouper import _parse_id
+            for node in export_nodes:
+                dev_id = node.get("id", "")
+                parent_id, _, _ = _parse_id(dev_id)
+
+                baseline_abut = node.get("abutment", {})
+                orig_left = baseline_abut.get("abut_left", False)
+                orig_right = baseline_abut.get("abut_right", False)
+
+                if dev_id in abut_states:
+                    live_abut = abut_states[dev_id]
+                    orig_left = live_abut.get("abut_left", False)
+                    orig_right = live_abut.get("abut_right", False)
+                elif parent_id in abut_states:
+                    live_abut = abut_states[parent_id]
+                    orig_left = live_abut.get("abut_left", False)
+                    orig_right = live_abut.get("abut_right", False)
+
+                node["abutment"] = {
+                    "abut_left":  bool(orig_left),
+                    "abut_right": bool(orig_right)
+                }
+
+            # Magic Step: Squeeze 0.3um Symbolic Slots down to 0.070um physical diffusion-sharing pitch GLOBALLY
+            from collections import defaultdict
+            
+            # 1. Determine maximum slot index across all nodes
+            max_slot = 0
+            for n in export_nodes:
+                orig_x = n.get("geometry", {}).get("x", 0.0)
+                slot_idx = int(round(orig_x / 0.294))
+                nf = max(1, int(round(n.get("geometry", {}).get("width", 0.294) / 0.294)))
+                if slot_idx + nf - 1 > max_slot:
+                    max_slot = slot_idx + nf - 1
+            
+            # 2. Identify which slot boundaries are touch-abutted globally
+            abut_boundaries = [False] * max_slot
+            
+            # Group by row Y to find adjacent slots in the same row
+            rows = defaultdict(list)
+            for n in export_nodes:
+                y_key = round(n.get("geometry", {}).get("y", 0.0), 4)
+                rows[y_key].append(n)
+                
+            for y_key, row_nodes in rows.items():
+                slot_to_node = {}
+                for n in row_nodes:
+                    start_slot = int(round(n.get("geometry", {}).get("x", 0.0) / 0.294))
+                    nf = max(1, int(round(n.get("geometry", {}).get("width", 0.294) / 0.294)))
+                    for i in range(nf):
+                        slot_to_node[start_slot + i] = n
+                        
+                for k in range(max_slot):
+                    if k in slot_to_node and (k+1) in slot_to_node:
+                        prev = slot_to_node[k]
+                        curr = slot_to_node[k+1]
+                        
+                        if prev is curr:
+                            abut_boundaries[k] = True
+                        else:
+                            abut_right = prev.get("abutment", {}).get("abut_right", False)
+                            abut_left = curr.get("abutment", {}).get("abut_left", False)
+                            
+                            if abut_right and abut_left:
+                                abut_boundaries[k] = True
+            
+            # 3. Construct global slot coordinate map
+            slot_x = [0.0] * (max_slot + 1)
+            for k in range(max_slot):
+                if abut_boundaries[k]:
+                    slot_x[k+1] = slot_x[k] + 0.070
+                else:
+                    slot_x[k+1] = slot_x[k] + 0.294
+            
+            # 4. Update node positions based on global slot index map
+            for n in export_nodes:
+                orig_x = n.get("geometry", {}).get("x", 0.0)
+                slot_idx = int(round(orig_x / 0.294))
+                if 0 <= slot_idx <= max_slot:
+                    n["geometry"]["x"] = slot_x[slot_idx]
+
+            update_oas_placement(oas_path=oas_path, sp_path=sp_path, nodes=export_nodes, output_path=updated_path)
+            self.klayout_panel.set_oas_path(updated_path)
             self.set_workspace_mode("klayout")
             self.klayout_panel._on_open_klayout()
+        except Exception as e:
+            self.chat_panel._append_message("AI", f"Failed to prepare layout for KLayout: {e}", "#fde8e8", "#a00")
+            import traceback; traceback.print_exc()
+        finally:
+            self._restore_hierarchy_state(saved_hierarchy_state)
 
     # =================================================================
     #  Key press – Esc / D / M
@@ -843,67 +949,76 @@ class LayoutEditorTab(QWidget):
             abut_states = self.editor.get_device_abutment_states()
         except Exception:
             abut_states = {}
-        from collections import defaultdict
         from ai_agent.placement.finger_grouper import _parse_id
         
-        # Count total fingers per parent in the unrolled nodes
-        parent_counts = defaultdict(int)
-        for node in nodes:
-            parent_id, _, _ = _parse_id(node.get("id", ""))
-            parent_counts[parent_id] += 1
-            
         for node in nodes:
             dev_id = node.get("id", "")
-            parent_id, _, finger_idx = _parse_id(dev_id)
+            parent_id, _, _ = _parse_id(dev_id)
             
-            fi = finger_idx if finger_idx is not None else 1
-            total = parent_counts[parent_id]
+            baseline_abut = node.get("abutment", {})
+            orig_left = baseline_abut.get("abut_left", False)
+            orig_right = baseline_abut.get("abut_right", False)
             
             if dev_id in abut_states:
-                parent_abut = abut_states[dev_id]
+                live_abut = abut_states[dev_id]
+                orig_left = live_abut.get("abut_left", False)
+                orig_right = live_abut.get("abut_right", False)
             elif parent_id in abut_states:
-                parent_abut = abut_states[parent_id]
-            else:
-                parent_abut = {"abut_left": False, "abut_right": False}
+                live_abut = abut_states[parent_id]
+                orig_left = live_abut.get("abut_left", False)
+                orig_right = live_abut.get("abut_right", False)
                 
             node["abutment"] = {
-                "abut_left":  (fi > 1) or bool(parent_abut.get("abut_left", False)),
-                "abut_right": (fi < total) or bool(parent_abut.get("abut_right", False))
+                "abut_left":  bool(orig_left),
+                "abut_right": bool(orig_right)
             }
 
         # Magic Step: Squeeze 0.3um Symbolic Slots down to 0.070um physical diffusion-sharing pitch GLOBALLY
         # This completely avoids independent row squeezing drifts, preserving perfect cross-row vertical alignment.
         if nodes:
-            # 1. Determine maximum slot index across all nodes
+            # 1. Determine maximum slot index across all nodes (accounts for device width)
             max_slot = 0
             for n in nodes:
                 orig_x = n.get("geometry", {}).get("x", 0.0)
                 slot_idx = int(round(orig_x / 0.294))
-                if slot_idx > max_slot:
-                    max_slot = slot_idx
-            
+                nf = max(1, int(round(n.get("geometry", {}).get("width", 0.294) / 0.294)))
+                if slot_idx + nf - 1 > max_slot:
+                    max_slot = slot_idx + nf - 1
+
             # 2. Identify which slot boundaries are touch-abutted globally
             abut_boundaries = [False] * max_slot
-            
+
             # Group by row Y to find adjacent slots in the same row
-            rows = defaultdict(list)
+            from collections import defaultdict as _dd
+            rows = _dd(list)
             for n in nodes:
                 y_key = round(n.get("geometry", {}).get("y", 0.0), 4)
                 rows[y_key].append(n)
 
             for y_key, row_nodes in rows.items():
-                slot_to_node = {int(round(n.get("geometry", {}).get("x", 0.0) / 0.294)): n for n in row_nodes}
+                # Fill every slot occupied by each device (multi-finger devices span multiple slots)
+                slot_to_node = {}
+                for n in row_nodes:
+                    start_slot = int(round(n.get("geometry", {}).get("x", 0.0) / 0.294))
+                    nf = max(1, int(round(n.get("geometry", {}).get("width", 0.294) / 0.294)))
+                    for i in range(nf):
+                        slot_to_node[start_slot + i] = n
+
                 for k in range(max_slot):
                     if k in slot_to_node and (k+1) in slot_to_node:
                         prev = slot_to_node[k]
                         curr = slot_to_node[k+1]
-                        
-                        abut_right = prev.get("abutment", {}).get("abut_right", False)
-                        abut_left = curr.get("abutment", {}).get("abut_left", False)
-                        
-                        if abut_right and abut_left:
+
+                        # Internal fingers of the same multi-finger device are always abutted
+                        if prev is curr:
                             abut_boundaries[k] = True
-            
+                        else:
+                            abut_right = prev.get("abutment", {}).get("abut_right", False)
+                            abut_left = curr.get("abutment", {}).get("abut_left", False)
+
+                            if abut_right and abut_left:
+                                abut_boundaries[k] = True
+
             # 3. Construct global slot coordinate map
             slot_x = [0.0] * (max_slot + 1)
             for k in range(max_slot):
@@ -913,7 +1028,7 @@ class LayoutEditorTab(QWidget):
                 else:
                     # 0.294um is the standard symbolic pitch
                     slot_x[k+1] = slot_x[k] + 0.294
-            
+
             # 4. Update node positions based on global slot index map
             for n in nodes:
                 orig_x = n.get("geometry", {}).get("x", 0.0)
@@ -1648,7 +1763,7 @@ class LayoutEditorTab(QWidget):
         self._redo_stack.append(copy.deepcopy(self.nodes))
         self.nodes = self._undo_stack.pop()
         self._original_data["nodes"] = self.nodes
-        self._refresh_panels(compact=True)
+        self._refresh_panels(compact=False)
         self._update_undo_redo_state()
 
     def do_redo(self):
@@ -1741,7 +1856,7 @@ class LayoutEditorTab(QWidget):
                     swapped_count += 1
         
         self._original_data["nodes"] = self.nodes
-        self._refresh_panels(compact=True)
+        self._refresh_panels(compact=False)
         self.editor.viewport().update()
         self.chat_panel._append_message("AI", f"Swapped Source/Drain nets for {swapped_count} device(s).", "#e8f4fd", "#1a1a2e")
 
@@ -2240,11 +2355,11 @@ class LayoutEditorTab(QWidget):
                 "orientation": "R0"
             }
         }
+        # Explicitly map subtype to Ntap or Ptap cell name
+        tap_node["layout_cell"] = "Ntap" if subtype == "ntap" else "Ptap"
         if template:
             if template.get("layout_index") is not None:
                 tap_node["template_layout_index"] = template.get("layout_index")
-            if template.get("layout_cell"):
-                tap_node["layout_cell"] = template.get("layout_cell")
         return tap_node
 
     def _add_vdd_tap(self, candidate):
@@ -3281,31 +3396,26 @@ class LayoutEditorTab(QWidget):
             export_nodes = copy.deepcopy(self.nodes)
 
             from ai_agent.placement.finger_grouper import _parse_id
-            from collections import defaultdict
-
-            # Count total fingers per parent in the unrolled export_nodes
-            parent_counts = defaultdict(int)
-            for node in export_nodes:
-                parent_id, _, _ = _parse_id(node.get("id", ""))
-                parent_counts[parent_id] += 1
-
             for node in export_nodes:
                 dev_id = node.get("id", "")
-                parent_id, m_idx, f_idx_val = _parse_id(dev_id)
+                parent_id, _, _ = _parse_id(dev_id)
 
-                total = parent_counts[parent_id]
-                f_idx = f_idx_val if f_idx_val is not None else (m_idx if m_idx is not None else 1)
+                baseline_abut = node.get("abutment", {})
+                orig_left = baseline_abut.get("abut_left", False)
+                orig_right = baseline_abut.get("abut_right", False)
 
                 if dev_id in abut_states:
-                    parent_abut = abut_states[dev_id]
+                    live_abut = abut_states[dev_id]
+                    orig_left = live_abut.get("abut_left", False)
+                    orig_right = live_abut.get("abut_right", False)
                 elif parent_id in abut_states:
-                    parent_abut = abut_states[parent_id]
-                else:
-                    parent_abut = {"abut_left": False, "abut_right": False}
+                    live_abut = abut_states[parent_id]
+                    orig_left = live_abut.get("abut_left", False)
+                    orig_right = live_abut.get("abut_right", False)
 
                 node["abutment"] = {
-                    "abut_left":  (f_idx > 1) or bool(parent_abut.get("abut_left", False)),
-                    "abut_right": (f_idx < total) or bool(parent_abut.get("abut_right", False))
+                    "abut_left":  bool(orig_left),
+                    "abut_right": bool(orig_right)
                 }
 
             # ── Net-aware abutment validation ──────────────────────────
@@ -3387,7 +3497,8 @@ class LayoutEditorTab(QWidget):
                     max_slot = slot_idx + nf - 1
 
             abut_boundaries = [False] * max_slot
-            rows = defaultdict(list)
+            from collections import defaultdict as _dd
+            rows = _dd(list)
             for n in export_nodes:
                 y_key = round(n.get("geometry", {}).get("y", 0.0), 4)
                 rows[y_key].append(n)
@@ -3435,19 +3546,71 @@ class LayoutEditorTab(QWidget):
                     n["geometry"]["x"] = slot_x[slot_idx]
 
             for node in export_nodes:
-                name = node["id"]
-                x = node.get("geometry", {}).get("x", 0.0)
-                y = node.get("geometry", {}).get("y", 0.0)
-                orient = node.get("geometry", {}).get("orientation", "R0")
-                # Parameters are stored under 'electrical' in the standard schema
-                params = copy.deepcopy(node.get("electrical", node.get("parameters", {})))
+                name    = node["id"]
+                x       = node.get("geometry", {}).get("x", 0.0)
+                y       = node.get("geometry", {}).get("y", 0.0)
+                orient  = node.get("geometry", {}).get("orientation", "R0")
+                dev_type = str(node.get("type", "nmos")).strip().lower()
 
-                # Retrieve resolved physical abutment parameters
+                # Retrieve abutment flags resolved above
                 abut = node.get("abutment", {})
-                params["left_abut"] = 1 if abut.get("abut_left", False) else 0
+                params = copy.deepcopy(node.get("electrical", node.get("parameters", {})))
+                params["left_abut"]  = 1 if abut.get("abut_left",  False) else 0
                 params["right_abut"] = 1 if abut.get("abut_right", False) else 0
 
-                exporter.add_instance(name, x, y, orient, params=params)
+                # ── Classify device kind ──────────────────────────────────
+                is_tap = (
+                    dev_type == "tap"
+                    or str(name).upper().startswith("TAP_")
+                )
+                is_dummy = (
+                    not is_tap and (
+                        bool(node.get("is_dummy"))
+                        or str(name).upper().startswith(
+                            ("DUMMY", "EDGE_DUMMY", "FILLER_DUMMY", "MATCH_DUMMY")
+                        )
+                    )
+                )
+
+                if is_tap:
+                    subtype  = str(node.get("subtype", "ptap")).lower()
+                    is_ntap  = "ntap" in subtype or "vdd" in subtype
+                    tap_rail = "VDD" if is_ntap else "GND"
+                    tap_cell = "Ntap" if is_ntap else "Ptap"
+                    exporter.add_instance(
+                        name, x, y, orient,
+                        is_tap=True,
+                        tap_rail=tap_rail,
+                        tap_cell=tap_cell,
+                        device_type=dev_type,
+                    )
+                    continue
+
+                # Resolve terminal nets (prefer node-level, fall back to _terminal_nets)
+                tnets = self._terminal_nets.get(name) or self._terminal_nets.get(
+                    _parse_id(name)[0]
+                ) or {}
+                net_s = node.get("net_s") or tnets.get("S") or ""
+                net_d = node.get("net_d") or tnets.get("D") or ""
+                net_g = node.get("net_g") or tnets.get("G") or ""
+                # Bulk = same polarity supply
+                net_b = "vdd!" if "pmos" in dev_type or "pfet" in dev_type else "gnd!"
+
+                # Map type to nfet/pfet for dummy lines
+                if "p" in dev_type:
+                    dev_type_tcl = "pfet"
+                else:
+                    dev_type_tcl = "nfet"
+
+                exporter.add_instance(
+                    name, x, y, orient, params=params,
+                    is_dummy=is_dummy,
+                    device_type=dev_type_tcl,
+                    net_d=net_d,
+                    net_g=net_g,
+                    net_s=net_s,
+                    net_b=net_b,
+                )
 
             return exporter.export_for_tcl()
         except Exception as e:
@@ -3532,31 +3695,26 @@ class LayoutEditorTab(QWidget):
             export_nodes = copy.deepcopy(self.nodes)
             
             from ai_agent.placement.finger_grouper import _parse_id
-            from collections import defaultdict
-            
-            # Count total fingers per parent in the unrolled export_nodes
-            parent_counts = defaultdict(int)
-            for node in export_nodes:
-                parent_id, _, _ = _parse_id(node.get("id", ""))
-                parent_counts[parent_id] += 1
-                
             for node in export_nodes:
                 dev_id = node.get("id", "")
-                parent_id, m_idx, f_idx_val = _parse_id(dev_id)
-                
-                total = parent_counts[parent_id]
-                f_idx = f_idx_val if f_idx_val is not None else (m_idx if m_idx is not None else 1)
-                
+                parent_id, _, _ = _parse_id(dev_id)
+
+                baseline_abut = node.get("abutment", {})
+                orig_left = baseline_abut.get("abut_left", False)
+                orig_right = baseline_abut.get("abut_right", False)
+
                 if dev_id in abut_states:
-                    parent_abut = abut_states[dev_id]
+                    live_abut = abut_states[dev_id]
+                    orig_left = live_abut.get("abut_left", False)
+                    orig_right = live_abut.get("abut_right", False)
                 elif parent_id in abut_states:
-                    parent_abut = abut_states[parent_id]
-                else:
-                    parent_abut = {"abut_left": False, "abut_right": False}
-                    
+                    live_abut = abut_states[parent_id]
+                    orig_left = live_abut.get("abut_left", False)
+                    orig_right = live_abut.get("abut_right", False)
+
                 node["abutment"] = {
-                    "abut_left":  (f_idx > 1) or bool(parent_abut.get("abut_left", False)),
-                    "abut_right": (f_idx < total) or bool(parent_abut.get("abut_right", False))
+                    "abut_left":  bool(orig_left),
+                    "abut_right": bool(orig_right)
                 }
 
             # Magic Step: Squeeze 0.3um Symbolic Slots down to 0.070um physical diffusion-sharing pitch GLOBALLY

@@ -26,27 +26,46 @@ graph TD
 
 ## The AI Placement File Format
 
-The placement output is exported as a space-separated, delimiter-free text file (`.txt`), where each line represents a unique transistor instance:
+The placement output is exported as a space-separated, delimiter-free text file (`.txt`), where each line represents a unique transistor, dummy, or tap instance:
 
-```text
-InstanceName X_Microns Y_Microns Orientation PCell_Parameters... left_abut=0/1 right_abut=0/1
-```
+### Line Formats
+* **Regular Transistor:**
+  ```text
+  <InstanceName> <X_Microns> <Y_Microns> <Orientation> [PCell_Parameters...]
+  ```
+  Example:
+  ```text
+  M1 0.490 0.668 R0 l=0.014 nf=1 nfin=4.0 m=1 left_abut=1 right_abut=1
+  ```
+* **Dummy Transistor:**
+  ```text
+  DUMMY <InstanceName> <CellType> <X_Microns> <Y_Microns> <Orientation> [PCell_Parameters...] [Terminals...]
+  ```
+  Example:
+  ```text
+  DUMMY D1 nfet 0.420 0.000 R0 l=0.014 nf=1 nfin=4.0 m=1 left_abut=1 right_abut=0 D=gnd! G=vdd! S=gnd! B=gnd!
+  ```
+* **Tap Cell:**
+  ```text
+  TAP <Rail> <CellType> <X_Microns> <Y_Microns> <Orientation>
+  ```
+  Example:
+  ```text
+  TAP GND Ptap -2.070 2.115 R0
+  ```
 
-### Sample Placement File
-```text
-M28 0.000 -0.000 R0 l=0.014 nf=1 nfin=4.0 m=1 left_abut=1 right_abut=1
-M5 0.140 -0.000 R0 l=0.014 nf=1 nfin=4.0 m=1 left_abut=0 right_abut=1
-M4 0.210 -0.000 R0 l=0.014 nf=1 nfin=4.0 m=1 left_abut=1 right_abut=0
-M3 0.070 -0.000 R0 l=0.014 nf=1 nfin=4.0 m=1 left_abut=0 right_abut=0
-```
+---
 
-* **Instance Name**: Preserves suffix names (e.g. `_m1`, `_f1`) to align with unrolled fingers in the layout.
-* **X / Y Coordinates**: Explicit coordinates on the physical grid in micrometers.
-* **Orientation**: Rotation/mirroring code (e.g., `R0`, `R90`, `MY`).
-* **PCell Parameters**: Centralized transistor parameters (e.g., channel length `l`, number of fingers `nf`).
-* **Abutment Flags**: Explicitly resolves physical diffusion sharing on both sides:
-  - `left_abut=1` / `right_abut=1`: Direct diffusion sharing with its neighbor (dummy or active).
-  - `left_abut=0` / `right_abut=0`: Isolate terminal boundary (no physical diffusion sharing).
+## The `ai_place.tcl` Internal Architecture
+
+The `ai_place_final` procedure parses the placement text file and executes layout database updates in four distinct pipeline phases:
+
+| Phase | Operation | Direct Database API | Purpose / Description |
+| :--- | :--- | :--- | :--- |
+| **Phase 1** | **Active Device Movement** | `oa::setOrigin`, `oa::setOrient`, `db::setParamValue` | Queries active transistors (e.g. `M1.f1`) in the design database and moves them directly to target coordinates. Injects `leftAbut`/`rightAbut` properties to close layout diffusion gaps. |
+| **Phase 2** | **Dummy Device Generation** | `le::createInst`, `db::setParamValue` | Dynamically instantiates new dummy transistors from the target PDK library (`SAED_PDK_14`) at designated coordinates, sets PCell parameters, and marks their PDK role as `Dummy`. |
+| **Phase 3** | **Tap Cell Generation** | `le::createInst` | Dynamically instantiates substrate boundary tap cells (`Ntap`/`Ptap`) from the `taps` cell library. |
+| **Phase 4** | **GUI Terminal Synchronization** | `de::getActiveFigure`, `gi::setField`, `gi::executeAction` | Safely and programmatically connects newly created dummy instance terminals (Gate, Drain, Source, Bulk) to layout nets via the GUI Property Editor, keeping database connectivity completely in sync. |
 
 ---
 
@@ -54,18 +73,21 @@ M3 0.070 -0.000 R0 l=0.014 nf=1 nfin=4.0 m=1 left_abut=0 right_abut=0
 
 ### `ai_place {filename target_cell}`
 
-Directly moves and updates parameters for active design instances in OpenAccess memory.
+Directly moves and updates parameters/connectivity for active design instances in OpenAccess memory.
 
 #### Arguments
 * **`filename`** *(string)*: The full or relative file path to the generated placement text file (e.g., `"xor_ai_placement.txt"`).
 * **`target_cell`** *(string)*: The case-sensitive name of the active cell view target in design memory (e.g., `"xor"`).
+
+> [!NOTE]
+> `ai_place` is a convenient alias wrapper that forwards parameters to the core `ai_place_final` procedure. Both names can be used interchangeably.
 
 ---
 
 ## Step-by-Step Usage Guide
 
 ### 1. Open the Layout Editor
-Open your custom layout suite (e.g., Cadence Virtuoso) and open the target cell's layout view in **Edit Mode**.
+Open your custom layout suite (e.g., Synopsys Custom Compiler or Cadence Virtuoso) and open the target cell's layout view in **Edit Mode**.
 
 ### 2. Export Placement from Symbolic Editor
 In the GUI of your Symbolic Editor:
@@ -91,3 +113,18 @@ The design layout will instantly refresh and show:
 1. Every transistor moved to its designated sub-micron coordinate position.
 2. Mirroring and rotation applied directly (such as `MY` orientations for symmetry pairs).
 3. `leftAbut` and `rightAbut` PCell parameters set to `1` or `0`, rendering perfect gapless diffusion sharing.
+4. Newly generated physical-only `Dummy` cells and substrate `Tap` cells drawn exactly on target grid boundaries.
+
+---
+
+## Automated Directory Sync (Live Watcher)
+
+You can run `cc_watcher.tcl` to automatically detect changes to the placement file and update your layout in real-time as you edit in the GUI:
+
+```tcl
+source eda/cc_watcher.tcl
+start_ai_watcher "eda/Xor_Automation_ai_placement.txt"
+```
+
+> [!TIP]
+> The Live Watcher polls every $800\,\text{ms}$. When you save a new layout configuration, the watcher detects the updated modification time (`mtime`) and automatically triggers the placement procedure.
