@@ -3337,6 +3337,7 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False, preserve
                         next_parent = _transistor_key(n_next.get("id", ""))
                         
                         # If they're from different parents, check individual finger nets
+                        is_direct_abutment_allowed = False
                         if curr_parent != next_parent:
                             # For now, just check current state without flipping
                             # Global flip optimization will be done separately
@@ -3344,15 +3345,49 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False, preserve
                             next_left, _ = get_block_boundary_nets([n_next], False)
                             
                             if curr_right and next_left and curr_right != "NC" and next_left != "NC" and curr_right == next_left:
-                                n_curr.setdefault("abutment", {})["abut_right"] = True
-                                n_next.setdefault("abutment", {})["abut_left"] = True
-                            else:
-                                n_curr.setdefault("abutment", {})["abut_right"] = False
-                                n_next.setdefault("abutment", {})["abut_left"] = False
+                                is_direct_abutment_allowed = True
+                        
+                        if is_direct_abutment_allowed:
+                            n_curr.setdefault("abutment", {})["abut_right"] = True
+                            n_next.setdefault("abutment", {})["abut_left"] = True
                         else:
-                            # Same parent - don't abut
-                            n_curr.setdefault("abutment", {})["abut_right"] = False
-                            n_next.setdefault("abutment", {})["abut_left"] = False
+                            # NO shared net -> insert a bridge dummy to achieve continuous abutment!
+                            dummy_idx += 1
+                            dummy_id = f"FILLER_DUMMY_BRIDGE_{y_key}_{b_idx}_{_dev_type}"
+                            
+                            gate_net = "VSS" if _dev_type == "nmos" else "VDD"
+                            rail_net = "VDD" if _dev_type == "pmos" else "VSS"
+                            
+                            _, curr_right = get_block_boundary_nets([n_curr], False)
+                            next_left, _ = get_block_boundary_nets([n_next], False)
+                            
+                            bridge_dummy = {
+                                "id": dummy_id,
+                                "type": _dev_type,
+                                "is_dummy": True,
+                                "geometry": {
+                                    "x": round(cursor_slot * STD_PITCH, 6),
+                                    "y": round(float(y_key), 6),
+                                    "width": STD_PITCH,
+                                    "height": ref_height,
+                                    "orientation": "R0"
+                                },
+                                "electrical": dict(ref_elec),
+                                "net_s": curr_right or rail_net,
+                                "net_d": next_left or rail_net,
+                                "net_g": gate_net,
+                                "abutment": {
+                                    "abut_left": True,
+                                    "abut_right": True
+                                }
+                            }
+                            # Enable abutment at boundaries with the bridge dummy
+                            n_curr.setdefault("abutment", {})["abut_right"] = True
+                            n_next.setdefault("abutment", {})["abut_left"] = True
+                            
+                            row_nodes_final.append(bridge_dummy)
+                            cursor_slot += 1
+
 
 
 

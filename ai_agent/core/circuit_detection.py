@@ -29,6 +29,13 @@ _POWER_NETS = frozenset({"VDD", "VSS", "GND", "VCC", "AVDD", "AVSS",
 # Internal helpers (mirrors topology.py / finger_grouper.py conventions)
 # ---------------------------------------------------------------------------
 
+import re
+
+def _parent_id(dev_id: str) -> str:
+    """Strip finger/multiplier suffixes like _f1, _m1, .f1, _f1_d1, etc."""
+    return re.sub(r'(_[mf]\d+|\.f\d+).*', '', dev_id)
+
+
 def _nets_for(dev_id: str, terminal_nets: dict) -> dict:
     if not isinstance(terminal_nets, dict):
         return {}
@@ -36,6 +43,13 @@ def _nets_for(dev_id: str, terminal_nets: dict) -> dict:
         v = terminal_nets.get(key)
         if isinstance(v, dict):
             return v
+    # Fallback: strip finger suffix and try to look up parent ID
+    pid = _parent_id(dev_id)
+    if pid != dev_id:
+        for key in (pid, pid.upper(), pid.lower()):
+            v = terminal_nets.get(key)
+            if isinstance(v, dict):
+                return v
     return {}
 
 
@@ -128,8 +142,13 @@ def detect_differential_pairs(nodes: list, terminal_nets: dict) -> LayoutToolRes
             if snet and snet not in _POWER_NETS:
                 src_map[snet].append(did)
         for snet, members in src_map.items():
-            if len(members) >= 2:
-                diff_pairs.append((members[0], members[1]))
+            parent_to_devs = defaultdict(list)
+            for m in members:
+                parent_to_devs[_parent_id(m)].append(m)
+            parents = list(parent_to_devs.keys())
+            if len(parents) >= 2:
+                p0, p1 = parents[0], parents[1]
+                diff_pairs.append((parent_to_devs[p0][0], parent_to_devs[p1][0]))
                 shared_sources.append(snet)
 
     return LayoutToolResult(
@@ -176,7 +195,9 @@ def detect_current_mirrors(nodes: list, terminal_nets: dict) -> LayoutToolResult
             continue
         has_diode = any(_net(m, "D", terminal_nets) == gnet for m in members)
         if has_diode:
-            mirror_clusters.append(sorted(members))
+            distinct_parents = {_parent_id(m) for m in members}
+            if len(distinct_parents) >= 2:
+                mirror_clusters.append(sorted(members))
 
     return LayoutToolResult(
         success=True,
@@ -209,6 +230,8 @@ def detect_cross_coupled_pairs(nodes: list, terminal_nets: dict) -> LayoutToolRe
             continue
         for b in ids[i + 1:]:
             if type_lookup[a] != type_lookup[b]:
+                continue
+            if _parent_id(a) == _parent_id(b):
                 continue
             tb = _nets_for(b, terminal_nets)
             if not tb:
