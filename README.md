@@ -122,49 +122,46 @@ The output engine translates symbolic designs into production-ready physical str
 
 ## 6. Examples
 
-### 🧩 A. XOR Gate (Digital cell placed in Analog Framework)
-A standard XOR cell unrolled and optimized:
+Below are three representative circuit implementations comparing logical schematics, unoptimized initial placements, and fully optimized, compacted layouts.
 
-* **AI Generated Schematic Graph**:
-  ![XOR Schematic](Thesis/figures/xor_sch_AI_generated.png)
-* **Before AI Placement (Unoptimized)**:
-  ![XOR Before](Thesis/figures/xor_before_AI_placement.png)
-* **Symbolic Canvas Layout**:
-  ![XOR Symbolic](Thesis/figures/xor_symbolic.png)
-* **Transistor-Level Placement**:
-  ![XOR Transistor-Level](Thesis/figures/xor_transistor_level.png)
-* **Final OASIS Layout View**:
-  ![XOR OASIS](Thesis/figures/xor_klayout.png)
+---
+
+### 🧩 A. XOR Gate (Digital cell placed in Analog Framework)
+Demonstrates the unrolling and optimization of a standard 12-transistor digital XOR cell. The AI placement engine balances the PMOS and NMOS clusters and centers them to minimize routing crossings.
+
+| 1. AI Generated Schematic Graph | 2. Before AI Placement (Unoptimized) |
+| :---: | :---: |
+| ![XOR Schematic](Thesis/figures/xor_sch_AI_generated.png) | ![XOR Before](Thesis/figures/xor_before_AI_placement.png) |
+
+| 3. Symbolic Canvas Layout | 4. Transistor-Level Placement | 5. Final OASIS Layout View |
+| :---: | :---: | :---: |
+| ![XOR Symbolic](Thesis/figures/xor_symbolic.png) | ![XOR Transistor-Level](Thesis/figures/xor_transistor_level.png) | ![XOR OASIS](Thesis/figures/xor_klayout.png) |
 
 ---
 
 ### 🧩 B. High-Performance Current Mirror
-Active matched rows aligned with alternating source/drain terminals:
+Shows active matched rows aligned with alternating source/drain terminals and grid-aligned dummies to guarantee uniform spatial gradients.
 
-* **Before AI Placement (Unoptimized)**:
-  ![CM Before](Thesis/figures/current_mirror_before_AI_placement.png)
-* **Symbolic Canvas Layout**:
-  ![CM Symbolic](Thesis/figures/current_mirror_symbolic.png)
-* **Transistor-Level Placement**:
-  ![CM Transistor-Level](Thesis/figures/current_mirror_transistor_level.png)
-* **Transistor-Level (Colored Nodes)**:
-  ![CM Transistor Colored](Thesis/figures/current_mirror_transistor_level_colord.png)
-* **KLayout Physical View**:
-  ![CM KLayout](Thesis/figures/current_mirror_klayout.png)
-* **Synopsys Custom Compiler Integration View**:
-  ![CM Custom Compiler](Thesis/figures/current_mirror_from_custom_compiler.png)
+| 1. Before AI Placement (Unoptimized) | 2. Symbolic Canvas Layout |
+| :---: | :---: |
+| ![CM Before](Thesis/figures/current_mirror_before_AI_placement.png) | ![CM Symbolic](Thesis/figures/current_mirror_symbolic.png) |
+
+| 3. Transistor-Level Placement | 4. Transistor-Level (Colored Nodes) |
+| :---: | :---: |
+| ![CM Transistor-Level](Thesis/figures/current_mirror_transistor_level.png) | ![CM Transistor Colored](Thesis/figures/current_mirror_transistor_level_colord.png) |
+
+| 5. KLayout Physical View | 6. Synopsys Custom Compiler View |
+| :---: | :---: |
+| ![CM KLayout](Thesis/figures/current_mirror_klayout.png) | ![CM Custom Compiler](Thesis/figures/current_mirror_from_custom_compiler.png) |
 
 ---
 
 ### 🧩 C. Differential Pair (Comparator Block)
-The AI placement specialist and symmetry enforcer interleave active devices and center them symmetrically:
+Displays the input stage of a dynamic comparator. The AI placement specialist and symmetry enforcer interleave active devices and center them symmetrically with outer balanced dummy pads to eliminate thermal and process gradients.
 
-* **AI Generated Schematic Graph**:
-  ![Comparator Schematic](Thesis/figures/comparator_sch_AI_generated.png)
-* **Before AI Placement (Unoptimized)**:
-  ![Comparator Before](Thesis/figures/comparator_before_AI_placement.png)
-* **Final Symmetric Compacted Layout**:
-  ![Comparator Final](Thesis/figures/Comparator.png)
+| 1. AI Generated Schematic Graph | 2. Before AI Placement (Unoptimized) | 3. Final Symmetric Compacted Layout |
+| :---: | :---: | :---: |
+| ![Comparator Schematic](Thesis/figures/comparator_sch_AI_generated.png) | ![Comparator Before](Thesis/figures/comparator_before_AI_placement.png) | ![Comparator Final](Thesis/figures/Comparator.png) |
 
 ---
 
