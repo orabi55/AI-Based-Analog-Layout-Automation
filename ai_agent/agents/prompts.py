@@ -152,6 +152,12 @@ def build_fc_system_prompt(layout_context: dict | None) -> str:
         "calls to rearrange a row).\n"
         "4. After tool calls complete you may add a short confirmation in text.\n\n"
 
+        "## RESPONDING TO QUESTIONS & EXPLANATIONS\n"
+        "1. If the user asks a question about the layout (e.g. connectivity, topology, why devices are placed a certain way, or explaining/analyzing the circuit),\n"
+        "   use the layout context and net list below to provide a detailed, expert explanation.\n"
+        "2. You can call relevant analysis tools (like `detect_circuit_type`, `detect_current_mirrors`, `check_overlaps`) to get deterministic insights before explaining.\n"
+        "3. Always explain your reasoning clearly, pointing out device names (e.g., MM1, MM2) and their connections.\n\n"
+
         "## TOOL GROUPS\n"
         "### Primitive (direct device edits)\n"
         "  move_device(device, x, y)          — move one device\n"

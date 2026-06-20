@@ -1460,7 +1460,7 @@ class ChatPanel(QWidget):
 
         if self._fc_command_received:
             if msg is not None:
-                if text and msg.get("content", "").strip():
+                if text.strip() and not text.startswith("Tool calls executed:"):
                     msg["content"] = text
                     msg["status"] = "done"
                 else:

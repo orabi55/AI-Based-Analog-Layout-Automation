@@ -445,14 +445,84 @@ def run_llm_with_tools(
                 cmd_blocks.append(gui_cmd)
                 vprint(f"[TOOL_RUNNER] gui command emitted: {gui_cmd}")
 
+    # ── 4. Second LLM round: feed tool outputs back to LLM to get a conversational reply ──
+    final_text = ""
+    if tools_bound and tool_calls:
+        try:
+            from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
+            vprint("[TOOL_RUNNER] Building message history for second LLM turn...")
+
+            second_messages = []
+            for msg in lc_messages:
+                role = msg.get("role")
+                content = msg.get("content", "")
+                if role == "system":
+                    second_messages.append(SystemMessage(content=content))
+                elif role == "user":
+                    second_messages.append(HumanMessage(content=content))
+                elif role == "assistant":
+                    second_messages.append(AIMessage(content=content))
+
+            # Append the first AIMessage containing the tool calls
+            second_messages.append(response)
+
+            # Retrieve raw tool calls to align tool_call_id
+            raw_tool_calls = getattr(response, "tool_calls", []) or []
+            if not raw_tool_calls:
+                ak = getattr(response, "additional_kwargs", None) or {}
+                if isinstance(ak, dict):
+                    raw_tool_calls = ak.get("tool_calls") or []
+
+            # Append a ToolMessage for each tool call
+            for idx, (tc, res) in enumerate(zip(tool_calls, tool_results)):
+                tc_id = None
+                if idx < len(raw_tool_calls):
+                    raw_tc = raw_tool_calls[idx]
+                    if isinstance(raw_tc, dict):
+                        tc_id = raw_tc.get("id") or raw_tc.get("tool_call_id")
+                    else:
+                        tc_id = getattr(raw_tc, "id", None) or getattr(raw_tc, "tool_call_id", None)
+
+                if not tc_id:
+                    tc_id = f"call_{idx}_{tc.get('name')}"
+
+                tool_output = str(res.message or "")
+                if not tool_output.strip():
+                    tool_output = "Success" if res.success else "Failed"
+
+                second_messages.append(ToolMessage(
+                    content=tool_output,
+                    tool_call_id=tc_id,
+                    name=tc.get("name")
+                ))
+
+            vprint("[TOOL_RUNNER] Invoking second-round LLM for final text...")
+            if worker is not None:
+                final_text, _ = stream_llm(
+                    second_messages,
+                    llm,
+                    message_id,
+                    worker,
+                    emit_done=False,
+                )
+            else:
+                second_response = llm.invoke(second_messages)
+                final_text = _extract_text(second_response)
+            vprint(f"[TOOL_RUNNER] Second-round LLM response: {final_text}")
+        except Exception as exc:
+            import traceback
+            vprint(f"[TOOL_RUNNER] Second round LLM call failed: {exc}\n{traceback.format_exc()}")
+            final_text = ""
+
     return {
-        "text":          text or _summarize_calls(tool_calls, tool_results),
+        "text":          final_text or text or _summarize_calls(tool_calls, tool_results),
         "fc_used":       True,
         "tool_results":  tool_results,
         "updated_nodes": executor.nodes,
         "cmd_blocks":    cmd_blocks,
         "tools_bound":   tools_bound,
     }
+
 
 
 def _summarize_calls(tool_calls: List[dict], tool_results: list) -> str:

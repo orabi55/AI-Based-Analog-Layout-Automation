@@ -26,8 +26,9 @@ Classify the user's message into exactly ONE of these intent targets:
                            or fix-and-verify layout requests.
 
     layout_query         - Specific questions about the currently loaded layout, net list,
-                           or design context (e.g. "is MM3 connected to MM4?", "what pins does net net1 have?").
-                           Use this ONLY when layout context is required to answer.
+                           design context, or explaining/analyzing the circuit/layout topology
+                           (e.g. "explain this circuit", "what does this circuit do?", "is MM3 connected to MM4?").
+                           Use this when the user asks about the active layout/circuit.
 
     general_chat         - Factual lookups, definitions, general programming help,
                            knowledge questions about concepts (e.g. "What is a cascode mirror?"),
@@ -44,8 +45,8 @@ def classify_intent(user_message: str, selected_model: str) -> str:
     """Classify user intent and return the matching node function name.
 
     Uses a regex fast-path for trivial cases (greetings, obvious
-    commands) and falls back to a lightweight LLM call only when
-    the intent is ambiguous.
+    commands, layout explanation queries) and falls back to a
+    lightweight LLM call only when the intent is ambiguous.
 
     Args:
         user_message:   the raw user text from the chat panel.
@@ -55,6 +56,26 @@ def classify_intent(user_message: str, selected_model: str) -> str:
         Node function name.
     """
     stripped = user_message.strip()
+    msg_lower = stripped.lower()
+
+    # Regex fast-path for layout/circuit queries and explanations
+    layout_query_patterns = [
+        r"\bexplain\b.*\b(circuit|layout|schematic|netlist)\b",
+        r"\banalyze\b.*\b(circuit|layout|schematic|netlist)\b",
+        r"\bwhat\b.*\b(circuit|layout|netlist)\b.*\b(is|do|does)\b",
+        r"\bcurrent\b.*\b(layout|circuit|netlist|schematic)\b",
+        r"\bhow\b.*\b(circuit|layout)\b.*\bwork\b",
+        r"\bexplain this\b",
+        r"\bconnected\b",
+        r"\bconnectivity\b",
+        r"\bconnection\b",
+        r"\boverlap\b",
+        r"\bdrc\b",
+        r"\bsymmetry\b",
+    ]
+    if any(re.search(p, msg_lower) for p in layout_query_patterns):
+        vprint(f"[CLASSIFIER] Regex Match -> layout_query: '{stripped[:60]}'")
+        return "layout_query"
 
     # ── LLM-only: ask the LLM ───────────────────────────────────
     msgs = [

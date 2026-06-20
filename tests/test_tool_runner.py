@@ -400,3 +400,67 @@ class TestErrorHandling:
         result = run_llm_with_tools([], selected_model="Gemini", nodes=[])
         assert result["fc_used"] is False
         assert result["updated_nodes"] == []
+
+
+# ---------------------------------------------------------------------------
+# Multi-turn Function Calling tests
+# ---------------------------------------------------------------------------
+
+class TestMultiTurnFunctionCalling:
+    def test_multi_turn_feeds_tool_results_back(self, monkeypatch, two_nodes):
+        from langchain_core.messages import AIMessage, ToolMessage
+        from ai_agent.llm.tool_runner import run_llm_with_tools
+
+        first_resp = _MockResponse(
+            tool_calls=[{"name": "detect_circuit_type", "args": {}, "id": "call_123"}],
+        )
+        second_resp = _MockResponse(
+            content="This is a latch circuit."
+        )
+
+        mock_llm = _MockMultiTurnLLM(first_resp, second_resp)
+
+        def fake_factory(selected_model, task_weight="light"):
+            return mock_llm
+
+        monkeypatch.setattr("ai_agent.llm.tool_runner.get_langchain_llm", fake_factory, raising=False)
+        monkeypatch.setattr("ai_agent.llm.factory.get_langchain_llm", fake_factory)
+
+        result = run_llm_with_tools(
+            [{"role": "user", "content": "Explain this circuit"}],
+            selected_model="Gemini",
+            nodes=two_nodes,
+        )
+
+        assert result["fc_used"]
+        assert result["text"] == "This is a latch circuit."
+        assert len(mock_llm.invocations) == 2
+
+        # Verify second invocation messages structure
+        second_msgs = mock_llm.invocations[1]
+        assert len(second_msgs) == 3  # user + assistant (tool_call) + tool (result)
+        assert isinstance(second_msgs[1], _MockResponse)  # original AIMessage
+        assert isinstance(second_msgs[2], ToolMessage)
+        assert second_msgs[2].tool_call_id == "call_123"
+        # Since the tool result returned "Circuit type: generic" from mock, check that
+        assert "generic" in second_msgs[2].content.lower()
+
+
+
+class _MockMultiTurnLLM:
+    def __init__(self, first_resp, second_resp):
+        self.first_resp = first_resp
+        self.second_resp = second_resp
+        self.invocations = []
+        self.bind_tools_called = False
+
+    def bind_tools(self, tools):
+        self.bind_tools_called = True
+        return self
+
+    def invoke(self, messages):
+        self.invocations.append(messages)
+        if len(self.invocations) == 1:
+            return self.first_resp
+        return self.second_resp
+
