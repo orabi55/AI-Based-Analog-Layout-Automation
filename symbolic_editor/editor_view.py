@@ -16,6 +16,11 @@ try:
 except Exception:
     shiboken6 = None
 
+import warnings as _warnings
+_warnings.filterwarnings("ignore", message="Failed to disconnect", category=RuntimeWarning)
+
+_log = logging.getLogger(__name__)
+
 
 def _ip_ui_quiet() -> bool:
     """True while initial placement runs with step-only console mode."""
@@ -332,8 +337,8 @@ class SymbolicEditor(QGraphicsView):
         self._block_overlays = []    # list of QGraphicsItem for overlays
         self._block_items = []       # list of actual BlockItem instances (symbol view)
         self._block_overlays_visible = True
-        self._view_level = "symbol"   # 'symbol' or 'transistor'
-        self._device_render_mode = "detailed"
+        self._view_level = "transistor"   # 'symbol' or 'transistor'
+        self._device_render_mode = "outline"
         self._centroid_items = []
 
         # Block colors
@@ -346,7 +351,7 @@ class SymbolicEditor(QGraphicsView):
         # Hierarchy group items (arrays, multipliers, fingers)
         self._hierarchy_groups = []  # list of top-level HierarchyGroupItem
         self._hierarchy_visible = True  # whether hierarchy groups are shown
-        self._hierarchy_view_mode = "symbolic"
+        self._hierarchy_view_mode = "detailed"
         self._custom_group_specs = []
         self._rebuilding_scene = False
         self._refreshing_block_overlays = False
@@ -547,7 +552,7 @@ class SymbolicEditor(QGraphicsView):
     @staticmethod
     def _restore_item_orientation(item, orient):
         """Apply saved/imported orientation using symbolic flip semantics."""
-        token = str(orient or "R0").strip().upper()
+        token = str(orient or "R0").strip().upper().replace("R00", "R0")
         if hasattr(item, "set_flip_h"):
             item.set_flip_h(False)
         if hasattr(item, "set_flip_v"):
@@ -849,7 +854,7 @@ class SymbolicEditor(QGraphicsView):
             if tap_type == "vdd":
                 # VDD tap (Ntap) right above all devices
                 topmost_y = min(self._snap_row(it.pos().y()) for it in active_items)
-                y = topmost_y - self._row_pitch
+                y = topmost_y - height
             else:
                 # GND tap (Ptap) right below all devices
                 bottommost_y = max(self._snap_row(it.pos().y()) for it in active_items)
@@ -1003,6 +1008,10 @@ class SymbolicEditor(QGraphicsView):
         self._clear_hierarchy_groups(remove_from_scene=True)
         self.scene.clear()
         self.device_items.clear()
+        if hasattr(self, "_centroid_items"):
+            self._centroid_items.clear()
+        if hasattr(self, "_symmetry_axis_items"):
+            self._symmetry_axis_items.clear()
 
         self.scale_factor = 80  # visual scaling
         widths = []
@@ -1060,13 +1069,29 @@ class SymbolicEditor(QGraphicsView):
                     nf=nf,
                 )
                 item.set_render_mode(self._device_render_mode)
+                
+                # Determine S/D swap status
+                is_swapped = False
+                n_s = node.get("net_s")
+                n_d = node.get("net_d")
+                orig_nets = self._schematic_nets_for_device(node.get("id"))
+                if orig_nets:
+                    orig_s = orig_nets.get("S")
+                    orig_d = orig_nets.get("D")
+                    if (n_s == orig_d and n_d == orig_s and orig_s != orig_d) or node.get("swapped_sd", False):
+                        is_swapped = True
+                else:
+                    if node.get("swapped_sd", False):
+                        is_swapped = True
+                item.set_swapped_sd(is_swapped)
+
                 # Restore abutment state from OAS / saved data
                 abut = node.get("abutment", {})
                 if abut:
                     item.set_abut_left(abut.get("abut_left", False))
                     item.set_abut_right(abut.get("abut_right", False))
             orient = geom.get("orientation", "R0")
-            print(f"[DEBUG GUI] Loading {node.get('id')} with orientation {orient}")
+            _log.debug("Loading %s with orientation %s", node.get('id'), orient)
             self._restore_item_orientation(item, orient)
 
             self.scene.addItem(item)
@@ -1095,6 +1120,8 @@ class SymbolicEditor(QGraphicsView):
             self._snap_grid = max(1.0, min(ref_w))
         if ref_h:
             self._row_pitch = max(1.0, max(ref_h))
+            if hasattr(self, "_row_space") and self._row_space is not None:
+                self._row_pitch = (0.568 + self._row_space) * getattr(self, "scale_factor", 80)
 
         if compact:
             # Grid-snap mode: snap transistors to grid and compact their rows.
@@ -1121,6 +1148,7 @@ class SymbolicEditor(QGraphicsView):
         self.scene.setSceneRect(-1000000, -1000000, 2000000, 2000000)
 
         # Force viewport repaint so custom colors and new positions are visible immediately.
+        self._auto_set_horizontal_abutment()
         self.viewport().update()
 
     def get_updated_positions(self):
@@ -1523,12 +1551,14 @@ class SymbolicEditor(QGraphicsView):
         self._apply_hierarchy_view_mode()
 
     def show_symbolic_hierarchy(self):
-        self.set_view_level("symbol")
-        self.set_hierarchy_view_mode("symbolic")
+        self.set_view_level("transistor")
+        self.set_hierarchy_view_mode("detailed")
+        self.set_device_render_mode("outline")
 
     def show_detailed_hierarchy(self):
         self.set_view_level("transistor")
         self.set_hierarchy_view_mode("detailed")
+        self.set_device_render_mode("detailed")
 
     def find_group_by_name(self, group_name):
         for group in self._iter_live_hierarchy_groups():
@@ -1810,76 +1840,13 @@ class SymbolicEditor(QGraphicsView):
         return score
 
     def _order_row_items(self, items):
-        """Order row items so net-sharing neighbors (especially D-common) abut."""
-        ordered_by_x = sorted(items, key=lambda it: it.pos().x())
-        if len(ordered_by_x) <= 1 or not self._terminal_nets:
-            return ordered_by_x
+        """Order row items so net-sharing neighbors (especially D-common) abut.
+        To preserve AI-generated layout structures (interleaving, symmetry, dummies),
+        we always maintain and return the exact geometric coordinate order.
+        """
+        return sorted(items, key=lambda it: it.pos().x())
 
-        with_nets = [
-            it for it in ordered_by_x if self._terminal_nets.get(it.device_name)
-        ]
-        if len(with_nets) < 2:
-            return ordered_by_x
-
-        remaining = list(ordered_by_x)
-
-        def total_score(candidate):
-            return sum(
-                self._abut_pair_score(candidate, other)
-                + self._abut_pair_score(other, candidate)
-                for other in remaining
-                if other is not candidate
-            )
-
-        seed = max(
-            remaining,
-            key=lambda it: (total_score(it), -abs(it.pos().x())),
-        )
-        row = [seed]
-        remaining.remove(seed)
-
-        while remaining:
-            left_anchor = row[0]
-            right_anchor = row[-1]
-            best_item = None
-            best_side = None
-            best_rank = None
-
-            for cand in remaining:
-                score_left = self._abut_pair_score(cand, left_anchor)
-                score_right = self._abut_pair_score(right_anchor, cand)
-                if score_left > score_right:
-                    side = "left"
-                    score = score_left
-                    anchor = left_anchor
-                else:
-                    side = "right"
-                    score = score_right
-                    anchor = right_anchor
-
-                # Prefer higher net score, then closer current position to anchor.
-                rank = (score, -abs(cand.pos().x() - anchor.pos().x()))
-                if best_rank is None or rank > best_rank:
-                    best_rank = rank
-                    best_item = cand
-                    best_side = side
-
-            if best_side == "left":
-                row.insert(0, best_item)
-            else:
-                row.append(best_item)
-            remaining.remove(best_item)
-
-        # If no useful net signal exists, keep geometric order.
-        adjacency_gain = sum(
-            self._abut_pair_score(row[i], row[i + 1])
-            for i in range(len(row) - 1)
-        )
-        if adjacency_gain <= 0:
-            return ordered_by_x
-        return row
-
-    def _compact_rows_abutted(self, row_keys=None):
+    def _compact_rows_abutted(self, row_keys=None, preserve_x=False):
         """Pack row devices and collapse occupied rows onto touching tracks.
 
         Only DeviceItem (transistors) are compacted; capacitors and resistors
@@ -1890,7 +1857,8 @@ class SymbolicEditor(QGraphicsView):
         for item in self.device_items.values():
             if not isinstance(item, DeviceItem):
                 continue  # skip caps / resistors
-            row_y = self._snap_row(item.pos().y())
+            # Group by rounded Y coordinate to avoid corruption when row pitch changes dynamically
+            row_y = round(item.pos().y(), 1)
             block_inst = getattr(item, "block_instance", None) or ""
             key = (block_inst, getattr(item, "device_type", ""), row_y)
             rows.setdefault(key, []).append(item)
@@ -1909,7 +1877,7 @@ class SymbolicEditor(QGraphicsView):
                 continue
             block_inst, _, row_y = key
             target_row_y = row_y_map[(block_inst, row_y)]
-            if row_keys is not None and key not in row_keys:
+            if preserve_x or (row_keys is not None and key not in row_keys):
                 for it in items:
                     it.setPos(it.pos().x(), target_row_y)
                 continue
@@ -1922,11 +1890,51 @@ class SymbolicEditor(QGraphicsView):
                 # Default: move by full width
                 next_step = it.rect().width()
                 
-                # Symbolic Slot System: Abutted devices occupy adjacent slots and do not visually overlap.
-                # The squeezing to 0.070um only happens during GDS/Oasis export.
-                pass
-                
                 x_cursor += next_step
+
+        self._auto_set_horizontal_abutment()
+
+    def _auto_set_horizontal_abutment(self):
+        """Automatically set visual abutment flags for devices that are physically touching in the UI,
+        strictly respecting electrical net-sharing rules.
+        """
+        rows = {}
+        for item in self.device_items.values():
+            if getattr(item, "is_passive", False) or not hasattr(item, "set_abut_left"):
+                continue
+            y_key = round(item.pos().y(), 1)
+            rows.setdefault(y_key, []).append(item)
+            
+        node_map = {n.get("id"): n for n in getattr(self, "nodes", []) or []}
+            
+        for y_key, items in rows.items():
+            items = sorted(items, key=lambda it: it.pos().x())
+            
+            # First clear all
+            for it in items:
+                it.set_abut_left(False)
+                if hasattr(it, "set_abut_right"):
+                    it.set_abut_right(False)
+            
+            # Then set if touching and electrically compatible
+            for i in range(len(items) - 1):
+                curr_it = items[i]
+                next_it = items[i+1]
+                curr_right = curr_it.pos().x() + curr_it.rect().width()
+                if abs(next_it.pos().x() - curr_right) < 1.0:
+                    can_abut = True
+                    curr_node = node_map.get(curr_it.device_name)
+                    next_node = node_map.get(next_it.device_name)
+                    if curr_node and next_node:
+                        from symbolic_editor.layout_tab import _adjacent_devices_can_abut
+                        can_abut = _adjacent_devices_can_abut(curr_node, next_node, getattr(self, "_terminal_nets", {}) or {})
+                        
+                    if can_abut:
+                        if hasattr(curr_it, "set_abut_right"):
+                            curr_it.set_abut_right(True)
+                        next_it.set_abut_left(True)
+        
+        self.viewport().update()
 
     def swap_devices(self, id_a, id_b):
         """Swap the positions of two devices on the canvas."""
@@ -2033,11 +2041,17 @@ class SymbolicEditor(QGraphicsView):
             heights = [item.rect().height() for item in self.device_items.values()]
             if heights:
                 self._row_pitch = max(1.0, max(heights))
+                if hasattr(self, "_row_space") and self._row_space is not None:
+                    self._row_pitch = (0.568 + self._row_space) * getattr(self, "scale_factor", 80)
             for item in self.device_items.values():
                 item.set_snap_grid(self._snap_grid, self._row_pitch)
-            self._compact_rows_abutted()
+            self._compact_rows_abutted(preserve_x=True)
             self.refresh_hierarchy_group_geometry()
             self._invalidate_layout_background()
+
+    def set_row_space(self, space_um):
+        self._row_space = space_um
+        self.set_custom_row_gap(0.0)  # Recompute and snap
 
     def get_row_col(self, dev_id):
         item = self.device_items.get(dev_id)
@@ -2384,133 +2398,8 @@ class SymbolicEditor(QGraphicsView):
         self.highlight_net_by_name(net_name)
 
     def highlight_net_by_name(self, net_name: str, color=None):
-        """Highlight a net across the layout and draw dotted flight lines (ratsnest).
-
-        Steps:
-          1. Clear any transistor selection (mutually exclusive with net highlight)
-          2. Highlight terminal labels on all devices connected to this net
-          3. Collect every terminal anchor point for the net across all fingers
-          4. Draw dotted lines connecting consecutive anchor points (virtual routing)
-        """
-        # ── 1. Clear transistor selection ────────────────────────────────────
-        self.scene.blockSignals(True)
-        self.scene.clearSelection()
-        self.scene.blockSignals(False)
-        self._clear_connections()
-
-        if not net_name or net_name == "?":
-            self.clear_highlighted_net()
-            return
-
-        # ── 2. Highlight net terminal labels ─────────────────────────────────
-        self.set_highlighted_net(net_name)
-
-        # ── 3. Collect anchor points for every finger connected to this net ──
-        anchor_points = []
-        connected_items = []
-        net_up = net_name.strip().upper()
-
-        for dev_id, item in self.device_items.items():
-            term_nets = self._terminal_nets_for_device(dev_id)
-            if not term_nets:
-                continue
-            # Find which terminal(s) connect to this net
-            for terminal, tnet in term_nets.items():
-                if str(tnet).strip().upper() == net_up:
-                    connected_items.append(item)
-                    try:
-                        anchors = item.terminal_anchors()
-                        pt = (anchors.get(terminal)
-                              or anchors.get("G")
-                              or anchors.get("D")
-                              or anchors.get("S")
-                              or (next(iter(anchors.values())) if anchors else None))
-                        if pt is not None:
-                            anchor_points.append(pt)
-                    except (AttributeError, RuntimeError):
-                        pass
-                    break  # one terminal per device for the flight-line
-
-        # Apply focus dimming to non-connected devices
-        self._apply_dimming_for_selection(connected_items)
-
-        wire_color = QColor(color) if color else QColor("#00e5ff")
-        wire_color.setAlpha(220)
-        drawn_any = False
-        edge_index = 0
-
-        self.scene.blockSignals(True)
-        try:
-            for src, tgt, edge_net in self._iter_drawable_edges():
-                if str(edge_net).strip().upper() != net_up:
-                    continue
-                if self._add_connection_line(
-                    src, tgt, edge_net, edge_index,
-                    wire_color, 2.0,
-                    style=Qt.PenStyle.SolidLine,
-                    alpha=230,
-                    z=20,
-                ):
-                    drawn_any = True
-                    edge_index += 1
-        finally:
-            self.scene.blockSignals(False)
-
-        if drawn_any:
-            self.scene.update()
-            return
-
-        if len(anchor_points) < 2:
-            return  # nothing to connect
-
-        # ── 4. Draw dotted flight lines between sorted anchor points ─────────
-        # Sort by X so lines flow left→right (clean visual order)
-        anchor_points.sort(key=lambda p: p.x())
-
-        # Bright cyan dotted lines — clearly visible on the dark layout background
-        flight_color = wire_color
-        pen = QPen(flight_color, 1.8, Qt.PenStyle.DotLine,
-                   Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
-        pen.setCosmetic(True)
-
-        self.scene.blockSignals(True)
-        try:
-            for i in range(len(anchor_points) - 1):
-                p1 = anchor_points[i]
-                p2 = anchor_points[i + 1]
-                line_item = QGraphicsPathItem(
-                    self._connection_path(p1, p2, i, offset_factor=0.12)
-                )
-                line_item.setPen(pen)
-                line_item.setZValue(20)
-                line_item.setFlag(
-                    QGraphicsPathItem.GraphicsItemFlag.ItemIsSelectable, False
-                )
-                self.scene.addItem(line_item)
-                self._conn_lines.append(line_item)
-
-                # Small filled circle at each anchor point for clarity
-                dot = self.scene.addEllipse(
-                    p1.x() - 3, p1.y() - 3, 6, 6,
-                    QPen(Qt.PenStyle.NoPen),
-                    QBrush(flight_color)
-                )
-                dot.setZValue(21)
-                self._conn_lines.append(dot)
-
-            # Dot on the last point too
-            p_last = anchor_points[-1]
-            dot_last = self.scene.addEllipse(
-                p_last.x() - 3, p_last.y() - 3, 6, 6,
-                QPen(Qt.PenStyle.NoPen),
-                QBrush(flight_color)
-            )
-            dot_last.setZValue(21)
-            self._conn_lines.append(dot_last)
-        finally:
-            self.scene.blockSignals(False)
-
-        self.scene.update()
+        """Highlight a net across the layout via terminal color and dimming only (no flight lines)."""
+        self.highlight_net_simple(net_name)
 
 
     def _on_selection_changed(self):
@@ -2526,6 +2415,22 @@ class SymbolicEditor(QGraphicsView):
         if getattr(self, '_selection_updating', False):
             return
         
+        self._selection_updating = True
+        self.scene.blockSignals(True)
+        try:
+            selected = [s for s in self.scene.selectedItems()
+                        if hasattr(s, 'device_name')]
+            for item in list(selected):
+                if hasattr(item, '_sibling_group') and item._sibling_group:
+                    for sibling in item._sibling_group:
+                        if sibling and not sibling.isSelected():
+                            sibling.setSelected(True)
+        except RuntimeError:
+            pass
+        finally:
+            self.scene.blockSignals(False)
+            self._selection_updating = False
+
         try:
             selected = [s for s in self.scene.selectedItems()
                         if hasattr(s, 'device_name')]
@@ -2632,13 +2537,20 @@ class SymbolicEditor(QGraphicsView):
         if item:
             item.setSelected(True)
             matched_items.append(item)
+            if hasattr(item, '_sibling_group') and item._sibling_group:
+                for sibling in item._sibling_group:
+                    if sibling:
+                        sibling.setSelected(True)
+                        if sibling not in matched_items:
+                            matched_items.append(sibling)
         else:
             # Parent-level match: select every finger whose ID starts with dev_id
-            # Use both '_m' (multiplier) and '_f' (finger) suffix patterns
-            prefix = dev_id + "_"
+            # Use both '_m' (multiplier) and '_f' (finger) suffix patterns (with dot or underscore)
+            prefix_underscore = dev_id + "_"
+            prefix_dot = dev_id + "."
             matched = False
             for fid, fitem in self.device_items.items():
-                if fid == dev_id or fid.startswith(prefix):
+                if fid == dev_id or fid.startswith(prefix_underscore) or fid.startswith(prefix_dot):
                     fitem.setSelected(True)
                     matched_items.append(fitem)
                     matched = True
@@ -2672,7 +2584,7 @@ class SymbolicEditor(QGraphicsView):
                 matched_items.append(item)
             else:
                 for did in id_set:
-                    if dev_id.startswith(did + "_"):
+                    if dev_id.startswith(did + "_") or dev_id.startswith(did + "."):
                         matched_items.append(item)
                         break
         self.scene.blockSignals(True)
@@ -3340,6 +3252,70 @@ class SymbolicEditor(QGraphicsView):
                 txt.setPos(x + 5, y + 5)
                 txt.setZValue(100)
                 self._centroid_items.append(txt)
+
+    def set_symmetry_axis(self, x_um=None, y_um=None, color=None):
+        """Draw a bold dashed symmetry line overlay at X or Y coordinate on the canvas.
+        
+        If x_um is None and y_um is None, all axes are cleared.
+        The axis spans the full canvas extent for maximum visibility.
+        """
+        for item in getattr(self, "_symmetry_axis_items", []):
+            try:
+                self.scene.removeItem(item)
+            except Exception:
+                pass
+        if not hasattr(self, "_symmetry_axis_items"):
+            self._symmetry_axis_items = []
+        self._symmetry_axis_items.clear()
+
+        if x_um is None and y_um is None:
+            self.viewport().update()
+            return
+
+        from PySide6.QtGui import QPen, QColor, QBrush, QFont
+        from PySide6.QtCore import Qt, QRectF
+        pen_color = color if color else QColor("#00e5ff")
+        # Use a bolder pen with DashLine and higher width for premium visibility
+        pen = QPen(pen_color, 3, Qt.PenStyle.DashLine)
+        pen.setDashPattern([8, 4])
+
+        # Extend the axis well beyond the scene rect so it's always visible
+        extent = 8000
+
+        # scale_factor is 80 for visual sizing
+        scale = getattr(self, "scale_factor", 80)
+
+        if x_um is not None:
+            x_scene = float(x_um) * scale
+            line = self.scene.addLine(x_scene, -extent, x_scene, extent, pen)
+            line.setZValue(100)
+            self._symmetry_axis_items.append(line)
+
+            # Label at a fixed offset from the line
+            txt = self.scene.addSimpleText(f"⊗  Sym X = {x_um:.3f} µm")
+            font = QFont("Segoe UI", 9, QFont.Weight.Bold)
+            txt.setFont(font)
+            txt.setBrush(QBrush(pen_color))
+            txt.setPos(x_scene + 8, -extent + 30)
+            txt.setZValue(101)
+            self._symmetry_axis_items.append(txt)
+
+        if y_um is not None:
+            y_scene = -float(y_um) * scale
+            line = self.scene.addLine(-extent, y_scene, extent, y_scene, pen)
+            line.setZValue(100)
+            self._symmetry_axis_items.append(line)
+
+            txt = self.scene.addSimpleText(f"⊗  Sym Y = {y_um:.3f} µm")
+            font = QFont("Segoe UI", 9, QFont.Weight.Bold)
+            txt.setFont(font)
+            txt.setBrush(QBrush(pen_color))
+            txt.setPos(-extent + 20, y_scene - 22)
+            txt.setZValue(101)
+            self._symmetry_axis_items.append(txt)
+
+        self.viewport().update()
+
 
     def contextMenuEvent(self, event):
         """Show a right-click menu for devices, groups, or blocks."""

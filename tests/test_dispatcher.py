@@ -116,6 +116,11 @@ class TestRegistry:
         "optimize_layout_for_routing",
         # Persistence
         "save_layout",
+        # Advanced Layout Automation Features
+        "insert_guard_ring", "highlight_device_net", "draw_symmetry_axis",
+        "clear_canvas_decorations", "apply_rag_style_migration",
+        "reconfigure_floorplan", "shield_net", "preview_layout_gds", "place_sequence",
+        "swap_rows",
     }
 
     def test_all_tools_registered(self):

@@ -1,0 +1,934 @@
+% ==============================================================================
+% CHAPTER 6: Chatbot Co-Pilot & Interactive Human-in-the-Loop Review
+% ==============================================================================
+
+\usetikzlibrary{fit,backgrounds}
+
+\chapter[Chatbot Co-Pilot \& GUI Integration]{Stage 3: Chatbot Co-Pilot \& GUI Integration}
+\label{ch:chatbot_copilot}
+\chaptermark{Chatbot Co-Pilot \& GUI}
+
+\lettrine[lines=3]{I}{nteractive layout editing} forms the foundation of human-in-the-loop CAD tools. While automated scripts are useful for batch layout generation, analog designers require the ability to interactively steer the layout engine, modify relative positions, resolve design rule violations, and query circuit information using natural language. LayoutCopilot fulfills this need by integrating a Chatbot Co-Pilot panel directly into the PySide6 layout editor.
+
+This chapter details the architecture of the interactive chatbot stage. It explains the LangGraph-driven intent routing graph, the asynchronous frontend-backend worker thread architecture, the context-aware prompt templates, and the integration of PySide6's undo stack with headless KLayout live-rendering previews.
+
+% ==============================================================================
+\section[Chat Graph Architecture]{Interactive Chat Graph Architecture}
+\label{sec:chat_graph}
+\sectionmark{Chat Graph Architecture}
+
+The interactive chatbot is orchestrated by a dedicated state machine constructed via \texttt{build\_}\allowbreak\texttt{chat\_}\allowbreak\texttt{graph()} in the graph builder. Unlike the linear auto-run pipeline of Stage 2, the chat workflow uses intent-based routing to dispatch the user's natural language request to the appropriate agent node. Figure~\ref{fig:chat_transitions} visualizes the state transition model.
+
+\begin{figure}[H]
+    \centering
+    \fbox{\begin{tikzpicture}[
+        node distance=1.0cm and 0.75cm,
+        startstate/.style={draw=CodeGreen, fill=CodeGreen!10, text=CodeGreen!60!black, thick, circle, minimum size=1.6cm, align=center, font=\small\sffamily\bfseries, drop shadow={shadow xshift=1.2pt, shadow yshift=-1.2pt, fill=black!10}},
+        agentstate/.style={draw=RoyalBlue, fill=LightBlueBg, text=AcademicBlue, thick, rounded corners, minimum width=2.4cm, minimum height=1.0cm, align=center, font=\small\sffamily\bfseries, drop shadow={shadow xshift=1.2pt, shadow yshift=-1.2pt, fill=black!10}},
+        decision/.style={draw=WarmGold, fill=PaleGold!30, text=AcademicBlue, thick, diamond, aspect=2, minimum width=2.2cm, minimum height=1.0cm, align=center, font=\small\sffamily\bfseries, drop shadow={shadow xshift=1.2pt, shadow yshift=-1.2pt, fill=black!10}},
+        endstate/.style={draw=CodeGreen!80!black, fill=CodeGreen!20, text=CodeGreen!60!black, thick, circle, minimum size=1.6cm, double, align=center, font=\small\sffamily\bfseries, drop shadow={shadow xshift=1.2pt, shadow yshift=-1.2pt, fill=black!10}},
+        arrow/.style={-Latex, line width=1.3pt, draw=AcademicBlue},
+        feedbackarrow/.style={-Latex, line width=1.3pt, draw=WarmGold, dashed}
+    ]
+        % Nodes
+        \node[startstate] (start) {START};
+        \node[agentstate, right=of start] (router) {Intent \\ Router \\ (\texttt{router})};
+        
+        % Router Targets (Vertically Aligned Column)
+        \node[agentstate, above right=of router, yshift=0.5cm] (general) {General \\ Chatbot \\ (\texttt{general})};
+        \node[agentstate, right=of router] (place) {Placement \\ Specialist \\ (\texttt{placement\_sp})};
+        \node[agentstate, below right=of router, yshift=-0.5cm] (drc) {DRC \\ Critic \\ (\texttt{drc\_critic})};
+        
+        \node[agentstate, right=of place] (viewer) {Human \\ Viewer \\ (\texttt{human\_viewer})};
+        \node[endstate, right=of viewer] (end) {END};
+
+        % Connections from START to Router
+        \draw[arrow] (start) -- (router);
+        
+        % Intent Routing (Clean Orthogonal Branches)
+        \draw[arrow] (router) |- node[near end, above, font=\tiny\sffamily] {General Query} (general);
+        \draw[arrow] (router) -- node[midway, above, font=\tiny\sffamily] {Action} (place);
+        \draw[arrow] (router) |- node[near end, below, font=\tiny\sffamily] {DRC Fix Request} (drc);
+        
+        % Node flows (Curved Place-DRC connection to prevent line overlaps)
+        \draw[arrow] (place) to[bend left=20] (drc);
+        \draw[arrow] (general) -| (viewer);
+        \draw[arrow] (drc) -| (viewer);
+        \draw[arrow] (viewer) -- (end);
+        
+        % Cyclic loops (Prescriptive / ReAct DRC correction loop curved to the left)
+        \draw[feedbackarrow] (drc) to[bend left=20] node[midway, left, font=\tiny\sffamily, text=WarmGold, align=center] {DRC Fail \\ (Retry < 2)} (place);
+    \end{tikzpicture}}
+    \caption{Interactive Chatbot Agent LangGraph State Transition Model.}
+    \label{fig:chat_transitions}
+\end{figure}
+
+\subsection{State Schema and Shared Context}
+The interactive agent graph relies on a shared state variable, \texttt{LayoutState}, which acts as the unified database passed between nodes. The state elements, their types, and the nodes that mutate them are detailed in Table~\ref{tab:layout_state_details}.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Unified Graph LayoutState Schema Elements.}
+    \label{tab:layout_state_details}
+    \begin{tabularx}{\textwidth}{l p{2.2cm} l X}
+        \toprule
+        \textbf{Key} & \textbf{Data Type} & \textbf{Initial Value} & \textbf{Mutating Node(s)} \\
+        \midrule
+        \texttt{user\_message} & \texttt{str} & User text input & None (Read-only) \\
+        \texttt{chat\_history} & \texttt{list[dict]} & Scrubbed history & \texttt{router}, \texttt{general}, \texttt{placement\_sp} \\
+        \texttt{selected\_model} & \texttt{str} & \texttt{"Gemini"} & None (Read-only) \\
+        \texttt{intent} & \texttt{str} & \texttt{""} & \texttt{router} \\
+        \texttt{router\_target} & \texttt{str} & \texttt{""} & \texttt{router} \\
+        \texttt{placement\_nodes} & \texttt{list[dict]} & Canvas nodes & \texttt{placement\_sp}, \texttt{drc\_critic} \\
+        \texttt{pending\_cmds} & \texttt{list[dict]} & \texttt{[]} & \texttt{placement\_sp}, \texttt{drc\_critic} \\
+        \texttt{drc\_pass} & \texttt{bool} & \texttt{True} & \texttt{drc\_critic} \\
+        \texttt{drc\_flags} & \texttt{list[str]} & \texttt{[]} & \texttt{drc\_critic} \\
+        \texttt{general\_response} & \texttt{str} & \texttt{""} & \texttt{general} \\
+        \texttt{drc\_retry\_count} & \texttt{int} & \texttt{0} & \texttt{drc\_critic} \\
+        \bottomrule
+    \end{tabularx}
+\end{table}
+
+The chat state graph registered in \texttt{builder.py} binds the routing transitions and registers five main execution nodes:
+\begin{enumerate}
+    \item \textbf{Intent Router (\texttt{router})}: Employs a regex fast-path for simple commands and falls back to a lightweight LLM call to classify user messages into three categories: \texttt{placement\_specialist}, \texttt{drc\_critic}, or \texttt{general}.
+    \item \textbf{Placement Specialist (\texttt{placement\_specialist})}: Executes layout adjustments and movement commands. To minimize latency, it uses a lightweight logical device aggregator (\texttt{aggregate\_}\allowbreak\texttt{to\_}\allowbreak\texttt{logical\_}\allowbreak\texttt{devices()}) instead of the full row assigner and block merger.
+    \item \textbf{DRC Critic (\texttt{drc\_critic})}: Evaluates design rule spacing and horizontal overlaps, generating corrective offsets or looping back to the placement specialist on verification failures.
+    \item \textbf{General Assistant (\texttt{general})}: Handles knowledge retrieval, circuit explanations, and descriptive user questions.
+    \item \textbf{Human Viewer (\texttt{human\_viewer})}: Visualizes the placement adjustments in the GUI and terminates the execution stream.
+\end{enumerate}
+
+Listing~\ref{lst:chat_graph_builder} shows the LangGraph construction logic for interactive chat mode.
+
+\begin{thesiscode}{Interactive Chat LangGraph Builder Implementation (builder.py)\label{lst:chat_graph_builder}}{python}
+def build_chat_graph():
+    """Build the chat-bot LangGraph with intent-based routing."""
+    memory = MemorySaver()
+    builder = StateGraph(LayoutState)
+
+    # Register Chat Nodes
+    builder.add_node("router", _node_router)
+    builder.add_node("placement_specialist", node_placement_specialist_chatbot)
+    builder.add_node("drc_critic", node_drc_critic)
+    builder.add_node("general", node_general_chatbot)
+    builder.add_node("human_viewer", node_human_viewer)
+
+    # Bind State Transitions
+    builder.add_edge(START, "router")
+    builder.add_conditional_edges(
+        "router",
+        _route_after_router,
+        {
+            "placement_specialist": "placement_specialist",
+            "drc_critic": "drc_critic",
+            "general": "general",
+        },
+    )
+    builder.add_edge("placement_specialist", "drc_critic")
+    builder.add_conditional_edges(
+        "drc_critic",
+        route_after_drc_chat,
+        {
+            "human_viewer": "human_viewer",
+            "placement_specialist": "placement_specialist",
+        },
+    )
+    builder.add_edge("general", "human_viewer")
+    builder.add_edge("human_viewer", END)
+
+    return builder.compile(checkpointer=memory), memory
+\end{thesiscode}
+
+\subsection{Line-by-Line Analysis of build\_chat\_graph()}
+The entry point of the LangGraph compiler initializes a \texttt{StateGraph} using \texttt{LayoutState} (Line 4). It registers five nodes using the graph-binding method \texttt{add\_node()} (Lines 7-11). The edge connections specify the workflow layout:
+\begin{itemize}
+    \item \textbf{Line 14}: Binds the start node to the routing parser.
+    \item \textbf{Line 15-23}: Declares a conditional transition from \texttt{"router"} executing \texttt{\_route\_}\allowbreak\texttt{after\_}\allowbreak\texttt{router()}. The routing function evaluates the state key \texttt{router\_target} and maps it to the matching execution node.
+    \item \textbf{Line 24}: Directs the placement specialist straight into DRC critic validation.
+    \item \textbf{Line 25-32}: Establishes the conditional self-healing edge after the DRC critic. The router \texttt{route\_}\allowbreak\texttt{after\_}\allowbreak\texttt{drc\_}\allowbreak\texttt{chat()} checks whether \texttt{drc\_pass} is true. If false, and the retry limit has not been exceeded, it loops back to the placement node.
+    \item \textbf{Line 33}: Connects the conversational chatbot to the viewer node.
+    \item \textbf{Line 34}: Connects the human review node to the graph terminal endpoint.
+\end{itemize}
+
+\subsection{Intent Classification Node}
+The router node (\texttt{\_node\_}\allowbreak\texttt{router()}) reads the user's message and invokes \texttt{classify\_}\allowbreak\texttt{intent()} in \texttt{classifier.py}. The classification process uses a two-tiered routing paradigm. First, a regex-based quick classifier checks the message against trivial geometric command signatures (e.g. \emph{"move MM1"}, \emph{"swap A and B"}, \emph{"abut x y"}). If a match is found, the system immediately routes execution to the placement specialist, skipping LLM evaluation to eliminate API latency. 
+
+When semantic ambiguity exists, the router falls back to a lightweight LLM call utilizing a structured classification prompt forcing the model to output a single keyword indicating the target node. Listing~\ref{lst:intent_classifier} illustrates the classifier system prompt and LLM call logic.
+
+\begin{thesiscode}{Intent Classifier Logic (classifier.py)\label{lst:intent_classifier}}{python}
+CLASSIFIER_PROMPT = """\
+You are an intent classifier for an analog IC layout editor.
+Classify the user's message into exactly ONE of these intent targets:
+
+    placement_specialist - Direct placement / movement / ordering /
+                           abutment / interdigitation / row assignment / optimize routing crossings.
+                           Usually a command for the placement engine.
+
+    drc_critic           - DRC violations, spacing, overlap, clean-up,
+                           or fix-and-verify layout requests.
+
+    general              - Factual lookups, definitions, or knowledge
+                           questions about devices, properties, or concepts
+                           (e.g. "What is...", "How does...", "Why is...",
+                           "What are the specs of..."). Use this when the
+                           user is asking FOR INFORMATION rather than
+                           requesting an action on the layout.
+
+Choose the single best target for the user's request.
+Reply with ONLY the target name.
+Do not explain. Do not add punctuation.
+"""
+
+def classify_intent(user_message: str, selected_model: str) -> str:
+    stripped = user_message.strip()
+    msgs = [
+        {"role": "system", "content": CLASSIFIER_PROMPT},
+        {"role": "user",   "content": user_message},
+    ]
+    try:
+        llm = get_langchain_llm(selected_model, task_weight="light")
+        vprint(f"[CLASSIFIER] Requesting Intent Classification from {selected_model}...")
+        result = llm.invoke(msgs)
+        if not result:
+            return "general"
+        label = result.content.strip().lower().split()[0].rstrip(".,;:")
+        node_labels = {
+            "placement_specialist": "placement_specialist",
+            "drc_critic": "drc_critic",
+            "general": "general",
+        }
+        if label in node_labels:
+            vprint(f"[CLASSIFIER] LLM -> {label}: '{stripped[:60]}'")
+            return node_labels[label]
+    except Exception as exc:
+        vprint(f"[CLASSIFIER] Failed: {exc} - defaulting to general")
+    return "general"
+\end{thesiscode}
+
+\subsection{Line-by-Line Analysis of classify\_intent()}
+The intent classifier implements decision routing using the following code steps:
+\begin{itemize}
+    \item \textbf{Line 25-38}: Formulates the system instructions. The instructions define the semantic difference between layout actions (\texttt{placement\_specialist}), verification edits (\texttt{drc\_critic}), and conceptual inquiries (\texttt{general}).
+    \item \textbf{Line 41-45}: Assembles the prompt payload. The current message is paired with the system rules to ensure bounded completion.
+    \item \textbf{Line 64}: Instantiates the lightweight backend wrapper with \texttt{task\_weight="light"}. This configures the engine to use a faster, smaller model model configuration to prevent long token latencies.
+    \item \textbf{Line 66}: Dispatches the sync JSON payload to the language API.
+    \item \textbf{Line 69-79}: Truncates and sanitizes the output. It extracts the first word of the response string, strips trailing symbols (commas, colons), and checks if the keyword matches the three allowed node labels.
+    \item \textbf{Line 80-82}: Handles connection timeouts or API errors by falling back to the \texttt{"general"} chatbot.
+\end{itemize}
+% ==============================================================================
+\section[Chatbot Capabilities \& Features]{Chatbot Capabilities, Interactive Features \& User Commands}
+\label{sec:chatbot_features}
+\sectionmark{Chatbot Capabilities \& Features}
+
+Interactive layout environments must support a wide range of designer commands, spanning geometric adjustments, structural optimizations, design rule checks, and design parameters queries. LayoutCopilot implements these capabilities using a set of conversational commands that are classified and routed to the corresponding graph nodes. This section details the main features of the chatbot co-pilot and how they map to backend actions.
+
+\subsection{Conversational Device Manipulation}
+Designer prompts that instruct the chatbot to modify device positions are routed to the \texttt{placement\_specialist} node. The system prompt instructs the language model to parse natural language directions and synthesize structured JSON-RPC command payloads. These commands fall into three primary classes:
+\begin{enumerate}
+    \item \textbf{Relative Movement:} Instructions like \textit{"Move MM1 to the right by 2 slots"} or \textit{"Shift MDUM0 up by 1 row"}. The agent maps the directions (left, right, up, down) and the integer slot/row counts to actual coordinate shifts ($\Delta x$, $\Delta y$) snapped to PDK spacing and height grids.
+    \item \textbf{Absolute Placement:} Instructions specifying exact coordinate targets (e.g., \textit{"Set the x coordinate of MM2 to 1.176 microns"}). The agent extracts the absolute target coordinate and snaps it to the $0.294\,\mu\text{m}$ grid pitch.
+    \item \textbf{Device Swapping:} Instructions that swap the physical locations of two transistors (e.g., \textit{"Swap the locations of MM0 and MM1"}). The coordinator extracts the coordinates of both target nodes, swaps them, snaps them to grid row centers, and keeps all other routing/net configurations intact.
+\end{enumerate}
+
+\subsection{Connectivity-Aware Diffusion Sharing (Abutment)}
+Analog layouts are highly sensitive to source/drain diffusion parasitic capacitance. By abutting adjacent transistors sharing a common node (e.g., matching source or drain terminals), designers can share diffusion active regions, reducing layout area and parasitic caps. The chatbot supports interactive abutment through prompts like \textit{"Abut MM0 and MM1"}.
+Under the hood, the \texttt{placement\_specialist} checks the active net connections of the adjacent terminals of the target devices. If a shared net is verified, it executes a diffusion-sharing optimization, adjusts the devices' relative positions to eliminate spacing gaps, and flips transistor gates ($R0 \leftrightarrow MY$) if required.
+
+\subsection{Symmetry Group Definition}
+Differential pairs and matched current mirrors require strict layout symmetry. Designers can dynamically define symmetry constraints using conversational language, such as \textit{"MM0 and MM1 must be matching symmetric pairs about the vertical center axis"}.
+The chatbot parses the symmetry instruction, extracts the target devices and matching coordinates, and registers them into the active \texttt{LayoutState} symmetry groups. In subsequent editing commands, the symmetry enforcer mirrors any manual or conversational coordinate modifications in real-time, preserving match parameters.
+
+\subsection{DRC Criticism and Self-Healing}
+When designers request validation (e.g., \textit{"Check for DRC errors and fix them"}), the intent classifier routes the query to the \texttt{drc\_critic} node. 
+The DRC critic runs physical checks (such as gate-to-gate spacing and diffusion overlaps) and lists active design rule violations. If violations are present, the critic node synthesizes prescriptive coordinate corrections to shift the offending devices until they clear all design rules. The state is then updated with the corrective actions, which are executed automatically on the canvas.
+
+\subsection{General Circuit and PDK Queries}
+Designers can query the structural layout and PDK properties using prompts like \textit{"What is the width and number of fingers of MM0?"} or \textit{"Are MM1 and MM2 sharing diffusion?"}.
+These queries are routed to the \texttt{general} chatbot node. This node builds a textual context snapshot of the active layout state, reads the device properties and PDK guidelines, and formulates a natural language explanation, providing immediate layout documentation.
+
+Table~\ref{tab:chatbot_capabilities} summarizes these interactive chatbot capabilities, including the intent routing classifications, example user queries, and backend synthesized actions.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Interactive Chatbot Capabilities, Routed Nodes, and Target Commands.}
+    \label{tab:chatbot_capabilities}
+    \begin{tabularx}{\textwidth}{l X l X}
+        \toprule
+        \textbf{Feature Area} & \textbf{Example Prompt} & \textbf{Routed Node} & \textbf{Synthesized Action} \\
+        \midrule
+        Relative Move & \textit{"Move MM1 to the right by 2 slots"} & \texttt{placement\_sp} & \texttt{\{"action": "move", "device": "MM1", "x": 0.588, "y": 0\}} \\
+        Absolute Move & \textit{"Set the x coordinate of MM2 to 1.176"} & \texttt{placement\_sp} & \texttt{\{"action": "move", "device": "MM2", "x": 1.176\}} \\
+        Device Swap & \textit{"Swap MM0 and MM1"} & \texttt{placement\_sp} & \texttt{\{"action": "swap", "device\_a": "MM0", "device\_b": "MM1"\}} \\
+        Diffusion Abut & \textit{"Abut MM0 and MM1"} & \texttt{placement\_sp} & \texttt{\{"action": "abut", "device\_a": "MM0", "device\_b": "MM1"\}} \\
+        Symmetry Set & \textit{"MM0 and MM1 must be matching symmetric pairs"} & \texttt{general} & Updates state symmetry rules and snaps layout \\
+        DRC Criticism & \textit{"Run design rule checks and fix spacing errors"} & \texttt{drc\_critic} & Runs sweepline checks and schedules self-healing shifts \\
+        PDK Lookup & \textit{"What is the width and multiplier of MM0?"} & \texttt{general} & Reads device geometry keys from layout state JSON \\
+        \bottomrule
+    \end{tabularx}
+\end{table}
+
+% ==============================================================================
+\section[Specialized Chat Nodes]{Specialized Chat Nodes \& Prompt Architecture}
+\label{sec:chat_nodes}
+\sectionmark{Specialized Chat Nodes}
+
+\subsection{Conversational General Assistant Node}
+If the query is classified as a general query, the graph routes execution to the general assistant node (\texttt{general\_}\allowbreak\texttt{chatbot.py}). This node generates a context-aware natural language explanation based on the layout's active nodes, symmetry constraints, and terminal connections.
+
+The layout state is serialized into a textual snapshot using \texttt{build\_}\allowbreak\texttt{placement\_}\allowbreak\texttt{context\_}\allowbreak\texttt{chatbot()} which lists the physical attributes, coordinate bounds, matching structures, and terminal nets of all placed transistors. Listing~\ref{lst:general_chatbot} shows the implementation details.
+
+\begin{thesiscode}{General Chatbot Node Implementation (general\_chatbot.py)\label{lst:general_chatbot}}{python}
+def node_general_chatbot(state):
+    t0 = time.time()
+    nodes = state.get("placement_nodes", []) or state.get("nodes", [])
+    edges = state.get("edges", [])
+    terminal_nets = state.get("terminal_nets", {})
+    constraint_text = state.get("constraint_text", "")
+    user_message = state.get("user_message", "")
+    chat_history = state.get("chat_history", [])
+    selected_model = state.get("selected_model", "Gemini")
+    no_abutment_flag = state.get("no_abutment", False)
+
+    # Build layout context snapshot for chat prompt injection
+    context_text = build_placement_context_chatbot(
+        nodes, constraint_text, terminal_nets=terminal_nets,
+        edges=edges, no_abutment=no_abutment_flag,
+    )
+
+    user_prompt = f"User request: {user_message}\n\n{context_text}"
+    messages = _build_llm_messages(GENERAL_CHATBOT_PROMPT, chat_history, user_prompt)
+    
+    response_text = ""
+    try:
+        response = _invoke_with_retry(messages, selected_model, "light", "GENERAL")
+        response_text, response_thinking = _split_content_and_thinking(response.content)
+        response_text = _strip_thinking_text(response_text)
+    except Exception as exc:
+        response_text = "General assistant failed to respond."
+
+    updated_chat_history = _update_and_save_chat_history(
+        chat_history=chat_history, user_content=user_message,
+        node_role="General Assistant", node_content=response_text,
+    )
+
+    return {
+        "chat_history": updated_chat_history,
+        "general_response": response_text,
+        "last_agent": "general",
+        "pending_cmds": [],
+    }
+\end{thesiscode}
+
+\subsection{Line-by-Line Analysis of node\_general\_chatbot()}
+The general chatbot node operates by serializing structural layouts:
+\begin{itemize}
+    \item \textbf{Line 36-43}: Retrieves layout parameters. The coordinate node array, subcircuit edges, and netlists are loaded from the state.
+    \item \textbf{Line 45-48}: Generates a text context snapshot. The helper method parses the current node coordinates, active channel widths, finger multipliers, and symmetry constraints, converting them into structured text.
+    \item \textbf{Line 53}: Couples the text snapshot with the user's natural language question.
+    \item \textbf{Line 54}: Interleaves previous conversation rounds from \texttt{chat\_history} to maintain context across multiple turns.
+    \item \textbf{Line 60}: Invokes the lightweight language model. It splits the internal reasoning chain (`thinking`) from the user-facing text before saving the results.
+    \item \textbf{Line 67-71}: Updates the central SQLite chat log to maintain continuity across subsequent queries.
+\end{itemize}
+
+\subsection{Placement Specialist Node in Chat Mode}
+The placement specialist node in chat mode (\texttt{node\_}\allowbreak\texttt{placement\_}\allowbreak\texttt{specialist\_}\allowbreak\texttt{chatbot()}) allows designers to modify the layout using conversational directives. 
+
+Unlike the autonomous initial placement, the chat-mode placement specialist operates on the active user canvas. The process follows a structured sequence:
+\begin{enumerate}
+    \item \textbf{Context Assembly}: The active canvas geometry is parsed. The system aggregates physical fingers back to logical devices using \texttt{aggregate\_}\allowbreak\texttt{to\_}\allowbreak\texttt{logical\_}\allowbreak\texttt{devices()} to keep the LLM context size minimal and readable. For example, a transistor split into 16 fingers is represented as a single block with $nf=16$ rather than 16 individual instances, which prevents context window explosion and simplifies spatial reasoning.
+    \item \textbf{ReAct LLM Invocation}: The system prompt guides the LLM to analyze the coordinates, connectivity, and user instructions, generating both conversational feedback and structured layout command blocks (`[CMD]`).
+    \item \textbf{Prescriptive Refinements}: Once command blocks are parsed and applied to nodes, the node executes automatic geometrical constraints:
+    \begin{itemize}
+        \item \textbf{Mirror Symmetry Enforcement}: Runs \texttt{enforce\_}\allowbreak\texttt{reflection\_}\allowbreak\texttt{symmetry()} to ensure symmetry groups stay perfectly aligned across the central axis.
+        \item \textbf{Overlap Resolution}: Runs a physical mechanical sweep-line overlap resolver (\texttt{resolve\_}\allowbreak\texttt{overlaps()}) to adjust coordinates horizontally and clear grid collisions.
+        \item \textbf{Global Row Orientation Optimization}: Runs \texttt{optimize\_}\allowbreak\texttt{all\_}\allowbreak\texttt{rows\_}\allowbreak\texttt{orientations()} post-overlap resolution. This algorithm determines the optimal source/drain orientations to maximize shared-diffusion abutments and eliminate shorts across row elements, executing:
+        \begin{equation}
+            \text{Orientation}(\text{M}_i) \in \{\text{R0}, \text{MY}\}
+        \end{equation}
+        to guarantee minimum wire routing crossings.
+    \end{itemize}
+    \item \textbf{Device Conservation Check}: Performs \texttt{validate\_}\allowbreak\texttt{device\_}\allowbreak\texttt{count()} to protect layout integrity, falling back to original positions if devices are missing.
+\end{enumerate}
+
+Listing~\ref{lst:placement_specialist_chatbot} illustrates the core logical pipeline of the chat-mode placement specialist.
+
+\begin{thesiscode}{Placement Specialist Chatbot Node (placement\_specialist.py)\label{lst:placement_specialist_chatbot}}{python}
+def node_placement_specialist_chatbot(state):
+    t0 = time.time()
+    nodes            = state.get("nodes", [])
+    constraint_text  = state.get("constraint_text", "")
+    user_message     = state.get("user_message", "")
+    chat_history     = state.get("chat_history", [])
+    edges            = state.get("edges", [])
+    terminal_nets    = state.get("terminal_nets", {})
+    strategy_result  = state.get("strategy_result", "auto")
+    selected_model   = state.get("selected_model", "Gemini")
+    no_abutment_flag = state.get("no_abutment", False)
+    drc_passed       = state.get("drc_pass", False)
+    drc_violations   = state.get("drc_flags", [])
+
+    working_nodes = state.get("placement_nodes", []) or copy.deepcopy(nodes)
+
+    # Build placement context
+    context_text = build_placement_context_chatbot(
+        nodes, constraint_text, terminal_nets=terminal_nets, 
+        edges=edges, no_abutment=no_abutment_flag,
+    )
+
+    drc_note = ""
+    if not drc_passed and drc_violations:
+        violations_text = "\n".join(str(v) for v in drc_violations)
+        drc_note = f"DRC failed in the previous step. Fix these violations:\n{violations_text}\n\n"
+
+    placer_user = f"User request: {user_message}\n\nSelected Strategy: {strategy_result}\n\n{drc_note}{context_text}"
+    
+    placement_result = _invoke_react_agent_with_retry(
+        system_prompt=_PLACEMENT_SYSTEM_PROMPT, chat_history=chat_history,
+        user_prompt=placer_user, selected_model=selected_model,
+        task_weight="heavy", stage_tag="PLACEMENT",
+    )
+    
+    placement_response_text, thinking = _extract_agent_output_parts(placement_result)
+    stage2_cmds, placement_text = extract_cmd_blocks(placement_response_text)
+
+    # Apply commands to nodes
+    working_nodes = apply_cmds_to_nodes(nodes, stage2_cmds)
+    
+    # Enforce mirror symmetry and resolve layout overlaps
+    working_nodes = enforce_reflection_symmetry(working_nodes)
+    resolve_overlaps(working_nodes)
+    working_nodes = legalize_vertical_rows(working_nodes)
+
+    # Optimize S/D orientations globally for abutment diffusion-sharing
+    from ai_agent.placement.abutment import optimize_all_rows_orientations
+    working_nodes = optimize_all_rows_orientations(working_nodes, terminal_nets)
+    
+    # Validate conservation
+    conservation = validate_device_count(nodes, working_nodes)
+    if not conservation["pass"]:
+        working_nodes = copy.deepcopy(nodes)
+        stage2_cmds   = []
+
+    updated_chat_history = _update_and_save_chat_history(
+        chat_history=chat_history, user_content=user_message,
+        node_role="Placement Specialist Assistant", node_content=placement_text,
+    )
+
+    return {
+        "placement_nodes":         working_nodes,
+        "pending_cmds":            stage2_cmds,
+        "original_placement_cmds": stage2_cmds,
+        "chat_history":            updated_chat_history,
+        "placement_text":          placement_text,
+        "last_agent":              "placement_specialist",
+    }
+\end{thesiscode}
+
+\subsection{Line-by-Line Analysis of node\_placement\_specialist\_chatbot()}
+The interactive placer translates text directives into coordinates using the following implementation structure:
+\begin{itemize}
+    \item \textbf{Line 17-20}: Gathers coordinates and design constraints from the unified state data model.
+    \item \textbf{Line 24}: Serializes physical device attributes. It maps active coordinate positions ($x, y$), width, and current transistor orientations to establish spatial constraints.
+    \item \textbf{Line 29-32}: Checks prior DRC validation status. If the previous run failed, the violations are formatted and appended to the prompt, enabling the ReAct agent to adjust placements to clear rules.
+    \item \textbf{Line 36}: Invokes the heavy reasoning agent. Using \texttt{task\_weight="heavy"}, the system allocates a larger model (e.g. Gemini Pro) to process coordinate calculations.
+    \item \textbf{Line 42}: Parses the LLM's response. It splits natural language comments from structured JSON-RPC instructions bounded by `[CMD]` tags.
+    \item \textbf{Line 45}: Executes coordinate changes. The engine modifies the physical coordinates of the target devices based on the parsed instructions.
+    \item \textbf{Line 48-50}: Legalizes geometry. It enforces reflection symmetry across the layout axis, resolves transistor coordinate overlaps, and snaps devices to row heights.
+    \item \textbf{Line 54}: Optimizes diffusion sharing. It scans rows and flips transistor orientations ($R0 \leftrightarrow MY$) to share contacts and reduce parasitic capacitance.
+    \item \textbf{Line 57-60}: Verifies device conservation. It compares the modified device list against the original netlist to ensure no transistors were deleted, falling back to original positions if verification fails.
+\end{itemize}
+
+% ==============================================================================
+\section[Asynchronous Architecture]{Frontend-Backend Asynchronous Architecture}
+\label{sec:async_arch}
+\sectionmark{Asynchronous Architecture}
+
+Analog layout editors require a highly responsive user interface. Running heavy multi-agent LLM inference directly on the GUI main thread would cause the interface to freeze during API calls. LayoutCopilot resolves this by adopting a decoupled \emph{Worker-Object Pattern} implemented via PySide6 threads and signals. Figure~\ref{fig:worker_object_pattern} visualizes this interaction model.
+
+\begin{figure}[H]
+    \centering
+    \fbox{\begin{tikzpicture}[
+        node distance=0.8cm and 2.2cm,
+        component/.style={draw=RoyalBlue, fill=white, text=AcademicBlue, thick, rounded corners, minimum width=3.8cm, minimum height=0.9cm, align=center, font=\small\sffamily\bfseries, drop shadow={shadow xshift=1.0pt, shadow yshift=-1.0pt, fill=black!10}},
+        signalarrow/.style={-Latex, line width=1.2pt, draw=WarmGold, dashed},
+        callarrow/.style={-Latex, line width=1.2pt, draw=AcademicBlue}
+    ]
+        % --- GUI THREAD COMPONENTS ---
+        \node[component] (chat_panel) {ChatPanel\\(Sidebar UI)};
+        \node[component, below=of chat_panel] (editor) {LayoutTab / Canvas\\(Graphics Scene)};
+        \node[component, below=of editor] (undo_stack) {Undo/Redo Stack\\(State History)};
+        \node[component, below=of undo_stack] (socket_prev) {KLayout Socket\\(Live Preview)};
+
+        % --- WORKER THREAD COMPONENTS ---
+        \node[component, right=of chat_panel] (orch_worker) {OrchestratorWorker\\(QObject Driver)};
+        \node[component, below=of orch_worker] (langgraph) {LangGraph App\\(\texttt{chat\_app})};
+        \node[component, below=of langgraph] (llm_client) {Gemini LLM Client\\(Language Engine)};
+
+        % --- CONTAINERS (fit library) ---
+        \begin{scope}[on background layer]
+            % GUI container
+            \node[draw=AcademicBlue, fill=LightBlueBg, thick, rounded corners, inner sep=0.4cm, fit=(chat_panel) (socket_prev), drop shadow={shadow xshift=1.5pt, shadow yshift=-1.5pt, fill=black!15}] (gui_container) {};
+            % Worker container
+            \node[draw=AcademicBlue, fill=LightBlueBg, thick, rounded corners, inner sep=0.4cm, fit=(orch_worker) (llm_client), drop shadow={shadow xshift=1.5pt, shadow yshift=-1.5pt, fill=black!15}] (worker_container) {};
+        \end{scope}
+
+        % Container Labels
+        \node[anchor=south west, font=\small\sffamily\bfseries\color{AcademicBlue}] at (gui_container.north west) {GUI Thread (PySide6)};
+        \node[anchor=south west, font=\small\sffamily\bfseries\color{AcademicBlue}] at (worker_container.north west) {Worker Thread (QThread)};
+
+        % --- INTERACTION ARROWS ---
+        % User Request (shifted up)
+        \draw[callarrow] ($(chat_panel.east)+(0,0.15)$) -- node[midway, above, font=\tiny\sffamily] {\texttt{request\_}\allowbreak\texttt{orchestrated}} ($(orch_worker.west)+(0,0.15)$);
+        
+        % Worker Stream Status (shifted down)
+        \draw[signalarrow] ($(orch_worker.west)-(0,0.15)$) -- node[midway, below, font=\tiny\sffamily] {\texttt{stage\_}\allowbreak\texttt{started} / \texttt{delta}} ($(chat_panel.east)-(0,0.15)$);
+        
+        % Thread internal worker flows
+        \draw[callarrow] (orch_worker) -- (langgraph);
+        \draw[callarrow] (langgraph) -- (llm_client);
+        
+        % Layout update from worker to editor (routed cleanly around containers to avoid overlap)
+        \draw[signalarrow] (orch_worker.west) -- ++(-0.6, 0) |- node[near end, below, font=\tiny\sffamily] {\texttt{command\_}\allowbreak\texttt{ready}} (editor.east);
+        
+        % Local editor flows
+        \draw[callarrow] (editor) -- node[midway, left, font=\tiny\sffamily] {\texttt{push\_}\allowbreak\texttt{undo}} (undo_stack);
+        
+        % Live rendering loop (routed around the undo stack container to avoid line collisions)
+        \draw[callarrow] (editor.west) -- ++(-0.6, 0) |- node[near start, left, font=\tiny\sffamily, align=center] {GDSII\\Update} (socket_prev.west);
+    \end{tikzpicture}}
+    \caption{Asynchronous Frontend-Backend Interaction Model (Worker-Object Pattern).}
+    \label{fig:worker_object_pattern}
+\end{figure}
+
+The \texttt{ChatPanel} sidebar GUI widget instantiates a background \texttt{QThread} and moves an \texttt{OrchestratorWorker} instance to it. Figure~\ref{fig:chat_sequence} details the complete communication sequence between thread entities.
+
+\begin{figure}[H]
+    \centering
+    \fbox{\begin{tikzpicture}[
+        scale=0.9,
+        every node/.style={font=\small\sffamily},
+        actor/.style={draw=AcademicBlue, fill=LightBlueBg, text=AcademicBlue, thick, rounded corners, minimum width=1.4cm, minimum height=0.7cm, font=\footnotesize\sffamily},
+        line/.style={draw=AcademicBlue, dashed, thick},
+        arrow/.style={-Latex, thick, draw=RoyalBlue},
+        reply/.style={-Latex, dashed, thick, draw=WarmGold}
+    ]
+        % Lifelines
+        \node[actor] (user) {Designer};
+        \node[actor, right=0.7cm of user] (gui) {ChatPanel};
+        \node[actor, right=0.7cm of gui] (worker) {OrchWorker};
+        \node[actor, right=0.7cm of worker] (lang) {LangGraph};
+        \node[actor, right=0.7cm of lang] (editor) {LayoutTab};
+        \node[actor, right=0.7cm of editor] (kl) {KLayout};
+
+        % Vertical dashed lines (lifelines)
+        \draw[line] (user) -- ++(0,-8.0);
+        \draw[line] (gui) -- ++(0,-8.0);
+        \draw[line] (worker) -- ++(0,-8.0);
+        \draw[line] (lang) -- ++(0,-8.0);
+        \draw[line] (editor) -- ++(0,-8.0);
+        \draw[line] (kl) -- ++(0,-8.0);
+
+        % Activation boxes
+        \filldraw[fill=AcademicBlue!15, draw=AcademicBlue] ($(user.south)+(-0.1,-0.2)$) rectangle ($(user.south)+(0.1,-0.6)$);
+        \filldraw[fill=AcademicBlue!15, draw=AcademicBlue] ($(user.south)+(-0.1,-7.5)$) rectangle ($(user.south)+(0.1,-8.0)$);
+        
+        \filldraw[fill=AcademicBlue!15, draw=AcademicBlue] ($(gui.south)+(-0.1,-0.4)$) rectangle ($(gui.south)+(0.1,-1.3)$);
+        \filldraw[fill=AcademicBlue!15, draw=AcademicBlue] ($(gui.south)+(-0.1,-2.7)$) rectangle ($(gui.south)+(0.1,-3.1)$);
+        \filldraw[fill=AcademicBlue!15, draw=AcademicBlue] ($(gui.south)+(-0.1,-7.0)$) rectangle ($(gui.south)+(0.1,-7.9)$);
+        
+        \filldraw[fill=AcademicBlue!15, draw=AcademicBlue] ($(worker.south)+(-0.1,-1.0)$) rectangle ($(worker.south)+(0.1,-7.4)$);
+        
+        \filldraw[fill=AcademicBlue!15, draw=AcademicBlue] ($(lang.south)+(-0.1,-1.5)$) rectangle ($(lang.south)+(0.1,-4.0)$);
+        
+        \filldraw[fill=AcademicBlue!15, draw=AcademicBlue] ($(editor.south)+(-0.1,-4.0)$) rectangle ($(editor.south)+(0.1,-6.8)$);
+        
+        \filldraw[fill=AcademicBlue!15, draw=AcademicBlue] ($(kl.south)+(-0.1,-5.8)$) rectangle ($(kl.south)+(0.1,-6.7)$);
+
+        % Messages
+        \draw[arrow] ($(user.south)+(0.1,-0.5)$) -- node[midway, above, font=\tiny\sffamily] {Submit} ($(gui.south)+(-0.1,-0.5)$);
+        \draw[arrow] ($(gui.south)+(0.1,-1.1)$) -- node[midway, above, font=\tiny\sffamily] {\texttt{req\_orch()}} ($(worker.south)+(-0.1,-1.1)$);
+        \draw[arrow] ($(worker.south)+(0.1,-1.7)$) -- node[midway, above, font=\tiny\sffamily] {Stream} ($(lang.south)+(-0.1,-1.7)$);
+        
+        \draw[reply] ($(lang.south)+(-0.1,-2.4)$) -- node[midway, above, font=\tiny\sffamily] {\texttt{stage\_start}} ($(worker.south)+(0.1,-2.4)$);
+        \draw[reply] ($(worker.south)+(-0.1,-2.9)$) -- node[midway, above, font=\tiny\sffamily] {Update UI} ($(gui.south)+(0.1,-2.9)$);
+        
+        \draw[reply] ($(lang.south)+(-0.1,-3.7)$) -- node[midway, above, font=\tiny\sffamily] {\texttt{cmd\_ready}} ($(worker.south)+(0.1,-3.7)$);
+        \draw[reply] ($(worker.south)+(0.1,-4.2)$) -- node[midway, above, font=\tiny\sffamily] {\texttt{cmd\_req}} ($(editor.south)+(-0.1,-4.2)$);
+        
+        % UML Self-call representation
+        \draw[arrow] ($(editor.south)+(0.1,-4.8)$) -- ++(0.3, 0) -- ++(0, -0.6) node[midway, right, font=\tiny\sffamily] {\texttt{push\_undo()}} -- ($(editor.south)+(0.1,-5.4)$);
+        
+        \draw[arrow] ($(editor.south)+(0.1,-6.0)$) -- node[midway, above, font=\tiny\sffamily] {Send GDS} ($(kl.south)+(-0.1,-6.0)$);
+        \draw[reply] ($(kl.south)+(-0.1,-6.6)$) -- node[midway, above, font=\tiny\sffamily] {Preview} ($(editor.south)+(0.1,-6.6)$);
+        
+        \draw[reply] ($(worker.south)+(-0.1,-7.2)$) -- node[midway, above, font=\tiny\sffamily] {\texttt{resp\_ready}} ($(gui.south)+(0.1,-7.2)$);
+        \draw[reply] ($(gui.south)+(-0.1,-7.7)$) -- node[midway, above, font=\tiny\sffamily] {Bubble} ($(user.south)+(0.1,-7.7)$);
+    \end{tikzpicture}}
+    \caption{Thread Communication Sequence for an Interactive Layout Editing Turn.}
+    \label{fig:chat_sequence}
+\end{figure}
+
+The thread orchestration loop operates as follows:
+\begin{enumerate}
+    \item The user types a message and hits submit. If the message matches multi-agent keywords (e.g. \emph{"optimize"}, \emph{"align"}), it triggers the \texttt{request\_}\allowbreak\texttt{orchestrated} signal.
+    \item The signal is caught by the background worker thread, which runs \texttt{process\_}\allowbreak\texttt{orchestrated\_}\allowbreak\texttt{request} without blocking the main event loop.
+    \item The worker streams events during LangGraph execution. It emits \texttt{stage\_}\allowbreak\texttt{started} and \texttt{stage\_}\allowbreak\texttt{delta} signals to update status card animations in the GUI.
+    \item It emits \texttt{response\_}\allowbreak\texttt{delta} to stream text updates to the chat bubble.
+    \item If the LLM generates layout adjustment commands, the worker extracts them and emits a thread-safe \texttt{command\_}\allowbreak\texttt{ready} signal, carrying the commands back to the main thread for execution.
+\end{enumerate}
+
+Listing~\ref{lst:worker_stream} displays the background streaming loop inside \texttt{Orchestrator}\allowbreak\texttt{Worker}.
+
+\begin{thesiscode}{Asynchronous LangGraph Streaming in worker thread (workers.py)\label{lst:worker_stream}}{python}
+def _stream_graph(self, input_data):
+    try:
+        from ai_agent.graph.builder import chat_app as chat_graph_app
+        langgraph_app = chat_graph_app
+
+        vprint("\n[GRAPH] Streaming LangGraph...", flush=True)
+        active_stage_key = None
+
+        for event in langgraph_app.stream(input_data, self.thread_config, stream_mode="updates"):
+            if "__interrupt__" in event:
+                interrupt_data = event["__interrupt__"][0].value
+                itype = interrupt_data.get('type', '?')
+                
+                if itype == "visual_review":
+                    pending_cmds = interrupt_data.get("pending_cmds", [])
+                    last_agent = interrupt_data.get("last_agent")
+                    text = interrupt_data.get("General", "") if last_agent == "general" else ""
+                    
+                    if text:
+                        self.response_ready.emit(text)
+                    if pending_cmds:
+                        self.visual_viewer_signal.emit({
+                            "type": "visual_review",
+                            "pending_cmds": pending_cmds,
+                        })
+                    return
+
+            # Emit stage signals to update GUI status cards
+            for node_key, node_value in event.items():
+                if node_key == "__interrupt__":
+                    continue
+                title = self.NODE_DISPLAY.get(node_key, node_key)
+                if active_stage_key is not None and active_stage_key != node_key:
+                    self.stage_done.emit(active_stage_key, "")
+                self.stage_started.emit(node_key, title)
+                active_stage_key = node_key
+
+                summary = self._short_summary(node_value)
+                if summary:
+                    self.stage_delta.emit(node_key, summary)
+    except Exception as exc:
+        self.error_occurred.emit(f"Streaming failed: {exc}")
+\end{thesiscode}
+
+\subsection{Line-by-Line Analysis of \_stream\_graph()}
+The stream controller handles concurrent thread updates using the following implementation structure:
+\begin{itemize}
+    \item \textbf{Line 8}: Begins the graph update stream. The generator yields dictionary deltas representing the state updates returned by each node in the active graph.
+    \item \textbf{Line 9-11}: Intercepts node execution checks. If the graph reaches an active interrupt (such as the human visual review node), execution pauses, and the thread state is cached.
+    \item \textbf{Line 15-26}: Forwards intermediate layout results to the GUI thread. If layout commands are pending, the worker emits the thread-safe \texttt{visual\_viewer\_signal} carrying the commands, which triggers the layout editor view update.
+    \item \textbf{Line 30-32}: Standardizes node name rendering. It retrieves user-facing names from \texttt{NODE\_DISPLAY} (e.g., mapping \texttt{"node\_drc\_critic"} to \texttt{"DRC Critic"}).
+    \item \textbf{Line 33-35}: Signals state changes. It fires the QObject signal \texttt{stage\_started} to notify the GUI to animate the corresponding progress card.
+    \item \textbf{Line 37-39}: Captures and forwards node status logs. It extracts brief status strings (such as \emph{"DRC failed"} or \emph{"5 commands pending"}) using \texttt{\_short\_}\allowbreak\texttt{summary()} and passes them to the GUI thread via \texttt{stage\_}\allowbreak\texttt{delta}.
+\end{itemize}
+
+% ==============================================================================
+\section[Context Prompts \& XML Synthesis]{Context-Aware Prompts \& XML Command Synthesis}
+\label{sec:context_prompts}
+\sectionmark{Context Prompts \& XML Synthesis}
+
+\subsection{Context Generation}
+For the LLM to understand layout adjustments, the chatbot serializes the current layout canvas state into a structured text context using \texttt{build\_}\allowbreak\texttt{placement\_}\allowbreak\texttt{context\_}\allowbreak\texttt{chatbot()}. This context lists all placed and unplaced transistors, their coordinate positions (in micrometers), current orientations (e.g., $R0, MY$), physical dimensions, and shared net connections.
+
+\subsection{XML Command Synthesis}
+If the user requests coordinate edits (e.g., \emph{"Move MM2 to the right by 1 pitch and flip it"}), the LLM reasons over the spatial coordinates and generates structured command tags embedded in its response:
+\begin{thesiscode}{Synthesized AI Placement Command Block}{text}
+[CMD]{"action": "move", "device": "MM2", "x": 1.764, "y": 0.818, "orientation": "MY"}[/CMD]
+\end{thesiscode}
+
+The PySide6 interface uses regular expressions to extract these command blocks from the text stream:
+\begin{equation}
+    \text{Pattern: } \texttt{\textbackslash[CMD\textbackslash](.*?)\textbackslash[/CMD\textbackslash]}
+\end{equation}
+The extracted strings are parsed into JSON dictionaries, containing properties like action, device ID, and target coordinates.
+
+% ==============================================================================
+\section[Undo Stack \& Live Rendering]{Thread-Safe Undo/Redo Engine \& Live Rendering}
+\label{sec:undo_klayout}
+\sectionmark{Undo Stack \& Live Rendering}
+
+\subsection{Timer-Based Command Batching}
+To prevent screen flickering and excessive graphics scene recalculations, commands received from the AI thread are batched and executed within a single thread-safe event loop. 
+
+When a command arrives via the signal \texttt{command\_requested}, it is appended to a list. A single-shot \texttt{QTimer} is started with $0$\,ms delay. Once the thread returns control to the event loop, the timer triggers \texttt{\_flush\_}\allowbreak\texttt{ai\_}\allowbreak\texttt{command\_}\allowbreak\texttt{batch()}, capturing a single undo state snapshot and executing all commands as one transaction.
+
+\subsection{Undo State Stacking}
+LayoutCopilot wraps layout node arrays into a list-based undo stack. Before the batch execution starts, \texttt{\_push\_}\allowbreak\texttt{undo()} clones the current layout node dictionary. If the user chooses to undo (\texttt{Ctrl+Z}), the previous state is popped from \texttt{\_undo\_}\allowbreak\texttt{stack}, restoring coordinates and orientations. Listing~\ref{lst:undo_batch} illustrates this execution logic.
+
+\begin{thesiscode}{Batch Command Execution and Undo Stacking (layout\_tab.py)\label{lst:undo_batch}}{python}
+def _enqueue_ai_command(self, cmd):
+    self._pending_cmds.append(cmd)
+    if self._batch_flush_timer is None:
+        self._batch_flush_timer = QTimer(self)
+        self._batch_flush_timer.setSingleShot(True)
+        self._batch_flush_timer.timeout.connect(self._flush_ai_command_batch)
+    self._batch_flush_timer.start(0)
+
+def _flush_ai_command_batch(self):
+    cmds = list(self._pending_cmds)
+    self._pending_cmds.clear()
+    self._batch_flush_timer = None
+    if not cmds:
+        return
+        
+    print(f"[AI BATCH] Executing {len(cmds)} command(s) as one undo group")
+    self._sync_node_positions()
+    self._push_undo()  # Capture single snapshot before modifying positions
+    
+    for cmd in cmds:
+        self._handle_ai_command(cmd, _skip_undo=True)
+        
+    self._refresh_panels(compact=False)
+    self._sync_node_positions()
+
+def _push_undo(self):
+    if not self.nodes:
+        return
+    self._undo_stack.append(copy.deepcopy(self.nodes))
+    self._redo_stack.clear()
+    self.undo_state_changed.emit(bool(self._undo_stack), bool(self._redo_stack))
+\end{thesiscode}
+
+\subsection{Line-by-Line Analysis of Batch Execution and Undo Stacking}
+The layout editor aggregates geometric modifications using the following code steps:
+\begin{itemize}
+    \item \textbf{Line 2-6}: Queues incoming commands. Each parsed AI instruction is appended to \texttt{self.\_pending\_cmds}. If the batch flush timer is not active, it is configured as a single-shot timer.
+    \item \textbf{Line 7}: Starts the flush timer with a $0$\,ms delay. This schedules the execution task on the Qt event loop, allowing multiple individual incoming commands from a single AI generation step to be collected and run together.
+    \item \textbf{Line 10-13}: Flushes the queued command batch. Once the timer expires, the queued commands are copied and cleared.
+    \item \textbf{Line 17}: Clones the active layout state using \texttt{\_push\_}\allowbreak\texttt{undo()}. This pushes a deep-copied snapshot of all device coordinates and properties onto \texttt{\_undo\_stack} before any changes are applied, enabling single-transaction rollbacks.
+    \item \textbf{Line 19-20}: Executes commands with \texttt{\_skip\_undo=True} to prevent intermediate coordinate changes from polluting the undo history.
+    \item \textbf{Line 22-23}: Rebuilds the layout scene and synchronizes coordinate structures.
+    \item \textbf{Line 28-31}: Manages the undo/redo stacks. It pushes the snapshot state onto \texttt{\_undo\_stack}, clears the redo stack, and fires signals to update the toolbar undo/redo buttons.
+\end{itemize}
+
+\subsection{Command Execution Engine}
+Listing~\ref{lst:handle_ai_command} shows the core execution switch handling layout edits.
+
+\begin{thesiscode}{AI Command Interpretation Switch (layout\_tab.py)\label{lst:handle_ai_command}}{python}
+def _handle_ai_command(self, cmd, _skip_undo=False):
+    if not isinstance(cmd, dict):
+        return
+    action = str(cmd.get("action", "")).strip().lower()
+    try:
+        if action in {"replace_layout", "apply_layout"}:
+            new_nodes = cmd.get("nodes")
+            if isinstance(new_nodes, list):
+                if not _skip_undo:
+                    self._push_undo()
+                self.nodes = copy.deepcopy(new_nodes)
+                self._refresh_panels(compact=False)
+                self._sync_node_positions()
+
+        elif action in {"swap", "swap_devices"}:
+            raw_a = cmd.get("device_a", cmd.get("a"))
+            raw_b = cmd.get("device_b", cmd.get("b"))
+            id_a = self._resolve_device_id(raw_a)
+            id_b = self._resolve_device_id(raw_b)
+            if id_a and id_b:
+                if not _skip_undo:
+                    self._push_undo()
+                node_a = next((n for n in self.nodes if n.get("id") == id_a), None)
+                node_b = next((n for n in self.nodes if n.get("id") == id_b), None)
+                if node_a and node_b:
+                    ga, gb = node_a["geometry"], node_b["geometry"]
+                    ga["x"], gb["x"] = gb["x"], ga["x"]
+                    ga["y"], gb["y"] = gb["y"], ga["y"]
+                    oa, ob = ga.get("orientation", "R0"), gb.get("orientation", "R0")
+                    ga["orientation"], gb["orientation"] = ob, oa
+                    self._refresh_panels(compact=False)
+
+        elif action == "abut":
+            raw_a = cmd.get("device_a")
+            raw_b = cmd.get("device_b")
+            id_a = self._resolve_device_id(raw_a)
+            id_b = self._resolve_device_id(raw_b)
+            if id_a and id_b:
+                if not _skip_undo:
+                    self._push_undo()
+                self._abut_devices(id_a, id_b)
+                self._refresh_panels(compact=False)
+
+        elif action in {"move", "move_device"}:
+            raw_dev = cmd.get("device", cmd.get("id"))
+            x, y = cmd.get("x"), cmd.get("y")
+            dev_id = self._resolve_device_id(raw_dev)
+            if dev_id is not None and x is not None and y is not None:
+                if not _skip_undo:
+                    self._push_undo()
+                node = next((n for n in self.nodes if n.get("id") == dev_id), None)
+                if node:
+                    node["geometry"]["x"] = float(x)
+                    node["geometry"]["y"] = float(y)
+                    self._refresh_panels(compact=False)
+    except Exception as exc:
+        print(f"[AI CMD ERROR] Failed command {action}: {exc}")
+\end{thesiscode}
+
+\subsection{Line-by-Line Analysis of \_handle\_ai\_command()}
+The command parser interprets incoming action messages using the following code steps:
+\begin{itemize}
+    \item \textbf{Line 4}: Extracts the action identifier and normalizes the string to lowercase to handle variant inputs.
+    \item \textbf{Line 6-13}: Processes structural layout updates. It overrides the active node array with a new geometry map, updating the canvas view.
+    \item \textbf{Line 15-28}: Implements the device swapping command. It extracts device identifiers, resolves their corresponding IDs, swaps their spatial center coordinates ($x, y$), and flips their orientations to maintain connectivity.
+    \item \textbf{Line 30-38}: Implements the abutment command. It resolves target device IDs and invokes \texttt{\_abut\_devices()} to compact their shared diffusion regions.
+    \item \textbf{Line 40-50}: Implements the absolute coordinate movement command. It extracts target coordinates ($x, y$), retrieves the target device, and updates its spatial geometry structure.
+\end{itemize}
+
+\subsection{PDK Grid Snapping and Geometric Offsets Math}
+To ensure all manually or AI-edited placement coordinates remain physical design rule clean, coordinates are snapped to the PDK grid pitch. Let the raw target coordinate output from the parser be $X_{\text{raw}}$ and $Y_{\text{raw}}$. The snapped coordinate is evaluated as:
+\begin{equation}
+    X_{\text{snapped}} = \text{round}\left( \frac{X_{\text{raw}}}{P_{\text{grid}}} \right) \cdot P_{\text{grid}}
+\end{equation}
+\begin{equation}
+    Y_{\text{snapped}} = \text{round}\left( \frac{Y_{\text{raw}}}{P_{\text{grid}}} \right) \cdot P_{\text{grid}}
+\end{equation}
+where $P_{\text{grid}} = 0.294\,\mu\text{m}$ represents the standard technology transistor layout pitch (snapping coordinate boundary).
+
+Symmetry groups must be mirrored symmetrically about the row center axis $X_{\text{mid}}$. Let a device $M_1$ belong to a symmetric pair with partner $M_2$. When $M_1$ is moved to coordinate $X_1$, the coordinator automatically computes the mirrored position $X_2$ of $M_2$ as:
+\begin{equation}
+    X_2 = 2 \cdot X_{\text{mid}} - X_1 - W_{\text{device}}
+\end{equation}
+where $W_{\text{device}}$ represents the width of the physical transistor cell.
+
+\subsection{Headless KLayout Live Rendering Preview}
+To visualize coordinates as physical layout shapes, the editor communicates with a background headless \texttt{klayout} process via a TCP socket:
+\begin{enumerate}
+    \item When the AI updates the placement state, the editor generates the GDSII layout database.
+    \item The layout changes are sent to the KLayout server, which renders the GDSII file.
+    \item The rendered image is sent back to the PySide6 application, which updates the layout preview window.
+\end{enumerate}
+This provides analog designers with immediate visual feedback on AI-generated layout edits.
+
+% ==============================================================================
+\section[Interactive Editing Case Study]{Case Study: Interactive Editing Session of a Differential Pair}
+\label{sec:case_study}
+\sectionmark{Interactive Editing Case Study}
+
+To demonstrate the capabilities of the interactive chatbot, this section presents a step-by-step trace of a design session editing a differential input pair cluster. The netlist contains two active matched transistors, \texttt{MM0} and \texttt{MM1}, along with two dummy transistors, \texttt{MDUM0} and \texttt{MDUM1}.
+
+\subsection{Initial State Configuration}
+The initial state of the layout nodes in `LayoutState` is configured as follows:
+\begin{itemize}
+    \item \texttt{MM0}: Located at $X = 0.0\,\mu\text{m}$, $Y = 0.0\,\mu\text{m}$, orientation = \texttt{R0}.
+    \item \texttt{MM1}: Located at $X = 0.588\,\mu\text{m}$, $Y = 0.0\,\mu\text{m}$, orientation = \texttt{R0}.
+    \item \texttt{MDUM0}: Located at $X = -0.294\,\mu\text{m}$, $Y = 0.0\,\mu\text{m}$, orientation = \texttt{R0}.
+    \item \texttt{MDUM1}: Located at $X = 0.882\,\mu\text{m}$, $Y = 0.0\,\mu\text{m}$, orientation = \texttt{R0}.
+    \item The central symmetry axis is configured at $X_{\text{mid}} = 0.294\,\mu\text{m}$.
+\end{itemize}
+
+\subsection{Designer Command and Intent Routing}
+The designer enters the following query:
+\begin{quote}
+    \textit{"Swap the locations of MM0 and MM1, and then flip MM1 to MY orientation to share source diffusion."}
+\end{quote}
+
+The query execution flow is evaluated step-by-step:
+\begin{enumerate}
+    \item \textbf{Intent Routing}: The message enters the \texttt{router} node. The regex classifier identifies the keywords \emph{"swap"} and \emph{"flip"}, immediately routing the request to the \texttt{placement\_specialist} node, bypassing the LLM classifier to save execution time.
+    \item \textbf{Command Synthesis}: The placement specialist invokes the ReAct agent. The language model generates the following structured layout adjustment actions inside a single `[CMD]` block:
+    \begin{thesiscode}{Synthesized Swap and Move Command Blocks}{json}
+    [
+      {"action": "swap", "device_a": "MM0", "device_b": "MM1"},
+      {"action": "move", "device": "MM1", "x": 0.0, "y": 0.0, "orientation": "MY"}
+    ]
+    \end{thesiscode}
+    \item \textbf{Batch Execution}: The GUI receives the commands. The signals queue the actions, capture a single undo history snapshot, and execute the edits:
+    \begin{itemize}
+        \item \texttt{MM0} coordinates shift to $X = 0.588\,\mu\text{m}$, $Y = 0.0\,\mu\text{m}$.
+        \item \texttt{MM1} coordinates shift to $X = 0.0\,\mu\text{m}$, $Y = 0.0\,\mu\text{m}$ with orientation \texttt{MY}.
+    \end{itemize}
+    \item \textbf{Post-Processing Adjustments}:
+    \begin{itemize}
+        \item \textbf{Symmetry Check}: The enforcer validates the positions about $X_{\text{mid}} = 0.294\,\mu\text{m}$. Since $X_1 = 0.0$ and $X_2 = 0.588$ satisfy:
+        \begin{equation}
+            0.588 = 2 \cdot (0.294) - 0.0 - 0.294 \cdot (0)
+        \end{equation}
+        symmetry is verified.
+        \item \textbf{Diffusion Sharing}: The orientation optimizer evaluates the net connections. Since the source terminals of \texttt{MM0} and \texttt{MM1} share the same net (\texttt{NET\_TAIL}), and \texttt{MM1} is oriented to \texttt{MY}, their adjacent channels are aligned. The compiler shrinks the spacing coordinate boundary, decreasing the width from $1.176\,\mu\text{m}$ to $0.952\,\mu\text{m}$.
+    \end{itemize}
+    \item \textbf{DRC Validation}: The \texttt{drc\_critic} node runs. The clearance check reports zero design rule violations. The state returns \texttt{drc\_pass = True}, and the graph terminates at the human review view, displaying the modified, compacted layout on the PySide6 canvas.
+\end{enumerate}
+
+% ==============================================================================
+\section[Interactive Schematic Assistant]{Interactive Schematic Assistant \& Bi-Directional Cross-Highlighting}
+\label{sec:schematic_assistant}
+\sectionmark{Interactive Schematic Assistant}
+
+\noindent
+To facilitate intuitive verification and debugging of analog layout designs, the framework integrates an interactive, dockable \emph{Schematic Assistant}. This assistant allows designers to visualize the logical connections of the SPICE netlist in real-time, providing immediate visual feedback alongside the physical and symbolic layout views. By linking the logical schematic topology directly with the physical layout geometries, the framework bridges the cognitive gap between symbolic block planning and physical silicon layout compilation.
+
+\subsection{System Architecture and UI Integration}
+\noindent
+The Schematic Assistant is implemented as a specialized dockable widget (\texttt{SchematicPanel} in \texttt{schematic\_view.py}) that resides in the left sidebar layout of the PySide6 application. It is composed of a custom graphic view rendering canvas (\texttt{Schematic}\allowbreak\texttt{Canvas}) and a toolbar containing commands for fitting the view, refreshing the layout, and clearing selections. It interacts directly with the layout tab controller to sync active device lists and node definitions.
+
+\noindent
+The rendering engine utilizes Qt's graphics-view framework, where the \texttt{Schematic}\allowbreak\texttt{Canvas} manages a custom \texttt{QGraphicsScene}. Each transistor is represented by a custom \texttt{TransistorItem} (inheriting from \texttt{QGraphicsItem}) that overrides the native \texttt{paint()} method to draw standard IEEE-compliant NMOS and PMOS circuit symbols. The symbol painting includes:
+\begin{itemize}
+    \item \textbf{Channel and Gate Poly:} Rectilinear line stubs representing the transistor gate oxide and poly silicon.
+    \item \textbf{Bulk Connection Arrow:} An arrow symbol indicating the bulk terminal orientation (pointing inward for NMOS, pointing outward for PMOS).
+    \item \textbf{Terminal Pins:} Connection ports rendered as small, hover-sensitive squares representing the Drain, Gate, Source, and Bulk nodes.
+\end{itemize}
+
+\noindent
+In addition to transistor symbols, connection nets are rendered as \texttt{WireItem} graphics objects. Wires are routed using a simple rectilinear (Manhattan) router that joins the coordinate ports of connected devices. External connections (such as inputs, outputs, bias lines, and supply rails) are capped with a \texttt{LabelItem} indicating the net name, preventing the scene from becoming cluttered with long global routing lines.
+
+\subsection{Dual-Engine Layout Generation}
+\noindent
+When a cell is loaded or updated, the Schematic Assistant lays out the schematic components using a two-stage layout generation flow:
+\begin{enumerate}
+    \item \textbf{Deterministic Fallback Banding:} Initially, a fast, deterministic banding algorithm (\texttt{build\_band\_layout}) groups the transistors horizontally based on netlist connections. It partitions the active area into PMOS and NMOS rows and routes basic connecting lines to power rails (VDD and GND) at the cell boundaries. This provides a fallback visualization if the Vertex AI API is unavailable.
+    \item \textbf{Asynchronous Vertex AI Layout Engine:} To produce highly structured and professional schematic arrangements that follow industrial drafting conventions, the canvas launches a background thread that invokes Google Cloud Vertex AI (using the Gemini-2.5-flash model via the \texttt{google.genai} SDK).
+\end{enumerate}
+
+\subsection{Symmetric Prompting and LLM Constraints}
+\noindent
+The background task builds a detailed structured prompt (\texttt{\_build\_prompt()}) that serializes the SPICE netlist (drain, gate, and source pin-to-net mappings) and lists identified topological groupings (such as differential pairs, current mirrors, tail current sources, and cross-coupled latches). 
+
+\noindent
+The LLM is prompted to assign integer grid coordinates $(x, y)$ and gate mirror flags (\texttt{mirrored}) according to standard analog drafting conventions:
+\begin{itemize}
+    \item \textbf{Signal Flow direction:} PMOS devices are strictly placed in the upper half of the grid ($y < 0$) and NMOS devices in the lower half ($y \geq 0$) to align with standard power-to-ground current flow.
+    \item \textbf{Symmetry axes:} Matched differential pairs are placed symmetrically around the center axis $x = 0$ (e.g., at $x = -1.0$ and $x = 1.0$) with the right-side device gate mirrored inward.
+    \item \textbf{Cross-Coupled Latches:} Latches are aligned at adjacent NMOS/PMOS boundaries and configured to face each other (using complementary mirror states) to clearly visualize latch feedback loops.
+    \item \textbf{Manhattan Local Wires:} The model outputs local, low-pin count nets to draw as solid connecting wires, excluding power, ground, and port lines which are drawn as clean labels to avoid layout clutter.
+    \item \textbf{Latch Cross-Wires:} If a cross-coupled latch is active, the model synthesizes two crossing segments that render as a classic ``X'' shape on the schematic canvas.
+\end{itemize}
+
+\noindent
+To prevent the GUI thread from freezing during Vertex AI model generation, the layout calculation runs inside an asynchronous, non-blocking Python \texttt{threading.Thread}. Once model inference completes, the worker posts a signal carrying the JSON-RPC response back to the main GUI thread, which parses the coordinates, scales them to canvas pixels (multiplying the coordinates by a grid scale factor of 160 pixels), and refreshes the graphics scene dynamically.
+
+\subsection{Bi-Directional Cross-Highlighting}
+\noindent
+The Schematic Assistant enables a ``Human-in-the-Loop'' validation workflow through bi-directional cross-highlighting:
+\begin{itemize}
+    \item \textbf{Transistor Highlighting:} Clicking on any transistor symbol in the schematic canvas emits a \texttt{device\_clicked} signal. This highlights the corresponding transistor's gate poly fingers, contacts, and active regions in the main physical layout editor, allowing the designer to quickly locate devices.
+    \item \textbf{Net Highlighting:} Clicking on any connecting wire or net label in the schematic emits a \texttt{net\_clicked} signal. The GUI controller immediately highlights all physical layout metal wires, routing tracks, and pin terminals belonging to that net name, providing a rapid method for verifying trace connectivity.
+\end{itemize}
+
+\noindent
+This cross-highlighting system is implemented using PySide6 Qt Signals. When an item is clicked in the \texttt{SchematicCanvas}, a signal carrying the device name or net ID is emitted. The main \texttt{layout\_tab.py} controller intercepts these signals:
+\begin{verbatim}
+self.schematic_panel.highlight_device.connect(
+    self.editor.highlight_device
+)
+self.schematic_panel.highlight_net.connect(
+    self.editor.highlight_net_by_name
+)
+\end{verbatim}
+
+\noindent
+The controller forwards the selection to the layout editor canvas (\texttt{EditorView}), which highlights the matched transistor or net by selection, dims the surrounding layout items, and renders connection flightlines to the selected pins. Conversely, selecting a device finger or routing track in the main symbolic layout view propagates a selection event back to the \texttt{SchematicPanel}, highlighting the corresponding transistor symbol or net wire in red. This bi-directional interaction ensures that changes in layout planning can be immediately mapped to schematic topologies.
+

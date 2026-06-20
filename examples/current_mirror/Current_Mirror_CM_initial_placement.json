@@ -22,13 +22,12 @@
                 "orientation": "R0"
             },
             "abutment": {
-                "abut_left": true,
+                "abut_left": false,
                 "abut_right": true
             },
             "net_s": "gnd",
             "net_d": "A",
-            "net_g": "C",
-            "swapped_sd": false
+            "net_g": "C"
         },
         {
             "id": "MM2_f2",
@@ -53,12 +52,11 @@
             },
             "abutment": {
                 "abut_left": true,
-                "abut_right": true
+                "abut_right": false
             },
-            "net_s": "A",
-            "net_d": "gnd",
-            "net_g": "C",
-            "swapped_sd": true
+            "net_s": "gnd",
+            "net_d": "A",
+            "net_g": "C"
         },
         {
             "id": "MM2_f3",
@@ -82,13 +80,12 @@
                 "orientation": "R0"
             },
             "abutment": {
-                "abut_left": true,
+                "abut_left": false,
                 "abut_right": true
             },
             "net_s": "gnd",
             "net_d": "A",
-            "net_g": "C",
-            "swapped_sd": false
+            "net_g": "C"
         },
         {
             "id": "MM2_f4",
@@ -113,12 +110,11 @@
             },
             "abutment": {
                 "abut_left": true,
-                "abut_right": true
+                "abut_right": false
             },
-            "net_s": "A",
-            "net_d": "gnd",
-            "net_g": "C",
-            "swapped_sd": true
+            "net_s": "gnd",
+            "net_d": "A",
+            "net_g": "C"
         },
         {
             "id": "MM1_f1",
@@ -142,13 +138,12 @@
                 "orientation": "R0"
             },
             "abutment": {
-                "abut_left": true,
+                "abut_left": false,
                 "abut_right": true
             },
             "net_s": "gnd",
             "net_d": "B",
-            "net_g": "C",
-            "swapped_sd": false
+            "net_g": "C"
         },
         {
             "id": "MM1_f2",
@@ -173,12 +168,11 @@
             },
             "abutment": {
                 "abut_left": true,
-                "abut_right": true
+                "abut_right": false
             },
-            "net_s": "B",
-            "net_d": "gnd",
-            "net_g": "C",
-            "swapped_sd": true
+            "net_s": "gnd",
+            "net_d": "B",
+            "net_g": "C"
         },
         {
             "id": "MM1_f3",
@@ -202,13 +196,12 @@
                 "orientation": "R0"
             },
             "abutment": {
-                "abut_left": true,
+                "abut_left": false,
                 "abut_right": true
             },
             "net_s": "gnd",
             "net_d": "B",
-            "net_g": "C",
-            "swapped_sd": false
+            "net_g": "C"
         },
         {
             "id": "MM1_f4",
@@ -233,12 +226,11 @@
             },
             "abutment": {
                 "abut_left": true,
-                "abut_right": true
+                "abut_right": false
             },
-            "net_s": "B",
-            "net_d": "gnd",
-            "net_g": "C",
-            "swapped_sd": true
+            "net_s": "gnd",
+            "net_d": "B",
+            "net_g": "C"
         },
         {
             "id": "MM1_f5",
@@ -262,13 +254,12 @@
                 "orientation": "R0"
             },
             "abutment": {
-                "abut_left": true,
+                "abut_left": false,
                 "abut_right": true
             },
             "net_s": "gnd",
             "net_d": "B",
-            "net_g": "C",
-            "swapped_sd": false
+            "net_g": "C"
         },
         {
             "id": "MM1_f6",
@@ -293,12 +284,11 @@
             },
             "abutment": {
                 "abut_left": true,
-                "abut_right": true
+                "abut_right": false
             },
-            "net_s": "B",
-            "net_d": "gnd",
-            "net_g": "C",
-            "swapped_sd": true
+            "net_s": "gnd",
+            "net_d": "B",
+            "net_g": "C"
         },
         {
             "id": "MM1_f7",
@@ -322,13 +312,12 @@
                 "orientation": "R0"
             },
             "abutment": {
-                "abut_left": true,
+                "abut_left": false,
                 "abut_right": true
             },
             "net_s": "gnd",
             "net_d": "B",
-            "net_g": "C",
-            "swapped_sd": false
+            "net_g": "C"
         },
         {
             "id": "MM1_f8",
@@ -353,12 +342,11 @@
             },
             "abutment": {
                 "abut_left": true,
-                "abut_right": true
+                "abut_right": false
             },
-            "net_s": "B",
-            "net_d": "gnd",
-            "net_g": "C",
-            "swapped_sd": true
+            "net_s": "gnd",
+            "net_d": "B",
+            "net_g": "C"
         },
         {
             "id": "MM0_f1",
@@ -387,8 +375,7 @@
             },
             "net_s": "gnd",
             "net_d": "C",
-            "net_g": "C",
-            "swapped_sd": false
+            "net_g": "C"
         },
         {
             "id": "MM0_f2",
@@ -415,10 +402,9 @@
                 "abut_left": true,
                 "abut_right": true
             },
-            "net_s": "C",
-            "net_d": "gnd",
-            "net_g": "C",
-            "swapped_sd": true
+            "net_s": "gnd",
+            "net_d": "C",
+            "net_g": "C"
         },
         {
             "id": "MM0_f3",
@@ -447,8 +433,7 @@
             },
             "net_s": "gnd",
             "net_d": "C",
-            "net_g": "C",
-            "swapped_sd": false
+            "net_g": "C"
         },
         {
             "id": "MM0_f4",
@@ -473,12 +458,11 @@
             },
             "abutment": {
                 "abut_left": true,
-                "abut_right": true
+                "abut_right": false
             },
-            "net_s": "C",
-            "net_d": "gnd",
-            "net_g": "C",
-            "swapped_sd": true
+            "net_s": "gnd",
+            "net_d": "C",
+            "net_g": "C"
         },
         {
             "id": "MM0_f5",
@@ -502,13 +486,12 @@
                 "orientation": "R0"
             },
             "abutment": {
-                "abut_left": true,
+                "abut_left": false,
                 "abut_right": true
             },
             "net_s": "gnd",
             "net_d": "C",
-            "net_g": "C",
-            "swapped_sd": false
+            "net_g": "C"
         },
         {
             "id": "MM0_f6",
@@ -535,10 +518,9 @@
                 "abut_left": true,
                 "abut_right": true
             },
-            "net_s": "C",
-            "net_d": "gnd",
-            "net_g": "C",
-            "swapped_sd": true
+            "net_s": "gnd",
+            "net_d": "C",
+            "net_g": "C"
         },
         {
             "id": "MM0_f7",
@@ -567,8 +549,7 @@
             },
             "net_s": "gnd",
             "net_d": "C",
-            "net_g": "C",
-            "swapped_sd": false
+            "net_g": "C"
         },
         {
             "id": "MM0_f8",
@@ -595,10 +576,9 @@
                 "abut_left": true,
                 "abut_right": true
             },
-            "net_s": "C",
-            "net_d": "gnd",
-            "net_g": "C",
-            "swapped_sd": true
+            "net_s": "gnd",
+            "net_d": "C",
+            "net_g": "C"
         },
         {
             "id": "MM0_f9",
@@ -627,8 +607,7 @@
             },
             "net_s": "gnd",
             "net_d": "C",
-            "net_g": "C",
-            "swapped_sd": false
+            "net_g": "C"
         },
         {
             "id": "MM0_f10",
@@ -655,10 +634,9 @@
                 "abut_left": true,
                 "abut_right": true
             },
-            "net_s": "C",
-            "net_d": "gnd",
-            "net_g": "C",
-            "swapped_sd": true
+            "net_s": "gnd",
+            "net_d": "C",
+            "net_g": "C"
         },
         {
             "id": "MM0_f11",
@@ -687,8 +665,7 @@
             },
             "net_s": "gnd",
             "net_d": "C",
-            "net_g": "C",
-            "swapped_sd": false
+            "net_g": "C"
         },
         {
             "id": "MM0_f12",
@@ -713,12 +690,11 @@
             },
             "abutment": {
                 "abut_left": true,
-                "abut_right": true
+                "abut_right": false
             },
-            "net_s": "C",
-            "net_d": "gnd",
-            "net_g": "C",
-            "swapped_sd": true
+            "net_s": "gnd",
+            "net_d": "C",
+            "net_g": "C"
         },
         {
             "id": "MM0_f13",
@@ -742,13 +718,12 @@
                 "orientation": "R0"
             },
             "abutment": {
-                "abut_left": true,
+                "abut_left": false,
                 "abut_right": true
             },
             "net_s": "gnd",
             "net_d": "C",
-            "net_g": "C",
-            "swapped_sd": false
+            "net_g": "C"
         },
         {
             "id": "MM0_f14",
@@ -775,10 +750,9 @@
                 "abut_left": true,
                 "abut_right": true
             },
-            "net_s": "C",
-            "net_d": "gnd",
-            "net_g": "C",
-            "swapped_sd": true
+            "net_s": "gnd",
+            "net_d": "C",
+            "net_g": "C"
         },
         {
             "id": "MM0_f15",
@@ -807,8 +781,7 @@
             },
             "net_s": "gnd",
             "net_d": "C",
-            "net_g": "C",
-            "swapped_sd": false
+            "net_g": "C"
         },
         {
             "id": "MM0_f16",
@@ -835,10 +808,9 @@
                 "abut_left": true,
                 "abut_right": true
             },
-            "net_s": "C",
-            "net_d": "gnd",
-            "net_g": "C",
-            "swapped_sd": true
+            "net_s": "gnd",
+            "net_d": "C",
+            "net_g": "C"
         },
         {
             "id": "MM5_f1",
@@ -862,13 +834,12 @@
                 "orientation": "R0"
             },
             "abutment": {
-                "abut_left": true,
+                "abut_left": false,
                 "abut_right": true
             },
             "net_s": "VDD",
             "net_d": "Z",
-            "net_g": "X",
-            "swapped_sd": false
+            "net_g": "X"
         },
         {
             "id": "MM5_f2",
@@ -893,12 +864,11 @@
             },
             "abutment": {
                 "abut_left": true,
-                "abut_right": true
+                "abut_right": false
             },
-            "net_s": "Z",
-            "net_d": "VDD",
-            "net_g": "X",
-            "swapped_sd": true
+            "net_s": "VDD",
+            "net_d": "Z",
+            "net_g": "X"
         },
         {
             "id": "MM5_f3",
@@ -922,13 +892,12 @@
                 "orientation": "R0"
             },
             "abutment": {
-                "abut_left": true,
+                "abut_left": false,
                 "abut_right": true
             },
             "net_s": "VDD",
             "net_d": "Z",
-            "net_g": "X",
-            "swapped_sd": false
+            "net_g": "X"
         },
         {
             "id": "MM5_f4",
@@ -953,12 +922,11 @@
             },
             "abutment": {
                 "abut_left": true,
-                "abut_right": true
+                "abut_right": false
             },
-            "net_s": "Z",
-            "net_d": "VDD",
-            "net_g": "X",
-            "swapped_sd": true
+            "net_s": "VDD",
+            "net_d": "Z",
+            "net_g": "X"
         },
         {
             "id": "MM4_f1",
@@ -982,13 +950,12 @@
                 "orientation": "R0"
             },
             "abutment": {
-                "abut_left": true,
+                "abut_left": false,
                 "abut_right": true
             },
             "net_s": "VDD",
             "net_d": "Y",
-            "net_g": "X",
-            "swapped_sd": false
+            "net_g": "X"
         },
         {
             "id": "MM4_f2",
@@ -1013,12 +980,11 @@
             },
             "abutment": {
                 "abut_left": true,
-                "abut_right": true
+                "abut_right": false
             },
-            "net_s": "Y",
-            "net_d": "VDD",
-            "net_g": "X",
-            "swapped_sd": true
+            "net_s": "VDD",
+            "net_d": "Y",
+            "net_g": "X"
         },
         {
             "id": "MM4_f3",
@@ -1042,13 +1008,12 @@
                 "orientation": "R0"
             },
             "abutment": {
-                "abut_left": true,
+                "abut_left": false,
                 "abut_right": true
             },
             "net_s": "VDD",
             "net_d": "Y",
-            "net_g": "X",
-            "swapped_sd": false
+            "net_g": "X"
         },
         {
             "id": "MM4_f4",
@@ -1073,12 +1038,11 @@
             },
             "abutment": {
                 "abut_left": true,
-                "abut_right": true
+                "abut_right": false
             },
-            "net_s": "Y",
-            "net_d": "VDD",
-            "net_g": "X",
-            "swapped_sd": true
+            "net_s": "VDD",
+            "net_d": "Y",
+            "net_g": "X"
         },
         {
             "id": "MM4_f5",
@@ -1102,13 +1066,12 @@
                 "orientation": "R0"
             },
             "abutment": {
-                "abut_left": true,
+                "abut_left": false,
                 "abut_right": true
             },
             "net_s": "VDD",
             "net_d": "Y",
-            "net_g": "X",
-            "swapped_sd": false
+            "net_g": "X"
         },
         {
             "id": "MM4_f6",
@@ -1133,12 +1096,11 @@
             },
             "abutment": {
                 "abut_left": true,
-                "abut_right": true
+                "abut_right": false
             },
-            "net_s": "Y",
-            "net_d": "VDD",
-            "net_g": "X",
-            "swapped_sd": true
+            "net_s": "VDD",
+            "net_d": "Y",
+            "net_g": "X"
         },
         {
             "id": "MM4_f7",
@@ -1162,13 +1124,12 @@
                 "orientation": "R0"
             },
             "abutment": {
-                "abut_left": true,
+                "abut_left": false,
                 "abut_right": true
             },
             "net_s": "VDD",
             "net_d": "Y",
-            "net_g": "X",
-            "swapped_sd": false
+            "net_g": "X"
         },
         {
             "id": "MM4_f8",
@@ -1193,12 +1154,11 @@
             },
             "abutment": {
                 "abut_left": true,
-                "abut_right": true
+                "abut_right": false
             },
-            "net_s": "Y",
-            "net_d": "VDD",
-            "net_g": "X",
-            "swapped_sd": true
+            "net_s": "VDD",
+            "net_d": "Y",
+            "net_g": "X"
         },
         {
             "id": "MM3_f1",
@@ -1227,8 +1187,7 @@
             },
             "net_s": "VDD",
             "net_d": "X",
-            "net_g": "X",
-            "swapped_sd": false
+            "net_g": "X"
         },
         {
             "id": "MM3_f2",
@@ -1255,10 +1214,9 @@
                 "abut_left": true,
                 "abut_right": true
             },
-            "net_s": "X",
-            "net_d": "VDD",
-            "net_g": "X",
-            "swapped_sd": true
+            "net_s": "VDD",
+            "net_d": "X",
+            "net_g": "X"
         },
         {
             "id": "MM3_f3",
@@ -1287,8 +1245,7 @@
             },
             "net_s": "VDD",
             "net_d": "X",
-            "net_g": "X",
-            "swapped_sd": false
+            "net_g": "X"
         },
         {
             "id": "MM3_f4",
@@ -1313,12 +1270,11 @@
             },
             "abutment": {
                 "abut_left": true,
-                "abut_right": true
+                "abut_right": false
             },
-            "net_s": "X",
-            "net_d": "VDD",
-            "net_g": "X",
-            "swapped_sd": true
+            "net_s": "VDD",
+            "net_d": "X",
+            "net_g": "X"
         },
         {
             "id": "MM3_f5",
@@ -1342,13 +1298,12 @@
                 "orientation": "R0"
             },
             "abutment": {
-                "abut_left": true,
+                "abut_left": false,
                 "abut_right": true
             },
             "net_s": "VDD",
             "net_d": "X",
-            "net_g": "X",
-            "swapped_sd": false
+            "net_g": "X"
         },
         {
             "id": "MM3_f6",
@@ -1375,10 +1330,9 @@
                 "abut_left": true,
                 "abut_right": true
             },
-            "net_s": "X",
-            "net_d": "VDD",
-            "net_g": "X",
-            "swapped_sd": true
+            "net_s": "VDD",
+            "net_d": "X",
+            "net_g": "X"
         },
         {
             "id": "MM3_f7",
@@ -1407,8 +1361,7 @@
             },
             "net_s": "VDD",
             "net_d": "X",
-            "net_g": "X",
-            "swapped_sd": false
+            "net_g": "X"
         },
         {
             "id": "MM3_f8",
@@ -1435,10 +1388,9 @@
                 "abut_left": true,
                 "abut_right": true
             },
-            "net_s": "X",
-            "net_d": "VDD",
-            "net_g": "X",
-            "swapped_sd": true
+            "net_s": "VDD",
+            "net_d": "X",
+            "net_g": "X"
         },
         {
             "id": "MM3_f9",
@@ -1467,8 +1419,7 @@
             },
             "net_s": "VDD",
             "net_d": "X",
-            "net_g": "X",
-            "swapped_sd": false
+            "net_g": "X"
         },
         {
             "id": "MM3_f10",
@@ -1495,10 +1446,9 @@
                 "abut_left": true,
                 "abut_right": true
             },
-            "net_s": "X",
-            "net_d": "VDD",
-            "net_g": "X",
-            "swapped_sd": true
+            "net_s": "VDD",
+            "net_d": "X",
+            "net_g": "X"
         },
         {
             "id": "MM3_f11",
@@ -1527,8 +1477,7 @@
             },
             "net_s": "VDD",
             "net_d": "X",
-            "net_g": "X",
-            "swapped_sd": false
+            "net_g": "X"
         },
         {
             "id": "MM3_f12",
@@ -1553,12 +1502,11 @@
             },
             "abutment": {
                 "abut_left": true,
-                "abut_right": true
+                "abut_right": false
             },
-            "net_s": "X",
-            "net_d": "VDD",
-            "net_g": "X",
-            "swapped_sd": true
+            "net_s": "VDD",
+            "net_d": "X",
+            "net_g": "X"
         },
         {
             "id": "MM3_f13",
@@ -1582,13 +1530,12 @@
                 "orientation": "R0"
             },
             "abutment": {
-                "abut_left": true,
+                "abut_left": false,
                 "abut_right": true
             },
             "net_s": "VDD",
             "net_d": "X",
-            "net_g": "X",
-            "swapped_sd": false
+            "net_g": "X"
         },
         {
             "id": "MM3_f14",
@@ -1615,10 +1562,9 @@
                 "abut_left": true,
                 "abut_right": true
             },
-            "net_s": "X",
-            "net_d": "VDD",
-            "net_g": "X",
-            "swapped_sd": true
+            "net_s": "VDD",
+            "net_d": "X",
+            "net_g": "X"
         },
         {
             "id": "MM3_f15",
@@ -1647,8 +1593,7 @@
             },
             "net_s": "VDD",
             "net_d": "X",
-            "net_g": "X",
-            "swapped_sd": false
+            "net_g": "X"
         },
         {
             "id": "MM3_f16",
@@ -1675,10 +1620,9 @@
                 "abut_left": true,
                 "abut_right": true
             },
-            "net_s": "X",
-            "net_d": "VDD",
-            "net_g": "X",
-            "swapped_sd": true
+            "net_s": "VDD",
+            "net_d": "X",
+            "net_g": "X"
         },
         {
             "_block_id": "MM2_MM1_and_1_more_centroid",
@@ -1709,7 +1653,7 @@
             "id": "DUMMY_matrix_MM2_MM1_and_1_more_centroid_0",
             "is_dummy": true,
             "net_d": "gnd",
-            "net_g": "gnd",
+            "net_g": "VSS",
             "net_s": "gnd",
             "type": "nmos"
         },
@@ -1742,7 +1686,7 @@
             "id": "DUMMY_matrix_MM2_MM1_and_1_more_centroid_1",
             "is_dummy": true,
             "net_d": "C",
-            "net_g": "C",
+            "net_g": "VSS",
             "net_s": "C",
             "type": "nmos"
         },
@@ -1775,7 +1719,7 @@
             "id": "DUMMY_matrix_MM2_MM1_and_1_more_centroid_2",
             "is_dummy": true,
             "net_d": "gnd",
-            "net_g": "gnd",
+            "net_g": "VSS",
             "net_s": "gnd",
             "type": "nmos"
         },
@@ -1808,7 +1752,7 @@
             "id": "DUMMY_matrix_MM2_MM1_and_1_more_centroid_3",
             "is_dummy": true,
             "net_d": "C",
-            "net_g": "C",
+            "net_g": "VSS",
             "net_s": "C",
             "type": "nmos"
         },
@@ -1874,7 +1818,7 @@
             "id": "DUMMY_matrix_MM5_MM4_and_1_more_centroid_1",
             "is_dummy": true,
             "net_d": "X",
-            "net_g": "X",
+            "net_g": "VDD",
             "net_s": "X",
             "type": "pmos"
         },
@@ -1940,7 +1884,7 @@
             "id": "DUMMY_matrix_MM5_MM4_and_1_more_centroid_3",
             "is_dummy": true,
             "net_d": "X",
-            "net_g": "X",
+            "net_g": "VDD",
             "net_s": "X",
             "type": "pmos"
         }
@@ -5727,6 +5671,74 @@
             "net": "X"
         }
     ],
+    "custom_groups": [
+        {
+            "name": "Current_Mirror_MM0_MM1_MM2",
+            "devices": [
+                "MM0_f1",
+                "MM0_f10",
+                "MM0_f11",
+                "MM0_f12",
+                "MM0_f13",
+                "MM0_f14",
+                "MM0_f15",
+                "MM0_f16",
+                "MM0_f2",
+                "MM0_f3",
+                "MM0_f4",
+                "MM0_f5",
+                "MM0_f6",
+                "MM0_f7",
+                "MM0_f8",
+                "MM0_f9",
+                "MM1_f1",
+                "MM1_f2",
+                "MM1_f3",
+                "MM1_f4",
+                "MM1_f5",
+                "MM1_f6",
+                "MM1_f7",
+                "MM1_f8",
+                "MM2_f1",
+                "MM2_f2",
+                "MM2_f3",
+                "MM2_f4"
+            ]
+        },
+        {
+            "name": "Active_Load_MM3_MM4_MM5",
+            "devices": [
+                "MM3_f1",
+                "MM3_f10",
+                "MM3_f11",
+                "MM3_f12",
+                "MM3_f13",
+                "MM3_f14",
+                "MM3_f15",
+                "MM3_f16",
+                "MM3_f2",
+                "MM3_f3",
+                "MM3_f4",
+                "MM3_f5",
+                "MM3_f6",
+                "MM3_f7",
+                "MM3_f8",
+                "MM3_f9",
+                "MM4_f1",
+                "MM4_f2",
+                "MM4_f3",
+                "MM4_f4",
+                "MM4_f5",
+                "MM4_f6",
+                "MM4_f7",
+                "MM4_f8",
+                "MM5_f1",
+                "MM5_f2",
+                "MM5_f3",
+                "MM5_f4"
+            ]
+        }
+    ],
     "terminal_nets": {
         "MM2_f1": {
             "D": "A",
@@ -6043,14 +6055,14 @@
                 "cross_row": false,
                 "devices": [
                     "MM2",
-                    "MM0",
-                    "MM1"
+                    "MM1",
+                    "MM0"
                 ],
                 "nmos_devs": [],
                 "pmos_devs": [
                     "MM2",
-                    "MM0",
-                    "MM1"
+                    "MM1",
+                    "MM0"
                 ],
                 "span": 0.0,
                 "wire_length": 0.0,
@@ -6061,15 +6073,15 @@
                 "criticality": "signal",
                 "cross_row": false,
                 "devices": [
+                    "MM3",
                     "MM4",
-                    "MM5",
-                    "MM3"
+                    "MM5"
                 ],
                 "nmos_devs": [],
                 "pmos_devs": [
+                    "MM3",
                     "MM4",
-                    "MM5",
-                    "MM3"
+                    "MM5"
                 ],
                 "span": 0.0,
                 "wire_length": 0.0,
@@ -6097,7 +6109,7 @@
             "X"
         ]
     },
-    "chat_response": "[Initial Placement Complete]\n- DRC: \u2713 Clean\n- Nodes: 64 placed\n\n\n==============================================================\n  PLACEMENT SUMMARY\n==============================================================\n  Layout Size  : 4.704um x 2.672um  (aspect 1.76)\n  Total Area   : 12.569 um\u00b2\n  Utilization  : 87.5%\n  DRC Status   : \u2713 Clean\n  PMOS/NMOS    : \u2713 OK\n  Devices      : 64 placed\n  Time Total   : 2m 10s\n==============================================================\n\n================================================================\n  MATCHING & SYMMETRY QUALITY BENCHMARK\n================================================================\n  Matched pairs : 6\n  Metric                     Score   Progress                Grade\n  ------------------------  ------   ----------------------  -----\n  Layout Y Symmetry         100.0%   ####################    A+\n  X Mirror Symmetry         100.0%   ####################    A+\n  Interdigitation              N/A   (not applicable)      \n  Common Centroid (2D)      100.0%   ####################    A+\n  DRC Clean                 100.0%   ####################    A+\n  ------------------------  ------   ----------------------  -----\n  COMPOSITE                 100.0%   ####################    A+\n================================================================\n\n\n2 nets analyzed  (0 critical, 2 signal, 0 bias, 0 power)\nTotal Manhattan HPWL : 0.000 \u00b5m\nEstimated crossings  : 0\nWeighted cost        : 0.0\n\nWorst nets (by weighted HPWL):\n  C              signal   hpwl=0.000\u00b5m  (\u0394x=0.000, \u0394y=0.000)\n  X              signal   hpwl=0.000\u00b5m  (\u0394x=0.000, \u0394y=0.000)\n\nRouting channels (inter-row bands):\n  band 0  y\u22480.334\u00b5m  0 track(s)  \u2192 widen to 0.134 \u00b5m\n  band 1  y\u22481.002\u00b5m  0 track(s)  \u2192 widen to 0.134 \u00b5m\n  band 2  y\u22481.670\u00b5m  0 track(s)  \u2192 widen to 0.134 \u00b5m\n",
+    "chat_response": "[Initial Placement Complete]\n- DRC: \u2713 Clean\n- Nodes: 64 placed\n\n\n==============================================================\n  PLACEMENT SUMMARY\n==============================================================\n  Layout Size  : 4.704um x 2.672um  (aspect 1.76)\n  Total Area   : 12.569 um\u00b2\n  Utilization  : 87.5%\n  DRC Status   : \u2713 Clean\n  PMOS/NMOS    : \u2713 OK\n  Devices      : 64 placed\n  Time Total   : 1m 28s\n==============================================================\n\n================================================================\n  MATCHING & SYMMETRY QUALITY BENCHMARK\n================================================================\n  Matched pairs : 6\n  Metric                     Score   Progress                Grade\n  ------------------------  ------   ----------------------  -----\n  Layout Y Symmetry         100.0%   ####################    A+\n  X Mirror Symmetry         100.0%   ####################    A+\n  Interdigitation              N/A   (not applicable)      \n  Common Centroid (2D)      100.0%   ####################    A+\n  DRC Clean                 100.0%   ####################    A+\n  ------------------------  ------   ----------------------  -----\n  COMPOSITE                 100.0%   ####################    A+\n================================================================\n\n\n2 nets analyzed  (0 critical, 2 signal, 0 bias, 0 power)\nTotal Manhattan HPWL : 0.000 \u00b5m\nEstimated crossings  : 0\nWeighted cost        : 0.0\n\nWorst nets (by weighted HPWL):\n  C              signal   hpwl=0.000\u00b5m  (\u0394x=0.000, \u0394y=0.000)\n  X              signal   hpwl=0.000\u00b5m  (\u0394x=0.000, \u0394y=0.000)\n\nRouting channels (inter-row bands):\n  band 0  y\u22480.334\u00b5m  0 track(s)  \u2192 widen to 0.134 \u00b5m\n  band 1  y\u22481.002\u00b5m  0 track(s)  \u2192 widen to 0.134 \u00b5m\n  band 2  y\u22481.670\u00b5m  0 track(s)  \u2192 widen to 0.134 \u00b5m\n",
     "groups": {
         "MM2_MM1_and_1_more_centroid": [
             "MM0_f1",

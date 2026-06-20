@@ -255,6 +255,14 @@ def extract_symmetry_block(nodes: List[dict], terminal_nets: dict) -> str:
             v = safe_tn.get(key)
             if isinstance(v, dict):
                 return v
+        # Prefix fallback: if dev_id (e.g. MM5) is logical, match any key starting with it (e.g. MM5_m1)
+        if dev_id:
+            base = dev_id.split("<", 1)[0].split("_", 1)[0]
+            for key, value in safe_tn.items():
+                if not isinstance(value, dict):
+                    continue
+                if str(key).startswith(base):
+                    return value
         return {}
 
     def _net(dev_id: str, pin: str) -> str:

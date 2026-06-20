@@ -247,13 +247,55 @@ class LLMWorker(QObject):
         bind_tools (handled inside run_llm_with_tools).
         """
         try:
-            from ai_agent.llm.tool_runner import run_llm_with_tools
+            user_message = ""
+            for msg in reversed(chat_messages):
+                if msg.get("role") == "user":
+                    user_message = msg["content"]
+                    break
+            if not user_message:
+                user_message = full_prompt
+
+            from ai_agent.agents.classifier import classify_intent
+            intent = classify_intent(user_message, selected_model)
+            vprint(f"[LLM Worker] classified intent: {intent}")
 
             message_id = str(uuid.uuid4())
+
+            if intent == "general_chat":
+                # Open streaming bubble
+                self.response_started.emit(message_id)
+
+                from ai_agent.nodes.general_chatbot import GENERAL_CHAT_SYSTEM_PROMPT
+                from ai_agent.llm.factory import get_langchain_llm
+                llm = get_langchain_llm(selected_model, task_weight="light")
+
+                general_chat_messages = [{"role": "system", "content": GENERAL_CHAT_SYSTEM_PROMPT}]
+                has_user = False
+                for msg in chat_messages:
+                    if msg.get("role") == "system":
+                        continue
+                    general_chat_messages.append(msg)
+                    if msg.get("role") == "user":
+                        has_user = True
+                if not has_user:
+                    general_chat_messages.append({"role": "user", "content": user_message})
+
+                final_text, _ = stream_llm(
+                    general_chat_messages,
+                    llm,
+                    message_id,
+                    self,
+                    emit_done=True,
+                )
+                return
+
+            from ai_agent.llm.tool_runner import run_llm_with_tools
 
             ctx = getattr(self, "_layout_context", None) or {}
             nodes = ctx.get("nodes", []) if isinstance(ctx, dict) else []
             terminal_nets = ctx.get("terminal_nets", {}) if isinstance(ctx, dict) else {}
+            oas_path = ctx.get("oas_path") if isinstance(ctx, dict) else None
+            sp_path = ctx.get("sp_path") if isinstance(ctx, dict) else None
 
             # Legacy progress callback (kept for non-streaming consumers)
             def _progress(name, success, message):
@@ -275,6 +317,8 @@ class LLMWorker(QObject):
                 progress_cb=_progress,
                 worker=self,
                 message_id=message_id,
+                oas_path=oas_path,
+                sp_path=sp_path,
             )
 
             final_text = result.get("text") or "(no response)"
@@ -378,6 +422,10 @@ class OrchestratorWorker(LLMWorker):
 
         if chat_history is None:
             chat_history = []
+
+        # Scrub DRC violation lists from history to prevent context overflow
+        from ai_agent.llm.tool_runner import _scrub_drc_from_messages
+        chat_history = _scrub_drc_from_messages(chat_history)
 
         try:
             layout_context = _json.loads(layout_context_json)

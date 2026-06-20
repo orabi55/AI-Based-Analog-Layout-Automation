@@ -43,10 +43,13 @@ def generate_placement_grid(
     if technique == 'CUSTOM' and custom_str:
         return _handle_custom(devices, custom_str)
 
-    # 2. Grid & Dummy Initialization
+    # Grid & Dummy Initialization
     is_2d = rows > 1
-    # Factor: 2 for 1D CC, 4 for 2D CC (cross-quad)
-    symmetry_factor = 4 if is_2d else 2
+    # Factor: 2 for 1D CC, 4 for 2D CC (cross-quad). 1 for Interdigitated.
+    if technique == "INTERDIGITATED":
+        symmetry_factor = 1
+    else:
+        symmetry_factor = 4 if is_2d else 2
     
     total_fingers = sum(devices.values())
     if total_fingers == 0: return []
@@ -104,9 +107,12 @@ def generate_placement_grid(
     grid = [[None for _ in range(cols)] for _ in range(rows)]
     
     if not is_2d:
-        # 1D Mirrored: [Seed] [Reversed(Seed)]
-        grid[0][0:seed_total] = seed_list
-        grid[0][seed_total:2*seed_total] = reversed(seed_list)
+        if technique == "INTERDIGITATED":
+            grid[0][:] = seed_list
+        else:
+            # 1D Mirrored: [Seed] [Reversed(Seed)]
+            grid[0][0:seed_total] = seed_list
+            grid[0][seed_total:2*seed_total] = reversed(seed_list)
     else:
         # 2D point symmetry: build the full top row, then reverse it below.
         seed_len = len(seed_list)
@@ -114,7 +120,8 @@ def generate_placement_grid(
         grid[1][:] = list(reversed(grid[0]))
 
     # 5. Mathematical Audit
-    _analytical_audit(grid)
+    if technique != "INTERDIGITATED":
+        _analytical_audit(grid)
 
     return _convert_grid_to_coords(grid)
 

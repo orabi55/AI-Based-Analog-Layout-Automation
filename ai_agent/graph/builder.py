@@ -34,16 +34,14 @@ from ai_agent.nodes import (
 
 def _route_after_router(state: LayoutState):
     """Route the chat workflow to the selected analysis node."""
-    target = str(state.get("router_target", "topology_analyst"))
+    target = str(state.get("router_target", "general"))
     if target in {
-        "topology_analyst",
-        "strategy_selector",
         "placement_specialist",
         "drc_critic",
         "general",
     }:
         return target
-    return "topology_analyst"
+    return "general"
 
 
 def _node_router(state: LayoutState):

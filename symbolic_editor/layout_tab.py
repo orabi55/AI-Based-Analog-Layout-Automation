@@ -66,6 +66,138 @@ except ImportError:
     from dialogs.match_dialog import _MatchDialog
 
 from ai_agent.matching.engine import MatchingEngine
+from ai_agent.placement.finger_grouper import _parse_id
+
+
+
+def _normalize_orientation(orient):
+    """Normalize any custom or standard orientation string to standard OpenAccess tokens."""
+    token = str(orient or "R0").strip().upper().replace("R00", "R0")
+    horizontal_tokens = {"R0_FH", "FH", "MY", "MXR180"}
+    vertical_tokens = {"R0_FV", "FV", "MX", "MXR0"}
+    both_tokens = {"R180", "R0_FH_FV", "FH_FV", "FV_FH"}
+    
+    if token in both_tokens:
+        return "R180"
+    elif token in horizontal_tokens:
+        return "MY"
+    elif token in vertical_tokens:
+        return "MX"
+    return "R0"
+
+
+def _is_dummy_dev(node):
+    if not isinstance(node, dict):
+        return False
+    dev_id = str(node.get("id", ""))
+    dev_id_upper = dev_id.upper()
+    
+    # Prefix-based detection (overrides structural flag for known dummy patterns)
+    if dev_id_upper.startswith((
+        "DUMMY", "EDGE_DUMMY", "FILLER_DUMMY", "MATCH_DUMMY", 
+        "STRUCT_DUMMY", "TAP", "DUMMY_"
+    )) or (len(dev_id_upper) >= 2 and dev_id_upper[0] == "D" and dev_id_upper[1:].isdigit()):
+        return True
+
+    if node.get("structural"):
+        return False
+    return bool(node.get("is_dummy"))
+def _get_physical_boundary_nets(node, terminal_nets):
+    import re
+    from ai_agent.placement.finger_grouper import _parse_id
+    
+    node_id = node.get("id", "")
+    parent_id, _, _ = _parse_id(node_id)
+    
+    # Stored dictionary values
+    s = node.get("net_s")
+    d = node.get("net_d")
+    
+    # Fetch canonical schematic nets for reference
+    t = terminal_nets.get(node_id) or terminal_nets.get(parent_id) or {}
+    canon_s = t.get("S")
+    canon_d = t.get("D")
+    
+    # Fallback to canonical values if dictionary nets are missing
+    if not s or not d:
+        s = canon_s
+        d = canon_d
+        
+    # If still missing and it is a dummy device, default to VDD/VSS
+    if (not s or not d) and _is_dummy_dev(node):
+        dev_type = str(node.get("type", "")).lower()
+        default_net = "VDD" if "pmos" in dev_type else "VSS"
+        if not s:
+            s = default_net
+        if not d:
+            d = default_net
+ 
+    if not s or not d:
+        return None, None
+        
+    if node.get("swapped_sd", False):
+        s, d = d, s
+        
+    orient = _normalize_orientation(node.get("geometry", {}).get("orientation", "R0"))
+    flipped = (orient in ("MY", "R180"))
+    
+    # Finger calculation for multi-finger devices
+    nf = 1
+    nf_opt = node.get("electrical", {}).get("nf")
+    if nf_opt is not None:
+        nf = int(nf_opt)
+    else:
+        match = re.search(r'[fF](\d+)', node_id)
+        if match:
+            nf = int(match.group(1))
+            
+    is_even = (nf % 2 == 0)
+    
+    if flipped:
+        phys_left = d
+        phys_right = d if is_even else s
+    else:
+        phys_left = s
+        phys_right = s if is_even else d
+        
+    return phys_left, phys_right
+
+
+def _adjacent_devices_can_abut(prev, curr, terminal_nets):
+    import re
+    if prev is curr:
+        return True
+    
+    prev_id = prev.get("id", "")
+    curr_id = curr.get("id", "")
+    
+    prev_is_dummy = _is_dummy_dev(prev)
+    curr_is_dummy = _is_dummy_dev(curr)
+    
+    # If both are dummy devices, they can always abut.
+    if prev_is_dummy and curr_is_dummy:
+        return True
+        
+    from ai_agent.placement.finger_grouper import _parse_id
+    p_prev_id, _, _ = _parse_id(prev_id)
+    p_curr_id, _, _ = _parse_id(curr_id)
+    
+    prev_left, prev_right = _get_physical_boundary_nets(prev, terminal_nets)
+    curr_left, curr_right = _get_physical_boundary_nets(curr, terminal_nets)
+    
+    if not prev_right or not curr_left:
+        return False
+        
+    import re
+    prev_base = re.sub(r'(_[mf]\d+)+$', '', str(prev_id))
+    curr_base = re.sub(r'(_[mf]\d+)+$', '', str(curr_id))
+    if prev_base and curr_base and prev_base == curr_base:
+        return True
+        
+    if prev_right != "NC" and curr_left != "NC" and prev_right == curr_left:
+        return True
+        
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -218,6 +350,7 @@ class LayoutEditorTab(QWidget):
         workspace_layout.setContentsMargins(0, 0, 0, 0)
         workspace_layout.setSpacing(0)
         workspace_layout.addWidget(workspace_header)
+        
         workspace_layout.addWidget(self._workspace_splitter, 1)
 
         self._splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -314,6 +447,23 @@ class LayoutEditorTab(QWidget):
         )
 
         self.set_workspace_mode(self._workspace_mode)
+
+        # Start background pre-import of heavy AI libraries to prevent UI hang when running placement
+        import threading
+        def _pre_import_heavy_libs():
+            try:
+                import ai_agent.llm.factory
+                import ai_agent.llm.placement_worker
+                import ai_agent.graph.builder
+                from langchain_google_genai import ChatGoogleGenerativeAI
+                from langchain_openai import ChatOpenAI
+                try:
+                    from langchain_google_vertexai import ChatVertexAI
+                except ImportError:
+                    pass
+            except Exception:
+                pass
+        threading.Thread(target=_pre_import_heavy_libs, daemon=True).start()
 
     # ─────────────────────────────────────────────────────────────────
     def resizeEvent(self, event):
@@ -527,92 +677,10 @@ class LayoutEditorTab(QWidget):
         saved_hierarchy_state = self._expand_all_for_export()
         try:
             from export.oas_writer import update_oas_placement
-            abut_states = self.editor.get_device_abutment_states()
-            
             import copy
             export_nodes = copy.deepcopy(self.nodes)
             
-            from ai_agent.placement.finger_grouper import _parse_id
-            for node in export_nodes:
-                dev_id = node.get("id", "")
-                parent_id, _, _ = _parse_id(dev_id)
-
-                baseline_abut = node.get("abutment", {})
-                orig_left = baseline_abut.get("abut_left", False)
-                orig_right = baseline_abut.get("abut_right", False)
-
-                if dev_id in abut_states:
-                    live_abut = abut_states[dev_id]
-                    orig_left = live_abut.get("abut_left", False)
-                    orig_right = live_abut.get("abut_right", False)
-                elif parent_id in abut_states:
-                    live_abut = abut_states[parent_id]
-                    orig_left = live_abut.get("abut_left", False)
-                    orig_right = live_abut.get("abut_right", False)
-
-                node["abutment"] = {
-                    "abut_left":  bool(orig_left),
-                    "abut_right": bool(orig_right)
-                }
-
-            # Magic Step: Squeeze 0.3um Symbolic Slots down to 0.070um physical diffusion-sharing pitch GLOBALLY
-            from collections import defaultdict
-            
-            # 1. Determine maximum slot index across all nodes
-            max_slot = 0
-            for n in export_nodes:
-                orig_x = n.get("geometry", {}).get("x", 0.0)
-                slot_idx = int(round(orig_x / 0.294))
-                nf = max(1, int(round(n.get("geometry", {}).get("width", 0.294) / 0.294)))
-                if slot_idx + nf - 1 > max_slot:
-                    max_slot = slot_idx + nf - 1
-            
-            # 2. Identify which slot boundaries are touch-abutted globally
-            abut_boundaries = [False] * max_slot
-            
-            # Group by row Y to find adjacent slots in the same row
-            rows = defaultdict(list)
-            for n in export_nodes:
-                y_key = round(n.get("geometry", {}).get("y", 0.0), 4)
-                rows[y_key].append(n)
-                
-            for y_key, row_nodes in rows.items():
-                slot_to_node = {}
-                for n in row_nodes:
-                    start_slot = int(round(n.get("geometry", {}).get("x", 0.0) / 0.294))
-                    nf = max(1, int(round(n.get("geometry", {}).get("width", 0.294) / 0.294)))
-                    for i in range(nf):
-                        slot_to_node[start_slot + i] = n
-                        
-                for k in range(max_slot):
-                    if k in slot_to_node and (k+1) in slot_to_node:
-                        prev = slot_to_node[k]
-                        curr = slot_to_node[k+1]
-                        
-                        if prev is curr:
-                            abut_boundaries[k] = True
-                        else:
-                            abut_right = prev.get("abutment", {}).get("abut_right", False)
-                            abut_left = curr.get("abutment", {}).get("abut_left", False)
-                            
-                            if abut_right and abut_left:
-                                abut_boundaries[k] = True
-            
-            # 3. Construct global slot coordinate map
-            slot_x = [0.0] * (max_slot + 1)
-            for k in range(max_slot):
-                if abut_boundaries[k]:
-                    slot_x[k+1] = slot_x[k] + 0.070
-                else:
-                    slot_x[k+1] = slot_x[k] + 0.294
-            
-            # 4. Update node positions based on global slot index map
-            for n in export_nodes:
-                orig_x = n.get("geometry", {}).get("x", 0.0)
-                slot_idx = int(round(orig_x / 0.294))
-                if 0 <= slot_idx <= max_slot:
-                    n["geometry"]["x"] = slot_x[slot_idx]
-
+            export_nodes = self._collect_live_klayout_nodes(export_nodes)
             update_oas_placement(oas_path=oas_path, sp_path=sp_path, nodes=export_nodes, output_path=updated_path)
             self.klayout_panel.set_oas_path(updated_path)
             self.set_workspace_mode("klayout")
@@ -942,99 +1010,173 @@ class LayoutEditorTab(QWidget):
             return
         self._klayout_live_timer.start(max(0, int(delay_ms)))
 
-    def _collect_live_klayout_nodes(self):
-        self._sync_node_positions(schedule_live=False)
-        nodes = copy.deepcopy(self.nodes)
+    def _collect_live_klayout_nodes(self, nodes=None):
+        if nodes is None:
+            self._sync_node_positions(schedule_live=False)
+            import copy
+            nodes = copy.deepcopy(self.nodes)
         try:
             abut_states = self.editor.get_device_abutment_states()
         except Exception:
             abut_states = {}
         from ai_agent.placement.finger_grouper import _parse_id
+        import re
+
+        def _get_dummy_display_name(dev_id):
+            dev_id_upper = str(dev_id).upper()
+            is_dummy = (dev_id_upper.startswith("DUMMY")
+                        or dev_id_upper.startswith("FILLER_DUMMY")
+                        or dev_id_upper.startswith("EDGE_DUMMY")
+                        or bool(re.match(r"^D\d+$", dev_id_upper)))
+            if is_dummy:
+                parts = str(dev_id).split("_")
+                for p in parts:
+                    if p.isdigit():
+                        return f"D{p}"
+                match = re.search(r'\d+', dev_id)
+                if match:
+                    return f"D{match.group(0)}"
+            return dev_id
+
+        def _get_abut_state_for_node(node, abut_states):
+            nid = node.get("id", "")
+            pid, _, _ = _parse_id(nid)
+            for key in [nid, pid, _get_dummy_display_name(nid), _get_dummy_display_name(pid)]:
+                if key in abut_states:
+                    return abut_states[key]
+            return node.get("abutment") or {}
         
         for node in nodes:
-            dev_id = node.get("id", "")
-            parent_id, _, _ = _parse_id(dev_id)
-            
-            baseline_abut = node.get("abutment", {})
-            orig_left = baseline_abut.get("abut_left", False)
-            orig_right = baseline_abut.get("abut_right", False)
-            
-            if dev_id in abut_states:
-                live_abut = abut_states[dev_id]
-                orig_left = live_abut.get("abut_left", False)
-                orig_right = live_abut.get("abut_right", False)
-            elif parent_id in abut_states:
-                live_abut = abut_states[parent_id]
-                orig_left = live_abut.get("abut_left", False)
-                orig_right = live_abut.get("abut_right", False)
-                
+            state = _get_abut_state_for_node(node, abut_states)
             node["abutment"] = {
-                "abut_left":  bool(orig_left),
-                "abut_right": bool(orig_right)
+                "abut_left":  bool(state.get("abut_left", False)),
+                "abut_right": bool(state.get("abut_right", False))
             }
 
-        # Magic Step: Squeeze 0.3um Symbolic Slots down to 0.070um physical diffusion-sharing pitch GLOBALLY
-        # This completely avoids independent row squeezing drifts, preserving perfect cross-row vertical alignment.
+        # ──────────────────────────────────────────────────────────────────────
+        # Magic Step: Squeeze 0.294um Symbolic Slots → Physical Coordinates
+        #
+        # Each row is processed independently:
+        #   • The first device in the row starts at its symbolic X origin
+        #     (preserving row-to-row asymmetry / symmetry from the canvas).
+        #   • Adjacent devices that are touch-abutted share diffusion → 0.070um pitch.
+        #   • Adjacent devices that are NOT abutted sit edge-to-edge → 0.294um pitch.
+        #   • Internal fingers of the SAME logical node always use 0.070um pitch.
+        #
+        # KEY FIX: min_slot is computed per-row so rows that start at non-zero
+        # slot indices are not incorrectly padded with extra 0.294um gaps on the left.
+        # ──────────────────────────────────────────────────────────────────────
         if nodes:
-            # 1. Determine maximum slot index across all nodes (accounts for device width)
-            max_slot = 0
-            for n in nodes:
-                orig_x = n.get("geometry", {}).get("x", 0.0)
-                slot_idx = int(round(orig_x / 0.294))
-                nf = max(1, int(round(n.get("geometry", {}).get("width", 0.294) / 0.294)))
-                if slot_idx + nf - 1 > max_slot:
-                    max_slot = slot_idx + nf - 1
-
-            # 2. Identify which slot boundaries are touch-abutted globally
-            abut_boundaries = [False] * max_slot
-
-            # Group by row Y to find adjacent slots in the same row
-            from collections import defaultdict as _dd
-            rows = _dd(list)
-            for n in nodes:
-                y_key = round(n.get("geometry", {}).get("y", 0.0), 4)
-                rows[y_key].append(n)
+            from ai_agent.placement.abutment import group_nodes_by_row
+            
+            # Separate tap nodes from non-tap nodes
+            tap_nodes = [n for n in nodes if n.get("type") == "tap"]
+            non_tap_nodes = [n for n in nodes if n.get("type") != "tap"]
+            
+            rows = group_nodes_by_row(non_tap_nodes)
 
             for y_key, row_nodes in rows.items():
-                # Fill every slot occupied by each device (multi-finger devices span multiple slots)
+                row_nodes.sort(key=lambda n: float(n.get("geometry", {}).get("x", 0.0)))
+
+                if not row_nodes:
+                    continue
+
+                # ── 1. Find min_slot and max_slot for this row ────────────────
+                min_row_slot = None
+                max_row_slot = 0
+                for n in row_nodes:
+                    orig_x = n.get("geometry", {}).get("x", 0.0)
+                    slot_idx = int(round(orig_x / 0.294))
+                    nf = max(1, int(round(n.get("geometry", {}).get("width", 0.294) / 0.294)))
+                    if min_row_slot is None or slot_idx < min_row_slot:
+                        min_row_slot = slot_idx
+                    if slot_idx + nf - 1 > max_row_slot:
+                        max_row_slot = slot_idx + nf - 1
+
+                if min_row_slot is None:
+                    continue
+
+                num_slots = max_row_slot - min_row_slot  # number of inter-slot boundaries
+
+                # ── 2. Build slot_to_node using RELATIVE slot indices ─────────
                 slot_to_node = {}
                 for n in row_nodes:
-                    start_slot = int(round(n.get("geometry", {}).get("x", 0.0) / 0.294))
-                    nf = max(1, int(round(n.get("geometry", {}).get("width", 0.294) / 0.294)))
+                    orig_x   = n.get("geometry", {}).get("x", 0.0)
+                    abs_slot = int(round(orig_x / 0.294))
+                    rel_slot = abs_slot - min_row_slot
+                    nf       = max(1, int(round(n.get("geometry", {}).get("width", 0.294) / 0.294)))
                     for i in range(nf):
-                        slot_to_node[start_slot + i] = n
+                        slot_to_node[rel_slot + i] = n
 
-                for k in range(max_slot):
-                    if k in slot_to_node and (k+1) in slot_to_node:
+                # ── 3. Determine abutment at each inter-slot boundary ─────────
+                # Use node["abutment"] which was already populated above from the
+                # live canvas abut_states.
+                row_abut_boundaries = [False] * num_slots
+                for k in range(num_slots):
+                    if k in slot_to_node and (k + 1) in slot_to_node:
                         prev = slot_to_node[k]
-                        curr = slot_to_node[k+1]
+                        curr = slot_to_node[k + 1]
 
-                        # Internal fingers of the same multi-finger device are always abutted
                         if prev is curr:
-                            abut_boundaries[k] = True
+                            # Internal fingers of the same multi-finger device
+                            row_abut_boundaries[k] = True
                         else:
-                            abut_right = prev.get("abutment", {}).get("abut_right", False)
-                            abut_left = curr.get("abutment", {}).get("abut_left", False)
+                            prev_abut_right = prev.get("abutment", {}).get("abut_right", False)
+                            curr_abut_left  = curr.get("abutment", {}).get("abut_left",  False)
+                            if prev_abut_right and curr_abut_left:
+                                row_abut_boundaries[k] = True
 
-                            if abut_right and abut_left:
-                                abut_boundaries[k] = True
+                # ── 4. Build cumulative physical x-map (relative to row start) ─
+                # row_rel_x[rel_slot] = physical x offset from the first device
+                row_rel_x = [0.0] * (num_slots + 1)
+                for k in range(num_slots):
+                    if k in slot_to_node and (k + 1) in slot_to_node:
+                        if row_abut_boundaries[k]:
+                            row_rel_x[k + 1] = row_rel_x[k] + 0.070   # shared diffusion pitch
+                        else:
+                            row_rel_x[k + 1] = row_rel_x[k] + 0.140   # edge-to-edge pitch (no shared diff)
+                    else:
+                        # Empty slot
+                        row_rel_x[k + 1] = row_rel_x[k] + 0.294   # full cell pitch for empty space
 
-            # 3. Construct global slot coordinate map
-            slot_x = [0.0] * (max_slot + 1)
-            for k in range(max_slot):
-                if abut_boundaries[k]:
-                    # 0.070um is the physical pitch for shared diffusion
-                    slot_x[k+1] = slot_x[k] + 0.070
-                else:
-                    # 0.294um is the standard symbolic pitch
-                    slot_x[k+1] = slot_x[k] + 0.294
+                # ── 5. Compute physical start X for the row ───────────────────
+                # Use the ORIGINAL symbolic X of the first device as the row origin.
+                first_node  = row_nodes[0]
+                row_origin_x = first_node.get("geometry", {}).get("x", 0.0)
 
-            # 4. Update node positions based on global slot index map
-            for n in nodes:
-                orig_x = n.get("geometry", {}).get("x", 0.0)
-                slot_idx = int(round(orig_x / 0.294))
-                if 0 <= slot_idx <= max_slot:
-                    n["geometry"]["x"] = slot_x[slot_idx]
+                # ── 6. Update each node's X ───────────────────────────────────
+                for n in row_nodes:
+                    orig_x   = n.get("geometry", {}).get("x", 0.0)
+                    abs_slot = int(round(orig_x / 0.294))
+                    rel_slot = abs_slot - min_row_slot
+                    if 0 <= rel_slot <= num_slots:
+                        n["geometry"]["x"] = row_origin_x + row_rel_x[rel_slot]
+
+            # ── 7. Align tap cells with active rows in X coordinate ────────
+            if tap_nodes and non_tap_nodes:
+                x_map = {n.get("id"): n["geometry"]["x"] for n in non_tap_nodes if n.get("id")}
+                pos_map = {}
+                for n in non_tap_nodes:
+                    geo = n.get("geometry", {})
+                    pos_map[round(float(geo.get("x", 0.0)), 6)] = geo.get("x", 0.0)
+
+                for tap in tap_nodes:
+                    geo = tap.get("geometry", {})
+                    template_id = tap.get("template_device_id")
+                    if template_id and template_id in x_map:
+                        geo["x"] = x_map[template_id]
+                    else:
+                        tap_x = round(float(geo.get("x", 0.0)), 6)
+                        # Find closest match by X coordinate
+                        matched_phys_x = None
+                        best_diff = 1e9
+                        for x_val, phys_x in pos_map.items():
+                            diff = abs(x_val - tap_x)
+                            if diff < best_diff:
+                                best_diff = diff
+                                matched_phys_x = phys_x
+                        if matched_phys_x is not None and best_diff < 0.294:
+                            geo["x"] = matched_phys_x
 
         return nodes
 
@@ -1136,8 +1278,9 @@ class LayoutEditorTab(QWidget):
         if not self.nodes:
             return
             
-        from ai_agent.placement.finger_grouper import _parse_id
+        from ai_agent.placement.finger_grouper import _parse_id, get_block_boundary_nets
         from collections import defaultdict
+        import re
         
         # Group all current nodes by row Y
         rows = defaultdict(list)
@@ -1152,18 +1295,21 @@ class LayoutEditorTab(QWidget):
             # Sort horizontally by X coordinate
             row.sort(key=lambda n: float(n.get("geometry", {}).get("x", 0.0)))
             
+            # Run the dummy biasing pass
             for i, node in enumerate(row):
                 dev_id = node.get("id", "")
-                is_dummy = node.get("is_dummy") or dev_id.startswith(("DUMMY", "EDGE_DUMMY", "FILLER_DUMMY", "MATCH_DUMMY"))
+                is_dummy = _is_dummy_dev(node)
                 if not is_dummy:
+                    continue
+                # Skip tap cells if they shouldn't be modified
+                if str(node.get("id", "")).upper().startswith("TAP"):
                     continue
                     
                 # Search leftwards for the nearest non-dummy device in the same row
                 left_non_dummy = None
                 for idx in range(i - 1, -1, -1):
                     n = row[idx]
-                    nid = n.get("id", "")
-                    n_is_dummy = n.get("is_dummy") or nid.startswith(("DUMMY", "EDGE_DUMMY", "FILLER_DUMMY", "MATCH_DUMMY"))
+                    n_is_dummy = _is_dummy_dev(n)
                     if not n_is_dummy:
                         left_non_dummy = (n, i - idx)
                         break
@@ -1172,51 +1318,74 @@ class LayoutEditorTab(QWidget):
                 right_non_dummy = None
                 for idx in range(i + 1, len(row)):
                     n = row[idx]
-                    nid = n.get("id", "")
-                    n_is_dummy = n.get("is_dummy") or nid.startswith(("DUMMY", "EDGE_DUMMY", "FILLER_DUMMY", "MATCH_DUMMY"))
+                    n_is_dummy = _is_dummy_dev(n)
                     if not n_is_dummy:
                         right_non_dummy = (n, idx - i)
                         break
                         
-                # Choose the nearest neighbor
-                selected_device = None
-                is_right = False
+                left_net = None
+                right_net = None
+                right_term_type = 'D'
+                left_term_type = 'S'
+                
+                if left_non_dummy:
+                    ldev = left_non_dummy[0]
+                    _, left_net = get_block_boundary_nets([ldev], False)
+                    lorient = ldev.get("geometry", {}).get("orientation", "R0")
+                    lflipped = lorient in ("MY", "R180", "MX")
+                    lswapped = bool(ldev.get("swapped_sd", False))
+                    ltotal_flipped = lflipped ^ lswapped
+                    
+                    # Finger alternation logic for ldev's rightmost boundary (finger nf)
+                    lf_idx = int(ldev.get("electrical", {}).get("nf", 1))
+                    is_even = (lf_idx % 2 == 0)
+                    if is_even:
+                        right_term_type = 'D' if ltotal_flipped else 'S'
+                    else:
+                        right_term_type = 'S' if ltotal_flipped else 'D'
+                    
+                if right_non_dummy:
+                    rdev = right_non_dummy[0]
+                    right_net, _ = get_block_boundary_nets([rdev], False)
+                    rorient = rdev.get("geometry", {}).get("orientation", "R0")
+                    rflipped = rorient in ("MY", "R180", "MX")
+                    rswapped = bool(rdev.get("swapped_sd", False))
+                    rtotal_flipped = rflipped ^ rswapped
+                    
+                    # Finger alternation logic for rdev's leftmost boundary (finger 1, unswapped leftmost is D)
+                    left_term_type = 'S' if rtotal_flipped else 'D'
+                    
+                dev_type = str(node.get("type", "nmos")).strip().lower()
+                rail_net = "VDD" if dev_type == "pmos" else "VSS"
+                
+                if not left_net or left_net == "NC":
+                    left_net = right_net if (right_net and right_net != "NC") else rail_net
+                if not right_net or right_net == "NC":
+                    right_net = left_net
+                    
                 if left_non_dummy and right_non_dummy:
-                    if left_non_dummy[1] <= right_non_dummy[1]:
-                        selected_device = left_non_dummy[0]
-                        is_right = False
-                    else:
-                        selected_device = right_non_dummy[0]
-                        is_right = True
-                elif left_non_dummy:
-                    selected_device = left_non_dummy[0]
-                    is_right = False
-                elif right_non_dummy:
-                    selected_device = right_non_dummy[0]
-                    is_right = True
+                    # To match boundary nets of a non-flipped single dummy transistor:
+                    # left_boundary corresponds to node["net_d"] (Drain)
+                    # right_boundary corresponds to node["net_s"] (Source)
+                    # So we must assign:
+                    # node["net_d"] = left_net (matching the left neighbor's right boundary)
+                    # node["net_s"] = right_net (matching the right neighbor's left boundary)
+                    node["net_d"] = left_net
+                    node["net_s"] = right_net
                     
-                # Extract boundary net
-                bias_net = None
-                if selected_device:
-                    if is_right:
-                        if selected_device.get("swapped_sd"):
-                            bias_net = selected_device.get("net_d")
-                        else:
-                            bias_net = selected_device.get("net_s")
+                    if right_term_type == 'S' and left_term_type == 'D':
+                        node["net_g"] = left_net  # gate tied to left boundary net
+                    elif right_term_type == 'D' and left_term_type == 'S':
+                        node["net_g"] = right_net  # gate tied to right boundary net
+                    elif right_term_type == 'S' and left_term_type == 'S':
+                        node["net_g"] = left_net  # gate tied to left boundary net
                     else:
-                        if selected_device.get("swapped_sd"):
-                            bias_net = selected_device.get("net_s")
-                        else:
-                            bias_net = selected_device.get("net_d")
-                            
-                # Fallback to supply rail based on device type (VDD for PMOS, VSS for NMOS)
-                if not bias_net or bias_net == "NC":
-                    dev_type = str(node.get("type", "nmos")).strip().lower()
-                    bias_net = "VDD" if dev_type == "pmos" else "VSS"
-                    
-                node["net_s"] = bias_net
-                node["net_d"] = bias_net
-                node["net_g"] = bias_net
+                        node["net_g"] = rail_net  # gate tied to VDD/VSS
+                else:
+                    # OUTER DUMMY: allow sharing diffusion with neighbor
+                    node["net_d"] = left_net
+                    node["net_s"] = right_net
+                    node["net_g"] = rail_net
 
     def _refresh_panels(self, compact=False, force_schematic_ai=False):
         self._update_dummy_biasing_nets()
@@ -1993,7 +2162,7 @@ class LayoutEditorTab(QWidget):
                 if item and hasattr(item, "set_match_highlight"):
                     item.set_match_highlight(QColor("#FF5252"))
             self.chat_panel._append_message(
-                "AI", f"Matching Failed: {e}\nCentroids misaligned!", "#fde8e8", "#a00",
+                "AI", f"Matching Failed: {e}", "#fde8e8", "#a00",
             )
         self._sync_node_positions()
 
@@ -2173,6 +2342,7 @@ class LayoutEditorTab(QWidget):
     def set_abutment_mode(self, enabled):
         self._abutment_mode = enabled
         if enabled:
+            self.auto_optimize_sd_swaps()
             candidates = self.editor.apply_abutment()
             self._abutment_candidates = candidates
             n = len(candidates)
@@ -2194,6 +2364,312 @@ class LayoutEditorTab(QWidget):
             self._abutment_candidates = []
             msg = "Abutment analysis cleared."
         self.chat_panel._append_message("AI", msg, "#e8f4fd", "#1a1a2e")
+
+    def auto_optimize_sd_swaps(self):
+        """Automatically optimize S/D swaps and orientations of all row transistors 
+        globally to maximize valid diffusion-sharing abutments and resolve shorts,
+        while strictly preserving bilateral mirror symmetry.
+        """
+        if not self.nodes:
+            return
+            
+        terminal_nets = getattr(self, "_terminal_nets", {}) or {}
+        from ai_agent.placement.finger_grouper import _parse_id, get_block_boundary_nets
+        import copy
+        import re
+        
+        # 1. Group active transistors by row Y
+        from collections import defaultdict
+        rows = defaultdict(list)
+        for node in self.nodes:
+            if _is_dummy_dev(node):
+                continue
+            y_val = round(float(node.get("geometry", {}).get("y", 0.0)), 4)
+            rows[y_val].append(node)
+            
+        for y_val, row_nodes in rows.items():
+            # Sort horizontally by X coordinate
+            row_nodes.sort(key=lambda n: float(n.get("geometry", {}).get("x", 0.0)))
+            
+            # Group contiguous fingers belonging to the same parent device ID
+            blocks = []
+            i_idx = 0
+            while i_idx < len(row_nodes):
+                node = row_nodes[i_idx]
+                dev_id = node["id"]
+                parent_id, _, _ = _parse_id(dev_id)
+                if not parent_id:
+                    i_idx += 1
+                    continue
+                
+                chain = [node]
+                j_idx = i_idx + 1
+                while j_idx < len(row_nodes):
+                    next_node = row_nodes[j_idx]
+                    next_id = next_node["id"]
+                    next_parent_id, _, _ = _parse_id(next_id)
+                    if next_parent_id == parent_id:
+                        chain.append(next_node)
+                        j_idx += 1
+                    else:
+                        break
+                
+                blocks.append({
+                    "parent_id": parent_id,
+                    "nodes": chain
+                })
+                i_idx = j_idx
+                
+            M = len(blocks)
+            if M <= 1:
+                continue
+                
+            # Compute geometric center of the row to pair symmetric blocks
+            xs = [float(n["geometry"].get("x", 0.0)) for n in row_nodes]
+            widths = [float(n["geometry"].get("width", 0.294)) for n in row_nodes]
+            row_center_x = (min(xs) + max(xs[idx] + widths[idx] for idx in range(len(xs)))) / 2.0
+            
+            # Prepare block data and compute center_x of each block
+            blocks_data = []
+            for b_idx, b in enumerate(blocks):
+                p_id = b["parent_id"]
+                nets = terminal_nets.get(p_id) or terminal_nets.get(b["nodes"][0]["id"]) or {}
+                s_net = nets.get("S")
+                d_net = nets.get("D")
+                k = len(b["nodes"])
+                blocks_data.append({
+                    "parent_id": p_id,
+                    "s": s_net,
+                    "d": d_net,
+                    "k": k
+                })
+                # Geometric center of the block
+                b_xs = [float(node["geometry"]["x"]) for node in b["nodes"]]
+                b_widths = [float(node["geometry"].get("width", 0.294)) for node in b["nodes"]]
+                b["center_x"] = min(b_xs) + (max(b_xs[idx] + b_widths[idx] for idx in range(len(b_xs))) - min(b_xs)) / 2.0
+                
+            # Pair symmetric blocks about the row center
+            paired_partners = {} # block_index -> partner_block_index
+            for i in range(M):
+                if i in paired_partners:
+                    continue
+                bi = blocks[i]
+                best_j = None
+                best_dist = 0.25 # tolerance in microns
+                for j in range(i + 1, M):
+                    bj = blocks[j]
+                    dist_from_sym = abs((bi["center_x"] + bj["center_x"]) / 2.0 - row_center_x)
+                    if dist_from_sym < best_dist and len(bi["nodes"]) == len(bj["nodes"]):
+                        best_j = j
+                        best_dist = dist_from_sym
+                if best_j is not None:
+                    paired_partners[i] = best_j
+                    paired_partners[best_j] = i
+                    
+            # Identify independent flip indices
+            independent_indices = []
+            for i in range(M):
+                partner = paired_partners.get(i)
+                if partner is None:
+                    independent_indices.append(i)
+                elif i < partner:
+                    independent_indices.append(i)
+                    
+            num_vars = len(independent_indices)
+            
+            def get_full_flips(ind_flips):
+                flips = [0] * M
+                for idx, val in enumerate(ind_flips):
+                    orig_idx = independent_indices[idx]
+                    flips[orig_idx] = val
+                    partner = paired_partners.get(orig_idx)
+                    if partner is not None:
+                        flips[partner] = 1 - val
+                return flips
+                
+            # get_boundary_nets: predict left/right net after S/D alternation
+            # Left terminal  = net_s of finger 0: swapped when flip=1 -> net_s = D
+            # Right terminal = net_d of finger k-1: swapped when ((k-1)%2==1) XOR flip
+            def get_boundary_nets(b_idx, flip):
+                bd = blocks_data[b_idx]
+                s = bd["s"]
+                d = bd["d"]
+                k = bd["k"]
+                if not s or not d:
+                    return None, None
+                # Under physical PDK rules (unflipped: left = d, right = s if odd else d):
+                if flip:
+                    left = s
+                    right = d if (k % 2 != 0) else s
+                else:
+                    left = d
+                    right = s if (k % 2 != 0) else d
+                return left, right
+
+            def score_combination(flips):
+                score = 0
+                for i in range(M - 1):
+                    _, r_net = get_boundary_nets(i, flips[i])
+                    l_net, _ = get_boundary_nets(i + 1, flips[i+1])
+                    if r_net and l_net and r_net != "NC" and l_net != "NC" and r_net == l_net:
+                        score += 1
+                return score
+                
+            # Search for best combination
+            best_ind_flips = [0] * num_vars
+            if num_vars <= 10:
+                import itertools
+                best_score = -1
+                for ind_flips in itertools.product([0, 1], repeat=num_vars):
+                    flips = get_full_flips(ind_flips)
+                    sc = score_combination(flips)
+                    if sc > best_score:
+                        best_score = sc
+                        best_ind_flips = list(ind_flips)
+            else:
+                best_score = score_combination(get_full_flips(best_ind_flips))
+                improved = True
+                while improved:
+                    improved = False
+                    for i in range(num_vars):
+                        test_ind_flips = list(best_ind_flips)
+                        test_ind_flips[i] = 1 - test_ind_flips[i]
+                        sc = score_combination(get_full_flips(test_ind_flips))
+                        if sc > best_score:
+                            best_score = sc
+                            best_ind_flips = test_ind_flips
+                            improved = True
+                            
+            best_flips = get_full_flips(best_ind_flips)
+            
+            # Apply best flips back to nodes.
+            # We mark the block's flip state using "_block_flip" on each node, and
+            # also compute and set net_s, net_d, swapped_sd, and net_g directly
+            # so the live editor node list is perfectly in sync with the physical state.
+            for b_idx, b in enumerate(blocks):
+                flip = best_flips[b_idx]
+                p_id = b["parent_id"]
+                nets = terminal_nets.get(p_id) or terminal_nets.get(b["nodes"][0]["id"]) or {}
+                canon_s = nets.get("S")
+                canon_d = nets.get("D")
+                canon_g = nets.get("G")
+                
+                for idx, node in enumerate(b["nodes"]):
+                    # _block_flip=True means the block is mirrored; odd-index fingers start
+                    # at the "swapped" phase. Finger 0 of a flipped block = swapped.
+                    node["_block_flip"] = bool(flip)
+                    # Keep orientation aligned with best flips
+                    node.setdefault("geometry", {})["orientation"] = "MY" if flip else "R0"
+                    
+                    is_swapped_phase = (idx % 2 == 1) != bool(flip)
+                    if is_swapped_phase:
+                        if canon_s and canon_d:
+                            node["net_s"] = canon_d
+                            node["net_d"] = canon_s
+                        node["swapped_sd"] = True
+                    else:
+                        if canon_s and canon_d:
+                            node["net_s"] = canon_s
+                            node["net_d"] = canon_d
+                        node["swapped_sd"] = False
+                    if canon_g:
+                        node["net_g"] = canon_g
+                    
+        # 2. Re-bias all dummy nodes in each row after we've optimized all active transistor swaps!
+        all_row_nodes = defaultdict(list)
+        for node in self.nodes:
+            y_val = round(float(node.get("geometry", {}).get("y", 0.0)), 4)
+            all_row_nodes[y_val].append(node)
+            
+        for y_val, r_nodes in all_row_nodes.items():
+            # Sort horizontally
+            r_nodes.sort(key=lambda n: float(n.get("geometry", {}).get("x", 0.0)))
+            
+            # Run the dummy biasing pass
+            for i_itm, node in enumerate(r_nodes):
+                is_dummy = _is_dummy_dev(node)
+                if not is_dummy:
+                    continue
+                # Skip tap cells if they shouldn't be modified
+                if str(node.get("id", "")).upper().startswith("TAP"):
+                    continue
+                    
+                left_non_dummy = None
+                for idx in range(i_itm - 1, -1, -1):
+                    n = r_nodes[idx]
+                    if not _is_dummy_dev(n):
+                        left_non_dummy = (n, i_itm - idx)
+                        break
+                        
+                right_non_dummy = None
+                for idx in range(i_itm + 1, len(r_nodes)):
+                    n = r_nodes[idx]
+                    if not _is_dummy_dev(n):
+                        right_non_dummy = (n, idx - i_itm)
+                        break
+                        
+                left_net = None
+                right_net = None
+                left_term_type = 'S'
+                right_term_type = 'D'
+                
+                if left_non_dummy:
+                    ldev = left_non_dummy[0]
+                    _, left_net = get_block_boundary_nets([ldev], False)
+                    lorient = ldev.get("geometry", {}).get("orientation", "R0")
+                    lflipped = lorient in ("MY", "R180", "MX")
+                    lswapped = bool(ldev.get("swapped_sd", False))
+                    ltotal_flipped = lflipped ^ lswapped
+                    lf_idx = int(ldev.get("electrical", {}).get("nf", 1))
+                    is_even = (lf_idx % 2 == 0)
+                    if is_even:
+                        right_term_type = 'D' if ltotal_flipped else 'S'
+                    else:
+                        right_term_type = 'S' if ltotal_flipped else 'D'
+                    
+                if right_non_dummy:
+                    rdev = right_non_dummy[0]
+                    right_net, _ = get_block_boundary_nets([rdev], False)
+                    rorient = rdev.get("geometry", {}).get("orientation", "R0")
+                    rflipped = rorient in ("MY", "R180", "MX")
+                    rswapped = bool(rdev.get("swapped_sd", False))
+                    rtotal_flipped = rflipped ^ rswapped
+                    left_term_type = 'S' if rtotal_flipped else 'D'
+                    
+                dev_type = str(node.get("type", "nmos")).strip().lower()
+                rail_net = "VDD" if dev_type == "pmos" else "VSS"
+                
+                if not left_net or left_net == "NC":
+                    left_net = right_net if (right_net and right_net != "NC") else rail_net
+                if not right_net or right_net == "NC":
+                    right_net = left_net
+                    
+                if left_non_dummy and right_non_dummy:
+                    # To match boundary nets of a non-flipped single dummy transistor:
+                    # left_boundary corresponds to node["net_d"] (Drain)
+                    # right_boundary corresponds to node["net_s"] (Source)
+                    # So we must assign:
+                    # node["net_d"] = left_net (matching the left neighbor's right boundary)
+                    # node["net_s"] = right_net (matching the right neighbor's left boundary)
+                    node["net_d"] = left_net
+                    node["net_s"] = right_net
+                    
+                    if right_term_type == 'S' and left_term_type == 'D':
+                        node["net_g"] = left_net  # gate tied to left boundary net
+                    elif right_term_type == 'D' and left_term_type == 'S':
+                        node["net_g"] = right_net  # gate tied to right boundary net
+                    elif right_term_type == 'S' and left_term_type == 'S':
+                        node["net_g"] = left_net  # gate tied to left boundary net
+                    else:
+                        node["net_g"] = rail_net  # gate tied to VDD/VSS
+                else:
+                    # OUTER DUMMY: allow sharing diffusion with neighbor
+                    node["net_d"] = left_net
+                    node["net_s"] = right_net
+                    node["net_g"] = rail_net
+                    
+        self._refresh_panels(compact=True)
+
 
     def set_moving_groups_only(self, enabled):
         """Enable/disable moving groups only mode."""
@@ -2536,6 +3012,91 @@ class LayoutEditorTab(QWidget):
             return None
         return {"priority": weight_to_level[max_weight], "nets": nets}
 
+    def _send_ai_prompt(self, text: str):
+        if hasattr(self, "chat_panel"):
+            self.chat_panel.input_field.setPlainText(text)
+            self.chat_panel.send_message()
+
+    def do_run_rag(self):
+        self._send_ai_prompt("Run RAG migration on the selected devices.")
+
+    def do_run_drc(self):
+        self._send_ai_prompt("Run DRC check on the layout.")
+
+    def do_auto_insert_taps(self):
+        from ai_agent.tools.dispatcher import dispatch
+        from PySide6.QtWidgets import QMessageBox
+        res = dispatch("insert_taps", {}, self.nodes, pdk={})
+        if res.success:
+            self._handle_ai_command({"action": "apply_layout", "nodes": res.nodes})
+        else:
+            QMessageBox.warning(self, "Tap Insertion Failed", res.message)
+
+    def do_auto_taps(self):
+        self.do_auto_insert_taps()
+
+    def do_insert_edge_dummies(self):
+        from ai_agent.tools.dispatcher import dispatch
+        from PySide6.QtWidgets import QMessageBox
+        res = dispatch("insert_edge_dummies", {}, self.nodes, pdk={})
+        if res.success:
+            self._handle_ai_command({"action": "apply_layout", "nodes": res.nodes})
+        else:
+            QMessageBox.warning(self, "Insert Edge Dummies Failed", res.message)
+
+    def do_edge_dummies(self):
+        from PySide6.QtWidgets import QMessageBox
+        selected = self.editor.selected_device_ids()
+        if not selected:
+            # Default to all devices in the layout
+            selected = [n["id"] for n in self.nodes if n.get("id") and "geometry" in n]
+            
+        if not selected:
+            QMessageBox.information(self, "Empty Layout", "No devices found in the layout to add dummies around.")
+            return
+            
+        from ai_agent.tools.dispatcher import dispatch
+        res = dispatch("insert_dummies_around_group", {"group_node_ids": selected, "n_dummies": 1}, self.nodes, pdk={})
+        if res.success:
+            self._handle_ai_command({"action": "apply_layout", "nodes": res.nodes})
+        else:
+            QMessageBox.warning(self, "Edge Dummies Failed", res.message)
+
+    def do_symmetry_axis(self):
+        from PySide6.QtWidgets import QMessageBox
+        selected = self.editor.selected_device_ids()
+        if not selected:
+            # Default to computing symmetry for the entire layout
+            nodes_sel = [n for n in self.nodes if n.get("id") and "geometry" in n]
+        else:
+            nodes_sel = [n for n in self.nodes if n["id"] in selected and "geometry" in n]
+            
+        if not nodes_sel: 
+            QMessageBox.information(self, "Empty Layout", "No devices found in the layout to compute an axis.")
+            return
+            
+        xs = [float(n["geometry"].get("x", 0)) for n in nodes_sel]
+        
+        # Determine average pitch/width to accurately find the geometric center
+        from ai_agent.core.common_centroid import _ref_dim
+        # Fallback to standard pitch 0.294 if width isn't found
+        avg_w = _ref_dim(nodes_sel, "width", 0.294)
+        
+        center_x = (min(xs) + max(xs)) / 2.0
+        # If they aren't the same X, add half a device width to find true center between edges
+        if max(xs) > min(xs):
+             center_x += avg_w / 2.0
+             
+        self.editor.set_symmetry_axis(x_um=center_x)
+
+    def do_clear_overlays(self):
+        if hasattr(self.editor, "clear_highlighted_net"):
+            self.editor.clear_highlighted_net()
+        if hasattr(self.editor, "clear_candidate_highlight"):
+            self.editor.clear_candidate_highlight()
+        self.editor.viewport().update()
+        self.chat_panel._append_message("AI", "All graphical overlays cleared.", "#e8f4fd", "#1a1a2e")
+
     def do_ai_placement(self):
         if not self.nodes:
             self.chat_panel._append_message("AI", "No layout loaded. Import a netlist first (Ctrl+I).", "#fde8e8", "#a00")
@@ -2550,6 +3111,23 @@ class LayoutEditorTab(QWidget):
         abutment_enabled = dialog.is_abutment_enabled()
 
         dialog.apply_api_keys()
+
+        # Warm up and validate LLM model on main thread to avoid gRPC secondary-thread segfaults on Windows/PySide6,
+        # and to catch any missing/invalid API key/project ID errors before starting the worker thread.
+        if model_choice in ("VertexGemini", "VertexClaude", "Gemini", "Alibaba"):
+            try:
+                from ai_agent.llm.factory import get_langchain_llm
+                # Instantiating triggers imports & gRPC client initialization on the main thread safely.
+                _ = get_langchain_llm(model_choice, task_weight="light")
+            except Exception as e:
+                from PySide6.QtWidgets import QMessageBox
+                QMessageBox.critical(
+                    self,
+                    "AI Model Error",
+                    f"Could not initialize AI Model ({model_choice}) on the main thread:\n\n{str(e)}\n\n"
+                    "Please verify your API key, project ID, location, or package installations."
+                )
+                return
 
         self._sync_node_positions()
         data = copy.deepcopy(self._build_output_data())
@@ -2682,6 +3260,7 @@ class LayoutEditorTab(QWidget):
         with open(out_path, "w") as f:
             json.dump(data, f, indent=4)
         self._load_from_data_dict(data, out_path)
+        self.auto_optimize_sd_swaps()
         # Store a "before symmetry" snapshot for the compare toggle
         self._pre_symmetry_snapshot = None   # reset; symmetry enforcer will set it
         # Enable compare button if it exists
@@ -3117,6 +3696,27 @@ class LayoutEditorTab(QWidget):
 
     @staticmethod
     def _run_ai_initial_placement(data, model_choice="Gemini", abutment_enabled=True):
+        # Clean out any pre-existing filler or bridge dummy nodes from the input data
+        if isinstance(data, dict) and "nodes" in data:
+            cleaned_nodes = []
+            for node in data["nodes"]:
+                if not isinstance(node, dict):
+                    continue
+                node_id = str(node.get("id", ""))
+                node_id_upper = node_id.upper()
+                is_old_dummy = (
+                    node.get("is_dummy")
+                    or node_id_upper.startswith((
+                        "FILLER_DUMMY", "DUMMY_MATRIX_", "EDGE_DUMMY",
+                        "STRUCT_DUMMY_", "MATCH_DUMMY_", "DUMMY_"
+                    ))
+                    or "BRIDGE" in node_id_upper
+                    or (len(node_id_upper) >= 2 and node_id_upper[0] == "D" and node_id_upper[1:].isdigit())
+                )
+                if not is_old_dummy:
+                    cleaned_nodes.append(node)
+            data["nodes"] = cleaned_nodes
+
         import tempfile
         import os
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, dir=os.getcwd()) as tmp_in:
@@ -3346,6 +3946,8 @@ class LayoutEditorTab(QWidget):
         self._current_file = file_path
         self._write_json(file_path)
         self.title_changed.emit(os.path.basename(file_path))
+        if hasattr(self.window(), "_add_recent_file"):
+            self.window()._add_recent_file(file_path)
 
     def do_export_json(self):
         file_path, _ = QFileDialog.getSaveFileName(self, "Export Layout JSON", "", "JSON Files (*.json)")
@@ -3358,6 +3960,27 @@ class LayoutEditorTab(QWidget):
         with open(file_path, "w") as f:
             json.dump(output, f, indent=4)
         self.chat_panel._append_message("AI", f"Layout saved to {os.path.basename(file_path)}", "#e8f4fd", "#1a1a2e")
+
+    def do_highlight_net(self):
+        """Prompt user for a net and highlight it."""
+        if not self._terminal_nets:
+            self.chat_panel._append_message("AI", "No nets available to highlight.", "#fde8e8", "#a00")
+            return
+        
+        nets = set()
+        for dev_nets in self._terminal_nets.values():
+            nets.update(dev_nets.values())
+        
+        # Filter out empty nets
+        nets = sorted([n for n in nets if n])
+        if not nets:
+            self.chat_panel._append_message("AI", "No valid nets found.", "#fde8e8", "#a00")
+            return
+            
+        from PySide6.QtWidgets import QInputDialog
+        net_name, ok = QInputDialog.getItem(self, "Highlight Net", "Select net to highlight:", nets, 0, False)
+        if ok and net_name:
+            self.editor.highlight_net_by_name(net_name)
 
     def do_export_tcl(self):
         import os
@@ -3380,7 +4003,7 @@ class LayoutEditorTab(QWidget):
 
     def _run_tcl_export(self, file_path: str) -> bool:
         """Core export logic shared by do_export_tcl and do_export_and_deploy. Returns True on success."""
-        import sys, os, copy
+        import sys, os, copy, importlib
         proj_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         if proj_root not in sys.path:
             sys.path.insert(0, proj_root)
@@ -3388,6 +4011,8 @@ class LayoutEditorTab(QWidget):
         self._sync_node_positions()
         saved_hierarchy_state = self._expand_all_for_export()
         try:
+            import eda.json_to_tcl
+            importlib.reload(eda.json_to_tcl)
             from eda.json_to_tcl import LayoutExporter
             exporter = LayoutExporter(file_path)
 
@@ -3395,28 +4020,7 @@ class LayoutEditorTab(QWidget):
 
             export_nodes = copy.deepcopy(self.nodes)
 
-            from ai_agent.placement.finger_grouper import _parse_id
-            for node in export_nodes:
-                dev_id = node.get("id", "")
-                parent_id, _, _ = _parse_id(dev_id)
-
-                baseline_abut = node.get("abutment", {})
-                orig_left = baseline_abut.get("abut_left", False)
-                orig_right = baseline_abut.get("abut_right", False)
-
-                if dev_id in abut_states:
-                    live_abut = abut_states[dev_id]
-                    orig_left = live_abut.get("abut_left", False)
-                    orig_right = live_abut.get("abut_right", False)
-                elif parent_id in abut_states:
-                    live_abut = abut_states[parent_id]
-                    orig_left = live_abut.get("abut_left", False)
-                    orig_right = live_abut.get("abut_right", False)
-
-                node["abutment"] = {
-                    "abut_left":  bool(orig_left),
-                    "abut_right": bool(orig_right)
-                }
+            export_nodes = self._collect_live_klayout_nodes(export_nodes)
 
             # ── Net-aware abutment validation ──────────────────────────
             # The GUI abutment flags may have been set for the original OAS
@@ -3443,7 +4047,7 @@ class LayoutEditorTab(QWidget):
                     dev_id = node.get("id", "")
                     s_net, d_net = _sd_nets_for(dev_id)
                     if s_net or d_net:
-                        orient = node.get("geometry", {}).get("orientation", "R0")
+                        orient = _normalize_orientation(node.get("geometry", {}).get("orientation", "R0"))
                         if orient == "MY":
                             # Mirrored: S↔D are physically swapped
                             node["net_s"] = d_net
@@ -3452,104 +4056,13 @@ class LayoutEditorTab(QWidget):
                             node["net_s"] = s_net
                             node["net_d"] = d_net
 
-            def _adjacent_can_abut(left_node, right_node):
-                """Return True only if the right edge of left_node and
-                the left edge of right_node share a common S/D net
-                (including power nets like VSS/VDD — those are valid
-                for physical diffusion sharing).
-
-                Uses node-level net_s/net_d which already reflect
-                orientation flips (MY) from _resolve_row_overlaps."""
-                lid = left_node.get("id", "")
-                rid = right_node.get("id", "")
-
-                l_s = left_node.get("net_s")
-                l_d = left_node.get("net_d")
-                r_s = right_node.get("net_s")
-                r_d = right_node.get("net_d")
-
-                # Fall back to terminal_nets if node-level nets are missing
-                if not l_s and not l_d:
-                    l_s, l_d = _sd_nets_for(lid)
-                if not r_s and not r_d:
-                    r_s, r_d = _sd_nets_for(rid)
-
-                # No net info → cannot validate, default to no-abut
-                if not (l_s or l_d) or not (r_s or r_d):
-                    return False
-
-                # Right edge of left_node can be S or D,
-                # Left edge of right_node can be S or D.
-                # Check all 4 combinations for a shared net.
-                for l_term in (l_s, l_d):
-                    for r_term in (r_s, r_d):
-                        if l_term and r_term and l_term == r_term:
-                            return True
-                return False
-
-            # Magic Step: Squeeze 0.3um Symbolic Slots down to 0.070um physical diffusion-sharing pitch GLOBALLY
-            max_slot = 0
-            for n in export_nodes:
-                orig_x = n.get("geometry", {}).get("x", 0.0)
-                slot_idx = int(round(orig_x / 0.294))
-                nf = max(1, int(round(n.get("geometry", {}).get("width", 0.294) / 0.294)))
-                if slot_idx + nf - 1 > max_slot:
-                    max_slot = slot_idx + nf - 1
-
-            abut_boundaries = [False] * max_slot
-            from collections import defaultdict as _dd
-            rows = _dd(list)
-            for n in export_nodes:
-                y_key = round(n.get("geometry", {}).get("y", 0.0), 4)
-                rows[y_key].append(n)
-
-            for y_key, row_nodes in rows.items():
-                slot_to_node = {}
-                for n in row_nodes:
-                    start_slot = int(round(n.get("geometry", {}).get("x", 0.0) / 0.294))
-                    nf = max(1, int(round(n.get("geometry", {}).get("width", 0.294) / 0.294)))
-                    for i in range(nf):
-                        slot_to_node[start_slot + i] = n
-
-                for k in range(max_slot):
-                    if k in slot_to_node and (k+1) in slot_to_node:
-                        prev = slot_to_node[k]
-                        curr = slot_to_node[k+1]
-
-                        if prev is curr:
-                            # Same device spanning multiple slots (multi-finger internal)
-                            abut_boundaries[k] = True
-                        else:
-                            abut_right = prev.get("abutment", {}).get("abut_right", False)
-                            abut_left = curr.get("abutment", {}).get("abut_left", False)
-
-                            if abut_right and abut_left:
-                                # Both flags say "yes", but verify they share a net
-                                if _adjacent_can_abut(prev, curr):
-                                    abut_boundaries[k] = True
-                                else:
-                                    # Override: clear the flags on this boundary
-                                    prev["abutment"]["abut_right"] = False
-                                    curr["abutment"]["abut_left"] = False
-
-            slot_x = [0.0] * (max_slot + 1)
-            for k in range(max_slot):
-                if abut_boundaries[k]:
-                    slot_x[k+1] = slot_x[k] + 0.070
-                else:
-                    slot_x[k+1] = slot_x[k] + 0.294
-
-            for n in export_nodes:
-                orig_x = n.get("geometry", {}).get("x", 0.0)
-                slot_idx = int(round(orig_x / 0.294))
-                if 0 <= slot_idx <= max_slot:
-                    n["geometry"]["x"] = slot_x[slot_idx]
+            # export_nodes has already been squeezed and prepared by _collect_live_klayout_nodes
 
             for node in export_nodes:
                 name    = node["id"]
                 x       = node.get("geometry", {}).get("x", 0.0)
                 y       = node.get("geometry", {}).get("y", 0.0)
-                orient  = node.get("geometry", {}).get("orientation", "R0")
+                orient  = _normalize_orientation(node.get("geometry", {}).get("orientation", "R0"))
                 dev_type = str(node.get("type", "nmos")).strip().lower()
 
                 # Retrieve abutment flags resolved above
@@ -3564,12 +4077,7 @@ class LayoutEditorTab(QWidget):
                     or str(name).upper().startswith("TAP_")
                 )
                 is_dummy = (
-                    not is_tap and (
-                        bool(node.get("is_dummy"))
-                        or str(name).upper().startswith(
-                            ("DUMMY", "EDGE_DUMMY", "FILLER_DUMMY", "MATCH_DUMMY")
-                        )
-                    )
+                    not is_tap and _is_dummy_dev(node)
                 )
 
                 if is_tap:
@@ -3694,90 +4202,7 @@ class LayoutEditorTab(QWidget):
             import copy
             export_nodes = copy.deepcopy(self.nodes)
             
-            from ai_agent.placement.finger_grouper import _parse_id
-            for node in export_nodes:
-                dev_id = node.get("id", "")
-                parent_id, _, _ = _parse_id(dev_id)
-
-                baseline_abut = node.get("abutment", {})
-                orig_left = baseline_abut.get("abut_left", False)
-                orig_right = baseline_abut.get("abut_right", False)
-
-                if dev_id in abut_states:
-                    live_abut = abut_states[dev_id]
-                    orig_left = live_abut.get("abut_left", False)
-                    orig_right = live_abut.get("abut_right", False)
-                elif parent_id in abut_states:
-                    live_abut = abut_states[parent_id]
-                    orig_left = live_abut.get("abut_left", False)
-                    orig_right = live_abut.get("abut_right", False)
-
-                node["abutment"] = {
-                    "abut_left":  bool(orig_left),
-                    "abut_right": bool(orig_right)
-                }
-
-            # Magic Step: Squeeze 0.3um Symbolic Slots down to 0.070um physical diffusion-sharing pitch GLOBALLY
-            # This completely avoids independent row squeezing drifts, preserving perfect cross-row vertical alignment.
-            from collections import defaultdict
-            
-            # 1. Determine maximum slot index across all nodes
-            max_slot = 0
-            for n in export_nodes:
-                orig_x = n.get("geometry", {}).get("x", 0.0)
-                slot_idx = int(round(orig_x / 0.294))
-                nf = max(1, int(round(n.get("geometry", {}).get("width", 0.294) / 0.294)))
-                if slot_idx + nf - 1 > max_slot:
-                    max_slot = slot_idx + nf - 1
-            
-            # 2. Identify which slot boundaries are touch-abutted globally
-            abut_boundaries = [False] * max_slot
-            
-            # Group by row Y to find adjacent slots in the same row
-            rows = defaultdict(list)
-            for n in export_nodes:
-                y_key = round(n.get("geometry", {}).get("y", 0.0), 4)
-                rows[y_key].append(n)
-                
-            for y_key, row_nodes in rows.items():
-                slot_to_node = {}
-                for n in row_nodes:
-                    start_slot = int(round(n.get("geometry", {}).get("x", 0.0) / 0.294))
-                    nf = max(1, int(round(n.get("geometry", {}).get("width", 0.294) / 0.294)))
-                    for i in range(nf):
-                        slot_to_node[start_slot + i] = n
-                        
-                for k in range(max_slot):
-                    if k in slot_to_node and (k+1) in slot_to_node:
-                        prev = slot_to_node[k]
-                        curr = slot_to_node[k+1]
-                        
-                        if prev is curr:
-                            abut_boundaries[k] = True
-                        else:
-                            abut_right = prev.get("abutment", {}).get("abut_right", False)
-                            abut_left = curr.get("abutment", {}).get("abut_left", False)
-                            
-                            if abut_right and abut_left:
-                                abut_boundaries[k] = True
-            
-            # 3. Construct global slot coordinate map
-            slot_x = [0.0] * (max_slot + 1)
-            for k in range(max_slot):
-                if abut_boundaries[k]:
-                    # 0.070um is the physical pitch for shared diffusion
-                    slot_x[k+1] = slot_x[k] + 0.070
-                else:
-                    # 0.294um is the standard symbolic pitch
-                    slot_x[k+1] = slot_x[k] + 0.294
-            
-            # 4. Update node positions based on global slot index map
-            for n in export_nodes:
-                orig_x = n.get("geometry", {}).get("x", 0.0)
-                slot_idx = int(round(orig_x / 0.294))
-                if 0 <= slot_idx <= max_slot:
-                    n["geometry"]["x"] = slot_x[slot_idx]
-
+            export_nodes = self._collect_live_klayout_nodes(export_nodes)
             update_oas_placement(oas_path=oas_path, sp_path=sp_path, nodes=export_nodes, output_path=output_path)
             self.chat_panel._append_message("AI", f"Layout exported to **{os.path.basename(output_path)}**", "#e8f4fd", "#1a1a2e")
             self.klayout_panel.refresh_preview(output_path)
@@ -4204,7 +4629,7 @@ class LayoutEditorTab(QWidget):
 
             elif action == "wire_width":
                 net = cmd.get("net", "")
-                width_um = cmd.get("width_um", 0.3)
+                width_um = cmd.get("wire_width_um", 0.3)
                 if not hasattr(self, "_routing_annotations"):
                     self._routing_annotations = {}
                 self._routing_annotations.setdefault(net, {})["wire_width_um"] = float(width_um)
@@ -4229,10 +4654,72 @@ class LayoutEditorTab(QWidget):
                     self.editor.highlight_net_by_name(net, "#f39c12")
 
             else:
-                self.chat_panel._append_message("AI", f"Unsupported AI action: {action or '(empty)'}", "#fde8e8", "#a00")
+                try:
+                    from ai_agent.tools.dispatcher import dispatch
+                    res = dispatch(action, cmd, self.nodes, pdk={}, terminal_nets=getattr(self, "_terminal_nets", {}))
+                    if getattr(res, "success", False):
+                        if getattr(res, "changed", False):
+                            if not _skip_undo:
+                                self._push_undo()
+                            self.nodes = copy.deepcopy(res.nodes)
+                            if self._original_data is None:
+                                self._original_data = {}
+                            self._original_data["nodes"] = self.nodes
+                            self._refresh_panels(compact=False)
+                            self._sync_node_positions()
+                        message = getattr(res, "message", "") or f"Executed layout tool: {action}"
+                        self.chat_panel._append_message("AI", f"✅ {message}", "#e8f4fd", "#1a1a2e")
+                        self.chat_panel._fc_command_received = True
+                        self.chat_panel._chat_history.append({"role": "assistant", "content": message})
+                    else:
+                        err_msg = getattr(res, "message", "Unknown error")
+                        self.chat_panel._append_message("AI", f"AI action '{action}' failed: {err_msg}", "#fde8e8", "#a00")
+                except Exception as ex:
+                    self.chat_panel._append_message("AI", f"Unsupported AI action: {action or '(empty)'}", "#fde8e8", "#a00")
+
 
         except (KeyError, TypeError, ValueError) as e:
             self.chat_panel._append_message("AI", f"Could not execute command: {e}", "#fde8e8", "#a00")
+
+    def do_swap_rows(self):
+        from PySide6.QtWidgets import QMessageBox
+        selected = self.editor.selected_device_ids()
+        if not selected:
+            QMessageBox.information(self, "No Selection", "Please select devices from exactly two rows to swap them.")
+            return
+            
+        nodes_sel = [n for n in self.nodes if n.get("id") in selected and "geometry" in n]
+        y_coords = {float(n["geometry"].get("y", 0)) for n in nodes_sel}
+        
+        # Merge close Y coordinates in case of small floating point differences
+        merged_y = []
+        for y in sorted(list(y_coords)):
+            if not merged_y or abs(y - merged_y[-1]) > 1e-3:
+                merged_y.append(y)
+                
+        if len(merged_y) != 2:
+            QMessageBox.warning(self, "Invalid Selection", f"Please select devices from exactly two distinct rows. Found {len(merged_y)} rows.")
+            return
+            
+        y1, y2 = merged_y
+        
+        self._push_undo()
+        count = 0
+        for n in self.nodes:
+            if "geometry" not in n: continue
+            ny = float(n["geometry"].get("y", 0))
+            if abs(ny - y1) < 1e-3:
+                n["geometry"]["y"] = y2
+                count += 1
+            elif abs(ny - y2) < 1e-3:
+                n["geometry"]["y"] = y1
+                count += 1
+                
+        self._refresh_panels(compact=False)
+        self._sync_node_positions()
+        
+        if hasattr(self, "chat_panel"):
+            self.chat_panel._append_message("System", f"Swapped {count} devices between row Y={y1:.3f} and row Y={y2:.3f}", "#e8f4fd", "#1a1a2e")
 
     def _abut_devices(self, id_a, id_b):
         node_a = next((n for n in self.nodes if n.get("id") == id_a), None)
@@ -4279,3 +4766,10 @@ class LayoutEditorTab(QWidget):
         self._on_editor_selection_changed()
         if schedule_live:
             self._schedule_live_klayout_update(delay_ms=100)
+
+    def set_row_space(self, value):
+        self._row_space = value
+        if hasattr(self, "editor") and self.editor:
+            if hasattr(self.editor, "set_row_space"):
+                self.editor.set_row_space(value)
+        self._schedule_live_klayout_update(delay_ms=100)

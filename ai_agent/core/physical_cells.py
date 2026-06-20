@@ -75,7 +75,10 @@ def insert_endcaps(nodes: list, pdk: dict) -> LayoutToolResult:
     else:
         cell_name = raw_name
 
-    rows = _row_map(nodes)
+    # Filter out existing endcaps to prevent duplication
+    nodes_filtered = [n for n in nodes if not str(n.get("id", "")).startswith("ENDCAP_")]
+
+    rows = _row_map(nodes_filtered)
     inserted: List[dict] = []
     ctr = 0
 
@@ -122,7 +125,7 @@ def insert_endcaps(nodes: list, pdk: dict) -> LayoutToolResult:
         success=True,
         message=f"Inserted {len(inserted)} endcap(s)",
         changed=len(inserted) > 0,
-        nodes=list(nodes) + inserted,
+        nodes=list(nodes_filtered) + inserted,
         metrics={"endcaps_inserted": len(inserted)},
         warnings=warnings,
     )
@@ -134,63 +137,106 @@ def insert_endcaps(nodes: list, pdk: dict) -> LayoutToolResult:
 
 @wrap_tool
 def insert_taps(nodes: list, pdk: dict) -> LayoutToolResult:
-    """Insert substrate / well-tie tap cells at required intervals.
+    """Insert substrate / well-tie tap cells aligned with devices.
 
-    NMOS rows receive ptap cells; PMOS rows receive ntap cells.
-    Interval is driven by get_rule(pdk, "tap_max_distance_um") — that call
-    logs a WARNING automatically when the value comes from a heuristic fallback.
+    VDD taps (ntap) are placed at the top of PMOS devices of the topmost PMOS row,
+    and GND taps (ptap) are placed at the bottom of NMOS devices of the bottommost NMOS row.
     All inserted nodes are snapped to the fin-pitch grid and carry
     type="tap" and physical_only=True.
     """
     pdk = pdk or {}
-
-    tap_max: float  = get_rule(pdk, "tap_max_distance_um") or 2.5  # warning already logged
     fin_pitch: float = get_rule(pdk, "fin_pitch_um") or 0.014
-    tap_w: float    = get_rule(pdk, "tap_width_um") or 0.294
     tap_h: float    = get_rule(pdk, "tap_height_um") or 0.568
 
-    rows = _row_map(nodes)
+    # Filter out existing taps to prevent duplication
+    nodes_filtered = [n for n in nodes if not str(n.get("id", "")).startswith("TAP_")]
+
+    pmos_nodes = [n for n in nodes_filtered if str(n.get("type", "")).lower() == "pmos" and isinstance(n.get("geometry"), dict)]
+    nmos_nodes = [n for n in nodes_filtered if str(n.get("type", "")).lower() == "nmos" and isinstance(n.get("geometry"), dict)]
+
+    max_pmos_y = None
+    if pmos_nodes:
+        max_pmos_y = max(float(n["geometry"].get("y", 0.0)) for n in pmos_nodes)
+
+    min_nmos_y = None
+    if nmos_nodes:
+        min_nmos_y = min(float(n["geometry"].get("y", 0.0)) for n in nmos_nodes)
+
     inserted: List[dict] = []
     ctr = 0
 
-    for (y, dev_type), row_nodes in rows.items():
-        tap_subtype = "ptap" if dev_type.startswith("n") else "ntap"
-
-        xs    = [float(n["geometry"]["x"]) for n in row_nodes]
-        x_ends = [float(n["geometry"]["x"]) + float(n["geometry"].get("width", 0.294))
-                  for n in row_nodes]
-        min_x = min(xs)
-        max_x = max(x_ends)
-        row_w = max_x - min_x
-
-        if row_w <= 0:
+    for n in nodes_filtered:
+        geom = n.get("geometry")
+        if not isinstance(geom, dict):
             continue
+        dev_type = str(n.get("type", "")).lower()
+        if dev_type not in ("nmos", "pmos"):
+            continue
+            
+        x = float(geom.get("x", 0.0))
+        y = float(geom.get("y", 0.0))
+        w = float(geom.get("width", 0.294))
+        h = float(geom.get("height", 0.568))
 
-        # Number of equal-spaced intervals; at least one tap per row
-        n_intervals = max(1, int(row_w / tap_max))
-        interval = row_w / n_intervals
-
-        for i in range(n_intervals + 1):
-            raw_x = min_x + i * interval
-            snap_x = _snap(raw_x, fin_pitch)
-            ctr += 1
-            inserted.append({
-                "id":            f"TAP_{ctr}_{tap_subtype}",
-                "type":          "tap",
-                "subtype":       tap_subtype,
-                "physical_only": True,
-                "geometry": {
-                    "x": snap_x, "y": y,
-                    "width": tap_w, "height": tap_h,
-                    "orientation": "R0",
-                },
-            })
+        visual_margin = 0.1
+        if dev_type == "pmos":
+            # Only place VDD tap above the topmost PMOS row
+            if max_pmos_y is not None and abs(y - max_pmos_y) < 1e-4:
+                tap_subtype = "ntap"
+                # Derived from: tap_y - 0.003 (tap bottom) = y + 0.235 (pmos top) + visual_margin
+                tap_y = _snap(y + 0.238 + visual_margin, fin_pitch)
+                
+                ctr += 1
+                tap_node = {
+                    "id":            f"TAP_{ctr}_{tap_subtype}",
+                    "type":          "tap",
+                    "subtype":       tap_subtype,
+                    "physical_only": True,
+                    "layout_cell":   "Ntap",
+                    "template_device_id": n.get("id"),
+                    "geometry": {
+                        "x": _snap(x, fin_pitch),
+                        "y": tap_y,
+                        "width": w,
+                        "height": tap_h,
+                        "orientation": "R0",
+                    },
+                }
+                if n.get("layout_index") is not None:
+                    tap_node["template_layout_index"] = n["layout_index"]
+                inserted.append(tap_node)
+        elif dev_type == "nmos":
+            # Only place GND tap below the bottommost NMOS row
+            if min_nmos_y is not None and abs(y - min_nmos_y) < 1e-4:
+                tap_subtype = "ptap"
+                # Derived from: tap_y + 0.197 (tap top) = y - 0.333 (nmos bottom) - visual_margin
+                tap_y = _snap(y - 0.530 - visual_margin, fin_pitch)
+                
+                ctr += 1
+                tap_node = {
+                    "id":            f"TAP_{ctr}_{tap_subtype}",
+                    "type":          "tap",
+                    "subtype":       tap_subtype,
+                    "physical_only": True,
+                    "layout_cell":   "Ptap",
+                    "template_device_id": n.get("id"),
+                    "geometry": {
+                        "x": _snap(x, fin_pitch),
+                        "y": tap_y,
+                        "width": w,
+                        "height": tap_h,
+                        "orientation": "R0",
+                    },
+                }
+                if n.get("layout_index") is not None:
+                    tap_node["template_layout_index"] = n["layout_index"]
+                inserted.append(tap_node)
 
     return LayoutToolResult(
         success=True,
         message=f"Inserted {len(inserted)} tap cell(s)",
         changed=len(inserted) > 0,
-        nodes=list(nodes) + inserted,
+        nodes=list(nodes_filtered) + inserted,
         metrics={"taps_inserted": len(inserted)},
         warnings=[],
     )
@@ -294,3 +340,263 @@ def insert_all_physical_cells(nodes: list, pdk: dict) -> LayoutToolResult:
         },
         warnings=all_warnings,
     )
+
+
+@wrap_tool
+def insert_guard_ring(
+    nodes: list,
+    pdk: dict,
+    group_node_ids: list = None,
+    ring_type: str = "ptap",
+    spacing_um: float = 0.5,
+    tap_width_um: float = 0.294,
+    bounding_box: tuple = None,
+) -> LayoutToolResult:
+    """Add an automated substrate isolation guard ring around the selected group of devices or around
+    the entire layout bounding box. Places ptap cells for NMOS / p-substrate and ntap cells for PMOS / n-well.
+    """
+    pdk = pdk or {}
+    group_ids = set(group_node_ids) if group_node_ids else None
+    
+    # 1. Filter out existing guard ring nodes to prevent duplication
+    nodes_filtered = [n for n in nodes if not str(n.get("id", "")).startswith("GUARDRING_")]
+    
+    # 2. Automatically detect default ring type based on target device types
+    pmos_count = 0
+    nmos_count = 0
+    for n in nodes_filtered:
+        if group_ids and n.get("id") not in group_ids:
+            continue
+        t = str(n.get("type", "")).lower()
+        if t == "pmos":
+            pmos_count += 1
+        elif t == "nmos":
+            nmos_count += 1
+            
+    if pmos_count > 0 and nmos_count == 0:
+        ring_type = "ntap"
+    elif nmos_count > 0 and pmos_count == 0:
+        ring_type = "ptap"
+    
+    if bounding_box:
+        min_x, max_x, min_y, max_y = bounding_box
+    else:
+        # 3. Find bounding box of selected nodes
+        xs, ys, x_ends, y_ends = [], [], [], []
+        for n in nodes_filtered:
+            if not isinstance(n.get("geometry"), dict):
+                continue
+            if group_ids and n.get("id") not in group_ids:
+                continue
+            geom = n["geometry"]
+            x = float(geom.get("x", 0.0))
+            y = float(geom.get("y", 0.0))
+            w = float(geom.get("width", 0.294))
+            h = float(geom.get("height", 0.568))
+            xs.append(x)
+            ys.append(y)
+            x_ends.append(x + w)
+            y_ends.append(y + h)
+            
+        if not xs:
+            return LayoutToolResult(
+                success=False,
+                message="insert_guard_ring failed: no devices with geometry to surround.",
+                nodes=list(nodes),
+            )
+            
+        min_x = min(xs)
+        max_x = max(x_ends)
+        min_y = min(ys)
+        max_y = max(y_ends)
+    
+    # 4. Get PDK rules
+    fin_pitch: float = get_rule(pdk, "fin_pitch_um") or 0.014
+    tap_w: float = tap_width_um
+    tap_h: float = get_rule(pdk, "tap_height_um") or 0.568
+    
+    # Calculate ring boundaries
+    ring_min_x = _snap(min_x - spacing_um - tap_w, fin_pitch)
+    ring_max_x = _snap(max_x + spacing_um, fin_pitch)
+    ring_min_y = _snap(min_y - spacing_um - tap_h, fin_pitch)
+    ring_max_y = _snap(max_y + spacing_um, fin_pitch)
+    
+    inserted = []
+    ctr = 0
+    
+    # Left segment: x = ring_min_x, y goes from ring_min_y to ring_max_y
+    y_curr = ring_min_y
+    while y_curr <= ring_max_y + 1e-5:
+        ctr += 1
+        inserted.append({
+            "id": f"GUARDRING_{ctr}_{ring_type}",
+            "type": "tap",
+            "subtype": ring_type,
+            "physical_only": True,
+            "geometry": {
+                "x": ring_min_x,
+                "y": round(y_curr, 6),
+                "width": tap_w,
+                "height": tap_h,
+                "orientation": "R0",
+            }
+        })
+        y_curr += tap_h
+        
+    # Right segment: x = ring_max_x, y goes from ring_min_y to ring_max_y
+    y_curr = ring_min_y
+    while y_curr <= ring_max_y + 1e-5:
+        ctr += 1
+        inserted.append({
+            "id": f"GUARDRING_{ctr}_{ring_type}",
+            "type": "tap",
+            "subtype": ring_type,
+            "physical_only": True,
+            "geometry": {
+                "x": ring_max_x,
+                "y": round(y_curr, 6),
+                "width": tap_w,
+                "height": tap_h,
+                "orientation": "R0",
+            }
+        })
+        y_curr += tap_h
+        
+    # Bottom segment: y = ring_min_y, x goes from ring_min_x + tap_w to ring_max_x - tap_w
+    x_curr = ring_min_x + tap_w
+    while x_curr <= ring_max_x - tap_w + 1e-5:
+        ctr += 1
+        inserted.append({
+            "id": f"GUARDRING_{ctr}_{ring_type}",
+            "type": "tap",
+            "subtype": ring_type,
+            "physical_only": True,
+            "geometry": {
+                "x": _snap(x_curr, fin_pitch),
+                "y": ring_min_y,
+                "width": tap_w,
+                "height": tap_h,
+                "orientation": "R0",
+            }
+        })
+        x_curr += tap_w
+        
+    # Top segment: y = ring_max_y, x goes from ring_min_x + tap_w to ring_max_x - tap_w
+    x_curr = ring_min_x + tap_w
+    while x_curr <= ring_max_x - tap_w + 1e-5:
+        ctr += 1
+        inserted.append({
+            "id": f"GUARDRING_{ctr}_{ring_type}",
+            "type": "tap",
+            "subtype": ring_type,
+            "physical_only": True,
+            "geometry": {
+                "x": _snap(x_curr, fin_pitch),
+                "y": ring_max_y,
+                "width": tap_w,
+                "height": tap_h,
+                "orientation": "R0",
+            }
+        })
+        x_curr += tap_w
+        
+    return LayoutToolResult(
+        success=True,
+        message=f"Inserted isolation guard ring using {len(inserted)} {ring_type} tap cell(s).",
+        changed=len(inserted) > 0,
+        nodes=list(nodes_filtered) + inserted,
+        metrics={"guard_ring_taps_inserted": len(inserted)},
+    )
+
+
+@wrap_tool
+def insert_edge_dummies(nodes: list, pdk: dict) -> LayoutToolResult:
+    """Insert dummy transistor cells at the left and right boundary of every device row.
+
+    Automatically handles PMOS and NMOS rows separately. Copies the matching transistor
+    electrical and geometric layout parameters to ensure physical identicality.
+    This fulfills Option 6: Edge Dummies for Lithography Isolation.
+    """
+    import copy
+    pdk = pdk or {}
+    dummy_width: float = get_rule(pdk, "tap_width_um") or 0.294
+    dummy_height: float = get_rule(pdk, "tap_height_um") or 0.568
+    fin_pitch: float = get_rule(pdk, "fin_pitch_um") or 0.014
+
+    # Filter out existing automatically placed edge dummies to make it idempotent
+    nodes_filtered = [n for n in nodes if not str(n.get("id", "")).startswith("DUMMY_ROW_")]
+
+    rows = _row_map(nodes_filtered)
+    inserted: List[dict] = []
+    ctr = 0
+
+    for (y, dev_type), row_nodes in rows.items():
+        # Skip rows that are already composed entirely of physical-only or tap cells
+        active_nodes = [n for n in row_nodes if not n.get("physical_only") and n.get("type") in ("nmos", "pmos")]
+        if not active_nodes:
+            continue
+
+        xs = [float(n["geometry"]["x"]) for n in active_nodes]
+        x_ends = [float(n["geometry"]["x"]) + float(n["geometry"].get("width", 0.294)) for n in active_nodes]
+        ref_h = float(active_nodes[0]["geometry"].get("height", dummy_height))
+
+        min_x = min(xs)
+        max_x = max(x_ends)
+
+        left_x = _snap(min_x - dummy_width, fin_pitch)
+        right_x = _snap(max_x, fin_pitch)
+
+        # Mirror first real node in the row for identical electrical properties
+        template = active_nodes[0]
+        electrical = copy.deepcopy(template.get("electrical", {"l": 1.4e-08, "nf": 1, "nfin": 1}))
+
+        ctr += 1
+        dummy_l = {
+            "id": f"DUMMY_ROW_L_{ctr}_{dev_type}",
+            "type": dev_type,
+            "is_dummy": True,
+            "physical_only": True,
+            "electrical": electrical,
+            "geometry": {
+                "x": left_x,
+                "y": y,
+                "width": dummy_width,
+                "height": ref_h,
+                "orientation": "R0",
+            }
+        }
+        if template.get("layout_index") is not None:
+            dummy_l["template_layout_index"] = template["layout_index"]
+        if template.get("layout_cell"):
+            dummy_l["layout_cell"] = template["layout_cell"]
+
+        ctr += 1
+        dummy_r = {
+            "id": f"DUMMY_ROW_R_{ctr}_{dev_type}",
+            "type": dev_type,
+            "is_dummy": True,
+            "physical_only": True,
+            "electrical": electrical,
+            "geometry": {
+                "x": right_x,
+                "y": y,
+                "width": dummy_width,
+                "height": ref_h,
+                "orientation": "R0",
+            }
+        }
+        if template.get("layout_index") is not None:
+            dummy_r["template_layout_index"] = template["layout_index"]
+        if template.get("layout_cell"):
+            dummy_r["layout_cell"] = template["layout_cell"]
+
+        inserted.extend([dummy_l, dummy_r])
+
+    return LayoutToolResult(
+        success=True,
+        message=f"Inserted {len(inserted)} edge dummy cell(s) automatically at both row boundaries.",
+        changed=len(inserted) > 0,
+        nodes=list(nodes_filtered) + inserted,
+        metrics={"edge_dummies_inserted": len(inserted)},
+    )
+

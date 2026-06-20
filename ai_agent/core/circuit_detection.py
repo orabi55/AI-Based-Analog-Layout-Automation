@@ -368,10 +368,10 @@ def validate_dummy_presence(
         left_dummies  = 0
         right_dummies = 0
         for n in nodes:
+            nid = str(n.get("id", ""))
             if not (n.get("is_dummy") or
-                    str(n.get("id", "")).startswith(("STRUCT_DUMMY_",
-                                                      "EDGE_DUMMY",
-                                                      "FILLER_DUMMY_"))):
+                    nid.startswith(("STRUCT_DUMMY_", "EDGE_DUMMY", "FILLER_DUMMY_", "DUMMY_", "MATCH_DUMMY_"))
+                    or (len(nid) >= 2 and nid[0] == "D" and nid[1:].isdigit())):
                 continue
             geo = n.get("geometry", {}) or {}
             ny  = round(float(geo.get("y", 0.0)), 3)

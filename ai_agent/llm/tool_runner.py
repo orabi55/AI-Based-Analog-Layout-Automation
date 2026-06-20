@@ -244,6 +244,8 @@ def run_llm_with_tools(
     progress_cb=None,
     worker=None,
     message_id: str = "",
+    oas_path: str = None,
+    sp_path: str = None,
 ) -> dict:
     """Execute an LLM call with tool-binding, optional streaming, and dispatch.
 
@@ -356,7 +358,13 @@ def run_llm_with_tools(
 
     # ── 3. FC path — dispatch every call in order, threading updated nodes ──
     tool_results = []
-    executor     = ToolExecutor(nodes, terminal_nets=terminal_nets, pdk=pdk)
+    executor     = ToolExecutor(
+        nodes,
+        terminal_nets=terminal_nets,
+        pdk=pdk,
+        oas_path=oas_path,
+        sp_path=sp_path,
+    )
     changed_any  = False
     changed_calls = []
 

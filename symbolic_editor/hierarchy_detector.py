@@ -6,10 +6,11 @@ Automatic functional-group detection for analog IC layouts.
 
 Detects standard topological patterns from terminal_nets + node types:
   - Precharge  : CLK-gated PMOS pulling to VDD
-  - Latch_PMOS : cross-coupled PMOS (A.G=B.D, B.G=A.D)
   - TailClock  : CLK-gated NMOS at the bottom of a stack
-  - Latch_NMOS : cross-coupled NMOS
-  - InputPair_* : remaining NMOS grouped by their gate net (e.g., VINP / VINN)
+  - Latch_PMOS : cross-coupled PMOS parents
+  - Latch_NMOS : cross-coupled NMOS parents
+  - Diff_Pair  : parent devices forming a differential pair (sources tied, different gates)
+  - Current_Mirror / Active_Load : parent devices sharing gate and source, with one diode-connected
 
 Returns a list of group dicts compatible with apply_custom_groups():
     [{"name": str, "devices": [dev_id, ...]}, ...]
@@ -37,52 +38,181 @@ def detect_functional_groups(nodes, terminal_nets):
     nmos_ids = sorted(did for did, info in device_info.items() if info["type"] == "nmos")
 
     groups = []
-    used: set = set()
+    used = set()
+
+    # Define power and ground nets
+    power_nets = {"VDD", "VCC", "AVDD", "DVDD"}
+    ground_nets = {"VSS", "GND", "AVSS", "DVSS", "GROUND"}
 
     # ── 1. Precharge PMOS — CLK-gated, source = VDD ─────────────────
+    precharge_devs = []
     if clk_net:
-        precharge = [did for did in pmos_ids if device_info[did]["G"] == clk_net]
-        if precharge:
-            groups.append({"name": "Precharge", "devices": precharge})
-            used.update(precharge)
+        precharge_devs = [did for did in pmos_ids if device_info[did]["G"] == clk_net]
+        if precharge_devs:
+            groups.append({"name": "Precharge", "devices": precharge_devs})
+            used.update(precharge_devs)
 
-    remaining_pmos = [did for did in pmos_ids if did not in used]
+    # ── 2. Tail / Clock NMOS — CLK-gated ────────────────────────────
+    tail_devs = []
+    if clk_net:
+        tail_devs = [did for did in nmos_ids if device_info[did]["G"] == clk_net]
+        if tail_devs:
+            groups.append({"name": "TailClock", "devices": tail_devs})
+            used.update(tail_devs)
 
-    # ── 2. Cross-coupled PMOS → Latch_PMOS ──────────────────────────
-    latch_pmos, remaining_pmos = _detect_cross_coupled(remaining_pmos, device_info)
-    if latch_pmos:
-        groups.append({"name": "Latch_PMOS", "devices": latch_pmos})
-        used.update(latch_pmos)
+    # Remaining devices for latch/differential/mirror detection at parent level
+    remaining_devs = [did for did in device_info if did not in used]
 
+    # Group remaining devices by their parent name (e.g., MM8_m1 -> MM8)
+    parent_to_devs = defaultdict(list)
+    for did in remaining_devs:
+        # parent name is derived by splitting at the first underscore
+        parent_name = did.split("_")[0]
+        parent_to_devs[parent_name].append(did)
+
+    # Summarize parent properties
+    parent_info = {}
+    for parent, devs in parent_to_devs.items():
+        p_type = device_info[devs[0]]["type"]
+        gates = {device_info[d]["G"] for d in devs if device_info[d]["G"]}
+        drains = {device_info[d]["D"] for d in devs if device_info[d]["D"]}
+        sources = {device_info[d]["S"] for d in devs if device_info[d]["S"]}
+        parent_info[parent] = {
+            "type": p_type,
+            "gates": gates,
+            "drains": drains,
+            "sources": sources,
+            "devices": devs
+        }
+
+    # ── 3. Cross-coupled Latch Detection (Parent level) ──────────────
+    latch_pairs = []
+    parents_list = list(parent_info.keys())
+    for i in range(len(parents_list)):
+        for j in range(i + 1, len(parents_list)):
+            pA = parents_list[i]
+            pB = parents_list[j]
+            infoA = parent_info[pA]
+            infoB = parent_info[pB]
+            if infoA["type"] != infoB["type"]:
+                continue
+
+            # Check cross-coupling: A.G intersects B.D and B.G intersects A.D
+            cc1 = not infoA["gates"].isdisjoint(infoB["drains"])
+            cc2 = not infoB["gates"].isdisjoint(infoA["drains"])
+            # Neither is diode-connected
+            diodeA = not infoA["gates"].isdisjoint(infoA["drains"])
+            diodeB = not infoB["gates"].isdisjoint(infoB["drains"])
+
+            if cc1 and cc2 and not diodeA and not diodeB:
+                latch_pairs.append((pA, pB, infoA["type"]))
+
+    for pA, pB, p_type in latch_pairs:
+        devs = parent_info[pA]["devices"] + parent_info[pB]["devices"]
+        name = "Latch_PMOS" if p_type == "pmos" else "Latch_NMOS"
+        groups.append({"name": name, "devices": sorted(devs)})
+        used.update(devs)
+        parent_info.pop(pA, None)
+        parent_info.pop(pB, None)
+
+    # ── 4. Differential Input Pair Detection (Parent level) ──────────
+    diff_pairs = []
+    parents_list = list(parent_info.keys())
+    for i in range(len(parents_list)):
+        for j in range(i + 1, len(parents_list)):
+            pA = parents_list[i]
+            pB = parents_list[j]
+            infoA = parent_info[pA]
+            infoB = parent_info[pB]
+            if infoA["type"] != infoB["type"]:
+                continue
+
+            common_sources = infoA["sources"].intersection(infoB["sources"])
+            # Exclude standard power/ground nets from common sources
+            common_sources = {s for s in common_sources if s.upper() not in power_nets and s.upper() not in ground_nets}
+
+            # Different gate nets
+            diff_gates = infoA["gates"].isdisjoint(infoB["gates"])
+
+            if common_sources and diff_gates:
+                diff_pairs.append((pA, pB))
+
+    for pA, pB in diff_pairs:
+        devs = parent_info[pA]["devices"] + parent_info[pB]["devices"]
+        name = f"Diff_Pair_{pA}_{pB}"
+        groups.append({"name": name, "devices": sorted(devs)})
+        used.update(devs)
+        parent_info.pop(pA, None)
+        parent_info.pop(pB, None)
+
+    # ── 5. Current Mirror / Active Load Detection (Parent level) ─────
+    # Group remaining parents by primary gate and source nets
+    mirror_groups = defaultdict(list)
+    for parent, info in parent_info.items():
+        if not info["gates"] or not info["sources"]:
+            continue
+        g = list(info["gates"])[0]
+        s = list(info["sources"])[0]
+        mirror_groups[(info["type"], g, s)].append(parent)
+
+    for (p_type, g, s), parents in list(mirror_groups.items()):
+        if len(parents) >= 2:
+            # Check if at least one parent is diode-connected (gate matches drain)
+            has_diode = False
+            for p in parents:
+                info = parent_info[p]
+                if not info["gates"].isdisjoint(info["drains"]):
+                    has_diode = True
+                    break
+            if has_diode:
+                devs = []
+                for p in parents:
+                    devs.extend(parent_info[p]["devices"])
+                    parent_info.pop(p, None)
+                parents_str = "_".join(sorted(parents))
+                name = f"Active_Load_{parents_str}" if p_type == "pmos" else f"Current_Mirror_{parents_str}"
+                groups.append({"name": name, "devices": sorted(devs)})
+                used.update(devs)
+
+    # CMOS Inverters or other remaining devices
+    remaining_pmos = sorted(did for did, info in device_info.items() if info["type"] == "pmos" and did not in used)
+    remaining_nmos = sorted(did for did, info in device_info.items() if info["type"] == "nmos" and did not in used)
+
+    # Inverters
+    for p_id in list(remaining_pmos):
+        p_info = device_info[p_id]
+        p_s = p_info["S"].upper()
+        if not any(pn in p_s for pn in power_nets) and p_info["S"]:
+            continue
+        
+        for n_id in list(remaining_nmos):
+            n_info = device_info[n_id]
+            n_s = n_info["S"].upper()
+            if not any(gn in n_s for gn in ground_nets) and n_info["S"]:
+                continue
+            
+            # Match if gate and drain are the same
+            if p_info["G"] == n_info["G"] and p_info["D"] == n_info["D"]:
+                gate_net = p_info["G"]
+                safe = gate_net.replace("<", "").replace(">", "").upper()
+                groups.append({
+                    "name": f"Inverter_{safe}",
+                    "devices": [p_id, n_id]
+                })
+                used.add(p_id)
+                used.add(n_id)
+                remaining_pmos.remove(p_id)
+                remaining_nmos.remove(n_id)
+                break
+
+    # Remaining devices
+    is_analog = bool(clk_net or latch_pairs or diff_pairs or mirror_groups)
     if remaining_pmos:
-        groups.append({"name": "Other_PMOS", "devices": remaining_pmos})
-        used.update(remaining_pmos)
-
-    # ── 3. Tail / Clock NMOS — CLK-gated ────────────────────────────
-    if clk_net:
-        tail = [did for did in nmos_ids if device_info[did]["G"] == clk_net]
-        if tail:
-            groups.append({"name": "TailClock", "devices": tail})
-            used.update(tail)
-
-    remaining_nmos = [did for did in nmos_ids if did not in used]
-
-    # ── 4. Cross-coupled NMOS → Latch_NMOS ──────────────────────────
-    latch_nmos, remaining_nmos = _detect_cross_coupled(remaining_nmos, device_info)
-    if latch_nmos:
-        groups.append({"name": "Latch_NMOS", "devices": latch_nmos})
-        used.update(latch_nmos)
-
-    # ── 5. Input pairs — remaining NMOS grouped by gate net ─────────
-    gate_groups: dict = defaultdict(list)
-    for did in remaining_nmos:
-        g = device_info[did]["G"]
-        gate_groups[g if g else "__ungated__"].append(did)
-
-    for gate_net, devs in sorted(gate_groups.items()):
-        safe = gate_net.replace("<", "").replace(">", "").upper()
-        name = "Other_NMOS" if gate_net == "__ungated__" else f"InputPair_{safe}"
-        groups.append({"name": name, "devices": devs})
+        name = "PUN" if not is_analog else "Other_PMOS"
+        groups.append({"name": name, "devices": remaining_pmos})
+    if remaining_nmos:
+        name = "PDN" if not is_analog else "Other_NMOS"
+        groups.append({"name": name, "devices": remaining_nmos})
 
     return [g for g in groups if g["devices"]]
 
@@ -132,29 +262,3 @@ def _find_clk_net(device_info):
         if g and "clk" in g.lower():
             candidates[g] = candidates.get(g, 0) + 1
     return max(candidates, key=candidates.get) if candidates else None
-
-
-def _detect_cross_coupled(dev_ids, device_info):
-    """Split dev_ids into (cross_coupled, remaining).
-
-    Cross-coupled criterion: A.G == B.D  AND  B.G == A.D  for some pair (A, B).
-    """
-    drain_to_ids: dict = defaultdict(list)
-    for did in dev_ids:
-        d = device_info[did]["D"]
-        if d:
-            drain_to_ids[d].append(did)
-
-    cross_coupled: set = set()
-    for did in dev_ids:
-        g = device_info[did]["G"]
-        if not g:
-            continue
-        for partner in drain_to_ids.get(g, []):
-            if partner != did and device_info[partner]["G"] == device_info[did]["D"]:
-                cross_coupled.add(did)
-                cross_coupled.add(partner)
-
-    ordered = [did for did in dev_ids if did in cross_coupled]
-    remaining = [did for did in dev_ids if did not in cross_coupled]
-    return ordered, remaining

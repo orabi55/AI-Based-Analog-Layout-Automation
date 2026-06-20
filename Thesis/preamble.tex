@@ -1,0 +1,290 @@
+% ==============================================================================
+% PREAMBLE: LaTeX Design System & Packages
+% Styled for an Academic Reference Book & Thesis
+% ==============================================================================
+
+% --- Core Geometry & Page Layout ---
+\usepackage[
+    a4paper,
+    top=3.0cm,
+    bottom=3.0cm,
+    left=3.2cm,
+    right=2.8cm,
+    bindingoffset=0.5cm,
+    headheight=15pt
+]{geometry}
+
+% --- Custom Color Palette ---
+\usepackage[table,svgnames]{xcolor}
+\definecolor{AcademicBlue}{HTML}{0B2545}   % Primary Brand (Headers, Titles)
+\definecolor{WarmGold}{HTML}{C5A059}       % Accent Brand (Rules, Callouts, Border highlights)
+\definecolor{SoftCream}{HTML}{FDFBF7}      % Background for code blocks
+\definecolor{TextCharcoal}{HTML}{2B2B2B}   % Main body text
+\definecolor{BorderGray}{HTML}{E2E8F0}     % Division lines
+\definecolor{CodeGreen}{HTML}{1C7C54}      % Code comments color
+\definecolor{CodeBlue}{HTML}{005F73}       % Code keywords color
+\definecolor{LightBlueBg}{HTML}{F0F4F8}    % Remark box background
+% Extended palette for decorative elements
+\definecolor{DeepNavy}{HTML}{081D37}       % Darker navy for gradients
+\definecolor{RoyalBlue}{HTML}{1A4B84}      % Medium blue accent
+\definecolor{PaleGold}{HTML}{E8D5A3}       % Lighter gold for backgrounds
+\definecolor{CopperAccent}{HTML}{B87333}   % Copper for ornamental details
+\definecolor{IvoryWhite}{HTML}{FFFFF0}     % Warm white for text on dark
+\definecolor{SlateGray}{HTML}{708090}      % Muted gray for subtle elements
+
+% --- Fonts & Typography ---
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{newpxtext}                      % Premium Palatino-based body text
+\usepackage{newpxmath}                      % Consistent math symbols matching Palatino
+\usepackage[scaled=0.92]{helvet}            % Helvetica sans-serif for clean headings
+\usepackage{microtype}                      % Better character protrusion and font expansion
+\usepackage{lettrine}                       % Drop caps for chapter/abstract openings
+\renewcommand{\LettrineFontHook}{\color{AcademicBlue}}
+
+% --- Custom Chapter & Section Styling ---
+\usepackage{titlesec}
+\titleformat{\chapter}[display]
+  {\sffamily\bfseries\color{AcademicBlue}}
+  {\filright\fontsize{12}{12}\scshape\color{WarmGold}\chaptername\ \thechapter}
+  {6pt}
+  {\filright\Huge}
+  [\vspace{0.15cm}{\color{WarmGold}\hrule height 1.5pt}\vspace{0.3cm}]
+
+\titlespacing*{\chapter}{0pt}{10pt}{25pt}
+
+\titleformat{\section}
+  {\sffamily\Large\bfseries\color{AcademicBlue}}
+  {\thesection}{1em}{}
+\titleformat{\subsection}
+  {\sffamily\large\bfseries\color{AcademicBlue}}
+  {\thesubsection}{1em}{}
+
+% --- Running Headers & Footers (fancyhdr) ---
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\scshape\color{AcademicBlue}\leftmark}
+\fancyhead[R]{}
+\fancyfoot[R]{\small\bfseries\color{AcademicBlue}\thepage}
+\fancyfoot[L]{\small\scshape\color{WarmGold}AI-Based Layout Automation}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.4pt}
+\addtolength{\headwidth}{0.5cm}
+
+% Redefine marks for oneside mode so leftmark is Chapter and rightmark is Section
+\renewcommand{\chaptermark}[1]{\markboth{\thechapter.\ #1}{}}
+\renewcommand{\sectionmark}[1]{\markright{\thesection.\ #1}}
+
+% Redefine plain style for chapter pages
+\fancypagestyle{plain}{
+  \fancyhf{}
+  \fancyfoot[R]{\small\bfseries\color{AcademicBlue}\thepage}
+  \renewcommand{\headrulewidth}{0pt}
+  \renewcommand{\footrulewidth}{0.4pt}
+}
+
+% --- TikZ & Graphics ---
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{tikz}
+\usetikzlibrary{mindmap,trees,arrows.meta,positioning,shapes.geometric,shadows,calc,decorations.markings,patterns,fadings,decorations.pathmorphing}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+
+% --- Premium Code Display & Callouts (tcolorbox) ---
+\usepackage[most]{tcolorbox}
+\tcbuselibrary{listingsutf8,skins}
+
+% Listing configuration for code snippets
+\lstdefinelanguage{Tcl}{
+  keywords={proc, set, if, else, for, foreach, while, return, source, puts, global, exit},
+  sensitive=true,
+  comment=[l]{\#},
+  string=[b]"
+}
+
+\lstdefinelanguage{json}{
+  string=[b]",
+  comment=[l]{//},
+  morestring=[b]'
+}
+
+\lstdefinelanguage{text}{}
+
+\newtcblisting{thesiscode}[2]{
+  arc=3pt,
+  outer arc=3pt,
+  colback=SoftCream,
+  colframe=AcademicBlue,
+  coltitle=white,
+  fonttitle=\bfseries\small\sffamily,
+  title={#1},
+  boxrule=1pt,
+  enhanced,
+  breakable,
+  drop shadow,
+  listing only,
+  listing options={
+    language=#2,
+    basicstyle=\small\ttfamily\color{TextCharcoal},
+    keywordstyle=\bfseries\color{CodeBlue},
+    commentstyle=\itshape\color{CodeGreen},
+    stringstyle=\color{WarmGold},
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    stepnumber=1,
+    numbersep=8pt,
+    showstringspaces=false,
+    breaklines=true,
+    tabsize=4
+  }
+}
+
+% Styled Box for Sidebars / Important Remarks
+\newtcolorbox{thesisremark}[1]{
+  colback=LightBlueBg,
+  colframe=WarmGold,
+  coltitle=AcademicBlue,
+  fonttitle=\bfseries\sffamily,
+  title={#1},
+  boxrule=0pt,
+  leftrule=4pt,
+  arc=0pt,
+  outer arc=0pt,
+  enhanced,
+  drop shadow
+}
+
+% Styled Box for Core Concepts / Definitions
+\newtcolorbox{thesiscallout}[1]{
+  colback=SoftCream,
+  colframe=RoyalBlue,
+  coltitle=white,
+  fonttitle=\bfseries\sffamily,
+  title={#1},
+  boxrule=0pt,
+  leftrule=4pt,
+  arc=0pt,
+  outer arc=0pt,
+  enhanced,
+  drop shadow
+}
+
+
+% --- Advanced Tables & Formatting ---
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage[font=small,labelfont=bf]{caption}
+\usepackage{subcaption}
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=AcademicBlue,
+    citecolor=CodeGreen,
+    urlcolor=CodeBlue
+}
+
+% ==============================================================================
+% DECORATIVE COMMANDS FOR FRONTMATTER
+% ==============================================================================
+
+% --- Ornamental Rule (Enhanced with diamond pattern) ---
+\newcommand{\ornamentalrule}{
+  \begin{center}
+    \begin{tikzpicture}
+      \draw[very thick, WarmGold] (0,0) -- (2.2,0);
+      \draw[very thick, WarmGold] (3.8,0) -- (6,0);
+      % Central diamond ornament
+      \filldraw[WarmGold] (3,0) -- (3,-0.12) -- (2.8,0) -- (3,0.12) -- cycle;
+      \filldraw[CopperAccent] (3,0) circle (1.5pt);
+      % Side diamonds
+      \filldraw[WarmGold] (2.4,0) -- (2.4,-0.06) -- (2.3,0) -- (2.4,0.06) -- cycle;
+      \filldraw[WarmGold] (3.6,0) -- (3.6,-0.06) -- (3.7,0) -- (3.6,0.06) -- cycle;
+      % Thin parallel accent lines
+      \draw[thin, WarmGold!60] (0.3,0.08) -- (2.1,0.08);
+      \draw[thin, WarmGold!60] (3.9,0.08) -- (5.7,0.08);
+    \end{tikzpicture}
+  \end{center}
+}
+
+% --- Grand Ornamental Separator (for title pages) ---
+\newcommand{\grandornament}{
+  \begin{center}
+    \begin{tikzpicture}
+      % Main horizontal lines
+      \draw[ultra thick, WarmGold] (-3.5,0) -- (-0.8,0);
+      \draw[ultra thick, WarmGold] (0.8,0) -- (3.5,0);
+      % Central ornament - layered diamonds
+      \filldraw[WarmGold] (0,0) -- (0.25,-0.2) -- (0,-0.4) -- (-0.25,-0.2) -- cycle;
+      \filldraw[AcademicBlue] (0,-0.05) -- (0.18,-0.2) -- (0,-0.35) -- (-0.18,-0.2) -- cycle;
+      \filldraw[WarmGold] (0,-0.15) circle (2pt);
+      % Side ornaments
+      \foreach \x in {-0.6, 0.6} {
+        \filldraw[WarmGold] (\x,0) circle (2pt);
+      }
+      % Decorative curls at ends
+      \draw[thick, WarmGold, decorate, decoration={snake, amplitude=1pt, segment length=6pt}] (-3.5,0) -- (-3.8,0);
+      \draw[thick, WarmGold, decorate, decoration={snake, amplitude=1pt, segment length=6pt}] (3.5,0) -- (3.8,0);
+    \end{tikzpicture}
+  \end{center}
+}
+
+% --- Corner Filigree (for decorative page frames) ---
+% Usage: \cornerfiligree{position}{rotation}
+% position: e.g., (current page.north west), rotation: angle
+\newcommand{\cornerfiligree}[2]{
+  \begin{scope}[shift={#1}, rotate=#2]
+    \draw[thick, WarmGold, opacity=0.6] (0,0) -- (1.5,0);
+    \draw[thick, WarmGold, opacity=0.6] (0,0) -- (0,-1.5);
+    \draw[thick, WarmGold, opacity=0.4] (0.15,-0.15) -- (1.2,-0.15);
+    \draw[thick, WarmGold, opacity=0.4] (0.15,-0.15) -- (0.15,-1.2);
+    % Corner flourish
+    \draw[thick, WarmGold, opacity=0.5] (0.3,0) arc (0:-90:0.3);
+    \filldraw[WarmGold, opacity=0.7] (0,0) circle (2.5pt);
+  \end{scope}
+}
+
+% --- Decorative Page Frame ---
+\newcommand{\decorativeframe}{
+  \begin{tikzpicture}[remember picture, overlay]
+    % Outer frame
+    \draw[line width=1.5pt, WarmGold]
+      ($(current page.north west) + (1.8cm,-1.5cm)$)
+      rectangle
+      ($(current page.south east) + (-1.5cm,1.5cm)$);
+    % Inner frame (double-line effect)
+    \draw[line width=0.5pt, WarmGold!50]
+      ($(current page.north west) + (1.95cm,-1.65cm)$)
+      rectangle
+      ($(current page.south east) + (-1.65cm,1.65cm)$);
+    % Corner filigrees
+    \cornerfiligree{($(current page.north west) + (1.8cm,-1.5cm)$)}{0}
+    \cornerfiligree{($(current page.north east) + (-1.5cm,-1.5cm)$)}{-90}
+    \cornerfiligree{($(current page.south east) + (-1.5cm,1.5cm)$)}{180}
+    \cornerfiligree{($(current page.south west) + (1.8cm,1.5cm)$)}{90}
+  \end{tikzpicture}
+}
+
+% --- IC Layout Watermark Pattern ---
+\newcommand{\icwatermark}[1]{
+  \begin{scope}[shift={#1}, scale=1.2, opacity=0.06, color=AcademicBlue]
+    % Faint grid
+    \draw[step=0.4cm, line width=0.3pt] (-2.5,-2.5) grid (2.5,2.5);
+    % MOSFET symbol patterns
+    \draw[line width=1.5pt] (-1.8,0.8) -- (-1.8,-0.8);
+    \draw[line width=1.5pt] (1.8,0.8) -- (1.8,-0.8);
+    \draw[line width=1.0pt] (-1.8,0) -- (-0.5,0);
+    \draw[line width=1.0pt] (1.8,0) -- (0.5,0);
+    \draw[line width=0.8pt] (-0.5,0.7) -- (-0.5,-0.7);
+    \draw[line width=0.8pt] (0.5,0.7) -- (0.5,-0.7);
+    % Gate connections
+    \draw[line width=1.5pt] (-1.2,1.2) rectangle (1.2,2.0);
+    \node at (0,1.6) [font=\small\bfseries\sffamily] {PDK};
+    % Routing
+    \draw[line width=0.8pt, ->] (-1.8,0.4) -- (-2.4,0.4) -- (-2.4,-1.6) -- (0,-1.6);
+    \draw[line width=0.8pt, ->] (1.8,0.4) -- (2.4,0.4) -- (2.4,-1.6) -- (0,-1.6);
+    \filldraw (0,-1.6) circle (2pt);
+  \end{scope}
+}

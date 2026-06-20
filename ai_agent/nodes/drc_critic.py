@@ -43,6 +43,7 @@ def node_drc_critic(state):
 
     nodes = state.get("placement_nodes", [])
     gap_px = state.get("gap_px", 0.0)
+    terminal_nets = state.get("terminal_nets", {})
 
     PIXELS_PER_UM = 34.0
     gap_um = gap_px / PIXELS_PER_UM if gap_px > 0 else 0.0
@@ -82,14 +83,54 @@ def node_drc_critic(state):
     if n_violations > 20:
         log_detail(f"  ... and {n_violations - 20} more")
 
-    elapsed = time.time() - t0
-    ip_step("5/5 DRC Critic", f"fail — attempt {retry_num + 1} ({elapsed:.1f}s)")
-
+    # ── Step 5b: Apply prescriptive fixes ─────────────────────────────────────
+    log_section(f"Step 5b: Applying prescriptive DRC fixes (attempt {retry_num + 1})")
     intent = state.get("intent", "drc_critic")
     if intent == "placement_specialist":
         placement_text = state.get("placement_text", "")
     else:
         placement_text = ""
+
+    fixes = compute_prescriptive_fixes(
+        drc_result=drc_result,
+        gap_px=gap_px,
+        nodes=nodes,
+        geometric_tags=state.get("groups", {}),
+        terminal_nets=terminal_nets,
+    )
+
+    if fixes:
+        log_detail(f"Generated {len(fixes)} prescriptive DRC fix command(s).")
+        fixed_nodes = apply_cmds_to_nodes(nodes, fixes)
+        fixed_drc = run_drc_check(fixed_nodes, gap_um)
+        if fixed_drc["pass"]:
+            log_detail("Prescriptive fixes succeeded! DRC is now clean.")
+            elapsed = time.time() - t0
+            ip_step("5/5 DRC critic", f"pass with prescriptive fixes — attempt {retry_num + 1} ({elapsed:.1f}s)")
+            updated_chat_history = _update_and_save_chat_history(
+                chat_history=chat_history, user_content="",
+                node_role="DRC Critic Assistant",
+                node_content="DRC violations found and successfully resolved using prescriptive fixes.",
+            )
+            return {
+                "placement_nodes": fixed_nodes,
+                "drc_pass": True,
+                "drc_flags": [],
+                "pending_cmds": state.get("pending_cmds", []) + fixes,
+                "chat_history": updated_chat_history,
+                "drc_retry_count": retry_num + 1,
+                "last_agent": "drc_critic",
+                "placement_text": placement_text,
+            }
+        else:
+            log_detail(f"Prescriptive fixes applied but {len(fixed_drc['violations'])} violation(s) remain.")
+            nodes = fixed_nodes
+            drc_result = fixed_drc
+    else:
+        log_detail("No prescriptive fixes could be calculated.")
+
+    elapsed = time.time() - t0
+    ip_step("5/5 DRC Critic", f"fail — attempt {retry_num + 1} ({elapsed:.1f}s)")
 
     return {
         "placement_nodes": nodes,

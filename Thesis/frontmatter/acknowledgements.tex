@@ -1,0 +1,116 @@
+% ==============================================================================
+% FRONTMATTER: Decorative Acknowledgements Page
+% ==============================================================================
+
+\chapter*{Acknowledgements}
+\addcontentsline{toc}{chapter}{Acknowledgements}
+
+% --- DECORATIVE PAGE FRAME (TikZ overlay) ---
+\begin{tikzpicture}[remember picture, overlay]
+  % Outer gold frame
+  \draw[line width=1.2pt, WarmGold]
+    ($(current page.north west) + (2.0cm,-1.5cm)$)
+    rectangle
+    ($(current page.south east) + (-1.5cm,1.5cm)$);
+  % Inner thin frame
+  \draw[line width=0.4pt, WarmGold!40]
+    ($(current page.north west) + (2.15cm,-1.65cm)$)
+    rectangle
+    ($(current page.south east) + (-1.65cm,1.65cm)$);
+
+  % Corner ornaments - Top Left
+  \begin{scope}[shift={($(current page.north west) + (2.0cm,-1.5cm)$)}]
+    \draw[thick, WarmGold] (0,0) -- (1.5,0);
+    \draw[thick, WarmGold] (0,0) -- (0,-1.5);
+    \draw[thick, WarmGold!50] (0.3,0) arc (0:-90:0.3);
+    \filldraw[WarmGold] (0,0) circle (2.5pt);
+  \end{scope}
+
+  % Corner ornaments - Top Right
+  \begin{scope}[shift={($(current page.north east) + (-1.5cm,-1.5cm)$)}]
+    \draw[thick, WarmGold] (0,0) -- (-1.5,0);
+    \draw[thick, WarmGold] (0,0) -- (0,-1.5);
+    \draw[thick, WarmGold!50] (-0.3,0) arc (180:270:0.3);
+    \filldraw[WarmGold] (0,0) circle (2.5pt);
+  \end{scope}
+
+  % Corner ornaments - Bottom Left
+  \begin{scope}[shift={($(current page.south west) + (2.0cm,1.5cm)$)}]
+    \draw[thick, WarmGold] (0,0) -- (1.5,0);
+    \draw[thick, WarmGold] (0,0) -- (0,1.5);
+    \draw[thick, WarmGold!50] (0.3,0) arc (0:90:0.3);
+    \filldraw[WarmGold] (0,0) circle (2.5pt);
+  \end{scope}
+
+  % Corner ornaments - Bottom Right
+  \begin{scope}[shift={($(current page.south east) + (-1.5cm,1.5cm)$)}]
+    \draw[thick, WarmGold] (0,0) -- (-1.5,0);
+    \draw[thick, WarmGold] (0,0) -- (0,1.5);
+    \draw[thick, WarmGold!50] (-0.3,0) arc (180:90:0.3);
+    \filldraw[WarmGold] (0,0) circle (2.5pt);
+  \end{scope}
+
+  % Faint decorative side accent
+  \shade[top color=WarmGold!8, bottom color=white, opacity=0.5]
+    ($(current page.north west) + (2.0cm,-3.0cm)$)
+    rectangle
+    ($(current page.north east) + (-1.5cm,-4.5cm)$);
+\end{tikzpicture}
+
+\vspace{0.3cm}
+\grandornament
+\vspace{0.3cm}
+
+% --- ACKNOWLEDGEMENT TEXT (flows naturally, no redundant box) ---
+\noindent
+\lettrine[lines=3, findent=3pt, nindent=0pt]{W}{e would like} to express our sincere and deepest gratitude to our supervisor, \textbf{\color{AcademicBlue}Prof.\ DiaaEldin S.\ Khalil}, for being the supervisor of our project and for his guidance, support, and valuable insights throughout the course of this work.
+
+\vspace{0.2cm}
+\ornamentalrule
+\vspace{0.2cm}
+\noindent
+We would also like to extend our heartfelt appreciation to \textbf{\color{AcademicBlue}SI-VISION} for their generous sponsorship and technical support. Their industry insights into traditional Analog IC design tools played a key role in shaping the system-level specifications, design constraints, and practical considerations necessary for the real-world deployment of our proposed tool.
+
+\vspace{0.2cm}
+\ornamentalrule
+\vspace{0.2cm}
+\noindent
+\begin{tcolorbox}[
+    colback=SoftCream,
+    colframe=WarmGold,
+    arc=4pt,
+    boxrule=0.8pt,
+    leftrule=4pt,
+    enhanced,
+    drop shadow={black!8!white},
+    boxsep=10pt,
+    left=10pt, right=10pt, top=8pt, bottom=8pt
+]
+  \noindent
+  Special thanks are due to \textbf{\color{AcademicBlue}Eng.\ Fady Atef} and his outstanding team for their continuous support, technical discussions, and constructive feedback:
+  
+  \vspace{0.2cm}
+  \begin{center}
+    \sffamily\small
+    \begin{tabular}{r c l}
+      \textbf{\color{AcademicBlue}Eng.\ Omar Abuelela} & \quad\textcolor{WarmGold}{$\diamond$}\quad & \textbf{\color{AcademicBlue}Eng.\ Ahmed Abdelhady} \\
+      \textbf{\color{AcademicBlue}Eng.\ Abdelrahman Zain} & \quad\textcolor{WarmGold}{$\diamond$}\quad & \textbf{\color{AcademicBlue}Eng.\ Yahia Refaei}
+    \end{tabular}
+  \end{center}
+  \vspace{0.1cm}
+  
+  \noindent
+  We are deeply grateful to the entire \textbf{\color{AcademicBlue}SI-VISION Analog Design Team} and the \textbf{\color{AcademicBlue}Layout Design Team} for generously sharing their expertise and real-world design experience, which greatly enriched the quality and realism of this project.
+\end{tcolorbox}
+
+\vspace{0.2cm}
+\ornamentalrule
+\vspace{0.2cm}
+\noindent
+We would also like to acknowledge everyone who contributed, directly or indirectly, to the successful completion of this work.
+
+
+\vspace{0.5cm}
+
+% --- BOTTOM ORNAMENT ---
+\grandornament

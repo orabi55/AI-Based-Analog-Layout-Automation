@@ -38,7 +38,10 @@ from PySide6.QtGui import (
     QTransform,
     QFontMetricsF,
 )
-from theme import apply_style
+try:
+    from .theme import apply_style
+except ImportError:
+    from theme import apply_style
 
 # ── Palette ──────────────────────────────────────────────────────────────────
 _BG       = tcolor("#000000")

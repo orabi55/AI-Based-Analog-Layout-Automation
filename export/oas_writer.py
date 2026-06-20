@@ -227,6 +227,34 @@ def _make_variant_cell(lib, base_cell, base_type, raw_prop, al: bool, ar: bool) 
     return new_cell
 
 
+def _make_shifted_tap_cell(lib, base_cell, cell_name):
+    """Clone base_cell and shift its geometries by -0.117 um in X to align with transistor origins."""
+    shifted_name = f"{cell_name}_shifted"
+    for c in lib.cells:
+        if c.name == shifted_name:
+            return c
+    new_cell = gdstk.Cell(shifted_name)
+    lib.add(new_cell)
+    
+    if hasattr(base_cell, "properties") and base_cell.properties:
+        new_cell.properties = [list(p) for p in base_cell.properties]
+        
+    for poly in base_cell.polygons:
+        p_copy = poly.copy()
+        p_copy.translate(-0.117, 0)
+        new_cell.add(p_copy)
+    for path in base_cell.paths:
+        p_copy = path.copy()
+        p_copy.translate(-0.117, 0)
+        new_cell.add(p_copy)
+    for label in base_cell.labels:
+        l_copy = label.copy()
+        l_copy.origin = (l_copy.origin[0] - 0.117, l_copy.origin[1])
+        new_cell.add(l_copy)
+    return new_cell
+
+
+
 def _is_resistor_cell(cell_name):
     name_lower = cell_name.lower()
     return ("rppoly" in name_lower or "rnwell" in name_lower or
@@ -401,10 +429,12 @@ def update_oas_placement(oas_path, sp_path, nodes, output_path,
 
     def _node_is_dummy(node):
         node_id = str(node.get("id", "")).upper()
+        import re
         return (
             bool(node.get("is_dummy"))
             or node_id.startswith(("DUMMY", "FILLER_DUMMY", "EDGE_DUMMY", "TAP_"))
             or node.get("type") == "tap"
+            or bool(re.match(r"^D\d+$", node_id))
         )
 
     def _layout_entry_type(entry):
@@ -422,36 +452,31 @@ def update_oas_placement(oas_path, sp_path, nodes, output_path,
 
     def _node_type(node):
         dtype = str(node.get("type") or "").strip().lower()
+        if dtype == "tap":
+            subtype = str(node.get("subtype", "ptap")).lower()
+            return "pmos" if subtype == "ntap" else "nmos"
         return dtype if dtype in ("nmos", "pmos", "res", "cap") else None
 
-    template_refs_by_type = {}
-    dummy_template_refs_by_type = {}
-    for idx, entry in enumerate(layout_devices):
-        ref = entry.get("reference")
-        if ref is None:
-            continue
-        dtype = _layout_entry_type(entry)
-        if not dtype:
-            continue
-        if entry.get("is_dummy"):
-            dummy_template_refs_by_type.setdefault(dtype, ref)
-        else:
-            template_refs_by_type.setdefault(dtype, ref)
-
-    def _template_ref_for_dummy_node(node):
+    def _template_entry_for_dummy_node(node):
         try:
             template_idx = int(node.get("template_layout_index"))
         except (TypeError, ValueError):
             template_idx = None
         if template_idx is not None and 0 <= template_idx < len(layout_devices):
-            ref = layout_devices[template_idx].get("reference")
-            if ref is not None:
-                return ref
+            return layout_devices[template_idx]
 
         dtype = _node_type(node)
         if not dtype:
             return None
-        return dummy_template_refs_by_type.get(dtype) or template_refs_by_type.get(dtype)
+        for entry in layout_devices:
+            if entry.get("reference") is not None:
+                if entry.get("is_dummy") and _layout_entry_type(entry) == dtype:
+                    return entry
+        for entry in layout_devices:
+            if entry.get("reference") is not None:
+                if _layout_entry_type(entry) == dtype:
+                    return entry
+        return None
 
     primary_node_by_layout_idx = {}
     ref_to_node = {}
@@ -519,21 +544,22 @@ def update_oas_placement(oas_path, sp_path, nodes, output_path,
             elif mult_idx is not None:
                 f_idx = mult_idx
             
-            # Count how many fingers this parent has in mapping
+            # Count how many fingers this parent instance has in mapping
             sibling_indices = []
             for sibling_id in mapping.keys():
                 sib_parent, sib_mult, sib_fing = _parse_id(sibling_id)
-                if sib_parent == parent_id:
+                if sib_parent == parent_id and sib_mult == mult_idx:
                     sib_idx = sib_fing if sib_fing is not None else (sib_mult if sib_mult is not None else 0)
                     sibling_indices.append(sib_idx)
             
             if sibling_indices:
-                total_sibs = len(sibling_indices)
+                min_sib = min(sibling_indices)
+                max_sib = max(sibling_indices)
                 # If this finger is not the first one, it must abut left (shared diffusion)
-                if f_idx > 0:
+                if f_idx > min_sib:
                     target_al = True
                 # If this finger is not the last one, it must abut right (shared diffusion)
-                if f_idx < total_sibs - 1:
+                if f_idx < max_sib:
                     target_ar = True
 
         # Swap physical abutment flags under left-right mirrored orientations (e.g., rotation is 180)
@@ -611,9 +637,81 @@ def update_oas_placement(oas_path, sp_path, nodes, output_path,
             
             geom = dict(node.get("geometry", {}))
             rot_rad, x_mirror = _orient_to_gdstk(geom.get("orientation", "R0"))
+            
+            template_entry = _template_entry_for_dummy_node(node)
+            parent_cell = template_entry.get("parent_cell") or top_cell if template_entry else top_cell
+            parent_transform = template_entry.get("parent_transform", (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)) if template_entry else (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+
+            local_x, local_y = invert_transform_point(
+                parent_transform,
+                geom.get("x", 0),
+                geom.get("y", 0),
+            )
+            
+            # Determine abutment flags dynamically based on neighbor tap nodes
+            x_curr = geom.get("x", 0)
+            y_curr = geom.get("y", 0)
+            row_taps = [
+                t for t in nodes
+                if (t.get("type") == "tap" or str(t.get("id", "")).upper().startswith("TAP_"))
+                and abs(t.get("geometry", {}).get("y", 0) - y_curr) < 1e-3
+            ]
+            row_tap_xs = [t.get("geometry", {}).get("x", 0) for t in row_taps]
+            
+            target_al = any(0.01 < (x_curr - x) <= 0.075 for x in row_tap_xs)
+            target_ar = any(0.01 < (x - x_curr) <= 0.075 for x in row_tap_xs)
+
+            # Shift the tap geometries to align with transistor origin
+            shifted_cell = _make_shifted_tap_cell(lib, target_cell, cell_name)
+            
+            # Create/retrieve variant of the shifted tap cell with abutment clipping
+            al_str = "1" if target_al else "0"
+            ar_str = "1" if target_ar else "0"
+            variant_name = f"{cell_name}_manual_l{al_str}r{ar_str}"
+            
+            variant_cell = next((c for c in lib.cells if c.name == variant_name), None)
+            if variant_cell is None:
+                variant_cell = gdstk.Cell(variant_name)
+                lib.add(variant_cell)
+                
+                # Geometric Clipping Engine (using the same layers as transistor)
+                aggressive_layers = (19, 81, 17)
+                basic_layers      = (13, 83, 2)
+                
+                for poly in shifted_cell.polygons:
+                    pb = poly.bounding_box()
+                    pcx = (pb[0][0] + pb[1][0]) / 2.0
+                    
+                    keep = True
+                    # Rule 1: Left Abutment
+                    if target_al and pcx < -0.01:
+                        if poly.layer in basic_layers or poly.layer in aggressive_layers:
+                            keep = False
+                    
+                    # Rule 2: Right Abutment
+                    if target_ar and pcx > 0.05:
+                        if poly.layer in basic_layers:
+                            keep = False
+                            
+                    if keep:
+                        variant_cell.add(poly.copy())
+                        
+                for path in shifted_cell.paths:
+                    pb = path.bounding_box()
+                    pcx = (pb[0][0] + pb[1][0]) / 2.0
+                    if target_al and pcx < -0.01: continue
+                    if target_ar and pcx > 0.05: continue
+                    variant_cell.add(path.copy())
+                    
+                for label in shifted_cell.labels:
+                    lx = label.origin[0]
+                    if target_al and lx < -0.01: continue
+                    if target_ar and lx > 0.05: continue
+                    variant_cell.add(label.copy())
+
             dummy_ref = gdstk.Reference(
-                target_cell,
-                (geom.get("x", 0), geom.get("y", 0)),
+                variant_cell,
+                (local_x, local_y),
                 rot_rad,
                 1.0,
                 x_mirror,
@@ -622,19 +720,74 @@ def update_oas_placement(oas_path, sp_path, nodes, output_path,
                 dummy_ref.set_property("symbolic_tap", [str(node.get("id", ""))])
             except Exception:
                 pass
-            top_cell.add(dummy_ref)
+            parent_cell.add(dummy_ref)
             ref_to_node[id(dummy_ref)] = node
             continue
 
-        template_ref = _template_ref_for_dummy_node(node)
-        if template_ref is None:
+        template_entry = _template_entry_for_dummy_node(node)
+        if template_entry is None:
             continue
+        template_ref = template_entry["reference"]
+        parent_cell = template_entry.get("parent_cell") or top_cell
+        parent_transform = template_entry.get("parent_transform", (1.0, 0.0, 0.0, 1.0, 0.0, 0.0))
 
         geom = dict(node.get("geometry", {}))
+        local_x, local_y = invert_transform_point(
+            parent_transform,
+            geom.get("x", 0),
+            geom.get("y", 0),
+        )
         rot_rad, x_mirror = _orient_to_gdstk(geom.get("orientation", "R0"))
+        
+        # Determine the correct abutment cell variant for the dummy node
+        abutment  = node.get("abutment")
+        target_al = bool(abutment.get("abut_left",  False)) if abutment else False
+        target_ar = bool(abutment.get("abut_right", False)) if abutment else False
+        is_manual = (abutment is not None)
+
+        # Swap physical abutment flags under left-right mirrored orientations (e.g., rotation is 180)
+        deg_deg = round(math.degrees(rot_rad)) % 360
+        if deg_deg == 180:
+            target_al, target_ar = target_ar, target_al
+
+        dummy_cell = template_ref.cell
+        base_raw = _get_pcell_prop(template_ref.cell)
+        if base_raw:
+            base_type, base_params = _parse_pcell_params_from_prop(base_raw)
+            if base_type:
+                ph = _param_hash(base_params)
+                cat_key = (base_type, ph)
+                variants = catalog.setdefault(cat_key, {})
+                
+                if is_manual:
+                    al_str = "1" if target_al else "0"
+                    ar_str = "1" if target_ar else "0"
+                    manual_name = f"{base_type}_manual_l{al_str}r{ar_str}_{template_ref.cell.name[-4:]}"
+                    existing_manual = next((c for c in lib.cells if c.name == manual_name), None)
+                    if existing_manual:
+                        dummy_cell = existing_manual
+                    else:
+                        template_cell = variants.get((False, False), template_ref.cell)
+                        template_prop = _get_pcell_prop(template_cell) or base_raw
+                        new_cell = _make_variant_cell(
+                            lib, template_cell, base_type, template_prop, target_al, target_ar
+                        )
+                        dummy_cell = new_cell
+                else:
+                    if (target_al, target_ar) in variants:
+                        dummy_cell = variants[(target_al, target_ar)]
+                    else:
+                        template_cell = variants.get((False, False), template_ref.cell)
+                        template_prop = _get_pcell_prop(template_cell) or base_raw
+                        new_cell = _make_variant_cell(
+                            lib, template_cell, base_type, template_prop, target_al, target_ar
+                        )
+                        variants[(target_al, target_ar)] = new_cell
+                        dummy_cell = new_cell
+
         dummy_ref = gdstk.Reference(
-            template_ref.cell,
-            (geom.get("x", 0), geom.get("y", 0)),
+            dummy_cell,
+            (local_x, local_y),
             rot_rad,
             template_ref.magnification,
             x_mirror,
@@ -648,7 +801,7 @@ def update_oas_placement(oas_path, sp_path, nodes, output_path,
             dummy_ref.set_property("symbolic_dummy", [str(node.get("id", ""))])
         except Exception:
             pass
-        top_cell.add(dummy_ref)
+        parent_cell.add(dummy_ref)
         ref_to_node[id(dummy_ref)] = node
 
     if output_format is None:
@@ -711,10 +864,8 @@ def update_oas_placement(oas_path, sp_path, nodes, output_path,
                     if ref_deg == 180:
                         this_al, this_ar = this_ar, this_al
                     
-                    if this_al:
-                        fresh_ref.set_property("left_abut", [1])
-                    if this_ar:
-                        fresh_ref.set_property("right_abut", [1])
+                    fresh_ref.set_property("left_abut", [1 if this_al else 0])
+                    fresh_ref.set_property("right_abut", [1 if this_ar else 0])
                 
                 fresh_c.add(fresh_ref)
                 
@@ -753,10 +904,8 @@ def update_oas_placement(oas_path, sp_path, nodes, output_path,
                 if ref_deg == 180:
                     this_al, this_ar = this_ar, this_al
                 
-                if this_al:
-                    fresh_ref.set_property("left_abut", [1])
-                if this_ar:
-                    fresh_ref.set_property("right_abut", [1])
+                fresh_ref.set_property("left_abut", [1 if this_al else 0])
+                fresh_ref.set_property("right_abut", [1 if this_ar else 0])
             
             fresh_top.add(fresh_ref)
 

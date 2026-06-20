@@ -26,6 +26,13 @@ Be concise and practical. If the request is ambiguous, ask one clarifying questi
 Do not output command blocks or tool calls.
 """
 
+GENERAL_CHAT_SYSTEM_PROMPT = """\
+You are Antigravity, a helpful conversational AI assistant.
+You can discuss any topic (both general and technical/coding theory) naturally.
+Keep your response concise, interactive, and clear.
+Do not output command blocks or tool calls.
+"""
+
 
 def node_general_chatbot(state):
     t0 = time.time()
@@ -41,17 +48,24 @@ def node_general_chatbot(state):
     chat_history = state.get("chat_history", [])
     selected_model = state.get("selected_model", "Gemini")
     no_abutment_flag = state.get("no_abutment", False)
+    intent = state.get("intent", "general_chat")
 
-    context_text = build_placement_context_chatbot(
-        nodes,
-        constraint_text,
-        terminal_nets=terminal_nets,
-        edges=edges,
-        no_abutment=no_abutment_flag,
-    )
+    if intent == "general_chat":
+        context_text = "No active layout context needed."
+        system_prompt = GENERAL_CHAT_SYSTEM_PROMPT
+        user_prompt = user_message
+    else:
+        context_text = build_placement_context_chatbot(
+            nodes,
+            constraint_text,
+            terminal_nets=terminal_nets,
+            edges=edges,
+            no_abutment=no_abutment_flag,
+        )
+        system_prompt = GENERAL_CHATBOT_PROMPT
+        user_prompt = f"User request: {user_message}\n\n{context_text}"
 
-    user_prompt = f"User request: {user_message}\n\n{context_text}"
-    messages = _build_llm_messages(GENERAL_CHATBOT_PROMPT, chat_history, user_prompt)
+    messages = _build_llm_messages(system_prompt, chat_history, user_prompt)
     vprint(f"[GENERAL] Calling LLM ({selected_model}, weight=light)...", flush=True)
 
     response_text = ""

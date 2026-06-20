@@ -16,11 +16,40 @@ Functions:
   - Inputs: nodes (list), candidates (list)
   - Outputs: list of safety-corrected node dictionaries.
 """
-
 import re
 from collections import defaultdict
-
 from ai_agent.utils.logging import vprint
+
+def group_nodes_by_row(nodes: list, tolerance: float = 0.05) -> dict[float, list]:
+    """
+    Group nodes into rows based on their geometry 'y' coordinate using a clustering tolerance.
+    This prevents floating point rounding differences from splitting rows.
+    """
+    if not nodes:
+        return {}
+    sorted_nodes = sorted(nodes, key=lambda n: float(n.get("geometry", {}).get("y", 0.0)))
+    rows = {}
+    current_row = []
+    current_y_sum = 0.0
+    for n in sorted_nodes:
+        y = float(n.get("geometry", {}).get("y", 0.0))
+        if not current_row:
+            current_row.append(n)
+            current_y_sum = y
+        else:
+            avg_y = current_y_sum / len(current_row)
+            if abs(y - avg_y) <= tolerance:
+                current_row.append(n)
+                current_y_sum += y
+            else:
+                rep_y = round(current_y_sum / len(current_row), 3)
+                rows[rep_y] = current_row
+                current_row = [n]
+                current_y_sum = y
+    if current_row:
+        rep_y = round(current_y_sum / len(current_row), 3)
+        rows[rep_y] = current_row
+    return rows
 
 
 def _format_abutment_candidates(candidates: list) -> str:
@@ -102,10 +131,7 @@ def build_abutment_chains(nodes: list, candidates: list) -> list[list[str]]:
     # This ensures hierarchy siblings (MM0_f1, MM0_f2, etc.) expanded by
     # expand_groups are properly chained even if not in explicit candidates.
     # We ALWAYS check flags, regardless of whether candidates exist.
-    rows = defaultdict(list)
-    for n in nodes:
-        y = round(float(n.get("geometry", {}).get("y", 0.0)), 3)
-        rows[y].append(n)
+    rows = group_nodes_by_row(nodes)
 
     for y_val, row_nodes in rows.items():
         sorted_row = sorted(row_nodes, key=lambda n: n.get("geometry", {}).get("x", 0.0))
@@ -125,21 +151,13 @@ def build_abutment_chains(nodes: list, candidates: list) -> list[list[str]]:
         root = find(nid)
         groups.setdefault(root, []).append(nid)
 
-    # Build ordered chains — sort by finger index if present, else by ID
-    def _finger_key(nid: str) -> tuple:
-        parts = nid.rsplit("_f", 1)
-        if len(parts) == 2:
-            try:
-                return (parts[0], int(parts[1]))
-            except ValueError:
-                pass
-        return (nid, 0)
+    node_map = {n["id"]: n for n in nodes if "id" in n}
 
     chains = []
     for group in groups.values():
         if len(group) <= 1:
             continue  # single node — not a chain
-        ordered = sorted(group, key=_finger_key)
+        ordered = sorted(group, key=lambda nid: float(node_map.get(nid, {}).get("geometry", {}).get("x", 0.0)))
         chains.append(ordered)
 
     return chains
@@ -232,12 +250,7 @@ def heal_abutment_positions(nodes: list, candidates: list,
     # ── No-abutment mode: simple left-to-right packing per row ──────────
     if no_abutment:
         passive_ids = {p["id"] for p in passives} if passives else set()
-        row_buckets: dict[float, list] = defaultdict(list)
-        for n in nodes:
-            if n.get("id") in passive_ids:
-                continue
-            y = round(float(n.get("geometry", {}).get("y", 0.0)), 3)
-            row_buckets[y].append(n)
+        row_buckets = group_nodes_by_row([n for n in nodes if n.get("id") not in passive_ids])
 
         for y_key, row_nodes in row_buckets.items():
             row_sorted = sorted(row_nodes,
@@ -282,12 +295,7 @@ def heal_abutment_positions(nodes: list, candidates: list,
 
     # 2. Group nodes by row (Y rounded to 3 dp) — skip passives (already placed)
     passive_ids = {p["id"] for p in passives} if passives else set()
-    row_buckets: dict[float, list] = defaultdict(list)
-    for n in nodes:
-        if n.get("id") in passive_ids:
-            continue  # passives already healed in Step 0
-        y = round(float(n.get("geometry", {}).get("y", 0.0)), 3)
-        row_buckets[y].append(n)
+    row_buckets = group_nodes_by_row([n for n in nodes if n.get("id") not in passive_ids])
 
     for y_key, row_nodes in row_buckets.items():
         # 3. Build "segments":  each segment is either a chain or a singleton.
@@ -340,8 +348,8 @@ def heal_abutment_positions(nodes: list, candidates: list,
                 # must share the identical Y coordinate
                 geo["y"] = round(float(y_key), 6)
 
-                # Enforce orientation strictly to R0
-                current_orient = "R0"
+                # Initialize orientation from current geometry, defaulting to R0
+                current_orient = dev.get("geometry", {}).get("orientation", "R0")
 
                 # Dynamically determine the actual physical nets on the left and right edges
                 if terminal_nets is not None:
@@ -356,21 +364,27 @@ def heal_abutment_positions(nodes: list, candidates: list,
                     logic_d = tn.get("D")
                     
                     # Read from the node if already assigned/swapped, fallback to SPICE
-                    curr_left_net = dev.get("net_s") or logic_s
-                    curr_right_net = dev.get("net_d") or logic_d
+                    # Under physical rules, default left is D, default right is S
+                    curr_left_net = dev.get("net_d") or logic_d
+                    curr_right_net = dev.get("net_s") or logic_s
 
                     if dev_idx > 0 and prev_right_net is not None:
                         # If the physical nets don't match, we logically swap them to heal abutment
                         if curr_left_net != prev_right_net:
                             if curr_right_net == prev_right_net:
-                                dev["net_s"] = curr_right_net
-                                dev["net_d"] = curr_left_net
+                                dev["net_s"] = curr_left_net
+                                dev["net_d"] = curr_right_net
                                 curr_left_net, curr_right_net = curr_right_net, curr_left_net
+                                # Toggle orientation upon S/D swap to represent horizontal flip
+                                if current_orient == "MY":
+                                    current_orient = "R0"
+                                else:
+                                    current_orient = "MY"
 
                     prev_right_net = curr_right_net
                 
-                # Apply the orientation back to the geometry (strictly R0)
-                geo["orientation"] = "R0"
+                # Apply the orientation back to the geometry
+                geo["orientation"] = current_orient
 
                 is_last_in_chain = (dev_idx == len(segment) - 1)
 
@@ -447,10 +461,7 @@ def force_abutment_spacing(nodes: list, candidates: list = None) -> list:
     parent_of = {n.get("id", ""): re.sub(r'_[mf]\d+$', '', n.get("id", ""))
                  for n in nodes if n.get("id", "")}
 
-    row_buckets = defaultdict(list)
-    for n in nodes:
-        y = round(float(n.get("geometry", {}).get("y", 0.0)), 3)
-        row_buckets[y].append(n)
+    row_buckets = group_nodes_by_row(nodes)
 
     fixed_count = 0
 
@@ -501,5 +512,357 @@ def force_abutment_spacing(nodes: list, candidates: list = None) -> list:
 
     if fixed_count > 0:
         vprint(f"[FORCE_FIX] Fixed {fixed_count} device position(s)")
+
+    return nodes
+
+
+def _is_dummy_dev(node: dict) -> bool:
+    """Check if a node is a dummy device, filler dummy, or tap cell."""
+    if not isinstance(node, dict):
+        return False
+    dev_id = str(node.get("id", ""))
+    dev_id_upper = dev_id.upper()
+    
+    # Prefix-based detection (overrides structural flag for known dummy patterns)
+    if dev_id_upper.startswith((
+        "DUMMY", "EDGE_DUMMY", "FILLER_DUMMY", "MATCH_DUMMY", 
+        "STRUCT_DUMMY", "TAP", "DUMMY_"
+    )) or (len(dev_id_upper) >= 2 and dev_id_upper[0] == "D" and dev_id_upper[1:].isdigit()):
+        return True
+
+    if node.get("structural"):
+        return False
+    return bool(node.get("is_dummy"))
+
+
+def optimize_all_rows_orientations(nodes: list, terminal_nets: dict = None) -> list:
+    """
+    Automatically optimize S/D swaps and orientations of all row transistors 
+    globally to maximize valid diffusion-sharing abutments and resolve shorts,
+    while strictly preserving bilateral mirror symmetry.
+    
+    Also re-biases all dummy nodes in each row after active transistor swaps have been optimized.
+    """
+    if not nodes:
+        return nodes
+        
+    if terminal_nets is None:
+        terminal_nets = {}
+        
+    from ai_agent.placement.finger_grouper import _parse_id
+    import copy
+    import itertools
+
+    # 1. Group active transistors by row Y
+    rows = group_nodes_by_row([n for n in nodes if not _is_dummy_dev(n)])
+        
+    for y_val, row_nodes in rows.items():
+        # Sort horizontally by X coordinate
+        row_nodes.sort(key=lambda n: float(n.get("geometry", {}).get("x", 0.0)))
+        
+        # Group contiguous fingers belonging to the same parent device ID
+        blocks = []
+        i_idx = 0
+        while i_idx < len(row_nodes):
+            node = row_nodes[i_idx]
+            dev_id = node["id"]
+            parent_id, _, _ = _parse_id(dev_id)
+            if not parent_id:
+                i_idx += 1
+                continue
+            
+            chain = [node]
+            j_idx = i_idx + 1
+            while j_idx < len(row_nodes):
+                next_node = row_nodes[j_idx]
+                next_id = next_node["id"]
+                next_parent_id, _, _ = _parse_id(next_id)
+                if next_parent_id == parent_id:
+                    chain.append(next_node)
+                    j_idx += 1
+                else:
+                    break
+            
+            blocks.append({
+                "parent_id": parent_id,
+                "nodes": chain
+            })
+            i_idx = j_idx
+            
+        M = len(blocks)
+        if M <= 1:
+            continue
+        
+        # Skip interleaved patterns - they will be handled by maximize_interleaved_abutment
+        # An interleaved pattern has blocks of different transistors that alternate.
+        # This means the block sequence has non-contiguous occurrences of the same parent_id.
+        is_interleaved = False
+        if M > 2:
+            seen_blocks = [b["parent_id"] for b in blocks]
+            if len(seen_blocks) != len(set(seen_blocks)):
+                is_interleaved = True
+
+        if is_interleaved:
+            vprint(f"[optimize_all_rows_orientations] Skipping interleaved row y={y_val:.3f} (handled by maximize_interleaved_abutment)")
+            continue
+            
+        # Compute geometric center of the row to pair symmetric blocks
+        xs = [float(n["geometry"].get("x", 0.0)) for n in row_nodes]
+        widths = [float(n["geometry"].get("width", 0.294)) for n in row_nodes]
+        row_center_x = (min(xs) + max(xs[idx] + widths[idx] for idx in range(len(xs)))) / 2.0
+        
+        # Prepare block data and compute center_x of each block
+        blocks_data = []
+        for b_idx, b in enumerate(blocks):
+            p_id = b["parent_id"]
+            nets = terminal_nets.get(p_id) or terminal_nets.get(b["nodes"][0]["id"]) or {}
+            s_net = nets.get("S")
+            d_net = nets.get("D")
+            k = len(b["nodes"])
+            blocks_data.append({
+                "parent_id": p_id,
+                "s": s_net,
+                "d": d_net,
+                "k": k
+            })
+            # Geometric center of the block
+            b_xs = [float(node["geometry"]["x"]) for node in b["nodes"]]
+            b_widths = [float(node["geometry"].get("width", 0.294)) for node in b["nodes"]]
+            b["center_x"] = min(b_xs) + (max(b_xs[idx] + b_widths[idx] for idx in range(len(b_xs))) - min(b_xs)) / 2.0
+            
+        # Pair symmetric blocks about the row center
+        paired_partners = {} # block_index -> partner_block_index
+        for i in range(M):
+            if i in paired_partners:
+                continue
+            bi = blocks[i]
+            best_j = None
+            best_dist = 0.25 # tolerance in microns
+            for j in range(i + 1, M):
+                bj = blocks[j]
+                dist_from_sym = abs((bi["center_x"] + bj["center_x"]) / 2.0 - row_center_x)
+                if dist_from_sym < best_dist and len(bi["nodes"]) == len(bj["nodes"]):
+                    best_j = j
+                    best_dist = dist_from_sym
+            if best_j is not None:
+                paired_partners[i] = best_j
+                paired_partners[best_j] = i
+                
+        # Make all blocks independently flippable to maximize abutment
+        independent_indices = list(range(M))
+                
+        num_vars = len(independent_indices)
+        
+        def get_full_flips(ind_flips):
+            flips = [0] * M
+            for idx, val in enumerate(ind_flips):
+                orig_idx = independent_indices[idx]
+                flips[orig_idx] = val
+                # Don't force partner to opposite flip - allow independent optimization
+                # partner = paired_partners.get(orig_idx)
+                # if partner is not None:
+                #     flips[partner] = 1 - val
+            return flips
+            
+        def get_boundary_nets(b_idx, flip):
+            bd = blocks_data[b_idx]
+            s = bd["s"]
+            d = bd["d"]
+            k = bd["k"]
+            if not s or not d:
+                return None, None
+            
+            # Get the actual first and last nodes to check their swapped_sd flags
+            block_nodes = blocks[b_idx]["nodes"]
+            first_node = block_nodes[0]
+            last_node = block_nodes[-1]
+            
+            first_swapped = first_node.get("swapped_sd", False)
+            last_swapped = last_node.get("swapped_sd", False)
+            
+            # Calculate effective flip state for first and last fingers
+            # effective = swapped_sd XOR orientation_flipped XOR block_flip
+            first_orient = first_node.get("geometry", {}).get("orientation", "R0")
+            first_orient_flipped = first_orient in ("MY", "R180")
+            first_effective_flipped = first_swapped ^ first_orient_flipped ^ flip
+            
+            last_orient = last_node.get("geometry", {}).get("orientation", "R0")
+            last_orient_flipped = last_orient in ("MY", "R180")
+            last_effective_flipped = last_swapped ^ last_orient_flipped ^ flip
+            
+            # Left boundary depends on first finger
+            if first_effective_flipped:
+                left = d
+            else:
+                left = s
+            
+            # Right boundary depends on last finger and finger count
+            if last_effective_flipped:
+                if k % 2 == 1:  # odd
+                    right = s
+                else:  # even
+                    right = d
+            else:
+                if k % 2 == 1:  # odd
+                    right = d
+                else:  # even
+                    right = s
+            
+            return left, right
+
+        def score_combination(flips):
+            score = 0
+            for i in range(M - 1):
+                _, r_net = get_boundary_nets(i, flips[i])
+                l_net, _ = get_boundary_nets(i + 1, flips[i+1])
+                if r_net and l_net and r_net != "NC" and l_net != "NC" and r_net == l_net:
+                    score += 1
+            return score
+            
+        def composite_score(flips):
+            sc = score_combination(flips)
+            flip_count = sum(flips)
+            # Heavily prioritize abutment over flip count
+            # Each abutment is worth 1000 points, each flip costs 1 point
+            return sc * 1000 - flip_count
+            
+        # Search for best combination
+        best_ind_flips = [0] * num_vars
+        if num_vars <= 10:
+            best_score = -float('inf')
+            for ind_flips in itertools.product([0, 1], repeat=num_vars):
+                flips = get_full_flips(ind_flips)
+                sc = composite_score(flips)
+                if sc > best_score:
+                    best_score = sc
+                    best_ind_flips = list(ind_flips)
+        else:
+            best_score = composite_score(get_full_flips(best_ind_flips))
+            improved = True
+            while improved:
+                improved = False
+                for i in range(num_vars):
+                    test_ind_flips = list(best_ind_flips)
+                    test_ind_flips[i] = 1 - test_ind_flips[i]
+                    sc = composite_score(get_full_flips(test_ind_flips))
+                    if sc > best_score:
+                        best_score = sc
+                        best_ind_flips = test_ind_flips
+                        improved = True
+                        
+        best_flips = get_full_flips(best_ind_flips)
+        
+        # Apply best flips back to nodes.
+        for b_idx, b in enumerate(blocks):
+            flip = best_flips[b_idx]
+            p_id = b["parent_id"]
+            nets = terminal_nets.get(p_id) or terminal_nets.get(b["nodes"][0]["id"]) or {}
+            canon_s = nets.get("S")
+            canon_d = nets.get("D")
+            canon_g = nets.get("G")
+            
+            for idx, node in enumerate(b["nodes"]):
+                node["_block_flip"] = bool(flip)
+                node.setdefault("geometry", {})["orientation"] = "R0"
+                
+                # Determine if this finger should be swapped
+                # For alternating fingers: even fingers (0, 2, 4...) are normal, odd fingers (1, 3, 5...) are swapped
+                # If the whole block is flipped, this pattern is inverted
+                is_swapped_phase = (idx % 2 == 1) != bool(flip)
+                
+                # Set the swapped flag - get_block_boundary_nets will handle the swap logic
+                node["swapped_sd"] = is_swapped_phase
+                
+                # Set canonical nets (not swapped) - the flag tells boundary calculation to swap
+                if canon_s and canon_d:
+                    node["net_s"] = canon_s
+                    node["net_d"] = canon_d
+                if canon_g:
+                    node["net_g"] = canon_g
+                
+    # 2. Re-bias all dummy nodes in each row after active swaps are optimized (neighbor-based!)
+    all_row_nodes = group_nodes_by_row(nodes)
+        
+    for y_val, r_nodes in all_row_nodes.items():
+        # Sort horizontally
+        r_nodes.sort(key=lambda n: float(n.get("geometry", {}).get("x", 0.0)))
+        
+        # Run the dummy biasing pass
+        for i, node in enumerate(r_nodes):
+            is_dummy = _is_dummy_dev(node)
+            if not is_dummy:
+                continue
+            # Skip tap cells if they shouldn't be modified
+            if str(node.get("id", "")).upper().startswith("TAP"):
+                continue
+                
+            dev_type = str(node.get("type", "nmos")).strip().lower()
+            rail_net = "VDD" if "pmos" in dev_type else "VSS"
+            
+            # Find nearest non-dummy left neighbor
+            left_non_dummy = None
+            for idx in range(i - 1, -1, -1):
+                n = r_nodes[idx]
+                if not _is_dummy_dev(n):
+                    left_non_dummy = n
+                    break
+                    
+            # Find nearest non-dummy right neighbor
+            right_non_dummy = None
+            for idx in range(i + 1, len(r_nodes)):
+                n = r_nodes[idx]
+                if not _is_dummy_dev(n):
+                    right_non_dummy = n
+                    break
+                    
+            left_net = None
+            right_net = None
+            right_term_type = 'D'
+            left_term_type = 'S'
+            
+            if left_non_dummy:
+                from ai_agent.placement.finger_grouper import get_block_boundary_nets
+                _, left_net = get_block_boundary_nets([left_non_dummy], False)
+                lorient = left_non_dummy.get("geometry", {}).get("orientation", "R0")
+                lflipped = lorient in ("MY", "R180", "MX")
+                lswapped = bool(left_non_dummy.get("swapped_sd", False))
+                ltotal_flipped = lflipped ^ lswapped
+                
+                lf_idx = int(left_non_dummy.get("electrical", {}).get("nf", 1))
+                is_even = (lf_idx % 2 == 0)
+                if is_even:
+                    right_term_type = 'D' if ltotal_flipped else 'S'
+                else:
+                    right_term_type = 'S' if ltotal_flipped else 'D'
+                    
+            if right_non_dummy:
+                from ai_agent.placement.finger_grouper import get_block_boundary_nets
+                right_net, _ = get_block_boundary_nets([right_non_dummy], False)
+                rorient = right_non_dummy.get("geometry", {}).get("orientation", "R0")
+                rflipped = rorient in ("MY", "R180", "MX")
+                rswapped = bool(right_non_dummy.get("swapped_sd", False))
+                rtotal_flipped = rflipped ^ rswapped
+                
+                left_term_type = 'S' if rtotal_flipped else 'D'
+                
+            if not left_net or left_net == "NC":
+                left_net = right_net if (right_net and right_net != "NC") else rail_net
+            if not right_net or right_net == "NC":
+                right_net = left_net
+                
+            node["net_d"] = left_net
+            node["net_s"] = right_net
+            
+            if left_non_dummy and right_non_dummy:
+                if right_term_type == 'S' and left_term_type == 'D':
+                    node["net_g"] = left_net
+                elif right_term_type == 'D' and left_term_type == 'S':
+                    node["net_g"] = right_net
+                elif right_term_type == 'S' and left_term_type == 'S':
+                    node["net_g"] = left_net
+                else:
+                    node["net_g"] = rail_net
+            else:
+                node["net_g"] = rail_net
 
     return nodes

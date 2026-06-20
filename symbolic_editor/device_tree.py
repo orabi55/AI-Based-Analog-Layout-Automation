@@ -474,6 +474,16 @@ class DeviceTreePanel(QWidget):
         for node in self._nodes:
             dev_id = str(node.get("id", ""))
             dev_type = str(node.get("type", "")).lower()
+
+            # Skip internal centroid annotation nodes — these are visualization
+            # artifacts, not real devices that should appear in the hierarchy.
+            if dev_id.startswith("DUMMY_matrix_") or dev_id.startswith("DUMMY_centroid_"):
+                continue
+            # Skip physical-only cells (taps, endcaps, fillers) — they have no
+            # schematic identity and clutter the hierarchy panel.
+            if node.get("physical_only") and dev_type not in ("nmos", "pmos"):
+                continue
+
             is_dummy = node.get("is_dummy", False) or dev_id.upper().startswith("DUMMY")
             if is_dummy:
                 dummies.append(node)

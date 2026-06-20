@@ -510,10 +510,18 @@ def _load_all_skills() -> str:
 
 
 def _is_dummy_node(node: dict) -> bool:
+    """Return True for generated or explicit filler/dummy devices."""
+    if not isinstance(node, dict):
+        return False
     node_id = str(node.get("id", ""))
+    node_id_upper = node_id.upper()
     return bool(
         node.get("is_dummy")
-        or node_id.startswith(("FILLER_DUMMY_", "DUMMY_matrix_", "EDGE_DUMMY"))
+        or node_id_upper.startswith((
+            "FILLER_DUMMY_", "DUMMY_MATRIX_", "EDGE_DUMMY",
+            "STRUCT_DUMMY_", "MATCH_DUMMY_", "DUMMY_"
+        ))
+        or (len(node_id_upper) >= 2 and node_id_upper[0] == "D" and node_id_upper[1:].isdigit())
     )
 
 
@@ -550,7 +558,9 @@ def _compute_matching_and_rows(
             STD_PITCH,
         )
 
-        active_nodes = [n for n in nodes if not _is_dummy_node(n)]
+        # Pass all nodes (including dummies) to aggregate_to_logical_devices.
+        # It now handles dummies as standalone logical groups.
+        active_nodes = list(nodes)
 
         # Step 1: collapse fingers to groups
         group_nodes, group_edges, finger_map = fg_group_fingers(active_nodes, edges or [])

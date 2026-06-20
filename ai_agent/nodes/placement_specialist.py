@@ -110,11 +110,17 @@ def _snap_orphan_dummies(nodes: list) -> list:
     import statistics
 
     def _is_dummy(node):
+        if not isinstance(node, dict):
+            return False
         nid = str(node.get("id", ""))
-        return (
+        nid_upper = nid.upper()
+        return bool(
             node.get("is_dummy")
-            or nid.startswith(("FILLER_DUMMY_", "DUMMY_matrix_", "EDGE_DUMMY"))
-            or (len(nid) >= 2 and nid[0] == "D" and nid[1:].isdigit())
+            or nid_upper.startswith((
+                "FILLER_DUMMY_", "DUMMY_MATRIX_", "EDGE_DUMMY",
+                "STRUCT_DUMMY_", "MATCH_DUMMY_", "DUMMY_"
+            ))
+            or (len(nid_upper) >= 2 and nid_upper[0] == "D" and nid_upper[1:].isdigit())
         )
 
     def _dev_type(node):
@@ -913,12 +919,18 @@ def node_placement_specialist(state):
             working_nodes, finger_map,
             no_abutment=no_abutment_flag,
             original_group_nodes=orig_lookup,
+            terminal_nets=terminal_nets,
         )
         log_detail(f"Expanded to {len(working_nodes)} physical devices")
     else:
         from ai_agent.placement.finger_grouper import expand_logical_to_fingers
         working_nodes = expand_logical_to_fingers(working_nodes, nodes)
         log_detail(f"Legacy expansion → {len(working_nodes)} devices")
+
+    # ── Step 3e.2: Global Row Orientation Optimization ───────────────────────
+    # SKIPPED: optimize_all_rows_orientations conflicts with maximize_interleaved_abutment
+    # The comprehensive abutment optimization is now handled in _resolve_row_overlaps
+    log_section("Step 3e.2: Skipping optimize_all_rows_orientations (handled by maximize_interleaved_abutment)")
 
     # ── Step 3e: Post-expansion overlap resolution ───────────────────────────
     log_section("Step 3e: Post-expansion overlap resolution")
@@ -928,7 +940,7 @@ def node_placement_specialist(state):
         else "No overlaps detected after expansion"
     )
     working_nodes = legalize_vertical_rows(working_nodes)
-
+    
     # ── Snap orphan dummies (flying-transistor fix) ─────────────────────
     # When matching=Low (skip_matching), dummy devices (D-prefixed) that were
     # previously anchored inside ABBA blocks may end up at isolated Y coords.
@@ -1139,6 +1151,11 @@ def node_placement_specialist_chatbot(state):
     detect_abutment_intent(working_nodes, terminal_nets)
     working_nodes = enforce_reflection_symmetry(working_nodes)
 
+    # ── Step 3e.2: Global Row Orientation Optimization ───────────────────────
+    # SKIPPED: optimize_all_rows_orientations conflicts with maximize_interleaved_abutment
+    # The comprehensive abutment optimization is now handled in _resolve_row_overlaps
+    log_section("Step 3e.2: Skipping optimize_all_rows_orientations (handled by maximize_interleaved_abutment)")
+
     # ── Step 3e: Post-expansion overlap resolution ───────────────────────────
     log_section("Step 3e: Post-expansion overlap resolution")
     moved_ids = resolve_overlaps(working_nodes)
@@ -1147,7 +1164,7 @@ def node_placement_specialist_chatbot(state):
         else "No overlaps detected after expansion"
     )
     working_nodes = legalize_vertical_rows(working_nodes)
-
+    
     # ── Step 3f: Device conservation check ──────────────────────────────────
     log_section("Step 3f: Device conservation check")
     conservation = validate_device_count(nodes, working_nodes)

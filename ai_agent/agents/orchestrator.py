@@ -105,8 +105,14 @@ class MultiAgentOrchestrator:
                 run_llm_fn, selected_model
             )
 
-        else:
+        elif intent == "layout_query":
             return self._handle_question(
+                user_message, layout_context, chat_history,
+                run_llm_fn, selected_model
+            )
+
+        else:
+            return self._handle_general_chat(
                 user_message, layout_context, chat_history,
                 run_llm_fn, selected_model
             )
@@ -114,6 +120,17 @@ class MultiAgentOrchestrator:
     # ─────────────────────────────────────────────────────────────
     # CHAT / QUESTION handlers (single LLM call, no commands)
     # ─────────────────────────────────────────────────────────────
+    def _handle_general_chat(self, msg, ctx, history, run_llm_fn, model):
+        from ai_agent.nodes.general_chatbot import GENERAL_CHAT_SYSTEM_PROMPT
+        system = GENERAL_CHAT_SYSTEM_PROMPT
+        msgs = [{"role": "system", "content": system}]
+        for h in (history or [])[-4:]:
+            msgs.append({"role": h["role"], "content": h["content"]})
+        if not history or history[-1].get("content") != msg:
+            msgs.append({"role": "user", "content": msg})
+        reply = run_llm_fn(msgs, f"{system}\n\nUser: {msg}", model)
+        return {"reply": reply, "commands": [], "waiting": False}
+
     def _handle_chat(self, msg, ctx, history, run_llm_fn, model):
         from ai_agent.agents.prompts import build_chat_prompt
         system = build_chat_prompt(ctx)

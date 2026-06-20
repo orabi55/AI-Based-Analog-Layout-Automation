@@ -408,6 +408,7 @@ class WelcomeScreen(QWidget):
     open_file_requested = Signal()
     import_requested = Signal()
     example_requested = Signal(str, str)
+    open_recent_requested = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -515,6 +516,15 @@ class WelcomeScreen(QWidget):
         card_open.clicked.connect(self.open_file_requested.emit)
         cards_row.addWidget(card_open)
 
+        card_recent = _ActionCard(
+            "🕒", "Recent Files",
+            "Quickly access your previously opened layouts",
+            "#f39c12", ""
+        )
+        card_recent.clicked.connect(self._show_recent_menu)
+        cards_row.addWidget(card_recent)
+        self._card_recent = card_recent
+
         root.addLayout(cards_row)
 
         # ── Separator ─────────────────────────────────────────
@@ -606,3 +616,44 @@ class WelcomeScreen(QWidget):
             col += 1
             if col >= max_cols:
                 col = 0; row += 1
+
+    def _show_recent_menu(self):
+        from PySide6.QtCore import QSettings
+        from PySide6.QtWidgets import QMenu
+        from PySide6.QtGui import QAction
+        import os
+        
+        settings = QSettings("LayoutAutomation", "SymbolicEditor")
+        recent_files = settings.value("recent_files", [])
+        
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: #1a2230;
+                color: #eaf0f8;
+                border: 1px solid #2d3548;
+                border-radius: 4px;
+                padding: 4px;
+            }
+            QMenu::item {
+                padding: 8px 24px;
+                border-radius: 4px;
+            }
+            QMenu::item:selected {
+                background-color: #2d3548;
+            }
+        """)
+        
+        if not recent_files:
+            act = menu.addAction("No Recent Files")
+            act.setEnabled(False)
+        else:
+            for filepath in recent_files[:10]:
+                fname = os.path.basename(filepath)
+                # Capture the current filepath in the lambda
+                action = menu.addAction(f"📄 {fname}", lambda checked=False, f=filepath: self.open_recent_requested.emit(f))
+                action.setToolTip(filepath)
+                
+        # Show menu under the recent card
+        if hasattr(self, "_card_recent"):
+            menu.exec(self._card_recent.mapToGlobal(self._card_recent.rect().bottomLeft()))

@@ -1,0 +1,499 @@
+% ==============================================================================
+% FRONTMATTER: Stunning Cover Page & Professional Project Team Credentials
+% ==============================================================================
+
+\begin{titlepage}
+  % ============================================================================
+  % PAGE 1: Elegant Light Academic Cover with Geometric Stage Blocks
+  % ============================================================================
+
+  % --- FULL-PAGE WHITE BACKGROUND ---
+  \begin{tikzpicture}[remember picture, overlay]
+
+    % ---- FULL-BLEED SOLID WHITE BACKGROUND ----
+    \fill[white]
+      (current page.south west) rectangle (current page.north east);
+
+    % ---- OUTER GOLD FRAME ----
+    \draw[line width=1.2pt, WarmGold!70]
+      ($(current page.north west) + (1.0cm,-1.0cm)$)
+      rectangle
+      ($(current page.south east) + (-1.0cm,1.0cm)$);
+
+    % ---- INNER THIN FRAME ----
+    \draw[line width=0.4pt, WarmGold!30]
+      ($(current page.north west) + (1.15cm,-1.15cm)$)
+      rectangle
+      ($(current page.south east) + (-1.15cm,1.15cm)$);
+
+    % ---- CORNER GEOMETRIC ORNAMENTS ----
+    % Top-left
+    \begin{scope}[shift={($(current page.north west) + (1.0cm,-1.0cm)$)}]
+      \draw[thick, WarmGold!70] (0,0) -- (1.8,0);
+      \draw[thick, WarmGold!70] (0,0) -- (0,-1.8);
+      \draw[WarmGold!40, line width=0.4pt] (0.12,-0.12) -- (1.2,-0.12);
+      \draw[WarmGold!40, line width=0.4pt] (0.12,-0.12) -- (0.12,-1.2);
+      \filldraw[WarmGold!80] (0,0) circle (2.5pt);
+      % Small diamond
+      \filldraw[WarmGold!50] (0.9,0) -- (0.9,-0.06) -- (0.84,0) -- (0.9,0.06) -- cycle;
+    \end{scope}
+    % Top-right
+    \begin{scope}[shift={($(current page.north east) + (-1.0cm,-1.0cm)$)}]
+      \draw[thick, WarmGold!70] (0,0) -- (-1.8,0);
+      \draw[thick, WarmGold!70] (0,0) -- (0,-1.8);
+      \draw[WarmGold!40, line width=0.4pt] (-0.12,-0.12) -- (-1.2,-0.12);
+      \draw[WarmGold!40, line width=0.4pt] (-0.12,-0.12) -- (-0.12,-1.2);
+      \filldraw[WarmGold!80] (0,0) circle (2.5pt);
+      \filldraw[WarmGold!50] (-0.9,0) -- (-0.9,-0.06) -- (-0.84,0) -- (-0.9,0.06) -- cycle;
+    \end{scope}
+    % Bottom-left
+    \begin{scope}[shift={($(current page.south west) + (1.0cm,1.0cm)$)}]
+      \draw[thick, WarmGold!70] (0,0) -- (1.8,0);
+      \draw[thick, WarmGold!70] (0,0) -- (0,1.8);
+      \draw[WarmGold!40, line width=0.4pt] (0.12,0.12) -- (1.2,0.12);
+      \draw[WarmGold!40, line width=0.4pt] (0.12,0.12) -- (0.12,1.2);
+      \filldraw[WarmGold!80] (0,0) circle (2.5pt);
+      \filldraw[WarmGold!50] (0.9,0) -- (0.9,0.06) -- (0.84,0) -- (0.9,-0.06) -- cycle;
+    \end{scope}
+    % Bottom-right
+    \begin{scope}[shift={($(current page.south east) + (-1.0cm,1.0cm)$)}]
+      \draw[thick, WarmGold!70] (0,0) -- (-1.8,0);
+      \draw[thick, WarmGold!70] (0,0) -- (0,1.8);
+      \draw[WarmGold!40, line width=0.4pt] (-0.12,0.12) -- (-1.2,0.12);
+      \draw[WarmGold!40, line width=0.4pt] (-0.12,0.12) -- (-0.12,1.2);
+      \filldraw[WarmGold!80] (0,0) circle (2.5pt);
+      \filldraw[WarmGold!50] (-0.9,0) -- (-0.9,0.06) -- (-0.84,0) -- (-0.9,-0.06) -- cycle;
+    \end{scope}
+
+  \end{tikzpicture}
+
+  % --- PAGE CONTENT ---
+  \begin{center}
+    \vspace*{0.2cm}
+
+    % ======== INSTITUTION LOGOS (on white background → dark text) ========
+    \begin{tabular}{c @{\hspace{0.6cm}} c @{\hspace{0.6cm}} c}
+      \begin{minipage}[c]{4.5cm}
+        \centering
+        \includegraphics[width=2.5cm]{figures/ASU.png} \\[0.2cm]
+        {\small\bfseries\sffamily\color{AcademicBlue} Ain Shams University} \\
+        {\footnotesize\sffamily\color{SlateGray} Faculty of Engineering}
+      \end{minipage}
+      &
+      \begin{minipage}[c]{3cm}
+        \centering
+        % Central separator ornament
+        \begin{tikzpicture}
+          \draw[thick, WarmGold!60] (0,1) -- (0,-1);
+          \filldraw[WarmGold!80] (0,0.5) circle (1.5pt);
+          \filldraw[WarmGold!80] (0,0) circle (2pt);
+          \filldraw[WarmGold!80] (0,-0.5) circle (1.5pt);
+        \end{tikzpicture}
+      \end{minipage}
+      &
+      \begin{minipage}[c]{4.5cm}
+        \centering
+        \includegraphics[width=3.2cm]{figures/SI.png} \\[0.2cm]
+        {\small\bfseries\sffamily\color{AcademicBlue} SI-VISION} \\
+        {\footnotesize\sffamily\color{SlateGray} Industry Partner}
+      \end{minipage}
+    \end{tabular}
+
+    \vspace{0.8cm}
+
+    % ======== THESIS TYPE LABEL ========
+    {\Large\scshape\color{AcademicBlue} Graduation Project Thesis}
+
+    \vspace{0.1cm}
+
+    % Gold separator line
+    \begin{tikzpicture}
+      \draw[ultra thick, WarmGold!70] (-3,0) -- (-0.4,0);
+      \filldraw[WarmGold] (0,0) circle (2.5pt);
+      \draw[ultra thick, WarmGold!70] (0.4,0) -- (3,0);
+    \end{tikzpicture}
+
+    \vspace{0.6cm}
+
+    % ======== GRAND TITLE (Glowing effect on white background) ========
+    \begin{tcolorbox}[
+      enhanced,
+      colback=AcademicBlue!50!DeepNavy,
+      colframe=WarmGold,
+      arc=6pt,
+      boxrule=1.8pt,
+      halign=center,
+      valign=center,
+      width=13.5cm,
+      height=4.0cm,
+      shadow={1.5mm}{-1.5mm}{0mm}{black!15},
+      overlay={
+        % Inner gold border glow
+        \draw[WarmGold!25, line width=0.4pt]
+          ([xshift=5pt, yshift=-5pt]frame.north west) rectangle
+          ([xshift=-5pt, yshift=5pt]frame.south east);
+        % Second inner line
+        \draw[WarmGold!12, line width=0.3pt]
+          ([xshift=9pt, yshift=-9pt]frame.north west) rectangle
+          ([xshift=-9pt, yshift=9pt]frame.south east);
+      }
+    ]
+      \centering
+      \vspace{0.15cm}
+      {\fontsize{30}{38}\selectfont\bfseries\sffamily\color{white} AI-BASED ANALOG} \\[0.35cm]
+      {\fontsize{30}{38}\selectfont\bfseries\sffamily\color{white} LAYOUT AUTOMATION} \\[0.4cm]
+      {\small\color{PaleGold}\sffamily\itshape Multi-Agent LangGraph System with Deterministic Diffusion Compaction}
+    \end{tcolorbox}
+
+    \vspace{0.7cm}
+
+    % ======== FOUR-STAGE FANCY BLOCK DIAGRAM ========
+    \begin{tikzpicture}[
+      % --- Stage block (rounded rect with gradient-like fill) ---
+      stageblock/.style={
+        draw=WarmGold,
+        line width=1.2pt,
+        fill=AcademicBlue!60!DeepNavy,
+        minimum width=2.5cm,
+        minimum height=3.0cm,
+        align=center,
+        rounded corners=6pt,
+        font=\tiny\sffamily\color{white},
+      },
+      % --- Stage number badge ---
+      stagebadge/.style={
+        circle,
+        fill=WarmGold,
+        text=DeepNavy,
+        font=\scriptsize\bfseries\sffamily,
+        inner sep=0pt,
+        minimum size=16pt,
+      },
+      % --- Icon circle inside block ---
+      stageicon/.style={
+        circle,
+        draw=WarmGold!70,
+        line width=0.8pt,
+        fill=DeepNavy,
+        minimum size=22pt,
+        inner sep=0pt,
+      },
+      % --- Fancy arrow connector ---
+      fancyarrow/.style={
+        -{Triangle[length=6pt, width=5pt]},
+        line width=1.5pt,
+        WarmGold!90!black,
+      },
+    ]
+      % === STAGE 1: EDA Input ===
+      \node[stageblock] (s1) {};
+      \node[stageicon] at ($(s1.center) + (0cm,0.7cm)$) (i1) {};
+      % Vector Netlist Symbol
+      \draw[thick, WarmGold!95] ($(i1.center) + (-0.18cm,-0.08cm)$) -- ($(i1.center) + (0cm,0.18cm)$) -- ($(i1.center) + (0.18cm,-0.08cm)$);
+      \draw[thick, WarmGold!95] ($(i1.center) + (-0.18cm,-0.08cm)$) -- ($(i1.center) + (0.18cm,-0.08cm)$);
+      \filldraw[WarmGold] ($(i1.center) + (-0.18cm,-0.08cm)$) circle (1.8pt);
+      \filldraw[WarmGold] ($(i1.center) + (0.18cm,-0.08cm)$) circle (1.8pt);
+      \filldraw[WarmGold] ($(i1.center) + (0cm,0.18cm)$) circle (1.8pt);
+      \filldraw[white] ($(i1.center) + (0cm,-0.08cm)$) circle (1.2pt);
+
+      \node[stagebadge] at ($(s1.north east) + (-0.15,-0.15)$) {1};
+      \node[font=\scriptsize\bfseries\sffamily\color{WarmGold}, anchor=north] at ($(s1.center) + (0,0.15)$) {EDA Input};
+      \node[font=\fontsize{5}{6.5}\selectfont\sffamily\color{white!70}, align=center, anchor=north] at ($(s1.center) + (0,-0.1)$) {SPICE Parser\\PDK Queries\\Netlist Ingestion};
+
+      % === STAGE 2: AI Placement ===
+      \node[stageblock, right=0.9cm of s1] (s2) {};
+      \node[stageicon] at ($(s2.center) + (0cm,0.7cm)$) (i2) {};
+      % Vector Neural Network Symbol
+      \foreach \y in {-0.16, 0, 0.16} {
+        \foreach \outy in {-0.1, 0.1} {
+          \draw[WarmGold!70, line width=0.4pt] ($(i2.center) + (-0.18cm,\y cm)$) -- ($(i2.center) + (0.18cm,\outy cm)$);
+        }
+      }
+      \filldraw[WarmGold] ($(i2.center) + (-0.18cm,-0.16cm)$) circle (1.5pt);
+      \filldraw[WarmGold] ($(i2.center) + (-0.18cm,0cm)$) circle (1.5pt);
+      \filldraw[WarmGold] ($(i2.center) + (-0.18cm,0.16cm)$) circle (1.5pt);
+      \filldraw[white] ($(i2.center) + (0.18cm,-0.1cm)$) circle (1.5pt);
+      \filldraw[white] ($(i2.center) + (0.18cm,0.1cm)$) circle (1.5pt);
+
+      \node[stagebadge] at ($(s2.north east) + (-0.15,-0.15)$) {2};
+      \node[font=\scriptsize\bfseries\sffamily\color{WarmGold}, anchor=north] at ($(s2.center) + (0,0.15)$) {AI Placer};
+      \node[font=\fontsize{5}{6.5}\selectfont\sffamily\color{white!70}, align=center, anchor=north] at ($(s2.center) + (0,-0.1)$) {LangGraph Engine\\Multi-Agent Crew\\DRC Self-Healing};
+
+      % === STAGE 3: Chatbot Co-Pilot ===
+      \node[stageblock, right=0.9cm of s2] (s3) {};
+      \node[stageicon] at ($(s3.center) + (0cm,0.7cm)$) (i3) {};
+      % Vector Chat Dialogue Bubble Symbol
+      \draw[thick, WarmGold!95, rounded corners=1.5pt] ($(i3.center) + (-0.2cm,-0.12cm)$) rectangle ($(i3.center) + (0.2cm,0.14cm)$);
+      \draw[thick, WarmGold!95, fill=DeepNavy] ($(i3.center) + (-0.04cm,-0.12cm)$) -- ($(i3.center) + (-0.1cm,-0.22cm)$) -- ($(i3.center) + (-0.1cm,-0.12cm)$);
+      \draw[WarmGold!80, line width=0.8pt] ($(i3.center) + (-0.12cm,0.05cm)$) -- ($(i3.center) + (0.12cm,0.05cm)$);
+      \draw[WarmGold!80, line width=0.8pt] ($(i3.center) + (-0.12cm,-0.04cm)$) -- ($(i3.center) + (0.04cm,-0.04cm)$);
+
+      \node[stagebadge] at ($(s3.north east) + (-0.15,-0.15)$) {3};
+      \node[font=\scriptsize\bfseries\sffamily\color{WarmGold}, anchor=north] at ($(s3.center) + (0,0.15)$) {Co-Pilot};
+      \node[font=\fontsize{5}{6.5}\selectfont\sffamily\color{white!70}, align=center, anchor=north] at ($(s3.center) + (0,-0.1)$) {NL Commands\\PySide6 GUI\\Human Review};
+
+      % === STAGE 4: Export Output ===
+      \node[stageblock, right=0.9cm of s3] (s4) {};
+      \node[stageicon] at ($(s4.center) + (0cm,0.7cm)$) (i4) {};
+      % Vector Compaction Layout Symbol
+      \draw[thick, WarmGold!95] ($(i4.center) + (-0.22cm,-0.16cm)$) rectangle ($(i4.center) + (0.22cm,0.16cm)$);
+      \draw[thick, ->, >=stealth, WarmGold!95] ($(i4.center) + (-0.16cm,0cm)$) -- ($(i4.center) + (-0.03cm,0cm)$);
+      \draw[thick, ->, >=stealth, WarmGold!95] ($(i4.center) + (0.18cm,0cm)$) -- ($(i4.center) + (0.03cm,0cm)$);
+      \filldraw[WarmGold] ($(i4.center) + (0cm,0cm)$) circle (1.5pt);
+
+      \node[stagebadge] at ($(s4.north east) + (-0.15,-0.15)$) {4};
+      \node[font=\scriptsize\bfseries\sffamily\color{WarmGold}, anchor=north] at ($(s4.center) + (0,0.15)$) {Export};
+      \node[font=\fontsize{5}{6.5}\selectfont\sffamily\color{white!70}, align=center, anchor=north] at ($(s4.center) + (0,-0.1)$) {Compaction\\OASIS / GDS\\TCL Bridge};
+
+      % Draw pins on stage blocks to make them look like IC chips
+      \foreach \s in {s1,s2,s3,s4} {
+        \foreach \y in {-1.0, -0.6, -0.2, 0.2, 0.6, 1.0} {
+          \draw[line width=1pt, WarmGold!60] ($(\s.west) + (0,\y)$) -- ++(-0.1,0);
+          \draw[line width=1pt, WarmGold!60] ($(\s.east) + (0,\y)$) -- ++(0.1,0);
+        }
+      }
+
+      % === CONNECTORS ===
+      \draw[fancyarrow] (s1.east) -- (s2.west);
+      \draw[fancyarrow] (s2.east) -- (s3.west);
+      \draw[fancyarrow] (s3.east) -- (s4.west);
+
+      % === DRC SELF-HEALING LOOP (curved arrow under stage 2) ===
+      \draw[{Triangle[length=4pt, width=3.5pt]}-,
+            line width=0.8pt,
+            WarmGold!85!black,
+            dashed]
+        ($(s2.south) + (-0.4cm,0)$)
+        to[out=-130, in=-50, looseness=1.6]
+        node[below, font=\fontsize{4.5}{5.5}\selectfont\itshape\color{WarmGold!85!black}, yshift=-1pt]
+        {Self-Healing Loop}
+        ($(s2.south) + (0.4cm,0)$);
+
+    \end{tikzpicture}
+
+
+    \vfill
+
+    % ======== BOTTOM ORNAMENT (replaces date/department) ========
+    \begin{tikzpicture}
+      % Ornamental bottom bar
+      \draw[ultra thick, WarmGold!70] (-4,0) -- (-1,0);
+      \draw[ultra thick, WarmGold!70] (1,0) -- (4,0);
+      % Central layered diamond
+      \filldraw[WarmGold!90!black] (0,0) -- (0.3,-0.25) -- (0,-0.5) -- (-0.3,-0.25) -- cycle;
+      \filldraw[AcademicBlue] (0,-0.05) -- (0.2,-0.25) -- (0,-0.45) -- (-0.2,-0.25) -- cycle;
+      \filldraw[WarmGold] (0,-0.2) circle (1.8pt);
+      % Side accent diamonds
+      \filldraw[WarmGold!70] (-0.7,0) -- (-0.7,-0.05) -- (-0.77,0) -- (-0.7,0.05) -- cycle;
+      \filldraw[WarmGold!70] (0.7,0) -- (0.7,-0.05) -- (0.77,0) -- (0.7,0.05) -- cycle;
+    \end{tikzpicture}
+
+
+
+  \end{center}
+\end{titlepage}
+
+\clearpage
+\setcounter{page}{2}
+\thispagestyle{plain}
+
+  % ============================================================================
+  % PAGE 2: Elegant Student Credentials & Project Team
+  % ============================================================================
+
+  
+
+  % --- DECORATIVE PAGE FRAME ---
+  \decorativeframe
+
+
+  % --- SECTION HEADING ---
+  \begin{center}
+    {\fontsize{24}{30}\selectfont\bfseries\sffamily\color{AcademicBlue} Project Team}
+  \end{center}
+  \vspace{-0.1cm}
+  \grandornament
+  \vspace{0.4cm}
+
+  % --- STUDENT CARDS GRID (3 rows of 2 columns) ---
+  \begin{center}
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabular}{c @{\hspace{0.4cm}} c}
+    
+    % --- ROW 1 ---
+    \begin{tcolorbox}[
+      enhanced,
+      width=6.8cm,
+      height=3.6cm,
+      valign=center,
+      colback=AcademicBlue!3,
+      colframe=AcademicBlue!80!DeepNavy,
+      arc=4pt,
+      boxrule=1.2pt,
+      shadow={1mm}{-1mm}{0mm}{black!10},
+      title={\sffamily\bfseries\fontsize{10}{12}\selectfont Mohammed Magdy Mohammed},
+      coltitle=white,
+      colbacktitle=AcademicBlue!90!DeepNavy,
+      fonttitle=\small\sffamily\bfseries,
+      attach boxed title to top center={yshift=-2mm},
+      boxed title style={colback=AcademicBlue!90!DeepNavy, colframe=WarmGold, boxrule=0.8pt, arc=2pt, top=1.5pt, bottom=1.5pt, left=4pt, right=4pt}
+    ]
+      \centering
+      \vspace{0.1cm}
+      {\footnotesize\sffamily\color{SlateGray} Student ID: 2100519} \par\vspace{0.2cm}
+      \tcbox[enhanced, colback=PaleGold!25, colframe=WarmGold, boxsep=1.5pt, top=1pt, bottom=1pt, left=3pt, right=3pt, arc=2pt, boxrule=0.6pt, fontupper=\fontsize{7}{8}\selectfont\sffamily\bfseries\color{WarmGold!50!black}]{STAGE 1: INPUTS} \par\vspace{0.2cm}
+      {\fontsize{8.5}{11}\selectfont\sffamily\color{TextCharcoal}\bfseries SPICE Parsing \& PDK Library Graphing}
+    \end{tcolorbox}
+    &
+    \begin{tcolorbox}[
+      enhanced,
+      width=6.8cm,
+      height=3.6cm,
+      valign=center,
+      colback=AcademicBlue!3,
+      colframe=AcademicBlue!80!DeepNavy,
+      arc=4pt,
+      boxrule=1.2pt,
+      shadow={1mm}{-1mm}{0mm}{black!10},
+      title={\sffamily\bfseries\fontsize{10}{12}\selectfont Noureldin Ayman Mohammed},
+      coltitle=white,
+      colbacktitle=AcademicBlue!90!DeepNavy,
+      fonttitle=\small\sffamily\bfseries,
+      attach boxed title to top center={yshift=-2mm},
+      boxed title style={colback=AcademicBlue!90!DeepNavy, colframe=WarmGold, boxrule=0.8pt, arc=2pt, top=1.5pt, bottom=1.5pt, left=4pt, right=4pt}
+    ]
+      \centering
+      \vspace{0.1cm}
+      {\footnotesize\sffamily\color{SlateGray} Student ID: 2101407} \par\vspace{0.2cm}
+      \tcbox[enhanced, colback=PaleGold!25, colframe=WarmGold, boxsep=1.5pt, top=1pt, bottom=1pt, left=3pt, right=3pt, arc=2pt, boxrule=0.6pt, fontupper=\fontsize{7}{8}\selectfont\sffamily\bfseries\color{WarmGold!50!black}]{STAGE 2: AI PLACEMENT} \par\vspace{0.2cm}
+      {\fontsize{8.5}{11}\selectfont\sffamily\color{TextCharcoal}\bfseries LangGraph Placement Specialist Agent}
+    \end{tcolorbox}
+    \\[0.3cm]
+
+    % --- ROW 2 ---
+    \begin{tcolorbox}[
+      enhanced,
+      width=6.8cm,
+      height=3.6cm,
+      valign=center,
+      colback=AcademicBlue!3,
+      colframe=AcademicBlue!80!DeepNavy,
+      arc=4pt,
+      boxrule=1.2pt,
+      shadow={1mm}{-1mm}{0mm}{black!10},
+      title={\sffamily\bfseries\fontsize{10}{12}\selectfont Ahmed Khairat Mohammed},
+      coltitle=white,
+      colbacktitle=AcademicBlue!90!DeepNavy,
+      fonttitle=\small\sffamily\bfseries,
+      attach boxed title to top center={yshift=-2mm},
+      boxed title style={colback=AcademicBlue!90!DeepNavy, colframe=WarmGold, boxrule=0.8pt, arc=2pt, top=1.5pt, bottom=1.5pt, left=4pt, right=4pt}
+    ]
+      \centering
+      \vspace{0.1cm}
+      {\footnotesize\sffamily\color{SlateGray} Student ID: 2100157} \par\vspace{0.2cm}
+      \tcbox[enhanced, colback=PaleGold!25, colframe=WarmGold, boxsep=1.5pt, top=1pt, bottom=1pt, left=3pt, right=3pt, arc=2pt, boxrule=0.6pt, fontupper=\fontsize{7}{8}\selectfont\sffamily\bfseries\color{WarmGold!50!black}]{STAGE 2: AI PLACEMENT} \par\vspace{0.2cm}
+      {\fontsize{8.5}{11}\selectfont\sffamily\color{TextCharcoal}\bfseries DRC Critic Spatial Self-Healing Engine}
+    \end{tcolorbox}
+    &
+    \begin{tcolorbox}[
+      enhanced,
+      width=6.8cm,
+      height=3.6cm,
+      valign=center,
+      colback=AcademicBlue!3,
+      colframe=AcademicBlue!80!DeepNavy,
+      arc=4pt,
+      boxrule=1.2pt,
+      shadow={1mm}{-1mm}{0mm}{black!10},
+      title={\sffamily\bfseries\fontsize{10}{12}\selectfont Mohammed Wael Mohammed},
+      coltitle=white,
+      colbacktitle=AcademicBlue!90!DeepNavy,
+      fonttitle=\small\sffamily\bfseries,
+      attach boxed title to top center={yshift=-2mm},
+      boxed title style={colback=AcademicBlue!90!DeepNavy, colframe=WarmGold, boxrule=0.8pt, arc=2pt, top=1.5pt, bottom=1.5pt, left=4pt, right=4pt}
+    ]
+      \centering
+      \vspace{0.1cm}
+      {\footnotesize\sffamily\color{SlateGray} Student ID: 2100308} \par\vspace{0.2cm}
+      \tcbox[enhanced, colback=PaleGold!25, colframe=WarmGold, boxsep=1.5pt, top=1pt, bottom=1pt, left=3pt, right=3pt, arc=2pt, boxrule=0.6pt, fontupper=\fontsize{7}{8}\selectfont\sffamily\bfseries\color{WarmGold!50!black}]{STAGE 3: CO-PILOT GUI} \par\vspace{0.2cm}
+      {\fontsize{8.5}{11}\selectfont\sffamily\color{TextCharcoal}\bfseries PySide6 Canvas GUI \& Undo Stack}
+    \end{tcolorbox}
+    \\[0.3cm]
+
+    % --- ROW 3 ---
+    \begin{tcolorbox}[
+      enhanced,
+      width=6.8cm,
+      height=3.6cm,
+      valign=center,
+      colback=AcademicBlue!3,
+      colframe=AcademicBlue!80!DeepNavy,
+      arc=4pt,
+      boxrule=1.2pt,
+      shadow={1mm}{-1mm}{0mm}{black!10},
+      title={\sffamily\bfseries\fontsize{10}{12}\selectfont Omar Ahmed Abobakr},
+      coltitle=white,
+      colbacktitle=AcademicBlue!90!DeepNavy,
+      fonttitle=\small\sffamily\bfseries,
+      attach boxed title to top center={yshift=-2mm},
+      boxed title style={colback=AcademicBlue!90!DeepNavy, colframe=WarmGold, boxrule=0.8pt, arc=2pt, top=1.5pt, bottom=1.5pt, left=4pt, right=4pt}
+    ]
+      \centering
+      \vspace{0.1cm}
+      {\footnotesize\sffamily\color{SlateGray} Student ID: 2100307} \par\vspace{0.2cm}
+      \tcbox[enhanced, colback=PaleGold!25, colframe=WarmGold, boxsep=1.5pt, top=1pt, bottom=1pt, left=3pt, right=3pt, arc=2pt, boxrule=0.6pt, fontupper=\fontsize{7}{8}\selectfont\sffamily\bfseries\color{WarmGold!50!black}]{STAGE 3: CHATBOT CO-PILOT} \par\vspace{0.2cm}
+      {\fontsize{8.5}{11}\selectfont\sffamily\color{TextCharcoal}\bfseries Chatbot Co-Pilot Intent \& Skill Pipeline}
+    \end{tcolorbox}
+    &
+    \begin{tcolorbox}[
+      enhanced,
+      width=6.8cm,
+      height=3.6cm,
+      valign=center,
+      colback=AcademicBlue!3,
+      colframe=AcademicBlue!80!DeepNavy,
+      arc=4pt,
+      boxrule=1.2pt,
+      shadow={1mm}{-1mm}{0mm}{black!10},
+      title={\sffamily\bfseries\fontsize{10}{12}\selectfont Eman Sherif Sayed},
+      coltitle=white,
+      colbacktitle=AcademicBlue!90!DeepNavy,
+      fonttitle=\small\sffamily\bfseries,
+      attach boxed title to top center={yshift=-2mm},
+      boxed title style={colback=AcademicBlue!90!DeepNavy, colframe=WarmGold, boxrule=0.8pt, arc=2pt, top=1.5pt, bottom=1.5pt, left=4pt, right=4pt}
+    ]
+      \centering
+      \vspace{0.1cm}
+      {\footnotesize\sffamily\color{SlateGray} Student ID: 2100721} \par\vspace{0.2cm}
+      \tcbox[enhanced, colback=PaleGold!25, colframe=WarmGold, boxsep=1.5pt, top=1pt, bottom=1pt, left=3pt, right=3pt, arc=2pt, boxrule=0.6pt, fontupper=\fontsize{7}{8}\selectfont\sffamily\bfseries\color{WarmGold!50!black}]{STAGE 4: COMPACTION} \par\vspace{0.2cm}
+      {\fontsize{8.5}{11}\selectfont\sffamily\color{TextCharcoal}\bfseries Diffusion Compaction \& Exporters}
+    \end{tcolorbox}
+
+  \end{tabular}
+  \end{center}
+
+  \vspace{0.3cm}
+
+  % --- SUBMISSION DETAILS ---
+  \begin{center}
+    \begin{tcolorbox}[
+      enhanced,
+      colback=AcademicBlue!3,
+      colframe=WarmGold,
+      arc=3pt,
+      boxrule=0.8pt,
+      width=12.5cm,
+      halign=center,
+      shadow={1mm}{-1mm}{0mm}{black!15},
+      top=2mm, bottom=2mm
+    ]
+      {\small\itshape\color{TextCharcoal} This graduation project thesis is submitted to} \\[0.15cm]
+      {\large\bfseries\sffamily\color{AcademicBlue} Prof.\ DiaaEldin S.\ Khalil} \\[0.15cm]
+      {\small\itshape\color{TextCharcoal} in partial fulfillment of the requirements for the degree of} \\[0.1cm]
+      {\normalsize\bfseries\sffamily\color{AcademicBlue} Bachelor of Science in Electronics and Communications Engineering} \\[0.2cm]
+      \ornamentalrule
+      {\large\scshape\color{WarmGold} Ain Shams University}\\[0.05cm]
+      {\footnotesize\sffamily\color{SlateGray} Faculty of Engineering -- Electronics and Communications Department}
+    \end{tcolorbox}
+  \end{center}
+

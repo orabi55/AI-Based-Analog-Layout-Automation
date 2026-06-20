@@ -1,0 +1,87 @@
+% ==============================================================================
+% FRONTMATTER: Decorative Abstract Page
+% ==============================================================================
+
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+
+% --- DECORATIVE PAGE FRAME (TikZ overlay) ---
+\begin{tikzpicture}[remember picture, overlay]
+  % Outer gold frame
+  \draw[line width=1.2pt, WarmGold]
+    ($(current page.north west) + (2.0cm,-1.5cm)$)
+    rectangle
+    ($(current page.south east) + (-1.5cm,1.5cm)$);
+  % Inner thin frame
+  \draw[line width=0.4pt, WarmGold!40]
+    ($(current page.north west) + (2.15cm,-1.65cm)$)
+    rectangle
+    ($(current page.south east) + (-1.65cm,1.65cm)$);
+
+  % Corner ornaments - Top Left
+  \begin{scope}[shift={($(current page.north west) + (2.0cm,-1.5cm)$)}]
+    \draw[thick, WarmGold] (0,0) -- (1.5,0);
+    \draw[thick, WarmGold] (0,0) -- (0,-1.5);
+    \draw[thick, WarmGold!50] (0.3,0) arc (0:-90:0.3);
+    \filldraw[WarmGold] (0,0) circle (2.5pt);
+  \end{scope}
+
+  % Corner ornaments - Top Right
+  \begin{scope}[shift={($(current page.north east) + (-1.5cm,-1.5cm)$)}]
+    \draw[thick, WarmGold] (0,0) -- (-1.5,0);
+    \draw[thick, WarmGold] (0,0) -- (0,-1.5);
+    \draw[thick, WarmGold!50] (-0.3,0) arc (180:270:0.3);
+    \filldraw[WarmGold] (0,0) circle (2.5pt);
+  \end{scope}
+
+  % Corner ornaments - Bottom Left
+  \begin{scope}[shift={($(current page.south west) + (2.0cm,1.5cm)$)}]
+    \draw[thick, WarmGold] (0,0) -- (1.5,0);
+    \draw[thick, WarmGold] (0,0) -- (0,1.5);
+    \draw[thick, WarmGold!50] (0.3,0) arc (0:90:0.3);
+    \filldraw[WarmGold] (0,0) circle (2.5pt);
+  \end{scope}
+
+  % Corner ornaments - Bottom Right
+  \begin{scope}[shift={($(current page.south east) + (-1.5cm,1.5cm)$)}]
+    \draw[thick, WarmGold] (0,0) -- (-1.5,0);
+    \draw[thick, WarmGold] (0,0) -- (0,1.5);
+    \draw[thick, WarmGold!50] (-0.3,0) arc (180:90:0.3);
+    \filldraw[WarmGold] (0,0) circle (2.5pt);
+  \end{scope}
+
+  % Faint decorative accent band under heading
+  \shade[top color=WarmGold!8, bottom color=white, opacity=0.5]
+    ($(current page.north west) + (2.0cm,-3.0cm)$)
+    rectangle
+    ($(current page.north east) + (-1.5cm,-4.5cm)$);
+
+
+\end{tikzpicture}
+
+\vspace{0.3cm}
+\grandornament
+\vspace{0.6cm}
+
+% --- ABSTRACT TEXT (flows naturally, no redundant box) ---
+\noindent
+\lettrine[lines=3, findent=3pt, nindent=0pt]{A}{nalog} integrated circuit (IC) physical design is one of the most persistent bottlenecks in the semiconductor industry. Unlike digital layout design, which is highly automated through standard cell methodologies and logic synthesis tools, analog layout remains a labor-intensive, manual art. This reliance on manual layout is driven by the strict constraints governing analog performance, including device matching, parasitic capacitance and resistance sensitivities, and layout-dependent effects (LDE).
+
+\vspace{0.4cm}
+
+\noindent
+This thesis presents a novel, four-stage automated framework that bridges the gap between schematic intent and physical silicon layout. The core contribution is a decoupled architecture that separates high-level strategic reasoning from low-level physical coordinate placement.
+
+\vspace{0.4cm}
+
+% Stage descriptions in a visually distinct list
+\begin{itemize}
+  \item \textbf{\color{AcademicBlue}Stage 1: Input Ingestion} parses raw SPICE netlists, executes subgraph isomorphism to identify matching transistor groups, and queries physical PDK layouts to build a unified spatial database.
+  \item \textbf{\color{AcademicBlue}Stage 2: LangGraph-Driven Multi-Agent Placer} coordinates strategic placement, finger unrolling, and row mapping. A DRC Critic agent analyzes clearances and feeds prescriptive spatial corrections back to the placer in a self-healing loop.
+  \item \textbf{\color{AcademicBlue}Stage 3: Interactive Chatbot Co-Pilot} connects a PySide6 GUI to the model backend, enabling designers to refine placements with natural language commands translated directly into undoable GUI actions.
+  \item \textbf{\color{AcademicBlue}Stage 4: Compaction \& Export Pipelines} compacts symbolic layout slots down to a physical pitch of 0.070\,\(\mu\)m using diffusion-sharing principles and streams binary OASIS layouts, while a TCL watchdog injects coordinated movements directly into OpenAccess compiler databases.
+\end{itemize}
+
+
+\vspace{0.5cm}
+\grandornament

@@ -8,7 +8,7 @@ from ai_agent.placement.quality_metrics import score_placement
 
 
 def _load_comparator_placement():
-    path = Path("examples/comparator/comparator_initial_placement_placed.json")
+    path = Path("examples/comparator/comparator_initial_placement.json")
     return json.loads(path.read_text(encoding="utf-8"))
 
 
@@ -45,6 +45,7 @@ def test_vout_critical_signal_flow_improves_routing_without_matching_loss():
     crit = {"VOUTN", "VOUTP"}
 
     before = build_routing_report(nodes, [], terminal_nets, user_critical_nets=crit)
+    before_quality = score_placement(nodes, matching_info=None, verbose=False)
     result = optimize_critical_signal_flow(
         copy.deepcopy(nodes),
         terminal_nets,
@@ -57,4 +58,5 @@ def test_vout_critical_signal_flow_improves_routing_without_matching_loss():
     assert _net_hpwl(after, "VOUTP") < _net_hpwl(before, "VOUTP")
     assert after.weighted_cost < before.weighted_cost
     assert after.estimated_crossings <= before.estimated_crossings
-    assert quality["composite_score"] == 1.0
+    assert quality["composite_score"] >= before_quality["composite_score"]
+

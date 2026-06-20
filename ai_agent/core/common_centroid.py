@@ -142,8 +142,14 @@ def place_common_centroid(
         )
 
     # Build the token→count dict expected by generate_placement_grid
-    devices_in = {"M0": len(group_a), "M1": len(group_b)}
-
+    m0_count = len(group_a)
+    m1_count = len(group_b)
+    
+    # Pad to even numbers to satisfy perfect mathematical CC centroid constraints
+    if m0_count % 2 != 0: m0_count += 1
+    if m1_count % 2 != 0: m1_count += 1
+        
+    devices_in = {"M0": m0_count, "M1": m1_count}
     # Delegate all pattern logic to the existing generator
     grid = generate_placement_grid(devices_in, technique="CC", rows=1)
 
@@ -341,7 +347,18 @@ def insert_dummies_around_group(
         row_map.setdefault(y, []).append(n)
 
     inserted: List[dict] = []
-    ctr = 0
+    
+    # Find next available STRUCT_DUMMY index
+    used = set()
+    for n in group_nodes:
+        nid = n.get("id", "")
+        if nid.startswith("STRUCT_DUMMY_"):
+            parts = nid.split("_")
+            if parts and parts[-1].isdigit():
+                used.add(int(parts[-1]))
+    d_counter = 1
+    while d_counter in used:
+        d_counter += 1
 
     for y, row_nodes in row_map.items():
         geos   = [n.get("geometry") or {} for n in row_nodes]
@@ -350,6 +367,7 @@ def insert_dummies_around_group(
         ref_w  = widths[0] if widths else STD_PITCH
         ref_h  = float(geos[0].get("height", 0.568)) if geos else 0.568
         ref_t  = str(row_nodes[0].get("type", "nmos"))
+        ref_c  = row_nodes[0].get("color")
 
         min_x = min(xs)
         max_x = max(xs[i] + widths[i] for i in range(len(xs)))
@@ -357,32 +375,41 @@ def insert_dummies_around_group(
         for i in range(n_dummies):
             # Left dummy: placed just to the left of the group
             left_x  = _snap(min_x  - (i + 1) * ref_w, fin_pitch)
-            # Right dummy: placed just to the right of the group
-            right_x = _snap(max_x  +  i      * ref_w, fin_pitch)
-
-            ctr += 1
-            inserted.append({
-                "id":         f"STRUCT_DUMMY_L_{ctr}",
+            d_id = f"STRUCT_DUMMY_L_{d_counter}"
+            d_counter += 1
+            while d_counter in used: d_counter += 1
+            dummy_l = {
+                "id":         d_id,
                 "type":       ref_t,
                 "structural": True,
-                # NOTE: no "is_dummy" key — keeps _is_dummy_node() from flagging it
+                # NOTE: no "is_dummy" key so it acts like a structural element
                 "geometry": {
                     "x": left_x, "y": y,
                     "width": ref_w, "height": ref_h,
                     "orientation": "R0",
-                },
-            })
-            ctr += 1
-            inserted.append({
-                "id":         f"STRUCT_DUMMY_R_{ctr}",
+                }
+            }
+            if ref_c: dummy_l["color"] = ref_c
+            inserted.append(dummy_l)
+
+        for i in range(n_dummies):
+            # Right dummy: placed just to the right of the group
+            right_x = _snap(max_x  +  i      * ref_w, fin_pitch)
+            d_id = f"STRUCT_DUMMY_R_{d_counter}"
+            d_counter += 1
+            while d_counter in used: d_counter += 1
+            dummy_r = {
+                "id":         d_id,
                 "type":       ref_t,
                 "structural": True,
                 "geometry": {
                     "x": right_x, "y": y,
                     "width": ref_w, "height": ref_h,
                     "orientation": "R0",
-                },
-            })
+                }
+            }
+            if ref_c: dummy_r["color"] = ref_c
+            inserted.append(dummy_r)
 
     return LayoutToolResult(
         success=True,

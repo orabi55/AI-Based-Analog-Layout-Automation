@@ -1396,9 +1396,9 @@ def merge_matched_groups(
 
         # Generate interleaved pattern based on technique
         if technique == "ABAB_diff_pair":
-            interleaved = interdigitate_fingers(fingers_a, fingers_b, pattern="ABAB", edge_dummies=True)
+            interleaved = interdigitate_fingers(fingers_a, fingers_b, pattern="ABBA", edge_dummies=True)
         elif technique == "ABAB_load_pair":
-            interleaved = interdigitate_fingers(fingers_a, fingers_b, pattern="ABAB", edge_dummies=True)
+            interleaved = interdigitate_fingers(fingers_a, fingers_b, pattern="ABBA", edge_dummies=True)
         elif technique == "symmetric_cross_coupled":
             # Cross-coupled latch: use ABBA for perfect vertical symmetry
             # with reflection constraint enforced downstream in the healer
@@ -2415,6 +2415,7 @@ def expand_to_fingers(
         matching_info: dict | None = None,
         no_abutment: bool = False,
         original_group_nodes: dict[str, dict] | None = None,
+        terminal_nets: dict | None = None,
 ) -> list:
     """
     Explode optimized LLM groupings back into physical multi-finger atomic elements.
@@ -2598,6 +2599,20 @@ def expand_to_fingers(
                     dev_fingers[base] = []
                 dev_fingers[base].append(m)
                 
+            canonical_nets = {}
+            for b in dev_fingers:
+                net_s = dev_fingers[b][0].get("net_s")
+                net_d = dev_fingers[b][0].get("net_d")
+                
+                # Force power/ground nets to be Source to align canonical nets consistently
+                if net_d and str(net_d).upper() in ["VDD", "VSS", "VDD!", "VSS!", "VSS_SUB"]:
+                    net_s, net_d = net_d, net_s
+                    
+                canonical_nets[b] = {
+                    "S": net_s,
+                    "D": net_d
+                }
+                
             MATRIX_ROW_PITCH = _row_step_um(members)
             rep_node = members[0]
             dummy_idx = 0
@@ -2621,6 +2636,11 @@ def expand_to_fingers(
                     fx = round(origin_x + c * pitch, 6)
                     fy = round(final_y + r * MATRIX_ROW_PITCH, 6)
                     
+                    # Reset to canonical nets to fix arbitrary pre-swapping from netlister
+                    if base != "dummy" and base in canonical_nets:
+                        if "S" in canonical_nets[base]: node["net_s"] = canonical_nets[base]["S"]
+                        if "D" in canonical_nets[base]: node["net_d"] = canonical_nets[base]["D"]
+                        
                     # Keep all fingers in R0 orientation with alternating S/D net swapping
                     cell_orient = "R0"
                     if c % 2 != 0:
@@ -2708,7 +2728,7 @@ def expand_to_fingers(
 
     # --- Pass 4: resolve inter-group overlaps per row ----------------------
     vprint(f"[expand_to_fingers] Before overlap resolution: {len(expanded)} devices expanded")
-    expanded = _resolve_row_overlaps(expanded, no_abutment)
+    expanded = _resolve_row_overlaps(expanded, no_abutment, terminal_nets=terminal_nets)
     expanded = legalize_vertical_rows(expanded)
     vprint(f"[expand_to_fingers] After overlap resolution: returning {len(expanded)} devices")
 
@@ -2731,6 +2751,67 @@ def expand_to_fingers(
 # Backward-compatible alias
 expand_groups = expand_to_fingers
 
+
+def get_block_boundary_nets(nodes: list, is_flipped: bool = False) -> tuple:
+    """Calculate the leftmost and rightmost boundary nets of a block of fingers.
+    
+    Each node represents a transistor with nf fingers. Within a transistor,
+    fingers alternate S/D orientation. The boundary nets depend on:
+    - Whether nf is odd or even
+    - Whether the transistor is swapped (swapped_sd)
+    - Whether the whole block is flipped (is_flipped)
+    - The orientation of the transistor (R0, MY, R180, etc.)
+    
+    The effective flip state is: swapped_sd XOR (orientation in (MY, R180)) XOR is_flipped
+    
+    For a transistor with nf fingers:
+      - If effectively flipped:
+        - nf odd: left=net_d, right=net_s
+        - nf even: left=net_d, right=net_d
+      - If not effectively flipped:
+        - nf odd: left=net_s, right=net_d
+        - nf even: left=net_s, right=net_s
+    """
+    if not nodes:
+        return None, None
+    
+    # Calculate left boundary of first node
+    n_first = nodes[0]
+    nf_first = n_first.get("electrical", {}).get("nf", 1)
+    swapped_first = n_first.get("swapped_sd", False)
+    orient_first = n_first.get("geometry", {}).get("orientation", "R0")
+    orient_flipped_first = orient_first in ("MY", "R180")
+    
+    # Effective flip state: swapped XOR orientation XOR block flip
+    effective_first_flipped = swapped_first ^ orient_flipped_first ^ is_flipped
+    
+    if effective_first_flipped:
+        left_net = n_first.get("net_d")
+    else:
+        left_net = n_first.get("net_s")
+    
+    # Calculate right boundary of last node
+    n_last = nodes[-1]
+    nf_last = n_last.get("electrical", {}).get("nf", 1)
+    swapped_last = n_last.get("swapped_sd", False)
+    orient_last = n_last.get("geometry", {}).get("orientation", "R0")
+    orient_flipped_last = orient_last in ("MY", "R180")
+    
+    # Effective flip state: swapped XOR orientation XOR block flip
+    effective_last_flipped = swapped_last ^ orient_flipped_last ^ is_flipped
+    
+    if effective_last_flipped:
+        if nf_last % 2 == 1:  # odd
+            right_net = n_last.get("net_s")
+        else:  # even
+            right_net = n_last.get("net_d")
+    else:
+        if nf_last % 2 == 1:  # odd
+            right_net = n_last.get("net_d")
+        else:  # even
+            right_net = n_last.get("net_s")
+    
+    return left_net, right_net
 
 def detect_abutment_intent(nodes: List[dict], terminal_nets: dict | None) -> None:
     """
@@ -2897,10 +2978,17 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False, preserve
                     n["net_g"] = nets.get("G")
 
         # --- Step 1: Group physical fingers in this row into logical blocks ---
+        # For matched/interdigitated blocks, use _block_id to keep the entire
+        # interdigitated sequence together as one block. For non-matched nodes,
+        # use _block_key (per multiplier copy) so the solver can reorder them.
         block_nodes = defaultdict(list)
         for n in row_nodes:
-            bk = n.get("_block_id") or _block_key(n["id"])
+            if n.get("_matched_block") and n.get("_block_id"):
+                bk = n["_block_id"]
+            else:
+                bk = _block_key(n["id"])
             block_nodes[bk].append(n)
+
             
         blocks = []
         for bk, f_nodes in block_nodes.items():
@@ -2923,7 +3011,8 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False, preserve
             # Preserve the block sequence, but optimize their flips/mirroring to maximize abutments!
             ordered_blocks = list(blocks)
             M = len(blocks)
-            if M <= 1:
+            is_matched = any(b["nodes"][0].get("_matched_block") for b in blocks)
+            if M <= 1 or is_matched:
                 best_flips = [0] * M
             else:
                 # Detect blocks already flipped (orientation=MY) from a previous pass.
@@ -3018,12 +3107,9 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False, preserve
                     is_flipped = b["nodes"][0].get("geometry", {}).get("orientation", "R0") in ("MY", "R180")
                     already_flipped_sub.append(is_flipped)
                     
-                    left = b["nodes"][0].get("net_s")
-                    right = b["nodes"][-1].get("net_d")
-                    if is_flipped:
-                        left = b["nodes"][0].get("net_d")
-                        right = b["nodes"][-1].get("net_s")
+                    left, right = get_block_boundary_nets(b["nodes"], False)
                     block_nets.append((left, right))
+
 
                 def evaluate(perm, flips):
                     direct_abuts = 0
@@ -3127,33 +3213,50 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False, preserve
                     }
                 break
 
-        # Mirror flipped blocks first so that net sharing checks are 100% accurate
-        if not no_abutment:
-            for b_idx, b in enumerate(ordered_blocks):
-                if best_flips[b_idx]:
-                    mirrored_nodes = []
-                    for n in reversed(b["nodes"]):
-                        nc = copy.deepcopy(n)
-                        if "abutment" in nc:
-                            abut = nc["abutment"]
-                            nc["abutment"] = {
-                                "abut_left": abut.get("abut_right", False),
-                                "abut_right": abut.get("abut_left", False),
-                            }
-                        # Swap net_s and net_d logically to represent mirroring without physical flip
-                        if "net_d" in nc or "net_s" in nc:
-                            nc["net_d"], nc["net_s"] = nc["net_s"], nc.get("net_d")
-                        nc.setdefault("geometry", {})["orientation"] = "R0"
-                        mirrored_nodes.append(nc)
-                    b["nodes"] = mirrored_nodes
+        
+        # Run global flip optimization BEFORE mirroring to work on original data
+        # Collect all active nodes from ordered blocks
+        all_active_nodes = []
+        for b in ordered_blocks:
+            all_active_nodes.extend(b["nodes"])
+        
+        # Run the optimization
+        all_active_nodes = maximize_interleaved_abutment(all_active_nodes, terminal_nets)
+        
+        # Put the optimized nodes back into blocks
+        # Copy abutment flags and net assignments from optimized nodes to original nodes
+        node_idx = 0
+        for b in ordered_blocks:
+            for i in range(len(b["nodes"])):
+                optimized_node = all_active_nodes[node_idx]
+                original_node = b["nodes"][i]
+                
+                # Copy abutment flags
+                if 'abutment' in optimized_node:
+                    original_node['abutment'] = optimized_node['abutment']
+                
+                # Copy net assignments if they changed
+                if 'net_s' in optimized_node:
+                    original_node['net_s'] = optimized_node['net_s']
+                if 'net_d' in optimized_node:
+                    original_node['net_d'] = optimized_node['net_d']
+                if 'swapped_sd' in optimized_node:
+                    original_node['swapped_sd'] = optimized_node['swapped_sd']
+                
+                node_idx += 1
+        
+        # Block mirroring is skipped - maximize_interleaved_abutment already optimized flips
 
         row_nodes_final = []
         cursor_slot = 0
         dummy_idx = 0
 
         for b_idx, b in enumerate(ordered_blocks):
-            # Place all fingers of the block consecutively
+            # Place all fingers of the block consecutively,
+            # but insert bridge dummies within matched blocks where needed
             K = len(b["nodes"])
+            is_matched = any(n.get("_matched_block") for n in b["nodes"])
+            
             for f_idx, n in enumerate(b["nodes"]):
                 geo = n.setdefault("geometry", {})
                 geo["x"] = round(cursor_slot * STD_PITCH, 6)
@@ -3165,65 +3268,105 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False, preserve
                 if no_abutment:
                     n["abutment"] = {"abut_left": False, "abut_right": False}
                 else:
+                    # Preserve abutment flags set by maximize_interleaved_abutment
+                    # Only set defaults if flags weren't already optimized
+                    existing_abutment = n.get("abutment", {})
                     n["abutment"] = {
-                        "abut_left": (f_idx > 0) or n.get("abutment", {}).get("abut_left", False),
-                        "abut_right": (f_idx < K - 1) or n.get("abutment", {}).get("abut_right", False),
+                        "abut_left": existing_abutment.get("abut_left", (f_idx > 0)),
+                        "abut_right": existing_abutment.get("abut_right", (f_idx < K - 1)),
                     }
                 row_nodes_final.append(n)
                 cursor_slot += 1
+                
+                # Within matched blocks: insert bridge dummies between adjacent
+                # fingers of different transistors that don't share boundary nets
+                if is_matched and not no_abutment and f_idx < K - 1:
+                    n_next = b["nodes"][f_idx + 1]
+                    n_curr_id = n.get("id", "")
+                    n_next_id = n_next.get("id", "")
+                    curr_is_dummy = n.get("is_dummy") or n_curr_id.startswith(("DUMMY", "EDGE_DUMMY", "FILLER_DUMMY", "MATCH_DUMMY"))
+                    next_is_dummy = n_next.get("is_dummy") or n_next_id.startswith(("DUMMY", "EDGE_DUMMY", "FILLER_DUMMY", "MATCH_DUMMY"))
+                    
+                    if not curr_is_dummy and not next_is_dummy:
+                        # Check if same transistor (siblings always abut)
+                        import re
+                        curr_base = re.sub(r'(_[mf]\d+)+$', '', str(n_curr_id))
+                        next_base = re.sub(r'(_[mf]\d+)+$', '', str(n_next_id))
+                        if curr_base != next_base:
+                            # Different transistors — check if they share a boundary net
+                            _, right_net = get_block_boundary_nets([n], False)
+                            left_net, _ = get_block_boundary_nets([n_next], False)
+                            if right_net and left_net and right_net != "NC" and left_net != "NC" and right_net == left_net:
+                                # Share a net - abut!
+                                n.setdefault("abutment", {})["abut_right"] = True
+                                n_next_abutment = n_next.get("abutment", {})
+                                n_next_abutment["abut_left"] = True
+                                n_next["abutment"] = n_next_abutment
+                            else:
+                                # No shared net - don't abut
+                                n.setdefault("abutment", {})["abut_right"] = False
+                                n_next_abutment = n_next.get("abutment", {})
+                                n_next_abutment["abut_left"] = False
+                                n_next["abutment"] = n_next_abutment
 
             # Insert a bridge dummy if needed between this block and the next
             if not no_abutment and b_idx < len(ordered_blocks) - 1:
-                right_net = b["nodes"][-1].get("net_d")
-                left_net = ordered_blocks[b_idx + 1]["nodes"][0].get("net_s")
+                n_curr = b["nodes"][-1]
+                n_next = ordered_blocks[b_idx + 1]["nodes"][0]
                 
-                # Check if they share a net directly
-                if right_net and left_net and right_net == left_net:
-                    # Direct abutment is possible!
-                    b["nodes"][-1].setdefault("abutment", {})["abut_right"] = True
-                    ordered_blocks[b_idx + 1]["nodes"][0].setdefault("abutment", {})["abut_left"] = True
+                curr_is_dummy = n_curr.get("is_dummy") or str(n_curr.get("id", "")).startswith(("DUMMY", "EDGE_DUMMY", "FILLER_DUMMY", "MATCH_DUMMY", "TAP"))
+                next_is_dummy = n_next.get("is_dummy") or str(n_next.get("id", "")).startswith(("DUMMY", "EDGE_DUMMY", "FILLER_DUMMY", "MATCH_DUMMY", "TAP"))
+                
+                if curr_is_dummy or next_is_dummy:
+                    # Directly abut with dummy neighbors
+                    n_curr.setdefault("abutment", {})["abut_right"] = True
+                    n_next.setdefault("abutment", {})["abut_left"] = True
                 else:
-                    # No shared net -> insert a bridge dummy to achieve continuous abutment!
-                    dummy_idx += 1
-                    dummy_id = f"FILLER_DUMMY_BRIDGE_{y_key}_{b_idx}_{_dev_type}"
+                    _, right_net = get_block_boundary_nets(b["nodes"], False)
+                    left_net, _ = get_block_boundary_nets(ordered_blocks[b_idx + 1]["nodes"], False)
                     
-                    gate_net = "VSS" if _dev_type == "nmos" else "VDD"
-                    
-                    bridge_dummy = {
-                        "id": dummy_id,
-                        "type": _dev_type,
-                        "is_dummy": True,
-                        "geometry": {
-                            "x": round(cursor_slot * STD_PITCH, 6),
-                            "y": round(float(y_key), 6),
-                            "width": STD_PITCH,
-                            "height": ref_height,
-                            "orientation": "R0"
-                        },
-                        "electrical": dict(ref_elec),
-                        "net_s": right_net,
-                        "net_d": left_net,
-                        "net_g": gate_net,
-                        "abutment": {
-                            "abut_left": True,
-                            "abut_right": True
-                        }
-                    }
-                    # Enable abutment at boundaries with the bridge dummy
-                    b["nodes"][-1].setdefault("abutment", {})["abut_right"] = True
-                    ordered_blocks[b_idx + 1]["nodes"][0].setdefault("abutment", {})["abut_left"] = True
-                    
-                    row_nodes_final.append(bridge_dummy)
-                    cursor_slot += 1
+                    # Check if they share a net directly
+                    if right_net and left_net and right_net != "NC" and left_net != "NC" and right_net == left_net:
+                        # Direct abutment is possible!
+                        n_curr.setdefault("abutment", {})["abut_right"] = True
+                        n_next.setdefault("abutment", {})["abut_left"] = True
+                    else:
+                        # Check for interleaved fingers (matched pairs)
+                        # Even if blocks don't share boundary nets, individual fingers might
+                        curr_parent = _transistor_key(n_curr.get("id", ""))
+                        next_parent = _transistor_key(n_next.get("id", ""))
+                        
+                        # If they're from different parents, check individual finger nets
+                        if curr_parent != next_parent:
+                            # For now, just check current state without flipping
+                            # Global flip optimization will be done separately
+                            _, curr_right = get_block_boundary_nets([n_curr], False)
+                            next_left, _ = get_block_boundary_nets([n_next], False)
+                            
+                            if curr_right and next_left and curr_right != "NC" and next_left != "NC" and curr_right == next_left:
+                                n_curr.setdefault("abutment", {})["abut_right"] = True
+                                n_next.setdefault("abutment", {})["abut_left"] = True
+                            else:
+                                n_curr.setdefault("abutment", {})["abut_right"] = False
+                                n_next.setdefault("abutment", {})["abut_left"] = False
+                        else:
+                            # Same parent - don't abut
+                            n_curr.setdefault("abutment", {})["abut_right"] = False
+                            n_next.setdefault("abutment", {})["abut_left"] = False
+
+
 
         # Replace type-row nodes with our perfectly optimized layout row
         type_rows[(y_key, _dev_type)] = row_nodes_final
 
-    # Rebuild active_nodes from optimized rows including bridge dummies
+    
+# Rebuild active_nodes from optimized rows including bridge dummies
     active_nodes = []
     for row_nodes in type_rows.values():
         active_nodes.extend(row_nodes)
-
+    
+    # Run final post-processing to maximize abutment for interleaved fingers
+    
     # --- Step 5: Global Centering & Inner/Outer Filler Dummies ---
     # Only apply centering and filler insertion to MOS rows.
     # Passives (caps/res) must keep their placed geometry and never get dummy passives.
@@ -3255,7 +3398,7 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False, preserve
 
         total_slots = int(round((global_max_x - global_min_x) / pitch_std))
         import os
-        skip_fillers = os.environ.get("DISABLE_FILLER_DUMMIES", "1").lower() in ("1", "true", "yes")
+        skip_fillers = os.environ.get("DISABLE_FILLER_DUMMIES", "0").lower() in ("1", "true", "yes")
         dummy_counter = 0
 
         for (y_key, dev_type), row_nodes in type_rows.items():
@@ -3281,18 +3424,23 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False, preserve
                     break
 
             active_slots = len(row_nodes)
+            empty_slots = max(0, total_slots - active_slots)
+            
             if skip_fillers:
+                # Even without fillers, center the row on the global axis
+                # Use integer offset to maintain grid alignment
+                center_offset = empty_slots // 2
                 left_slots = 0
                 right_slots = 0
-                empty_slots = 0
             else:
-                empty_slots = max(0, total_slots - active_slots)
+                # Add filler dummies to equalize row widths
                 left_slots = empty_slots // 2
                 right_slots = empty_slots - left_slots
+                center_offset = left_slots
 
             # 1. Reposition active nodes to be perfectly centered in the row
             for idx, n in enumerate(row_nodes):
-                n["geometry"]["x"] = round((left_slots + idx) * pitch_std, 6)
+                n["geometry"]["x"] = round((center_offset + idx) * pitch_std, 6)
                 n["geometry"]["y"] = round(float(y_key), 6)
 
             # 2. Generate left filler dummies
@@ -3345,69 +3493,6 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False, preserve
     for y_val, row in final_rows.items():
         row.sort(key=lambda n: n.get("geometry", {}).get("x", 0.0))
         
-        # Ensure S/D nets alternate correctly for all consecutive fingers of the same parent device
-        i_idx = 0
-        while i_idx < len(row):
-            node = row[i_idx]
-            dev_id = node.get("id", "")
-            if node.get("is_dummy") or dev_id.startswith(("DUMMY", "EDGE_DUMMY", "FILLER_DUMMY", "MATCH_DUMMY", "TAP")):
-                i_idx += 1
-                continue
-            
-            parent_id, _, _ = _parse_id(dev_id)
-            if not parent_id:
-                i_idx += 1
-                continue
-                
-            # Find the contiguous chain of fingers belonging to this parent_id
-            chain = [node]
-            j_idx = i_idx + 1
-            while j_idx < len(row):
-                next_node = row[j_idx]
-                next_id = next_node.get("id", "")
-                if next_node.get("is_dummy") or next_id.startswith(("DUMMY", "EDGE_DUMMY", "FILLER_DUMMY", "MATCH_DUMMY", "TAP")):
-                    break
-                next_parent_id, _, _ = _parse_id(next_id)
-                if next_parent_id == parent_id:
-                    chain.append(next_node)
-                    j_idx += 1
-                else:
-                    break
-            
-            # Apply alternating swap logic
-            for idx, chain_node in enumerate(chain):
-                # First ensure we have reference/schematic S/D nets for this finger
-                nets = {}
-                if terminal_nets:
-                    nets = terminal_nets.get(chain_node["id"]) or terminal_nets.get(parent_id) or {}
-                if not nets:
-                    nets = _current_terminal_nets.get(chain_node["id"]) or _current_terminal_nets.get(parent_id) or {}
-                
-                if nets:
-                    chain_node.setdefault("net_s", nets.get("S"))
-                    chain_node.setdefault("net_d", nets.get("D"))
-                    chain_node.setdefault("net_g", nets.get("G"))
-                
-                orig_s = chain_node.get("net_s")
-                orig_d = chain_node.get("net_d")
-                if chain_node.get("swapped_sd") and orig_s and orig_d:
-                    # Reverse back to baseline first to avoid double swapping
-                    orig_s, orig_d = orig_d, orig_s
-                
-                if idx % 2 == 1:
-                    # Swap S/D nets logically
-                    if orig_s and orig_d:
-                        chain_node["net_s"] = orig_d
-                        chain_node["net_d"] = orig_s
-                    chain_node["swapped_sd"] = True
-                else:
-                    if orig_s and orig_d:
-                        chain_node["net_s"] = orig_s
-                        chain_node["net_d"] = orig_d
-                    chain_node["swapped_sd"] = False
-                    
-            i_idx = j_idx
-
         # Bias all dummies in this row based on their nearest neighboring non-dummy device
         for i_itm, node in enumerate(row):
             dev_id = node.get("id", "")
@@ -3433,12 +3518,73 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False, preserve
                     right_non_dummy = (n, idx - i_itm)
                     break
                     
-            selected_device = None
-            is_right = False
+            left_net = None
+            right_net = None
+            left_term_type = 'S'
+            right_term_type = 'D'
+            
+            if left_non_dummy:
+                ldev = left_non_dummy[0]
+                lorient = ldev.get("geometry", {}).get("orientation", "R0")
+                lflipped = lorient in ("MY", "R180", "MX")
+                lswapped = bool(ldev.get("swapped_sd", False))
+                ltotal_flipped = lflipped ^ lswapped
+                
+                lf_idx = int(ldev.get("electrical", {}).get("nf", 1))
+                is_even = (lf_idx % 2 == 0)
+                if is_even:
+                    right_term_type = 'S' if ltotal_flipped else 'D'
+                else:
+                    right_term_type = 'D' if ltotal_flipped else 'S'
+                    
+                p_left, p_right = get_block_boundary_nets([ldev], False)
+                left_net = p_right
+                
+            if right_non_dummy:
+                rdev = right_non_dummy[0]
+                rorient = rdev.get("geometry", {}).get("orientation", "R0")
+                rflipped = rorient in ("MY", "R180", "MX")
+                rswapped = bool(rdev.get("swapped_sd", False))
+                rtotal_flipped = rflipped ^ rswapped
+                
+                left_term_type = 'S' if rtotal_flipped else 'D'
+                
+                p_left, p_right = get_block_boundary_nets([rdev], False)
+                right_net = p_left
+                
+            dev_type = str(node.get("type", "nmos")).strip().lower()
+            rail_net = "VDD" if dev_type == "pmos" else "VSS"
+            
+            if not left_net or left_net == "NC":
+                left_net = right_net if (right_net and right_net != "NC") else rail_net
+            if not right_net or right_net == "NC":
+                right_net = left_net
+                
             if left_non_dummy and right_non_dummy:
-                if left_non_dummy[1] <= right_non_dummy[1]:
-                    selected_device = left_non_dummy[0]
-                         # Clear outer edges of the row
+                # Match this bridge dummy's physical boundaries to its neighbors.
+                # get_block_boundary_nets() defines a non-flipped, odd-nf device as:
+                #   left_boundary  = node["net_s"]
+                #   right_boundary = node["net_d"]
+                # The previous assignment reversed these fields, causing the final
+                # validation pass to clear real<->bridge dummy abutment flags.
+                node["net_s"] = left_net
+                node["net_d"] = right_net
+                
+                if right_term_type == 'S' and left_term_type == 'D':
+                    node["net_g"] = left_net  # gate tied to left boundary net
+                elif right_term_type == 'D' and left_term_type == 'S':
+                    node["net_g"] = right_net  # gate tied to right boundary net
+                elif right_term_type == 'S' and left_term_type == 'S':
+                    node["net_g"] = left_net  # gate tied to left boundary net
+                else:
+                    node["net_g"] = rail_net  # gate tied to VDD/VSS
+            else:
+                # OUTER DUMMY: allow sharing diffusion with its single neighbor.
+                node["net_s"] = left_net
+                node["net_d"] = right_net
+                node["net_g"] = rail_net
+                
+        # Clear outer edges of the row
         if row:
             row[0].setdefault("abutment", {})["abut_left"] = False
             row[-1].setdefault("abutment", {})["abut_right"] = False
@@ -3465,18 +3611,20 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False, preserve
                 
                 if curr_is_dummy and next_is_dummy:
                     is_abutment_allowed = True
-                elif not curr_is_dummy and not next_is_dummy:
-                    # Check if sibling fingers of the same transistor
-                    import re
-                    curr_base = re.sub(r'(_[mf]\d+)+$', '', str(curr_id))
-                    next_base = re.sub(r'(_[mf]\d+)+$', '', str(next_id))
-                    if curr_base and next_base and curr_base == next_base:
+                else:
+                    # One or both are real/dummy - check physical boundary nets
+                    _, curr_right = get_block_boundary_nets([curr_n], False)
+                    next_left, _ = get_block_boundary_nets([next_n], False)
+                    c_net = curr_right
+                    n_net = next_left
+                    if c_net and n_net and c_net != "NC" and n_net != "NC" and c_net == n_net:
                         is_abutment_allowed = True
-                    else:
-                        # Different transistors — check shared net
-                        c_net = curr_n.get("net_d")
-                        n_net = next_n.get("net_s")
-                        if c_net and n_net and c_net != "NC" and n_net != "NC" and c_net == n_net:
+                    elif not curr_is_dummy and not next_is_dummy:
+                        # Check if sibling fingers of the same transistor
+                        import re
+                        curr_base = re.sub(r'(_[mf]\d+)+$', '', str(curr_id))
+                        next_base = re.sub(r'(_[mf]\d+)+$', '', str(next_id))
+                        if curr_base and next_base and curr_base == next_base:
                             is_abutment_allowed = True
             
             if is_abutment_allowed:
@@ -3486,6 +3634,7 @@ def _resolve_row_overlaps(nodes: List[dict], no_abutment: bool = False, preserve
                 curr_n.setdefault("abutment", {})["abut_right"] = False
                 next_n.setdefault("abutment", {})["abut_left"] = False
  
+    
     return active_nodes
 
 
@@ -3512,6 +3661,180 @@ def build_compact_graph(
 # ---------------------------------------------------------------------------
 # Backward-compatible wrapper for old expand_logical_to_fingers signature
 # ---------------------------------------------------------------------------
+
+def maximize_interleaved_abutment(nodes: List[dict], terminal_nets: dict = None) -> List[dict]:
+    """
+    Maximize abutment for interleaved matched pair fingers using global flip optimization.
+    
+    This function runs after _resolve_row_overlaps to fix abutment gaps between
+    interleaved fingers that couldn't be resolved by local pair-wise optimization.
+    
+    IMPORTANT: This function modifies nodes IN-PLACE to ensure changes propagate.
+    
+    Args:
+        nodes: List of node dictionaries with geometry and abutment info
+        terminal_nets: Optional terminal net mapping
+    
+    Returns:
+        Same list of nodes with optimized abutment flags (modified in-place)
+    """
+    if not nodes:
+        return nodes
+    
+    from collections import defaultdict
+    
+    # Group by row
+    rows = defaultdict(list)
+    for n in nodes:
+        y = round(n.get('geometry', {}).get('y', 0.0), 6)
+        rows[(y, n.get('type', 'unknown'))].append(n)
+    
+    # Process each row
+    for key in sorted(rows.keys()):
+        y, typ = key
+        row = sorted(rows[key], key=lambda n: n['geometry']['x'])
+        
+        # Separate active devices and dummies
+        active = [n for n in row if not n.get('is_dummy', False)]
+        
+        if len(active) < 2:
+            continue
+        
+        # Group by parent transistor
+        blocks = defaultdict(list)
+        for n in active:
+            parent_id = _transistor_key(n.get('id', ''))
+            blocks[parent_id].append(n)
+        
+        # Optimize if we have 2 or more blocks
+        if len(blocks) < 2:
+            continue
+        
+        # Check if this is an interleaved pattern
+        positions = []
+        for n in active:
+            parent = _transistor_key(n.get('id', ''))
+            positions.append(parent)
+        
+        is_interleaved = False
+        for i in range(len(positions) - 1):
+            if positions[i] != positions[i + 1]:
+                is_interleaved = True
+                break
+        
+        if not is_interleaved:
+            continue
+        
+        vprint(f"[MAXIMIZE_ABUTMENT] Optimizing interleaved pattern in row y={y:.3f} ({typ})")
+        
+        # O(N) dynamic programming (Viterbi) optimization for flips.
+        # Interleaved pattern order is fixed by the matching pattern, so we preserve it.
+        N = len(active)
+        best_perm = list(range(N))
+        best_flips = [False] * N
+        best_abutments = 0
+
+        if N > 0:
+            # Build cache for boundary nets of each device in normal and flipped states
+            def get_device_boundary(idx, flip):
+                dev = {
+                    'id': active[idx]['id'],
+                    'net_s': active[idx].get('net_s'),
+                    'net_d': active[idx].get('net_d'),
+                    'swapped_sd': active[idx].get('swapped_sd', False),
+                    'geometry': {'orientation': 'R0'},
+                    'electrical': {'nf': 1}
+                }
+                if flip:
+                    dev['swapped_sd'] = not dev['swapped_sd']
+                    dev['net_s'], dev['net_d'] = dev['net_d'], dev['net_s']
+                return get_block_boundary_nets([dev], False)
+
+            boundaries = {}
+            for idx in range(N):
+                boundaries[(idx, False)] = get_device_boundary(idx, False)
+                boundaries[(idx, True)] = get_device_boundary(idx, True)
+
+            # dp[i][f] = (max_score, prev_f)
+            dp = [{} for _ in range(N)]
+            dp[0][False] = (0, None)
+            dp[0][True] = (-1, None)  # Small penalty for flipping the first device
+
+            for i in range(1, N):
+                for curr_flip in [False, True]:
+                    curr_left, _ = boundaries[(i, curr_flip)]
+                    best_score = -float('inf')
+                    best_prev = None
+                    for prev_flip in [False, True]:
+                        _, prev_right = boundaries[(i - 1, prev_flip)]
+                        
+                        # Touch matching check
+                        touch_match = (
+                            curr_left and prev_right and 
+                            curr_left != 'NC' and prev_right != 'NC' and 
+                            curr_left == prev_right
+                        )
+                        
+                        # Score: prev_score + (1000 if touch_match else 0) - (1 if curr_flip else 0)
+                        score = dp[i-1][prev_flip][0] + (1000 if touch_match else 0) - (1 if curr_flip else 0)
+                        if score > best_score:
+                            best_score = score
+                            best_prev = prev_flip
+                    dp[i][curr_flip] = (best_score, best_prev)
+
+            # Find best ending flip state
+            best_end_flip = False
+            if dp[N-1][True][0] > dp[N-1][False][0]:
+                best_end_flip = True
+
+            # Backtrack
+            curr_f = best_end_flip
+            for idx in range(N - 1, -1, -1):
+                best_flips[idx] = curr_f
+                curr_f = dp[idx][curr_f][1]
+
+            # Re-evaluate actual abutment count achieved
+            for i in range(N - 1):
+                curr_left, curr_right = boundaries[(i, best_flips[i])]
+                next_left, next_right = boundaries[(i+1, best_flips[i+1])]
+                if curr_right and next_left and curr_right != 'NC' and next_left != 'NC' and curr_right == next_left:
+                    best_abutments += 1
+        
+        # Apply best permutation and flip configuration IN-PLACE
+        if best_perm and best_flips:
+            # Reorder active devices according to best permutation
+            reordered_active = [active[idx] for idx in best_perm]
+            
+            # Apply flips
+            for i, flip in enumerate(best_flips):
+                if flip:
+                    reordered_active[i]['swapped_sd'] = not reordered_active[i].get('swapped_sd', False)
+                    reordered_active[i]['net_s'], reordered_active[i]['net_d'] = reordered_active[i]['net_d'], reordered_active[i]['net_s']
+            
+            # Update the active list with reordered devices
+            for i, dev in enumerate(reordered_active):
+                active[i] = dev
+            
+            # Set abutment flags for ALL adjacent pairs based on final configuration
+            for i in range(N - 1):
+                curr = active[i]
+                next_node = active[i + 1]
+                
+                _, curr_right = get_block_boundary_nets([curr], False)
+                next_left, _ = get_block_boundary_nets([next_node], False)
+                
+                if curr_right and next_left and curr_right != 'NC' and next_left != 'NC' and curr_right == next_left:
+                    curr.setdefault('abutment', {})['abut_right'] = True
+                    next_node.setdefault('abutment', {})['abut_left'] = True
+                else:
+                    curr.setdefault('abutment', {})['abut_right'] = False
+                    next_node.setdefault('abutment', {})['abut_left'] = False
+            
+            vprint(f"[MAXIMIZE_ABUTMENT] Achieved {best_abutments} abutments in row y={y:.3f}")
+    
+    return nodes
+
+
 
 def expand_logical_to_fingers(logical_nodes: list, original_nodes: list, pitch: float = 0.294, terminal_nets: dict = None) -> list:
     """Expand logical placement back to physical fingers (backward-compatible).

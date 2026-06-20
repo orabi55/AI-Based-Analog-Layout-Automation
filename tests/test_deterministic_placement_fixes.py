@@ -141,12 +141,57 @@ def test_common_centroid_matrix_expansion_keeps_side_dummies():
         }
     }
 
-    expanded = expand_to_fingers(
-        group_placement,
-        {group_id: [member]},
-        original_group_nodes=original_group_nodes,
-    )
+    import os
+    orig_val = os.environ.get("DISABLE_FILLER_DUMMIES")
+    os.environ["DISABLE_FILLER_DUMMIES"] = "1"
+    try:
+        expanded = expand_to_fingers(
+            group_placement,
+            {group_id: [member]},
+            original_group_nodes=original_group_nodes,
+        )
+    finally:
+        if orig_val is None:
+            del os.environ["DISABLE_FILLER_DUMMIES"]
+        else:
+            os.environ["DISABLE_FILLER_DUMMIES"] = orig_val
 
     dummy_ids = [node["id"] for node in expanded if node.get("is_dummy")]
     assert len(dummy_ids) == 2
     assert all(dummy_id.startswith(f"DUMMY_matrix_{group_id}_") for dummy_id in dummy_ids)
+
+
+def test_layout_editor_tab_toolbar_delegates():
+    tab = LayoutEditorTab.__new__(LayoutEditorTab)
+    tab.nodes = [
+        {
+            "id": "MP1",
+            "type": "pmos",
+            "geometry": {"x": 0.0, "y": 0.668, "width": 0.294, "height": 0.668},
+        },
+        {
+            "id": "MN1",
+            "type": "nmos",
+            "geometry": {"x": 0.0, "y": 0.0, "width": 0.294, "height": 0.668},
+        }
+    ]
+    tab.editor = SimpleNamespace(
+        selected_device_ids=lambda: []
+    )
+    
+    commands = []
+    def mock_handle_ai_command(cmd):
+        commands.append(cmd)
+    tab._handle_ai_command = mock_handle_ai_command
+    
+    # Run auto taps
+    tab.do_auto_taps()
+    assert len(commands) == 1
+    assert commands[0]["action"] == "apply_layout"
+    
+    # Run insert edge dummies
+    commands.clear()
+    tab.do_insert_edge_dummies()
+    assert len(commands) == 1
+    assert commands[0]["action"] == "apply_layout"
+

@@ -15,7 +15,7 @@ from ai_agent.utils.logging import vprint
 
 # ── LLM Classifier prompt ────────────────────────────────────────
 CLASSIFIER_PROMPT = """\
-You are an intent classifier for an analog IC layout editor.
+You are an intent classifier for an analog IC layout assistant.
 Classify the user's message into exactly ONE of these intent targets:
 
     placement_specialist - Direct placement / movement / ordering /
@@ -25,12 +25,14 @@ Classify the user's message into exactly ONE of these intent targets:
     drc_critic           - DRC violations, spacing, overlap, clean-up,
                            or fix-and-verify layout requests.
 
-    general              - Factual lookups, definitions, or knowledge
-                           questions about devices, properties, or concepts
-                           (e.g. "What is...", "How does...", "Why is...",
-                           "What are the specs of..."). Use this when the
-                           user is asking FOR INFORMATION rather than
-                           requesting an action on the layout.
+    layout_query         - Specific questions about the currently loaded layout, net list,
+                           or design context (e.g. "is MM3 connected to MM4?", "what pins does net net1 have?").
+                           Use this ONLY when layout context is required to answer.
+
+    general_chat         - Factual lookups, definitions, general programming help,
+                           knowledge questions about concepts (e.g. "What is a cascode mirror?"),
+                           greetings, or small talk. Use this when the user is asking general questions
+                           and NO active layout data is required to answer.
 
 Choose the single best target for the user's request.
 Reply with ONLY the target name.
@@ -65,18 +67,20 @@ def classify_intent(user_message: str, selected_model: str) -> str:
         vprint(f"[CLASSIFIER] Requesting Intent Classification from {selected_model}...")
         result = llm.invoke(msgs)
         if not result:
-            return "general"
+            return "general_chat"
         label = result.content.strip().lower().split()[0].rstrip(".,;:")
         node_labels = {
             "topology_analyst": "topology_analyst",
             "strategy_selector": "strategy_selector",
             "placement_specialist": "placement_specialist",
             "drc_critic": "drc_critic",
-            "general": "general",
+            "general_chat": "general_chat",
+            "layout_query": "layout_query",
+            "general": "general_chat",
         }
         if label in node_labels:
             vprint(f"[CLASSIFIER] LLM -> {label}: '{stripped[:60]}'")
             return node_labels[label]
     except Exception as exc:
-        vprint(f"[CLASSIFIER] Failed: {exc} — defaulting to general")
-    return "general"
+        vprint(f"[CLASSIFIER] Failed: {exc} — defaulting to general_chat")
+    return "general_chat"

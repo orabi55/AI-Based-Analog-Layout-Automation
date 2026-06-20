@@ -1,0 +1,64 @@
+M2.f1 0.490 -0.000 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M2.f2 0.560 -0.000 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M2.f3 0.490 0.668 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M2.f4 0.560 0.668 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M1.f1 0.350 -0.000 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M1.f2 0.420 -0.000 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M1.f3 0.630 -0.000 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M1.f4 0.700 -0.000 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M1.f5 0.350 0.668 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M1.f6 0.420 0.668 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M1.f7 0.630 0.668 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M1.f8 0.700 0.668 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M0.f1 0.070 -0.000 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M0.f2 0.140 -0.000 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M0.f3 0.210 -0.000 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M0.f4 0.280 -0.000 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M0.f5 0.770 -0.000 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M0.f6 0.840 -0.000 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M0.f7 0.910 -0.000 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M0.f8 0.980 -0.000 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M0.f9 0.070 0.668 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M0.f10 0.140 0.668 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M0.f11 0.210 0.668 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M0.f12 0.280 0.668 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M0.f13 0.770 0.668 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M0.f14 0.840 0.668 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M0.f15 0.910 0.668 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M0.f16 0.980 0.668 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M5.f1 0.490 1.336 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M5.f2 0.560 1.336 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M5.f3 0.490 2.004 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M5.f4 0.560 2.004 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M4.f1 0.350 1.336 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M4.f2 0.420 1.336 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M4.f3 0.630 1.336 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M4.f4 0.700 1.336 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M4.f5 0.350 2.004 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M4.f6 0.420 2.004 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M4.f7 0.630 2.004 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M4.f8 0.700 2.004 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M3.f1 0.070 1.336 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M3.f2 0.140 1.336 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M3.f3 0.210 1.336 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M3.f4 0.280 1.336 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M3.f5 0.770 1.336 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M3.f6 0.840 1.336 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M3.f7 0.910 1.336 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M3.f8 0.980 1.336 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M3.f9 0.070 2.004 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M3.f10 0.140 2.004 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M3.f11 0.210 2.004 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M3.f12 0.280 2.004 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M3.f13 0.770 2.004 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M3.f14 0.840 2.004 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M3.f15 0.910 2.004 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+M3.f16 0.980 2.004 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=1
+DUMMY DUMMY_matrix_MM2_MM1_and_1_more_centroid_0 nfet 0.000 -0.000 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=0 right_abut=1 D=gnd! G=gnd! S=gnd! B=gnd!
+DUMMY DUMMY_matrix_MM2_MM1_and_1_more_centroid_1 nfet 1.050 -0.000 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=0 D=C G=C S=C B=gnd!
+DUMMY DUMMY_matrix_MM2_MM1_and_1_more_centroid_2 nfet 0.000 0.668 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=0 right_abut=1 D=gnd! G=gnd! S=gnd! B=gnd!
+DUMMY DUMMY_matrix_MM2_MM1_and_1_more_centroid_3 nfet 1.050 0.668 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=0 D=C G=C S=C B=gnd!
+DUMMY DUMMY_matrix_MM5_MM4_and_1_more_centroid_0 pfet 0.000 1.336 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=0 right_abut=1 D=vdd! G=vdd! S=vdd! B=vdd!
+DUMMY DUMMY_matrix_MM5_MM4_and_1_more_centroid_1 pfet 1.050 1.336 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=0 D=X G=X S=X B=vdd!
+DUMMY DUMMY_matrix_MM5_MM4_and_1_more_centroid_2 pfet 0.000 2.004 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=0 right_abut=1 D=vdd! G=vdd! S=vdd! B=vdd!
+DUMMY DUMMY_matrix_MM5_MM4_and_1_more_centroid_3 pfet 1.050 2.004 R0 l=0.014 nf=1 nfin=2.0 m=1 left_abut=1 right_abut=0 D=X G=X S=X B=vdd!

@@ -1,0 +1,471 @@
+% ==============================================================================
+% CHAPTER 7: Output Compaction & Compiler Integration
+% ==============================================================================
+
+\chapter[Compaction \& Export Pipelines]{Stage 4: Compaction \& Export Pipelines}
+\label{ch:compaction_exporter}
+
+\lettrine[lines=3]{T}{he physical execution layer} translates symbolic placements into final silicon geometries. This phase runs a compaction pass on symbolic slots and exports layouts through a double-exporter pipeline. While symbolic representations are useful for spatial planning and machine learning optimization, physical design rules require exact coordinates snapped to PDK grids, tap/tie cell placement, and terminal net connectivity. 
+
+This chapter details the mathematical formulations of the diffusion compaction engine, the net compatibility rules for abutment, the graph serialization JSON flow, the variant PCell cloning OASIS exporter, and the multi-phase OpenAccess TCL database exporter.
+
+% ==============================================================================
+\section[Diffusion Compaction]{Spatial Diffusion-Sharing Compaction \& Net Compatibility}
+\label{sec:compaction_math}
+
+Standard symbolic layouts align transistors on a coarse grid ($0.294\,\mu\text{m}$) to simplify editing. During compilation, the physical engine compresses shared source/drain regions down to a pitch of $0.070\,\mu\text{m}$. Let a transistor row $R$ be defined as an ordered list of device fingers:
+\[R = \{f_1, f_2, \dots, f_k\}\]
+
+Each finger $f_i$ is mapped to a symbolic slot index $s_i \in \mathbb{Z}^+$. The symbolic coordinate spacing is defined as:
+\[X_{\text{symbolic}}(f_i) = s_i \times P_{\text{symbolic}}\]
+where $P_{\text{symbolic}} = 0.294\,\mu\text{m}$ represents the loose symbolic pitch.
+
+During compact export, the physical coordinate engine resolves the physical spacing using local abutment states. Let $A(f_i, f_{i+1}) \in \{0, 1\}$ represent the contact sharing (abutment) coefficient:
+\[A(f_i, f_{i+1}) = \begin{cases} 
+1 & \text{if } \text{net}(D_i) = \text{net}(S_{i+1}) \text{ (shared diffusion)} \\ 
+0 & \text{otherwise} 
+\end{cases}\]
+
+The physical compaction coordinate $X_{\text{physical}}(f_n)$ is recursively evaluated as:
+\[X_{\text{physical}}(f_1) = 0\]
+\[X_{\text{physical}}(f_n) = X_{\text{physical}}(f_{n-1}) + W_{\text{finger}} + D(f_{n-1}, f_n)\]
+
+where the boundary distance function $D(f_{n-1}, f_n)$ matches:
+\[D(f_{n-1}, f_n) = A(f_{n-1}, f_n) \cdot P_{\text{abut}} + (1 - A(f_{n-1}, f_n)) \cdot P_{\text{clearance}}\]
+
+*   $P_{\text{abut}} = 0.070\,\mu\text{m}$ (shared diffusion pitch).
+*   $P_{\text{clearance}} = 0.294\,\mu\text{m}$ (default isolated contact clearances).
+
+To ensure that the layout is physically realizable, the system validates the electrical compatibility of adjacent terminals before enabling compaction. The helper function \texttt{\_adjacent\_}\allowbreak\texttt{devices\_}\allowbreak\texttt{can\_}\allowbreak\texttt{abut()} implements these checks:
+\begin{itemize}
+    \item If either device is flagged as a dummy transistor, it is treated as an empty diffusion container and can always abut the adjacent active device.
+    \item If the adjacent instances belong to the same logical device (matching base IDs), they are physically contiguous and are abutted.
+    \item If their adjacent physical boundaries share the same electrical net (excluding non-connected nets), they are compatible for contact sharing.
+\end{itemize}
+
+The physical boundary nets are computed dynamically by \texttt{\_get\_}\allowbreak\texttt{physical\_}\allowbreak\texttt{boundary\_}\allowbreak\texttt{nets()} which takes the device configuration, total fingers $nf$, orientation (mirroring), and net connections:
+\begin{equation}
+    \text{phys\_left} = \begin{cases}
+        S & \text{if } (\text{swapped} \oplus \text{mirrored}) = 1 \\
+        D & \text{otherwise}
+    \end{cases}
+\end{equation}
+\begin{equation}
+    \text{phys\_right} = \begin{cases}
+        S & \text{if } (\text{swapped} \oplus \text{mirrored} \oplus \text{is\_even}) = 1 \\
+        D & \text{otherwise}
+    \end{cases}
+\end{equation}
+where $\text{swapped}$ indicates if the source and drain nets are physically swapped relative to the schematic, $\text{mirrored}$ indicates if the device orientation is left-right mirrored (\texttt{MY} or \texttt{R180}), and $\text{is\_even}$ is true if the finger count $nf$ is even.
+
+% ==============================================================================
+\section[JSON Placement Exporter]{JSON Graph Placement Exporter}
+\label{sec:json_exporter}
+
+Before the layout can be optimized by the multi-agent AI placement engine, the unified NetworkX database graph is serialized to a standard placement JSON schema. The exporter script \texttt{export\_json.py} loops over graph nodes and edges, serializing electrical and geometric parameters to enable coordinate snapshots. Listing~\ref{lst:export_json} shows the complete implementation.
+
+\begin{thesiscode}{JSON Layout Graph Exporter (export\_json.py)\label{lst:export_json}}{python}
+import json
+
+def graph_to_json(G, output_file):
+    """
+    Convert merged NetworkX graph to JSON file
+    for AI placement agent.
+    """
+    data = {
+        "nodes": [],
+        "edges": []
+    }
+
+    # Export nodes
+    for node, attrs in G.nodes(data=True):
+        node_entry = {
+            "id": node,
+            "type": attrs["type"],
+            "electrical": {
+                "l": attrs["l"],
+                "nf": attrs["nf"],
+                "nfin": attrs["nfin"]
+            },
+            "geometry": {
+                "x": attrs["x"],
+                "y": attrs["y"],
+                "width": attrs["width"],
+                "height": attrs["height"],
+                "orientation": attrs["orientation"]
+            }
+        }
+        data["nodes"].append(node_entry)
+
+    # Export edges
+    for u, v, attrs in G.edges(data=True):
+        edge_entry = {
+            "source": u,
+            "target": v,
+            "net": attrs.get("net", "")
+        }
+        data["edges"].append(edge_entry)
+
+    # Write file
+    with open(output_file, "w") as f:
+        json.dump(data, f, indent=4)
+
+    print(f"\nJSON exported to {output_file}")
+\end{thesiscode}
+
+\subsection{Line-by-Line Analysis of graph\_to\_json()}
+The serialization script maps graph objects using the following code blocks:
+\begin{itemize}
+    \item \textbf{Lines 8--11}: Initializes the JSON document structure. The dictionary contains two distinct arrays, \texttt{"nodes"} and \texttt{"edges"}, matching the schema format expected by the LangGraph agents.
+    \item \textbf{Lines 14--31}: Iterates over the NetworkX nodes. It serializes the instance name, device type (nmos, pmos, resistor, capacitor), electrical parameters (gate length \texttt{l}, finger multiplier \texttt{nf}, number of fins \texttt{nfin}), and physical coordinate parameters (\texttt{x}, \texttt{y}, \texttt{width}, \texttt{height}, and orientation \texttt{orientation}) into a single node dictionary.
+    \item \textbf{Lines 34--40}: Iterates over the NetworkX edges. It extracts the source and target node identifiers, along with the interconnect net label, and appends them to the edges array.
+    \item \textbf{Lines 43--46}: Writes the formatted dictionary to the target output text file using standard indentation of 4 spaces to ensure human readability.
+\end{itemize}
+
+% ==============================================================================
+\section[OASIS Layout Exporter]{Binary OASIS Layout Exporter \& Variant Cell Redirection}
+\label{sec:oasis_exporter}
+
+The binary OASIS layout assembler reads the compacted coordinate maps, imports physical tap/tie cells, and compiles the geometries using the \texttt{gdstk} library. 
+
+In sub-micron processes (such as SAED 14nm), physical transistor abutment is encoded using variant cell definitions. Rather than drawing custom geometries on the fly, the PDK PCells are configured with \texttt{leftAbut} and \texttt{rightAbut} parameters. When these parameters are modified, the layout compiler removes the end-cap diffusion regions, allowing adjacent cells to share a single active diffusion strip.
+
+The OASIS writer implements a catalog-driven variant redirection pipeline to update these parameters:
+\begin{enumerate}
+    \item \textbf{Variant cataloging}: The writer parses the input OASIS database, reads the existing cells, and builds a variant catalog. Each entry is keyed by a parameter hash (generated by MD5-hashing the cell's parameters excluding the abutment flags).
+    \item \textbf{Reference redirection}: For each transistor that requires manual abutment annotations, the writer checks if a matching variant cell (same parameters and matching abutment flags) already exists in the catalog. If it does, the cell reference is immediately redirected to it.
+    \item \textbf{Cell cloning}: If a matching variant does not exist, the writer duplicates the base cell and patches its \texttt{pcell} property bytes to configure the target abutment parameters. The cell reference is then updated to point to this new variant.
+\end{enumerate}
+
+Figure~\ref{fig:variant_flow} visualizes this catalog variant generation and reference redirection flow.
+
+\begin{figure}[H]
+    \centering
+    \fbox{\begin{tikzpicture}[
+        node distance=0.8cm and 1.2cm,
+        startstate/.style={draw=CodeGreen, fill=CodeGreen!10, text=CodeGreen!60!black, thick, rounded corners, minimum width=2.0cm, minimum height=0.8cm, align=center, font=\small\sffamily\bfseries, drop shadow={shadow xshift=1.2pt, shadow yshift=-1.2pt, fill=black!10}},
+        block/.style={draw=RoyalBlue, fill=LightBlueBg, text=AcademicBlue, thick, rounded corners, minimum width=2.4cm, minimum height=0.9cm, align=center, font=\small\sffamily\bfseries, drop shadow={shadow xshift=1.2pt, shadow yshift=-1.2pt, fill=black!10}},
+        decision/.style={draw=WarmGold, fill=PaleGold!30, text=AcademicBlue, thick, diamond, aspect=1.8, minimum width=2.2cm, minimum height=0.9cm, align=center, font=\small\sffamily\bfseries, drop shadow={shadow xshift=1.2pt, shadow yshift=-1.2pt, fill=black!10}},
+        arrow/.style={-Latex, line width=1.3pt, draw=AcademicBlue}
+    ]
+        % Row 1
+        \node[startstate] (start) {START};
+        \node[block, right=of start] (read) {Read Cell\\Properties};
+        \node[block, right=of read] (extract) {Extract PCell\\Parameters};
+        \node[block, right=of extract] (hash) {MD5 Hash\\Non-Abut Params};
+        
+        % Row 2
+        \node[decision, below=of hash, yshift=-0.6cm] (dec) {Variant\\in Catalog?};
+        \node[block, below=of extract, yshift=-0.6cm] (clone) {Clone Cell \&\\Patch Bytes};
+        \node[block, below=of read, yshift=-0.6cm] (redirect) {Redirect\\Reference};
+        \node[startstate, below=of start, yshift=-0.6cm] (end) {END};
+
+        % Connect Row 1
+        \draw[arrow] (start) -- (read);
+        \draw[arrow] (read) -- (extract);
+        \draw[arrow] (extract) -- (hash);
+        \draw[arrow] (hash) -- (dec);
+        
+        % Connect Row 2
+        \draw[arrow] (dec) -- node[near start, above, font=\tiny\sffamily] {No} (clone);
+        \draw[arrow] (clone) -- (redirect);
+        \draw[arrow] (redirect) -- (end);
+        
+        % Curve connection for Yes branch
+        \draw[arrow] (dec.south) -- ++(0,-0.4) node[near start, right, font=\tiny\sffamily] {Yes} -| (redirect.south);
+    \end{tikzpicture}}
+    \caption{OASIS Catalog Variant Generation and Cell Reference Redirection Flowchart.}
+    \label{fig:variant_flow}
+\end{figure}
+
+Listing~\ref{lst:make_variant} shows the Python code inside \texttt{oas\_writer.py} that generates a new cell variant and patches its PCell OpenAccess properties.
+
+\begin{thesiscode}{Variant Cell Generation \& Property Patching (oas\_writer.py)\label{lst:make_variant}}{python}
+def _make_variant_cell(lib, base_cell, base_type, raw_prop, al: bool, ar: bool) -> "gdstk.Cell":
+    """Clone base_cell and patch its pcell property abutment flags.
+    Also physically trims the geometry to create the abutment effect.
+    """
+    al_str = "1" if al else "0"
+    ar_str = "1" if ar else "0"
+    variant_name = f"{base_type}_manual_l{al_str}r{ar_str}_{base_cell.name[-4:]}"
+
+    for c in lib.cells:
+        if c.name == variant_name:
+            return c
+
+    # Create a fresh copy manually to avoid duplication/linkage issues
+    new_cell = gdstk.Cell(variant_name)
+    lib.add(new_cell)
+
+    # Copy raw polygons & references
+    for poly in base_cell.polygons:
+        new_cell.add(poly.copy())
+    for path in base_cell.paths:
+        new_cell.add(path.copy())
+    for label in base_cell.labels:
+        new_cell.add(label.copy())
+    for ref in base_cell.references:
+        new_cell.add(ref.copy())
+
+    # Clone the pcell property bytes list
+    new_prop = list(raw_prop)
+    
+    # Locate & update abutment parameters
+    for idx, token in enumerate(new_prop[4:], 4):
+        s = _decode(token)
+        if "##32##" in s:
+            parts = s.split("##32##")
+            param_name = parts[0].strip()
+            if param_name == "leftAbut":
+                new_prop[idx] = _encode(f"leftAbut ##32## string ##32## {al_str}")
+            elif param_name == "rightAbut":
+                new_prop[idx] = _encode(f"rightAbut ##32## string ##32## {ar_str}")
+
+    # Set updated property on the new cell
+    new_cell.set_property(new_prop[0], new_prop[1:])
+    return new_cell
+\end{thesiscode}
+
+\subsection{Line-by-Line Analysis of \_make\_variant\_cell()}
+The variant generation function operates on the layout library using the following code steps:
+\begin{itemize}
+    \item \textbf{Lines 5--7}: Formulates a unique name for the target cell variant. The naming convention prefixes the cell type (e.g. \texttt{nfet\_manual}) with the boolean values of the left and right abutment flags (\texttt{l0r1}) to guarantee unique identifier names.
+    \item \textbf{Lines 9--11}: Scans the library. If a variant cell with the same name has already been created, the method skips duplication and returns the existing cell reference.
+    \item \textbf{Lines 14--15}: Instantiates a fresh \texttt{gdstk.Cell} object and adds it to the active library database.
+    \item \textbf{Lines 18--25}: Performs a deep copy of the base cell contents. All physical layout layers, routing paths, net labels, and sub-block cell references are cloned to populate the new cell.
+    \item \textbf{Lines 31--40}: Iterates over the parameters encoded in the cell's OpenAccess \texttt{pcell} property array. If the parameter matches \texttt{"leftAbut"} or \texttt{"rightAbut"}, the string value token is updated with the target state (\texttt{"1"} or \texttt{"0"}).
+    \item \textbf{Lines 42--43}: Commits the updated property bytes array to the new cell object and returns the cell.
+\end{itemize}
+
+% ==============================================================================
+\section[OpenAccess TCL Exporter]{OpenAccess Database TCL Injection Exporter}
+\label{sec:tcl_exporter}
+
+For integration with commercial compilers (such as Cadence Virtuoso or Synopsys Custom Compiler), the system provides an OpenAccess-compatible TCL exporter. The PySide6 frontend serializes layout nodes to an intermediate text file (\texttt{ai\_placement.txt}) using \texttt{json\_to\_tcl.py}. 
+
+A file watchdog script (\texttt{cc\_watcher.tcl}) monitors the workspace and triggers the database injection script \texttt{ai\_place.tcl} when updates are written. Figure~\ref{fig:tcl_export_flow} visualizes this Python-TCL exporter and OpenAccess deployment pipeline.
+
+\begin{figure}[H]
+    \centering
+    \fbox{\begin{tikzpicture}[
+        node distance=0.8cm and 1.2cm,
+        component/.style={draw=AcademicBlue, fill=white, text=AcademicBlue, thick, rounded corners, minimum width=2.4cm, minimum height=0.9cm, align=center, font=\small\sffamily\bfseries, drop shadow={shadow xshift=1.2pt, shadow yshift=-1.2pt, fill=black!10}},
+        db/.style={draw=WarmGold, fill=PaleGold!25, text=AcademicBlue, thick, cylinder, shape border rotate=90, minimum width=2.0cm, minimum height=1.0cm, align=center, font=\small\sffamily\bfseries, drop shadow={shadow xshift=1.2pt, shadow yshift=-1.2pt, fill=black!10}},
+        arrow/.style={-Latex, line width=1.3pt, draw=AcademicBlue},
+        dashedarrow/.style={-Latex, line width=1.3pt, draw=WarmGold, dashed}
+    ]
+        % Nodes vertically aligned
+        \node[component] (gui) {LayoutTab\\(PySide6 GUI)};
+        \node[component, below=of gui] (exporter) {json\_to\_tcl.py\\Exporter};
+        \node[component, below=of exporter] (txt) {ai\_placement.txt\\(Flat File)};
+        \node[component, below=of txt] (watcher) {Watcher\\Observer};
+        \node[component, below=of watcher] (tcl) {ai\_place.tcl\\Execution};
+        
+        % Split paths symmetrically below tcl
+        \node[db, below left=1.2cm and 0.8cm of tcl] (oa) {OpenAccess\\DB};
+        \node[component, below right=1.2cm and 0.8cm of tcl] (prop) {GUI Property\\Editor (Nets)};
+
+        % Containers
+        \begin{scope}[on background layer]
+            \node[draw=AcademicBlue!50, fill=LightBlueBg!50, dashed, thick, rounded corners, inner sep=0.4cm, fit=(gui) (exporter) (txt)] (frontend) {};
+            \node[draw=WarmGold!50, fill=PaleGold!10, dashed, thick, rounded corners, inner sep=0.4cm, fit=(watcher) (tcl) (oa) (prop)] (backend) {};
+        \end{scope}
+
+        % Labels for containers
+        \node[anchor=south west, font=\small\sffamily\bfseries\color{AcademicBlue}] at (frontend.north west) {Python Frontend Environment};
+        \node[anchor=north west, font=\small\sffamily\bfseries\color{WarmGold!50!black}] at (backend.south west) {Native OpenAccess EDA Session (Virtuoso / Custom Compiler)};
+
+        % Connections
+        \draw[arrow] (gui) -- (exporter);
+        \draw[arrow] (exporter) -- (txt);
+        \draw[arrow] (txt) -- node[midway, right, font=\tiny\sffamily] {Write} (watcher);
+        \draw[arrow] (watcher) -- node[midway, right, font=\tiny\sffamily] {Trigger} (tcl);
+        
+        % Forking connections
+        \draw[arrow] (tcl.south) -- node[midway, above left, font=\tiny\sffamily] {Phase 1-3} (oa.north);
+        \draw[arrow] (tcl.south) -- node[midway, above right, font=\tiny\sffamily] {Phase 4} (prop.north);
+        \draw[arrow] (prop.west) -- node[midway, below, font=\tiny\sffamily] {Inject Nets} (oa.east);
+    \end{tikzpicture}}
+    \caption{Python-TCL Export and OpenAccess Database Deployment Workflow.}
+    \label{fig:tcl_export_flow}
+\end{figure}
+
+The database injection script \texttt{ai\_place.tcl} executes four deployment phases, which are presented below in separate modular code blocks.
+
+\subsection{Phase 0: Placement File Ingestion \& Property Regex Parsing}
+The first phase of the database injection script reads the flat placement file, filters active devices, dummy transistors, and tap cells, and parses their specific parameters using regular expressions. Listing~\ref{lst:ai_place_part1} details this implementation.
+
+\begin{thesiscode}{Database Placement - File Ingestion \& Regex Parsing (Part 1)\label{lst:ai_place_part1}}{Tcl}
+proc ai_place_final {filename target_cell} {
+    puts "Starting Layout Radar & Placement..."
+    set iter [oa::DesignGetOpenDesigns]
+    set ns [oa::NativeNS]
+    set libName "SAED_PDK_14" 
+    set tapLibName "taps"
+
+    if [catch {open $filename r} fp] {
+        puts "ERROR: Cannot open $filename"
+        return
+    }
+
+    array set ai_data {}
+    set dummy_list {} 
+    set tap_list {}
+
+    while {[gets $fp line] >= 0} {
+        set line [string trim $line]
+        if {$line == ""} continue
+        set elements [regexp -inline -all -- {\S+} $line]
+        set type_flag [lindex $elements 0]
+        set is_dummy 0; set cell_type ""
+        
+        if {$type_flag == "TAP"} {
+            set rail [lindex $elements 1]
+            set cell_type [lindex $elements 2]
+            set xPos [lindex $elements 3]
+            set yPos [lindex $elements 4]
+            set orient [lindex $elements 5]
+            lappend tap_list [list $rail $cell_type $xPos $yPos $orient]
+            continue
+        }
+        
+        if {$type_flag == "DUMMY"} {
+            set is_dummy 1
+            set name [lindex $elements 1]
+            set cell_type [lindex $elements 2]
+            set xPos [lindex $elements 3]
+            set yPos [lindex $elements 4]
+            set orient [lindex $elements 5]
+            lappend dummy_list $name
+        } else {
+            set name [lindex $elements 0]
+            set xPos [lindex $elements 1]
+            set yPos [lindex $elements 2]
+            set orient [lindex $elements 3]
+        }
+        
+        set leftVal ""; set rightVal ""; set l_val ""; set m_val ""; set nf_val ""; set nfin_val ""
+        set d_net ""; set g_net ""; set s_net ""; set b_net ""
+        
+        if {[regexp {left_abut=([01])} $line match val]} { set leftVal $val }
+        if {[regexp {right_abut=([01])} $line match val]} { set rightVal $val }
+        if {[regexp {l=([0-9.]+)} $line match val]} { set l_val $val }
+        if {[regexp {m=([0-9.]+)} $line match val]} { set m_val $val }
+        if {[regexp {nf=([0-9.]+)} $line match val]} { set nf_val $val }
+        if {[regexp {nfin=([0-9.]+)} $line match val]} { set nfin_val $val }
+        
+        if {[regexp {D=([^ ]+)} $line match val]} { set d_net $val }
+        if {[regexp {G=([^ ]+)} $line match val]} { set g_net $val }
+        if {[regexp {S=([^ ]+)} $line match val]} { set s_net $val }
+        if {[regexp {B=([^ ]+)} $line match val]} { set b_net $val }
+        
+        set ai_data($name) [list $xPos $yPos $orient $leftVal $rightVal $is_dummy $cell_type $l_val $m_val $nf_val $nfin_val $d_net $g_net $s_net $b_net]
+    }
+    close $fp
+\end{thesiscode}
+
+\subsubsection{Line-by-Line Analysis of File Parsing (Part 1)}
+The ingestion and tokenization logic executes as follows:
+\begin{itemize}
+    \item \textbf{Lines 3--6}: Registers the database placement procedure, acquires active design views, and configures the SAED 14nm PDK library parameters.
+    \item \textbf{Lines 8--11}: Attempts to open the coordinate placement file, wrapping the call in a \texttt{catch} statement to prevent execution failures on missing files.
+    \item \textbf{Lines 17--47}: Loops through the file lines. It tokenizes whitespace-separated columns and sorts instances into active transistors, dummy instances, or tap cells depending on the row header.
+    \item \textbf{Lines 49--64}: Extracts PDK dimensions (\texttt{l}, \texttt{m}, \texttt{nf}, \texttt{nfin}) and net connections (\texttt{D}, \texttt{G}, \texttt{S}, \texttt{B}) using regular expression matching, and caches them inside the \texttt{ai\_data} array.
+\end{itemize}
+
+\subsection{Phase 1: Active Transistor Database Traversal \& Placement}
+The second phase of the database injection script selects the target layout view, loops through existing transistor instances, and updates their origins, orientations, and abutment parameters. Listing~\ref{lst:ai_place_part2} details this implementation.
+
+\begin{thesiscode}{Database Placement - Active Device Alignment (Part 2)\label{lst:ai_place_part2}}{Tcl}
+    set target_win [gi::getActiveWindow]
+    set target_ctx [de::getActiveContext]
+    set total_moved 0
+
+    while { [set cv [oa::getNext $iter]] != "0" && $cv != "" } {
+        set cellStr "UnknownCell"; set viewStr "UnknownView"
+        catch { set cellStr [oa::get [oa::getCellName $cv] $ns] }
+        catch { set viewStr [oa::get [oa::getViewName $cv] $ns] }
+
+        if {$cellStr != $target_cell || [string match -nocase "*schematic*" $viewStr]} { continue }
+
+        puts "-> Targeting Cell: '$cellStr'"
+        set block [oa::getTopBlock $cv]
+        set instIter [oa::getInsts $block]
+
+        # PHASE 1: Move Active Transistors
+        while { [set inst [oa::getNext $instIter]] != "0" && $inst != "" } {
+            set instStr ""
+            catch { set instStr [oa::get [oa::getName $inst] $ns] }
+
+            if { [info exists ai_data($instStr)] } {
+                set target $ai_data($instStr)
+                if {[lindex $target 5]} { continue }
+
+                oa::setOrigin $inst [list [expr {double([lindex $target 0])}] [expr {double([lindex $target 1])}]]
+                oa::setOrient $inst [lindex $target 2]
+                
+                set leftVal [lindex $target 3]; set rightVal [lindex $target 4]
+                if {$leftVal != ""} { catch {db::setParamValue "leftAbut" -value $leftVal -of $inst} }
+                if {$rightVal != ""} { catch {db::setParamValue "rightAbut" -value $rightVal -of $inst} }
+                incr total_moved
+            }
+        }
+\end{thesiscode}
+
+\subsubsection{Line-by-Line Analysis of Active Alignment (Part 2)}
+The traversal and positioning engine operates using the following logic:
+\begin{itemize}
+    \item \textbf{Lines 2--4}: Captures window and context handles from the active EDA tools design canvas.
+    \item \textbf{Lines 5--12}: Iterates over open cellviews, skipping schematic views and locking onto the layout view of the target cell.
+    \item \textbf{Lines 14--16}: Extracts the top-level block and registers an instance iterator to scan all layout instances.
+    \item \textbf{Lines 19--38}: Scans cell instances. If an instance matches an active transistor, the script sets its physical origin coordinates using \texttt{oa::set}\allowbreak\texttt{Origin}, sets its left-right orientation via \texttt{oa::set}\allowbreak\texttt{Orient}, and injects parameter updates for \texttt{leftAbut} and \texttt{rightAbut} directly into database memory.
+\end{itemize}
+
+\subsection{Phase 2 \& 3: Dummy and Tap Cell Instantiation}
+The final phase of the database injection script instantiates dummy transistors and substrate tap cells at their target placement coordinates, completing the layout generation. Listing~\ref{lst:ai_place_part3} details this implementation.
+
+\begin{thesiscode}{Database Placement - Dummy \& Tap Instantiation (Part 3)\label{lst:ai_place_part3}}{Tcl}
+        # PHASE 2: Create Dummies
+        foreach dummy_name $dummy_list {
+            set target $ai_data($dummy_name)
+            set cell_type [lindex $target 6]
+            set x [expr {double([lindex $target 0])}]
+            set y [expr {double([lindex $target 1])}]
+            
+            set inst [le::createInst $dummy_name -design $cv -libName $libName -cellName $cell_type -viewName "layout" -origin [list $x $y] -orient [lindex $target 2]]
+            
+            set leftVal [lindex $target 3]; set rightVal [lindex $target 4]; set l_val [lindex $target 7]; set m_val [lindex $target 8]; set nf_val [lindex $target 9]; set nfin_val [lindex $target 10]
+            
+            catch {db::setParamValue "usage" -value "Dummy" -of $inst}
+            if {$leftVal != ""} { catch {db::setParamValue "leftAbut" -value $leftVal -of $inst} }
+            if {$rightVal != ""} { catch {db::setParamValue "rightAbut" -value $rightVal -of $inst} }
+            if {$l_val != ""} { catch {db::setParamValue "l" -value $l_val -of $inst} }
+            if {$m_val != ""} { catch {db::setParamValue "m" -value $m_val -of $inst} }
+            if {$nf_val != ""} { catch {db::setParamValue "nf" -value $nf_val -of $inst} }
+            if {$nfin_val != ""} { catch {db::setParamValue "nfin" -value $nfin_val -of $inst} }
+        }
+
+        # PHASE 3: Create Taps
+        set tap_counter 0
+        foreach tap_data $tap_list {
+            set rail [lindex $tap_data 0]
+            set cell_type [lindex $tap_data 1]
+            set x [expr {double([lindex $tap_data 2])}]
+            set y [expr {double([lindex $tap_data 3])}]
+            set orient [lindex $tap_data 4]
+            
+            set name "TAP_${rail}_${tap_counter}"
+            incr tap_counter
+            
+            le::createInst $name -design $cv -libName $tapLibName -cellName $cell_type -viewName "layout" -origin [list $x $y] -orient $orient
+        }
+    }
+}
+\end{thesiscode}
+
+\subsubsection{Line-by-Line Analysis of Instantiation (Part 3)}
+The instantiation engine completes layout generation via the following code blocks:
+\begin{itemize}
+    \item \textbf{Lines 2--19}: Executes Phase 2. It iterates over the dummy transistor list, creates new instance objects using \texttt{le::createInst}, sets their usage parameter to \texttt{"Dummy"}, and sets device dimensions and abutment flags.
+    \item \textbf{Lines 22--37}: Executes Phase 3. It iterates over tap coordinates, registers unique names (e.g. \texttt{TAP\_VDD\_0}), and instantiates substrate tap cells from the taps library to establish power and ground connections.
+\end{itemize}

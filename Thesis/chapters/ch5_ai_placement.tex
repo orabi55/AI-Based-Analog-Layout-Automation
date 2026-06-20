@@ -1,0 +1,753 @@
+% ==============================================================================
+% CHAPTER 5: Autonomous Multi-Agent AI Placement System
+% ==============================================================================
+
+\chapter{Stage 2: LangGraph-Driven Multi-Agent Placer}
+\label{ch:ai_placement}
+
+\lettrine[lines=3]{T}{he initial placement engine} forms the computational core of the LayoutCopilot compiler's second stage. Placement of sub-micron analog components is a highly constrained optimization problem. While traditional placement tools rely purely on simulated annealing or analytical numerical formulations, they struggle to capture the complex, qualitative matching and symmetry constraints that human layout experts apply by intuition. LayoutCopilot resolves this by adopting a decoupled multi-agent architecture orchestrated by a LangGraph state machine.
+
+This chapter details the design, agent roles, and state transitions of the Stage 2 initial placement engine. It explains the shared state representation, the implementation details of each processing stage with code listings, the DRC self-healing feedback loop, and walks through a concrete current mirror and dynamic latch comparator placement example, detailing the exact outputs in the execution logs.
+
+% ==============================================================================
+\section[Multi-Agent Architecture]{LangGraph State Machine Architecture}
+\label{sec:agent_arch}
+
+The multi-agent placer is built on LangGraph, a state-machine framework that extends LangChain to support cyclic graphs, agent loops, and structured state transitions. By modeling the placement process as a graph of cooperating nodes, LayoutCopilot isolates specialized layout tasks (topology analysis, placement strategy selection, grid-based component positioning, physical finger unrolling, routing cost evaluation, and DRC checks) into discrete agents.
+
+\subsection{LayoutState Shared State Definition}
+All agents in the graph read from and write to a shared, mutable database structure called the \texttt{LayoutState}. This state tracks design data, inputs, constraint strings, placement results, and design rule flags.
+
+\begin{thesiscode}{LayoutState Shared State Dictionary Structure (state.py)}{python}
+from typing import TypedDict, List, Dict, Any, Literal
+
+class LayoutState(TypedDict):
+    mode: Literal["initial", "chat"]       # "initial" for Ctrl+P, "chat" for bot
+    user_message: str
+    chat_history: List[Dict[str, str]]
+    nodes: List[Dict[str, Any]]            # Original layout device list
+    sp_file_path: str
+    selected_model: str
+
+    constraint_text: str                   # Symmetry constraint blocks
+    edges: List[Dict]                      # Schematic connectivity list
+    terminal_nets: Dict[str, Dict[str, Any]]
+
+    Analysis_result: str                   # Output of topology analyst
+    strategy_result: str                   # Output of strategy selector
+
+    placement_nodes: List[Dict]            # Updated device placement positions
+    deterministic_snapshot: List[Dict]
+    original_placement_cmds: List[Dict]
+
+    drc_flags: List[Dict]                  # DRC violation reports
+    drc_pass: bool
+    drc_retry_count: int
+    gap_px: float
+
+    routing_pass_count: int
+    routing_result: Dict[str, Any]
+    placement_quality: Dict[str, Any]      # Bounding box / wire-length scores
+    placement_mode: str                     # "auto" | "two_half"
+    groups: List[Dict[str, Any]]            # Aggregated matching groups
+\end{thesiscode}
+
+\subsection{State Graph Construction \& Flow Control}
+The graph builder (\texttt{builder.py}) instantiates the state machine, registers the execution nodes, and defines transition edges. In the initial placement mode (\texttt{"initial"}), the pipeline runs as a linear flow with a conditional self-healing loop around the DRC Critic. Figure~\ref{fig:langgraph_placement_transitions} illustrates the state transitions, and Figure~\ref{fig:placement_block_diagram} presents the detailed architectural block diagram of the placement stage.
+
+\begin{figure}[H]
+    \centering
+    \fbox{\begin{tikzpicture}[
+        node distance=1.1cm and 1.3cm,
+        startstate/.style={draw=CodeGreen, fill=CodeGreen!10, text=CodeGreen!60!black, thick, circle, minimum size=1.8cm, align=center, font=\small\sffamily\bfseries, drop shadow={shadow xshift=1.5pt, shadow yshift=-1.5pt, fill=black!15}},
+        agentstate/.style={draw=RoyalBlue, fill=LightBlueBg, text=AcademicBlue, thick, rounded corners, minimum width=2.4cm, minimum height=1.0cm, align=center, font=\small\sffamily\bfseries, drop shadow={shadow xshift=1.5pt, shadow yshift=-1.5pt, fill=black!15}},
+        decision/.style={draw=WarmGold, fill=PaleGold!30, text=AcademicBlue, thick, diamond, aspect=2, minimum width=2.4cm, minimum height=1.1cm, align=center, font=\small\sffamily\bfseries, drop shadow={shadow xshift=1.5pt, shadow yshift=-1.5pt, fill=black!15}},
+        endstate/.style={draw=CodeGreen!80!black, fill=CodeGreen!20, text=CodeGreen!60!black, thick, circle, minimum size=1.8cm, double, align=center, font=\small\sffamily\bfseries, drop shadow={shadow xshift=1.5pt, shadow yshift=-1.5pt, fill=black!15}},
+        arrow/.style={-Latex, line width=1.3pt, draw=AcademicBlue},
+        feedbackarrow/.style={-Latex, line width=1.3pt, draw=WarmGold, dashed}
+    ]
+        % Nodes
+        \node[startstate] (start) {START};
+        \node[agentstate, right=of start] (topo) {Topology \\ Analyst};
+        \node[agentstate, right=of topo] (strat) {Strategy \\ Selector};
+        \node[agentstate, below=of strat] (place) {Placement \\ Specialist};
+        \node[agentstate, left=of place] (expand) {Finger \\ Expansion};
+        \node[agentstate, below=of expand] (sym) {Symmetry \\ Enforcer};
+        \node[agentstate, right=of sym] (route) {Routing \\ Previewer};
+        \node[agentstate, right=of route] (drc) {DRC \\ Critic};
+        \node[decision, below=of drc] (check) {DRC \\ Clean?};
+        \node[agentstate, left=of check] (human) {Human \\ Viewer};
+        \node[endstate, left=of human] (end) {END};
+
+        % Connect
+        \draw[arrow] (start) -- (topo);
+        \draw[arrow] (topo) -- (strat);
+        \draw[arrow] (strat) -- (place);
+        \draw[arrow] (place) -- (expand);
+        \draw[arrow] (expand) -- (sym);
+        \draw[arrow] (sym) -- (route);
+        \draw[arrow] (route) -- (drc);
+        \draw[arrow] (drc) -- (check);
+        
+        \draw[arrow] (check) -- node[midway, above, font=\tiny\sffamily] {Yes} (human);
+        \draw[feedbackarrow] (check) |- node[near start, right, font=\tiny\sffamily] {No (Retry < 3)} (place);
+        \draw[arrow] (human) -- (end);
+    \end{tikzpicture}}
+    \caption{LangGraph Placement Agent State Machine and Self-Healing Feedback Loop.}
+    \label{fig:langgraph_placement_transitions}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \fbox{\begin{tikzpicture}[
+        node distance=0.8cm and 1.2cm,
+        box/.style={draw=AcademicBlue, fill=LightBlueBg, text=AcademicBlue, thick, rounded corners, minimum width=2.8cm, minimum height=1.0cm, align=center, font=\small\sffamily\bfseries, drop shadow={shadow xshift=1.2pt, shadow yshift=-1.2pt, fill=black!10}},
+        llmbox/.style={draw=WarmGold, fill=PaleGold!20, text=AcademicBlue, thick, rounded corners, minimum width=2.8cm, minimum height=1.0cm, align=center, font=\small\sffamily\bfseries, drop shadow={shadow xshift=1.2pt, shadow yshift=-1.2pt, fill=black!10}},
+        filebox/.style={draw=SlateGray, fill=BorderGray!40, text=TextCharcoal, thick, minimum width=2.8cm, minimum height=1.0cm, align=center, font=\small\ttfamily, drop shadow={shadow xshift=1.2pt, shadow yshift=-1.2pt, fill=black!10}},
+        arrow/.style={-Latex, line width=1.2pt, draw=AcademicBlue},
+        dashedarrow/.style={-Latex, line width=1.2pt, draw=WarmGold, dashed}
+    ]
+        % Nodes
+        \node[filebox] (input) {Unified Graph\\(JSON)};
+        \node[box, right=of input] (grouper) {Logical Finger\\Aggregator};
+        \node[box, right=of grouper] (rules) {Rules Engine\\(Heuristics)};
+        \node[llmbox, below=of rules] (topo_llm) {Topology Analyst\\(LLM)};
+        \node[llmbox, left=of topo_llm] (strat_llm) {Strategy Selector\\(LLM)};
+        \node[box, below=of strat_llm] (row_plan) {Row Planner \&\\Matched Merger};
+        \node[llmbox, right=of row_plan] (place_llm) {Placement Specialist\\(LLM)};
+        \node[box, below=of place_llm] (expand) {Finger Expansion\\\& Grid Snapper};
+        \node[box, left=of expand] (sym) {Symmetry\\Enforcer};
+        \node[box, below=of sym] (preview) {Routing\\Previewer};
+        \node[box, right=of preview] (drc) {DRC Critic\\(Sweep-line)};
+        \node[filebox, below=of preview] (output) {Placed Layout\\(JSON/XML)};
+        
+        % Connections
+        \draw[arrow] (input) -- (grouper);
+        \draw[arrow] (grouper) -- (rules);
+        \draw[arrow] (rules) -- (topo_llm);
+        \draw[arrow] (topo_llm) -- (strat_llm);
+        \draw[arrow] (strat_llm) -- (row_plan);
+        \draw[arrow] (row_plan) -- (place_llm);
+        \draw[arrow] (place_llm) -- (expand);
+        \draw[arrow] (expand) -- (sym);
+        \draw[arrow] (sym) -- (preview);
+        \draw[arrow] (preview) -- (drc);
+        \draw[arrow] (drc) -- (output);
+        
+        % Retry feedback path
+        \draw[dashedarrow] (drc) |- node[near start, right, font=\tiny\sffamily] {DRC Fail (Feedback Loop)} (place_llm);
+    \end{tikzpicture}}
+    \caption{Detailed Architectural Block Diagram of the Multi-Agent Placement Stage.}
+    \label{fig:placement_block_diagram}
+\end{figure}
+
+The graph structure is compiled with a memory checkpointer to support state rollbacks and chat history tracking. Listing~\ref{lst:graph_builder} shows the code that defines the compiled graph builder.
+
+\begin{thesiscode}{LangGraph Builder Implementation (builder.py)\label{lst:graph_builder}}{python}
+from langgraph.graph import StateGraph, START, END
+from langgraph.checkpoint.memory import MemorySaver
+from ai_agent.graph.state import LayoutState
+from ai_agent.graph.edges import route_after_drc, route_by_mode
+
+from ai_agent.nodes import (
+    node_topology_analyst,
+    node_strategy_selector,
+    node_placement_specialist,
+    node_finger_expansion,
+    node_symmetry_enforcer,
+    node_drc_critic,
+    node_routing_previewer,
+    node_human_viewer,
+)
+
+def build_layout_graph(mode: str = "initial"):
+    memory = MemorySaver()
+    builder = StateGraph(LayoutState)
+
+    # Register Nodes
+    builder.add_node("node_topology_analyst", node_topology_analyst)
+    builder.add_node("node_strategy_selector", node_strategy_selector)
+    builder.add_node("node_placement_specialist", node_placement_specialist)
+    builder.add_node("node_finger_expansion", node_finger_expansion)
+    builder.add_node("node_symmetry_enforcer", node_symmetry_enforcer)
+    builder.add_node("node_drc_critic", node_drc_critic)
+    builder.add_node("node_routing_previewer", node_routing_previewer)
+    builder.add_node("node_human_viewer", node_human_viewer)
+
+    # Bind Transitions
+    builder.add_conditional_edges(START, route_by_mode, {
+        "full_pipeline": "node_topology_analyst",
+        "interactive":   "node_topology_analyst",
+    })
+    builder.add_edge("node_topology_analyst", "node_strategy_selector")
+    builder.add_edge("node_strategy_selector", "node_placement_specialist")
+    builder.add_edge("node_placement_specialist", "node_finger_expansion")
+    builder.add_edge("node_finger_expansion", "node_symmetry_enforcer")
+    builder.add_edge("node_symmetry_enforcer", "node_routing_previewer")
+    builder.add_edge("node_routing_previewer", "node_drc_critic")
+
+    # Conditional Routing for DRC self-healing loop
+    builder.add_conditional_edges("node_drc_critic", route_after_drc, {
+        "placement_specialist": "node_placement_specialist",
+        "human_viewer": "node_human_viewer",
+    })
+    builder.add_edge("node_human_viewer", END)
+
+    return builder.compile(checkpointer=memory), memory
+\end{thesiscode}
+
+% ==============================================================================
+\section[Placement Stages]{Step-by-Step Placement Stages \& Execution Nodes}
+\label{sec:placement_stages}
+
+This section details the operational logic, algorithms, and code implementations for each of the seven stages of the initial placement pipeline.
+
+\subsection{Stage 2.1: Topology Analyst}
+The Topology Analyst Node (\texttt{topology\_analyst.py}) identifies matching structures in the design. It aggregates individual physical device fingers back into single logical groups using \texttt{aggregate\_to\_logical\_devices}. It then analyzes the logical nodes and net connectivity using the core Python rules engine (\texttt{analyze\_json}) to extract matched groups like differential pairs, current mirrors, and cross-coupled pairs. The results are formatted as a constraint prompt for the LLM.
+
+\textbf{Inputs}: The input consists of the raw netlist parsed into a unified graph JSON, which contains list dictionaries for transistors and nets, alongside terminal specifications.
+
+\textbf{Outputs}: Writes \texttt{constraint\_text} (containing rule-based heuristics output) and \texttt{Analysis\_result} (the LLM classification analysis including group boundaries, matching rules, current flow dependencies, and signal sensitivities) to the \texttt{LayoutState}.
+
+\begin{thesiscode}{Topology Analyst Node Implementation (topology\_analyst.py)}{python}
+import time
+from ai_agent.core.topology import analyze_json
+from ai_agent.agents.topology_analyst import TOPOLOGY_ANALYST_PROMPT
+from ai_agent.placement.finger_grouper import aggregate_to_logical_devices
+from ai_agent.nodes._shared import _build_llm_messages, _invoke_with_retry, vprint
+
+def node_topology_analyst(state):
+    nodes = state.get("nodes", [])
+    terminal_nets = state.get("terminal_nets", {})
+    user_message = state.get("user_message", "Please analyze the layout topology.")
+    chat_history = state.get("chat_history", [])
+    selected_model = state.get("selected_model", "Gemini")
+
+    # Group physical fingers to logical devices for context analysis
+    logical_nodes = aggregate_to_logical_devices(nodes)
+    
+    # Run Python constraints engine
+    constraint_text = analyze_json(logical_nodes, terminal_nets)
+    
+    analyst_user = f"User request: {user_message}\n\nConstraints:\n{constraint_text}\n\n"
+    analyst_msgs = _build_llm_messages(TOPOLOGY_ANALYST_PROMPT, chat_history, analyst_user)
+    
+    response = _invoke_with_retry(analyst_msgs, selected_model, "light", "TOPO")
+    
+    return {
+        "constraint_text": constraint_text,
+        "Analysis_result": response.content,
+        "last_agent": "topology_analyst",
+        "pending_cmds": [],
+    }
+\end{thesiscode}
+
+\subsection{Stage 2.2: Strategy Selector}
+The Strategy Selector Node (\texttt{strategy\_selector.py}) determines how components should be arranged on the layout canvas. It reads the logical constraint rules from the Topology Analyst and decides:
+\begin{itemize}
+    \item **Row Configuration:** The number of horizontal rows and their type assignment (e.g., Row 0 for NMOS, Row 1 for PMOS).
+    \item **Symmetry Plan:** The placement mode (e.g., \texttt{"two\_half"} to enforce mirror reflection about a vertical axis).
+\end{itemize}
+It outputs a strategy text block that guides the downstream placement specialist.
+
+\textbf{Inputs}: Reads the \texttt{Analysis\_result} and \texttt{constraint\_text} from the state.
+
+\textbf{Outputs}: Updates \texttt{strategy\_result} (the multi-layered composable strategy descriptions) and sets the global \texttt{placement\_mode} (\texttt{"two\_half"} or \texttt{"auto"}).
+
+\begin{thesiscode}{Strategy Selector Node Implementation (strategy\_selector.py)}{python}
+import time
+import ai_agent.agents.strategy_selector as strategy_selector
+from ai_agent.core.strategy import parse_placement_mode
+from ai_agent.nodes._shared import _build_llm_messages, _invoke_with_retry
+
+def node_strategy_selector(state):
+    analysis_txt = state.get("Analysis_result", "")
+    constraint_text = state.get("constraint_text", "")
+    chat_history = state.get("chat_history", [])
+    user_message = state.get("user_message", "Select layout strategy.")
+    selected_model = state.get("selected_model", "Gemini")
+
+    strategy_prompt = _build_llm_messages(
+        strategy_selector.STRATEGY_SELECTOR_PROMPT, [],
+        f"User request: {user_message}\n\nAnalysis:\n{analysis_txt}\n\nConstraints:\n{constraint_text}\n\n"
+    )
+    
+    response = _invoke_with_retry(strategy_prompt, selected_model, "light", "STRATEGY")
+    placement_mode = parse_placement_mode(response.content or "", constraint_text)
+
+    return {
+        "strategy_result": response.content,
+        "placement_mode": placement_mode,
+        "last_agent": "strategy_selector",
+        "pending_cmds": [],
+    }
+\end{thesiscode}
+
+\subsection{Stage 2.3: Placement Specialist}
+The Placement Specialist Node (\texttt{placement\_specialist.py}) generates symbolic coordinate positions (row, slot, orientation) for each device. To ensure the LLM places devices following analog rules (such as matching and signal flow constraints), LayoutCopilot uses a custom prompt manager called `SkillMiddleware`.
+
+`SkillMiddleware` parses specialized markdown files (skills) located in the \texttt{ai\_agent/skills/} folder. These skills contain layout expertise for specific topologies, such as current mirrors and differential pairs. The middleware dynamically injects these skills into the agent's system prompt based on the topology analysis, guiding the agent's spatial decisions.
+
+The agent uses a ReAct (Reasoning and Action) loop to verify its placements. It writes positioning commands in a structured XML format:
+\begin{lstlisting}[language=text]
+<cmd action="place" device="MM0" row="0" slot="1" orientation="R0" />
+\end{lstlisting}
+The node parses these XML commands and applies them to the device list. It also includes a post-processing pass to snap dummy devices to active row coordinates, preventing isolated "orphan" dummies.
+
+\textbf{Inputs}: Reads design nodes, constraints text, connectivity edges, strategy results, and PDK constraints.
+
+\textbf{Outputs}: Generates the symbolically placed \texttt{placement\_nodes} dictionary, and the original XML placement command list.
+
+\begin{thesiscode}{Placement Specialist Node Implementation (placement\_specialist.py)}{python}
+import copy
+from ai_agent.agents.placement_specialist import build_placement_context, create_placement_specialist_agent
+from ai_agent.tools.cmd_parser import extract_cmd_blocks, apply_cmds_to_nodes
+from ai_agent.nodes._shared import _build_llm_messages, _invoke_with_retry
+
+def node_placement_specialist(state):
+    nodes = state.get("nodes", [])
+    constraint_text = state.get("constraint_text", "")
+    edges = state.get("edges", [])
+    terminal_nets = state.get("terminal_nets", {})
+    strategy_result = state.get("strategy_result", "auto")
+    selected_model = state.get("selected_model", "Gemini")
+    no_abutment_flag = state.get("no_abutment", False)
+
+    working_nodes = copy.deepcopy(nodes)
+    
+    # Pre-calculate row assign prompts and inject matching middleware
+    context_text = build_placement_context(
+        nodes, constraint_text, terminal_nets=terminal_nets,
+        edges=edges, no_abutment=no_abutment_flag
+    )
+    
+    placer_user = f"Strategy: {strategy_result}\n\n{context_text}"
+    # Injected prompt with SkillMiddleware internally
+    placement_msgs = _build_llm_messages(
+        _PLACEMENT_SYSTEM_PROMPT, state.get("chat_history", []), placer_user
+    )
+    
+    result = _invoke_with_retry(placement_msgs, selected_model, "heavy", "PLACEMENT")
+    
+    # Extract XML commands from output text
+    cmds, placement_text = extract_cmd_blocks(result.content)
+    
+    if cmds:
+        placed_nodes = apply_cmds_to_nodes(working_nodes, cmds)
+    else:
+        placed_nodes = working_nodes
+
+    placed_nodes = _snap_orphan_dummies(placed_nodes)
+
+    return {
+        "placement_nodes": placed_nodes,
+        "original_placement_cmds": cmds,
+        "placement_text": placement_text,
+        "last_agent": "placement_specialist",
+    }
+\end{thesiscode}
+
+\subsection{Stage 2.4: Finger Expansion}
+The Finger Expansion Node (\texttt{finger\_expansion.py}) converts logical layout blocks into physical, placed transistors. The Placement Specialist plans coordinates at the transistor level. The Finger Expansion node expands each multi-finger logical device ($nf > 1$) into its constituent fingers.
+
+It then runs \texttt{\_resolve\_row\_overlaps} to place the fingers horizontally. This step snaps coordinates to the PDK grid pitch (e.g. $0.294\,\mu\text{m}$ for SAED 14nm) and inserts shielding dummy devices.
+
+\textbf{Inputs}: Reads symbolic \texttt{placement\_nodes} and original finger counts from \texttt{nodes}.
+
+\textbf{Outputs}: Emits physically expanded \texttt{placement\_nodes} with grid-snapped coordinates, and dummy filler insertions.
+
+\begin{thesiscode}{Finger Expansion Node Implementation (finger\_expansion.py)}{python}
+import copy
+from ai_agent.placement.finger_grouper import expand_logical_to_fingers, _resolve_row_overlaps, legalize_vertical_rows
+from ai_agent.tools.overlap_resolver import resolve_overlaps
+
+def node_finger_expansion(state):
+    placement_nodes = state.get("placement_nodes", [])
+    original_nodes = state.get("nodes", [])
+    terminal_nets = state.get("terminal_nets", {}) or {}
+    no_abutment_flag = state.get("no_abutment", False)
+
+    has_logical = any(n.get("_is_logical") for n in placement_nodes)
+
+    if has_logical:
+        # Expand logical group nodes back into individual finger arrays
+        physical_nodes = expand_logical_to_fingers(placement_nodes, original_nodes, terminal_nets=terminal_nets)
+        physical_nodes = _resolve_row_overlaps(physical_nodes, no_abutment_flag, preserve_order=True, terminal_nets=terminal_nets)
+    else:
+        physical_nodes = _resolve_row_overlaps(placement_nodes, no_abutment_flag, preserve_order=True, terminal_nets=terminal_nets)
+
+    # Shifter logic to clear horizontal overlaps
+    moved_ids = resolve_overlaps(physical_nodes)
+    if moved_ids:
+        physical_nodes = _resolve_row_overlaps(physical_nodes, no_abutment_flag, preserve_order=True, terminal_nets=terminal_nets)
+
+    # Legalize rows vertically to align centroids
+    physical_nodes = legalize_vertical_rows(physical_nodes)
+
+    return {
+        "placement_nodes": physical_nodes,
+        "deterministic_snapshot": copy.deepcopy(physical_nodes),
+        "last_agent": "finger_expansion",
+    }
+\end{thesiscode}
+
+\subsection{Diffusion-Sharing Abutment Engine}
+In sub-micron analog layout design, packing adjacent transistors such that they share their source or drain diffusion regions (known as device abutment) is critical for area minimization and parasitic capacitance reduction. In LayoutCopilot, this is managed by a deterministic \emph{Diffusion-Sharing Abutment Engine} (implemented in \texttt{abutment.py}), which post-processes the symbolic placement coordinates generated by the LLM.
+
+\subsubsection{Abutment Spacing vs. Standard Clearance}
+When two adjacent transistors share a common diffusion node, their poly gates can be brought much closer together. The engine enforces two distinct spacing rules between adjacent devices $D_i$ and $D_{i+1}$ in a row:
+\begin{itemize}
+    \item \textbf{Abutted Spacing}: If the devices share a common source/drain net, they are placed at the compacted abutment pitch $\delta_{\text{abut}}$:
+    \begin{equation}
+        x_{i+1} = x_i + \delta_{\text{abut}}, \quad \text{where } \delta_{\text{abut}} = 0.070\,\mu\text{m}
+    \end{equation}
+    \item \textbf{Standard Spacing}: If they do not share a net, they are separated by the standard PDK transistor clearance pitch $W_i$:
+    \begin{equation}
+        x_{i+1} = x_i + W_i, \quad \text{where } W_i \ge 0.294\,\mu\text{m}
+    \end{equation}
+\end{itemize}
+
+\subsubsection{Chain Formulation via Union-Find}
+Individual pair-wise abutment candidates (identified by the rules engine based on terminal net matching) are consolidated into multi-device abutment chains using a Union-Find algorithm with path compression in \texttt{build\_}\allowbreak\texttt{abutment\_}\allowbreak\texttt{chains}. This groups connected components (e.g., matching $A \leftrightarrow B$ and $B \leftrightarrow C$ into chain $[A, B, C]$) to ensure they are kept physically contiguous and packed as a single macroscopic segment.
+
+\subsubsection{Combinatorial Orientation Optimization}
+Since MOS transistors are physically symmetric, their source and drain terminals can be interchanged by horizontally flipping their orientation ($R0 \leftrightarrow MY$). The engine runs a global combinatorial optimization pass (\texttt{optimize\_}\allowbreak\texttt{all\_}\allowbreak\texttt{rows\_}\allowbreak\texttt{orientations}) to assign orientations:
+\begin{enumerate}
+    \item Group contiguous transistor fingers in a row belonging to the same parent device.
+    \item Identify and pair symmetric blocks positioned mirror-symmetrically across the row's center axis.
+    \item Perform a binary combinations exploration (flipping pairs together to preserve symmetry) to find the orientation variables that maximize shared-net boundaries (diffusion sharing opportunities) and eliminate net-short conflicts.
+\end{enumerate}
+
+\subsubsection{Geometry Healing \& Failsafe Spacing Cascade}
+Once optimal orientations are decided, the layout coordinates are reconstructed using two deterministic passes:
+\begin{itemize}
+    \item \textbf{Healed Coordinates}: The function \texttt{heal\_}\allowbreak\texttt{abutment\_}\allowbreak\texttt{positions} packs segments (chains and singletons) left-to-right. It checks adjacent nets along the chain and dynamically swaps terminal node labels (Source/Drain) and flips device geometries (R0/MY) to align matching nets.
+    \item \textbf{Failsafe Spacing Cascade}: The function \texttt{force\_}\allowbreak\texttt{abutment\_}\allowbreak\texttt{spacing} acts as a final safety check. It scans rows, detects adjacent devices natively declaring abutment, and forces their spacing to exactly $\delta_{\text{abut}} = 0.070\,\mu\text{m}$, cascading the required shift to all downstream devices in the row to prevent horizontal overlap.
+    \item \textbf{Dummy Biasing}: Finally, dummy devices (which do not conduct active currents) are dynamically biased to power rails ($VDD$ for PMOS, $VSS/GND$ for NMOS) or to neighboring active terminal nets to prevent floating diffusions.
+\end{itemize}
+
+\subsection{Stage 2.5: Symmetry Enforcer}
+The Symmetry Enforcer Node (\texttt{symmetry\_enforcer.py}) ensures symmetrical layout structures match the schematic constraints. Rather than placing fingers individually, it translates interdigitated finger blocks as rigid bodies.
+
+This matches the midpoint of each block to the shared vertical center line, enforcing mirror symmetry while preserving interdigitated structures.
+
+Mathematically, let $X_{G}$ represent the set of all coordinates of symmetry-constrained components. The global vertical center line $x_{\text{axis}}$ is computed by finding the mid-point of the global span and snapping it to the nearest half-pitch grid ($P_{\text{half}} = 0.147\,\mu\text{m}$):
+\begin{equation}
+    x_{\text{raw\_axis}} = \frac{\min(X_G) + \max(X_G)}{2}
+\end{equation}
+\begin{equation}
+    x_{\text{axis}} = \text{round}\left( \frac{x_{\text{raw\_axis}}}{P_{\text{half}}} \right) \times P_{\text{half}}
+\end{equation}
+
+For each matched pair block (treated as a rigid body with active fingers $F_B$), the enforcer computes its current centroid $x_{\text{mid}}$ and translates all constituent nodes by the rigid offset $dx$:
+\begin{equation}
+    x_{\text{mid}} = \frac{\min_{f \in F_B} (x_f) + \max_{f \in F_B} (x_f + w_f)}{2}
+\end{equation}
+\begin{equation}
+    dx = x_{\text{axis}} - x_{\text{mid}}
+\end{equation}
+\begin{equation}
+    x_f \leftarrow x_f + dx, \quad \forall f \in F_B
+\end{equation}
+
+After shifting, the enforcer executes a deterministic overlap resolution pass and snaps coordinates back onto the grid.
+
+\textbf{Inputs}: Reads physical coordinates from \texttt{placement\_nodes} and constraint details.
+
+\textbf{Outputs}: Returns symmetry-corrected, snapped, and legal coordinates for all device fingers.
+
+\begin{thesiscode}{Symmetry Enforcer Node Implementation (symmetry\_enforcer.py)}{python}
+from ai_agent.nodes.symmetry_enforcer import parse_symmetry_block, _find_finger_ids
+from ai_agent.placement.finger_grouper import _resolve_row_overlaps, legalize_vertical_rows
+from config.design_rules import PITCH_UM
+
+def node_symmetry_enforcer(state):
+    nodes = state.get("placement_nodes", [])
+    constraint_text = state.get("constraint_text", "")
+    placement_mode = state.get("placement_mode", "auto")
+
+    if placement_mode != "two_half":
+        return {"placement_nodes": nodes, "last_agent": "symmetry_enforcer"}
+
+    sym_rules = parse_symmetry_block(constraint_text)
+    if not sym_rules:
+        return {"placement_nodes": nodes, "last_agent": "symmetry_enforcer"}
+
+    # Calculate global layout width and define central axis
+    xs = [float(n["geometry"]["x"]) for n in nodes]
+    widths = [float(n["geometry"]["width"]) for n in nodes]
+    max_x = max(x + w for x, w in zip(xs, widths))
+    x_axis = round((max_x / 2.0) / (PITCH_UM / 2.0)) * (PITCH_UM / 2.0)
+
+    # Translate matched pairs to align their centers symmetrically about x_axis
+    fixed_nodes = copy.deepcopy(nodes)
+    for left_id, right_id, _ in sym_rules["pairs"]:
+        left_fingers = _find_finger_ids(left_id, fixed_nodes)
+        right_fingers = _find_finger_ids(right_id, fixed_nodes)
+        block_fids = left_fingers + right_fingers
+        
+        # Calculate centroids and shift coordinates symmetrically
+        bxs = [float(fixed_nodes[fid]["geometry"]["x"]) for fid in block_fids]
+        block_mid = (min(bxs) + max(bxs)) / 2.0
+        dx = x_axis - block_mid
+        for fid in block_fids:
+            fixed_nodes[fid]["geometry"]["x"] = round(float(fixed_nodes[fid]["geometry"]["x"]) + dx, 6)
+        
+    fixed_nodes = _resolve_row_overlaps(fixed_nodes, False, True)
+    fixed_nodes = legalize_vertical_rows(fixed_nodes)
+
+    return {
+        "placement_nodes": fixed_nodes,
+        "last_agent": "symmetry_enforcer",
+    }
+\end{thesiscode}
+
+\subsection{Stage 2.6: Routing Previewer}
+The Routing Previewer Node (\texttt{routing\_previewer.py}) estimates layout routing costs before generation. It calculates a routing metric by evaluating:
+\begin{itemize}
+    \item **Net Crossings:** The number of times signal paths cross, indicating routing congestion.
+    \item **Half-Perimeter Wire Length (HPWL):** The estimated wire length for each net $n$:
+    \begin{equation}
+        \text{HPWL}(n) = (x_{\text{max}} - x_{\text{min}}) + (y_{\text{max}} - y_{\text{min}})
+    \end{equation}
+\end{itemize}
+This metric evaluates placement configurations and guides structural optimization.
+
+\textbf{Inputs}: Reads placement coordinates, device pins, and net connections.
+
+\textbf{Outputs}: Generates routing quality metrics and writes routing track width suggestions back to the state to expand the vertical spacing between row coordinates where congested channels are predicted.
+
+\begin{thesiscode}{Routing Previewer Node Implementation (routing\_previewer.py)}{python}
+import time
+from ai_agent.core.routing import build_routing_report
+from ai_agent.nodes._shared import ip_step
+
+def node_routing_previewer(state):
+    nodes         = state.get("placement_nodes", [])
+    edges         = state.get("edges", [])
+    terminal_nets = state.get("terminal_nets", {})
+
+    report = build_routing_report(nodes, edges or [], terminal_nets or {})
+    routing_legacy = report.to_legacy_dict()
+    routing_legacy["log_text"] = report.format_log()
+
+    return {
+        "routing_result": routing_legacy,
+        "last_agent": "routing_previewer"
+    }
+\end{thesiscode}
+
+\subsection{Stage 2.7: DRC Critic}
+The DRC Critic Node (\texttt{drc\_critic.py}) validates placement clearances. It runs a sweep-line overlap detection check. If violations exist, it uses \texttt{compute\_prescriptive\_fixes} to calculate coordinate offsets and shift devices.
+
+If this automated fix fails, the node routes execution back to the Placement Specialist, providing a feedback string detailing the violations (e.g. \texttt{"Overlap between MM0 and MM1 at X=0.294"}) to guide the next iteration.
+
+\textbf{Inputs}: Reads placed nodes and target separation variables.
+
+\textbf{Outputs}: DRC flag list, pass status, and coordinate offsets.
+
+\begin{thesiscode}{DRC Critic Node Implementation (drc\_critic.py)}{python}
+import time
+from ai_agent.core.drc import run_drc_check, compute_prescriptive_fixes
+from ai_agent.tools.cmd_parser import apply_cmds_to_nodes
+
+def node_drc_critic(state):
+    retry_num = state.get("drc_retry_count", 0)
+    nodes = state.get("placement_nodes", [])
+    gap_px = state.get("gap_px", 0.0)
+    terminal_nets = state.get("terminal_nets", {})
+    gap_um = gap_px / 34.0 if gap_px > 0 else 0.0
+    
+    drc_result = run_drc_check(nodes, gap_um)
+    if drc_result["pass"]:
+        return {
+            "placement_nodes": nodes,
+            "drc_pass": True,
+            "drc_flags": [],
+            "last_agent": "drc_critic",
+        }
+
+    fixes = compute_prescriptive_fixes(
+        drc_result=drc_result, gap_px=gap_px, nodes=nodes,
+        geometric_tags=state.get("groups", {}), terminal_nets=terminal_nets
+    )
+
+    if fixes:
+        fixed_nodes = apply_cmds_to_nodes(nodes, fixes)
+        fixed_drc = run_drc_check(fixed_nodes, gap_um)
+        if fixed_drc["pass"]:
+            return {
+                "placement_nodes": fixed_nodes,
+                "drc_pass": True,
+                "drc_flags": [],
+                "pending_cmds": state.get("pending_cmds", []) + fixes,
+                "drc_retry_count": retry_num + 1,
+                "last_agent": "drc_critic",
+            }
+
+    return {
+        "placement_nodes": nodes,
+        "drc_pass": False,
+        "drc_flags": list(drc_result.get("violations", [])),
+        "drc_retry_count": retry_num + 1,
+        "last_agent": "drc_critic",
+    }
+\end{thesiscode}
+
+% ==============================================================================
+\section[Stage 2 I/O]{Input \& Output Interfaces}
+\label{sec:placer_io}
+
+Stage 2 operates with structured JSON input and output interfaces.
+
+\subsection{Input Interface Schema}
+The input is the unified graph JSON, which contains schematic definitions, node attributes, and logical net connectivity.
+
+\subsection{Output Placement Schema}
+The output JSON details the placement geometry. Each physical finger has absolute coordinates ($x, y$), width and height footprints, and orientations.
+
+\begin{thesiscode}{Output Placement JSON Schema}{json}
+{
+  "placement": [
+    {
+      "id": "MM2_f1",
+      "x": 0.0,
+      "y": 0.0,
+      "width": 0.294,
+      "height": 0.668,
+      "orientation": "R0",
+      "type": "nmos",
+      "parent": "MM2"
+    },
+    {
+      "id": "MM2_f2",
+      "x": 0.294,
+      "y": 0.0,
+      "width": 0.294,
+      "height": 0.668,
+      "orientation": "R0",
+      "type": "nmos",
+      "parent": "MM2"
+    }
+  ]
+}
+\end{thesiscode}
+
+% ==============================================================================
+\section[Log File Trace Walkthrough]{Execution Log Walkthrough: Dynamic Latch Comparator}
+\label{sec:log_walkthrough}
+
+To verify the robust, deterministic execution of LayoutCopilot's initial placement pipeline, this section conducts a detailed walkthrough of the execution trace generated during the placement of a \emph{Dynamic Latch Comparator} (recorded in \texttt{placement\_live\_output.log}). The circuit contains 62 physical transistor fingers (40 PMOS and 22 NMOS).
+
+\subsection{Phase 1: Topology Analyst Execution}
+The pipeline begins by grouping the 62 physical fingers to form 11 logical device representations (\texttt{MM0} to \texttt{MM10}). The rules engine generates the connectivity constraints and queries the LLM:
+\begin{itemize}
+    \item \textbf{Input Stage Pair}: Detects the input NMOS transistors \texttt{MM8} and \texttt{MM9} as a differential pair, mapping them to \texttt{GROUP\_INPUT\_DIFFERENTIAL\_PAIR}. It specifies symmetry and match requirements for the pair:
+    \begin{thesiscode}{Input Stage Pair Mapping Constraint}{text}
+PAIR_MAPPING:
+    - (MM8, MM9)
+    \end{thesiscode}
+    \item \textbf{Tail Source}: Groups the tail current source \texttt{MM10} and sets it as the axis of symmetry for the input differential pair.
+    \item \textbf{Precharge PMOS Devices}: Groups \texttt{MM0}, \texttt{MM1}, \texttt{MM2}, and \texttt{MM3} into the precharge PMOS group, denoted \texttt{GROUP\_}\allowbreak\texttt{PRECHARGE\_}\allowbreak\texttt{PMOS}, with symmetric constraint pairs: \texttt{(MM3, MM2)} and \texttt{(MM0, MM1)}.
+    \item \textbf{Latch Elements}: Groups the cross-coupled regenerative latches: PMOS devices \texttt{(MM4, MM5)} and NMOS devices \texttt{(MM6, MM7)}.
+\end{itemize}
+
+\subsection{Phase 2: Floorplanning Strategy Selector}
+The Strategy Selector generates four composable constraints:
+\begin{enumerate}
+    \item \textbf{Input Stage Core}: Common centroid placement for \texttt{MM10} (tail) centered between the input pair \texttt{(MM8, MM9)} along a vertical axis.
+    \item \textbf{Latch Symmetry}: Align cross-coupled pairs \texttt{(MM4, MM5)} and \texttt{(MM6, MM7)} symmetrically.
+    \item \textbf{Precharge PMOS Symmetry}: Centering the precharge group \texttt{GROUP\_}\allowbreak\texttt{PRECHARGE\_}\allowbreak\texttt{PMOS} about the vertical axis.
+    \item \textbf{Vertical Current Stacking}: Vertically stack the tail current source, input pair, and NMOS latches in order of current flow, placing the PMOS precharge and latch components above them.
+\end{enumerate}
+The global placement mode is set to \texttt{two\_half} to establish a vertical symmetry axis.
+
+\subsection{Phase 3: Placement Specialist Constraint Resolution}
+In Step 3a, LayoutCopilot merges matched pairs into rigid interdigitated blocks:
+\begin{itemize}
+    \item \texttt{MM8} and \texttt{MM9} are merged to \texttt{MM8\_MM9\_matched} (ABAB pattern, 18 fingers, width: $5.292\,\mu\text{m}$).
+    \item \texttt{MM2} and \texttt{MM1} are merged to \texttt{MM2\_MM1\_matched} (ABAB pattern, 18 fingers, width: $5.292\,\mu\text{m}$).
+    \item \texttt{MM5} and \texttt{MM4} are merged to \texttt{MM5\_MM4\_matched} (symmetric cross-coupled, 8 fingers, width: $2.352\,\mu\text{m}$).
+    \item \texttt{MM3} and \texttt{MM0} are merged to \texttt{MM3\_MM0\_matched} (ABAB pattern, 18 fingers, width: $5.292\,\mu\text{m}$).
+    \item \texttt{MM7} and \texttt{MM6} are skipped since they are single-finger devices.
+\end{itemize}
+The row planner balances the row aspect ratios. Because the total PMOS footprint width ($15.288\,\mu\text{m}$) exceeds that of the NMOS devices ($8.526\,\mu\text{m}$), the row planner splits the PMOS devices into three rows, resulting in a five-row stack:
+\begin{itemize}
+    \item \textbf{NMOS Row 0} ($y=0.000\,\mu\text{m}$): \texttt{MM8\_MM9\_matched} (width: $5.292\,\mu\text{m}$).
+    \item \textbf{NMOS Row 1} ($y=0.818\,\mu\text{m}$): \texttt{MM7, MM6, MM10} (widths: $0.294 + 0.294 + 1.176\,\mu\text{m}$).
+    \item \textbf{PMOS Row 0} ($y=1.636\,\mu\text{m}$): \texttt{MM3\_MM0\_matched} (width: $5.292\,\mu\text{m}$).
+    \item \textbf{PMOS Row 1} ($y=2.454\,\mu\text{m}$): \texttt{MM5\_MM4\_matched} (width: $2.352\,\mu\text{m}$).
+    \item \textbf{PMOS Row 2} ($y=3.272\,\mu\text{m}$): \texttt{MM2\_MM1\_matched} (width: $5.292\,\mu\text{m}$).
+\end{itemize}
+
+Step 3b invokes the LLM using these row boundaries. The LLM assigns slot numbers (0 to 17) for each row. For example, in Row 1 ($y=0.818\,\mu\text{m}$), it assigns \texttt{MM6} to slot 6, \texttt{MM10} to slots 7--10, and \texttt{MM7} to slot 11, centering the active components and leaving slots 0--5 and 12--17 for dummy devices.
+
+\subsection{Phase 4: Finger Expansion \& Dummy Insertion}
+In Step 3d, the symbolic slots are expanded to physical fingers. The logical nodes unroll to 68 active devices. The overlap resolver calculates spacing constraints and inserts:
+\begin{itemize}
+    \item \textbf{Edge Dummies}: Placed on the outer boundaries of interdigitated rows (e.g. \texttt{EDGE\_DUMMY\_L} at slot 0, and \texttt{EDGE\_DUMMY\_R} at slot 17) to prevent matching mismatches.
+    \item \textbf{Filler/Bridge Dummies}: Placed in rows with fewer active components to maintain uniform row widths and routing density (e.g., Row 1 at $y=0.818\,\mu\text{m}$ receives filler dummies in slots 0--5 and 12--17).
+\end{itemize}
+This brings the total physical device count to 90 transistors.
+
+\subsection{Phase 5: Symmetry Enforcer Alignment}
+In Stage 3.5, the Symmetry Enforcer computes the global layout midpoint at $x_{\text{axis}} = 2.4990\,\mu\text{m}$ (using the 18-slot width grid snapped to half-pitch). It translates the interdigitated blocks:
+\begin{itemize}
+    \item The block \texttt{MM8\_MM9\_matched} is centered at $2.4990\,\mu\text{m}$ (maintaining its ABAB pattern).
+    \item The block \texttt{MM3\_MM2\_matched} is centered at $2.4990\,\mu\text{m}$.
+    \item The tail current source \texttt{MM10} (4 fingers) is centered directly on the axis.
+\end{itemize}
+To resolve coordinate overlaps introduced by the translation, a post-enforcement overlap pass shifts 32 devices on the grid. For instance:
+\begin{thesiscode}{Symmetry Enforcer Overlap Correction Log Snippet}{text}
+[OVERLAP-FIX] MM1_m1 moved x=0.5880 -> 0.8820 (was overlapping MM2_m1 at row y=3.2720)
+[OVERLAP-FIX] MM2_m2 moved x=1.0290 -> 1.1760 (was overlapping MM1_m1 at row y=3.2720)
+\end{thesiscode}
+
+\subsection{Phase 6: Routing Previewer \& DRC Critic}
+The Routing Previewer measures a Manhattan HPWL of $21.844\,\mu\text{m}$ and estimates 41 crossings. The critical nets (\texttt{VOUTN}, \texttt{VOUTP}, \texttt{CLK}, \texttt{VX}, \texttt{VY}) are identified as cross-row nets, requiring track space in the horizontal routing bands:
+\begin{itemize}
+    \item \textbf{Band 1} ($y \approx 1.002\,\mu\text{m}$): Requires 6 routing tracks (widened to $0.938\,\mu\text{m}$).
+    \item \textbf{Band 2} ($y \approx 2.004\,\mu\text{m}$): Requires 5 routing tracks (widened to $0.804\,\mu\text{m}$).
+\end{itemize}
+
+Finally, the DRC Critic performs a sweep-line clearance check on all 90 devices. Because the Symmetry Enforcer and Overlap Resolver successfully aligned the layout onto the PDK grid, the DRC passes on attempt 1 with zero violations. The layout achieves a utilization of 68.9\% and a composite quality score of 100\% (A+ grade).
+
+% ==============================================================================
+\section[Current Mirror Walkthrough]{Example Walkthrough: Current Mirror Initial Placement}
+\label{sec:walkthrough_placer}
+
+This section traces the initial placement of the current mirror circuit (\texttt{CM}) from the \texttt{examples/current\_mirror} directory.
+
+\subsection{Topology Grouping}
+The Topology Analyst reads the unified graph and groups matched NMOS and PMOS mirrors:
+\begin{itemize}
+    \item **NMOS Mirror:** MM0, MM1, MM2 (common gate net \texttt{C}, source to \texttt{gnd}).
+    \item **PMOS Mirror:** MM3, MM4, MM5 (common gate net \texttt{X}, source to \texttt{VDD}).
+\end{itemize}
+
+\subsection{Row Planning}
+The Strategy Selector separates the device types into Y-rows:
+\begin{itemize}
+    \item **Row 0:** Assigned to NMOS devices, set at Y coordinate $0.0\,\mu\text{m}$.
+    \item **Row 1:** Assigned to PMOS devices, set at Y coordinate $0.668\,\mu\text{m}$.
+\end{itemize}
+
+\subsection{Symbolic Positioning}
+The Placement Specialist assigns slot indices:
+\begin{itemize}
+    \item **Row 0 NMOS Slot Sequence:** MM0 (diode reference) in the center, with MM1 and MM2 placed symmetrically on either side.
+    \item **Row 1 PMOS Slot Sequence:** MM3 (diode reference) in the center, with MM4 and MM5 placed symmetrically.
+\end{itemize}
+
+\subsection{Physical Finger Expansion}
+The Finger Expansion node expands the logical nodes into physical fingers:
+\begin{itemize}
+    \item **MM0 ($nf=16$):** Expanded into 16 fingers.
+    \item **MM1 ($nf=8$):** Expanded into 8 fingers.
+    \item **MM2 ($nf=4$):** Expanded into 4 fingers.
+\end{itemize}
+
+Matched pairs are placed in interdigitated configurations (e.g. ABBA patterns). For example, the MM1 ($nf=8$) and MM2 ($nf=4$) mirrors are placed in an interleaved sequence to minimize mismatch.
+
+The overlap resolver shifts coordinates horizontally to clear spacing violations. Symmetrical structures are aligned about the vertical center axis ($x = 4.116\,\mu\text{m}$). This placement passes the DRC Critic validation, generating a DRC-clean layout config.
+

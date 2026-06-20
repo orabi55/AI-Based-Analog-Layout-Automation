@@ -19,17 +19,53 @@
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.6680000000000001,
-                "orientation": "MY"
+                "orientation": "R0"
             },
             "layout_index": 4,
             "layout_cell": "nfet_pcell_87be",
             "abutment": {
                 "abut_left": false,
-                "abut_right": true
-            }
+                "abut_right": false
+            },
+            "net_s": "VSS",
+            "net_d": "Bb",
+            "net_g": "B",
+            "swapped_sd": false
         },
         {
             "id": "MM5",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 0.294,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.6680000000000001,
+                "orientation": "MY"
+            },
+            "layout_index": 5,
+            "layout_cell": "nfet_pcell_87be",
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "net_s": "PDN",
+            "net_d": "VSS",
+            "net_g": "Bb",
+            "swapped_sd": true
+        },
+        {
+            "id": "MM4",
             "type": "nmos",
             "electrical": {
                 "l": 1.4e-08,
@@ -47,42 +83,18 @@
                 "y": 0.0,
                 "width": 0.294,
                 "height": 0.6680000000000001,
-                "orientation": "MY"
-            },
-            "layout_index": 5,
-            "layout_cell": "nfet_pcell_87be",
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM4",
-            "type": "nmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 4.0,
-                "w": 0,
-                "parent": null,
-                "m": 1,
-                "multiplier_index": null,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 0.882,
-                "y": 0.0,
-                "width": 0.294,
-                "height": 0.6680000000000001,
-                "orientation": "MY"
+                "orientation": "R0"
             },
             "layout_index": 3,
             "layout_cell": "nfet_pcell_87be",
             "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            }
+                "abut_left": false,
+                "abut_right": false
+            },
+            "net_s": "VSS",
+            "net_d": "PDN",
+            "net_g": "A",
+            "swapped_sd": false
         },
         {
             "id": "MM3",
@@ -108,12 +120,48 @@
             "layout_index": 1,
             "layout_cell": "nfet_pcell_87be",
             "abutment": {
-                "abut_left": true,
+                "abut_left": false,
                 "abut_right": true
-            }
+            },
+            "net_s": "OUT",
+            "net_d": "PDN",
+            "net_g": "B",
+            "swapped_sd": true
         },
         {
             "id": "MM2",
+            "type": "nmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 0.882,
+                "y": 0.0,
+                "width": 0.294,
+                "height": 0.6680000000000001,
+                "orientation": "R0"
+            },
+            "layout_index": 0,
+            "layout_cell": "nfet_pcell_87be",
+            "abutment": {
+                "abut_left": true,
+                "abut_right": false
+            },
+            "net_s": "PDN",
+            "net_d": "OUT",
+            "net_g": "Ab",
+            "swapped_sd": false
+        },
+        {
+            "id": "MM25",
             "type": "nmos",
             "electrical": {
                 "l": 1.4e-08,
@@ -133,40 +181,16 @@
                 "height": 0.6680000000000001,
                 "orientation": "MY"
             },
-            "layout_index": 0,
-            "layout_cell": "nfet_pcell_87be",
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM25",
-            "type": "nmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 4.0,
-                "w": 0,
-                "parent": null,
-                "m": 1,
-                "multiplier_index": null,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 2.058,
-                "y": 0.0,
-                "width": 0.294,
-                "height": 0.6680000000000001,
-                "orientation": "R0"
-            },
             "layout_index": 2,
             "layout_cell": "nfet_pcell_87be",
             "abutment": {
-                "abut_left": true,
+                "abut_left": false,
                 "abut_right": false
-            }
+            },
+            "net_s": "Ab",
+            "net_d": "VSS",
+            "net_g": "A",
+            "swapped_sd": true
         },
         {
             "id": "MM29",
@@ -187,17 +211,53 @@
                 "y": 0.668001,
                 "width": 0.294,
                 "height": 0.6680000000000001,
-                "orientation": "MY"
+                "orientation": "R0"
             },
             "layout_index": 9,
             "layout_cell": "pfet_pcell_d69f",
             "abutment": {
                 "abut_left": false,
-                "abut_right": true
-            }
+                "abut_right": false
+            },
+            "net_s": "VDD",
+            "net_d": "Bb",
+            "net_g": "B",
+            "swapped_sd": false
         },
         {
             "id": "MM9",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 0.294,
+                "y": 0.668001,
+                "width": 0.294,
+                "height": 0.6680000000000001,
+                "orientation": "MY"
+            },
+            "layout_index": 8,
+            "layout_cell": "pfet_pcell_d69f",
+            "abutment": {
+                "abut_left": false,
+                "abut_right": false
+            },
+            "net_s": "PUN",
+            "net_d": "VDD",
+            "net_g": "Ab",
+            "swapped_sd": true
+        },
+        {
+            "id": "MM8",
             "type": "pmos",
             "electrical": {
                 "l": 1.4e-08,
@@ -215,73 +275,21 @@
                 "y": 0.668001,
                 "width": 0.294,
                 "height": 0.6680000000000001,
-                "orientation": "MY"
-            },
-            "layout_index": 8,
-            "layout_cell": "pfet_pcell_d69f",
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM8",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 4.0,
-                "w": 0,
-                "parent": null,
-                "m": 1,
-                "multiplier_index": null,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 0.882,
-                "y": 0.668001,
-                "width": 0.294,
-                "height": 0.6680000000000001,
-                "orientation": "MY"
+                "orientation": "R0"
             },
             "layout_index": 11,
             "layout_cell": "pfet_pcell_d69f",
             "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            }
+                "abut_left": false,
+                "abut_right": false
+            },
+            "net_s": "VDD",
+            "net_d": "PUN",
+            "net_g": "Bb",
+            "swapped_sd": false
         },
         {
             "id": "MM7",
-            "type": "pmos",
-            "electrical": {
-                "l": 1.4e-08,
-                "nf": 1,
-                "nfin": 4.0,
-                "w": 0,
-                "parent": null,
-                "m": 1,
-                "multiplier_index": null,
-                "finger_index": null,
-                "array_index": null
-            },
-            "geometry": {
-                "x": 1.47,
-                "y": 0.668001,
-                "width": 0.294,
-                "height": 0.6680000000000001,
-                "orientation": "R0"
-            },
-            "layout_index": 7,
-            "layout_cell": "pfet_pcell_d69f",
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            }
-        },
-        {
-            "id": "MM6",
             "type": "pmos",
             "electrical": {
                 "l": 1.4e-08,
@@ -301,12 +309,48 @@
                 "height": 0.6680000000000001,
                 "orientation": "MY"
             },
+            "layout_index": 7,
+            "layout_cell": "pfet_pcell_d69f",
+            "abutment": {
+                "abut_left": false,
+                "abut_right": true
+            },
+            "net_s": "OUT",
+            "net_d": "PUN",
+            "net_g": "B",
+            "swapped_sd": true
+        },
+        {
+            "id": "MM6",
+            "type": "pmos",
+            "electrical": {
+                "l": 1.4e-08,
+                "nf": 1,
+                "nfin": 4.0,
+                "w": 0,
+                "parent": null,
+                "m": 1,
+                "multiplier_index": null,
+                "finger_index": null,
+                "array_index": null
+            },
+            "geometry": {
+                "x": 0.882,
+                "y": 0.668001,
+                "width": 0.294,
+                "height": 0.6680000000000001,
+                "orientation": "R0"
+            },
             "layout_index": 6,
             "layout_cell": "pfet_pcell_d69f",
             "abutment": {
                 "abut_left": true,
-                "abut_right": true
-            }
+                "abut_right": false
+            },
+            "net_s": "PUN",
+            "net_d": "OUT",
+            "net_g": "A",
+            "swapped_sd": false
         },
         {
             "id": "MM24",
@@ -323,118 +367,22 @@
                 "array_index": null
             },
             "geometry": {
-                "x": 2.058,
+                "x": 1.47,
                 "y": 0.668001,
                 "width": 0.294,
                 "height": 0.6680000000000001,
-                "orientation": "R0"
+                "orientation": "MY"
             },
             "layout_index": 10,
             "layout_cell": "pfet_pcell_d69f",
             "abutment": {
-                "abut_left": true,
+                "abut_left": false,
                 "abut_right": false
-            }
-        },
-        {
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
             },
-            "electrical": {
-                "l": 1.4e-08,
-                "multiplier": 1,
-                "nf_per_device": 1,
-                "nfin": 4.0
-            },
-            "geometry": {
-                "height": 0.6680000000000001,
-                "orientation": "R0",
-                "width": 0.294,
-                "x": 0.294,
-                "y": 0.0
-            },
-            "id": "FILLER_DUMMY_BRIDGE_0.0_0_nmos",
-            "is_dummy": true,
-            "net_d": "OUT",
-            "net_g": "VSS",
-            "net_s": "VSS",
-            "type": "nmos"
-        },
-        {
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            },
-            "electrical": {
-                "l": 1.4e-08,
-                "multiplier": 1,
-                "nf_per_device": 1,
-                "nfin": 4.0
-            },
-            "geometry": {
-                "height": 0.6680000000000001,
-                "orientation": "R0",
-                "width": 0.294,
-                "x": 1.764,
-                "y": 0.0
-            },
-            "id": "FILLER_DUMMY_BRIDGE_0.0_4_nmos",
-            "is_dummy": true,
-            "net_d": "VSS",
-            "net_g": "VSS",
-            "net_s": "OUT",
-            "type": "nmos"
-        },
-        {
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            },
-            "electrical": {
-                "l": 1.4e-08,
-                "multiplier": 1,
-                "nf_per_device": 1,
-                "nfin": 4.0
-            },
-            "geometry": {
-                "height": 0.6680000000000001,
-                "orientation": "R0",
-                "width": 0.294,
-                "x": 0.294,
-                "y": 0.668001
-            },
-            "id": "FILLER_DUMMY_BRIDGE_0.668001_0_pmos",
-            "is_dummy": true,
-            "net_d": "OUT",
-            "net_g": "VDD",
-            "net_s": "VDD",
-            "type": "pmos"
-        },
-        {
-            "abutment": {
-                "abut_left": true,
-                "abut_right": true
-            },
-            "electrical": {
-                "l": 1.4e-08,
-                "multiplier": 1,
-                "nf_per_device": 1,
-                "nfin": 4.0
-            },
-            "geometry": {
-                "height": 0.6680000000000001,
-                "orientation": "R0",
-                "width": 0.294,
-                "x": 1.764,
-                "y": 0.668001
-            },
-            "id": "FILLER_DUMMY_BRIDGE_0.668001_4_pmos",
-            "is_dummy": true,
+            "net_s": "Ab",
             "net_d": "VDD",
-            "net_g": "VDD",
-            "net_s": "OUT",
-            "type": "pmos"
+            "net_g": "A",
+            "swapped_sd": true
         }
     ],
     "edges": [
@@ -624,6 +572,40 @@
             "net": "A"
         }
     ],
+    "custom_groups": [
+        {
+            "name": "Inverter_A",
+            "devices": [
+                "MM24",
+                "MM25"
+            ]
+        },
+        {
+            "name": "Inverter_B",
+            "devices": [
+                "MM29",
+                "MM28"
+            ]
+        },
+        {
+            "name": "PUN",
+            "devices": [
+                "MM6",
+                "MM7",
+                "MM8",
+                "MM9"
+            ]
+        },
+        {
+            "name": "PDN",
+            "devices": [
+                "MM2",
+                "MM3",
+                "MM4",
+                "MM5"
+            ]
+        }
+    ],
     "terminal_nets": {
         "MM28": {
             "D": "Bb",
@@ -686,116 +668,7 @@
             "S": "VDD"
         }
     },
-    "abutment_candidates": [
-        {
-            "dev_a": "MM5",
-            "term_a": "D",
-            "dev_b": "MM4",
-            "term_b": "D",
-            "shared_net": "PDN",
-            "type": "nmos",
-            "needs_flip": true
-        },
-        {
-            "dev_a": "MM5",
-            "term_a": "D",
-            "dev_b": "MM3",
-            "term_b": "S",
-            "shared_net": "PDN",
-            "type": "nmos",
-            "needs_flip": false
-        },
-        {
-            "dev_a": "MM5",
-            "term_a": "D",
-            "dev_b": "MM2",
-            "term_b": "S",
-            "shared_net": "PDN",
-            "type": "nmos",
-            "needs_flip": false
-        },
-        {
-            "dev_a": "MM4",
-            "term_a": "D",
-            "dev_b": "MM3",
-            "term_b": "S",
-            "shared_net": "PDN",
-            "type": "nmos",
-            "needs_flip": false
-        },
-        {
-            "dev_a": "MM4",
-            "term_a": "D",
-            "dev_b": "MM2",
-            "term_b": "S",
-            "shared_net": "PDN",
-            "type": "nmos",
-            "needs_flip": false
-        },
-        {
-            "dev_a": "MM3",
-            "term_a": "S",
-            "dev_b": "MM2",
-            "term_b": "S",
-            "shared_net": "PDN",
-            "type": "nmos",
-            "needs_flip": true
-        },
-        {
-            "dev_a": "MM9",
-            "term_a": "D",
-            "dev_b": "MM8",
-            "term_b": "D",
-            "shared_net": "PUN",
-            "type": "pmos",
-            "needs_flip": true
-        },
-        {
-            "dev_a": "MM9",
-            "term_a": "D",
-            "dev_b": "MM7",
-            "term_b": "S",
-            "shared_net": "PUN",
-            "type": "pmos",
-            "needs_flip": false
-        },
-        {
-            "dev_a": "MM9",
-            "term_a": "D",
-            "dev_b": "MM6",
-            "term_b": "S",
-            "shared_net": "PUN",
-            "type": "pmos",
-            "needs_flip": false
-        },
-        {
-            "dev_a": "MM8",
-            "term_a": "D",
-            "dev_b": "MM7",
-            "term_b": "S",
-            "shared_net": "PUN",
-            "type": "pmos",
-            "needs_flip": false
-        },
-        {
-            "dev_a": "MM8",
-            "term_a": "D",
-            "dev_b": "MM6",
-            "term_b": "S",
-            "shared_net": "PUN",
-            "type": "pmos",
-            "needs_flip": false
-        },
-        {
-            "dev_a": "MM7",
-            "term_a": "S",
-            "dev_b": "MM6",
-            "term_b": "S",
-            "shared_net": "PUN",
-            "type": "pmos",
-            "needs_flip": true
-        }
-    ],
+    "abutment_candidates": [],
     "no_abutment": false,
     "placement_goals": null,
     "routing_result": {
@@ -808,86 +681,86 @@
                 "y_boundary": 0.334
             }
         ],
-        "log_text": "7 nets analyzed  (1 critical, 6 signal, 0 bias, 0 power)\nTotal Manhattan HPWL : 10.984 \u00b5m\nEstimated crossings  : 26\nWeighted cost        : 73.5\n\nWorst nets (by weighted HPWL):\n  OUT            critical hpwl=1.550\u00b5m  (\u0394x=0.882, \u0394y=0.668)  [CROSS-ROW]\n  B              signal   hpwl=2.138\u00b5m  (\u0394x=1.470, \u0394y=0.668)  [CROSS-ROW]\n  A              signal   hpwl=2.138\u00b5m  (\u0394x=1.470, \u0394y=0.668)  [CROSS-ROW]\n  Bb             signal   hpwl=1.844\u00b5m  (\u0394x=1.176, \u0394y=0.668)  [CROSS-ROW]\n  Ab             signal   hpwl=1.550\u00b5m  (\u0394x=0.882, \u0394y=0.668)  [CROSS-ROW]\n\nRouting channels (inter-row bands):\n  band 0  y\u22480.334\u00b5m  0 track(s)  \u2192 widen to 0.134 \u00b5m",
+        "log_text": "7 nets analyzed  (1 critical, 6 signal, 0 bias, 0 power)\nTotal Manhattan HPWL : 8.926 \u00b5m\nEstimated crossings  : 27\nWeighted cost        : 43.8\n\nWorst nets (by weighted HPWL):\n  OUT            critical hpwl=0.962\u00b5m  (\u0394x=0.294, \u0394y=0.668)  [CROSS-ROW]\n  Bb             signal   hpwl=1.844\u00b5m  (\u0394x=1.176, \u0394y=0.668)  [CROSS-ROW]\n  Ab             signal   hpwl=1.844\u00b5m  (\u0394x=1.176, \u0394y=0.668)  [CROSS-ROW]\n  B              signal   hpwl=1.256\u00b5m  (\u0394x=0.588, \u0394y=0.668)  [CROSS-ROW]\n  A              signal   hpwl=1.256\u00b5m  (\u0394x=0.588, \u0394y=0.668)  [CROSS-ROW]\n\nRouting channels (inter-row bands):\n  band 0  y\u22480.334\u00b5m  0 track(s)  \u2192 widen to 0.134 \u00b5m",
         "net_details": {
             "A": {
                 "criticality": "signal",
                 "cross_row": true,
                 "devices": [
-                    "MM25",
                     "MM24",
                     "MM4",
+                    "MM25",
                     "MM6"
                 ],
                 "nmos_devs": [],
                 "pmos_devs": [
-                    "MM25",
                     "MM24",
                     "MM4",
+                    "MM25",
                     "MM6"
                 ],
-                "span": 1.47,
-                "wire_length": 2.138001,
-                "x_max": 2.205,
-                "x_min": 0.735
+                "span": 0.588,
+                "wire_length": 1.256001,
+                "x_max": 1.617,
+                "x_min": 1.029
             },
             "Ab": {
                 "criticality": "signal",
                 "cross_row": true,
                 "devices": [
                     "MM24",
+                    "MM2",
                     "MM25",
-                    "MM9",
-                    "MM2"
+                    "MM9"
                 ],
                 "nmos_devs": [],
                 "pmos_devs": [
                     "MM24",
+                    "MM2",
                     "MM25",
-                    "MM9",
-                    "MM2"
+                    "MM9"
                 ],
-                "span": 0.882,
-                "wire_length": 1.550001,
-                "x_max": 2.205,
-                "x_min": 1.323
+                "span": 1.176,
+                "wire_length": 1.844001,
+                "x_max": 1.617,
+                "x_min": 0.441
             },
             "B": {
                 "criticality": "signal",
                 "cross_row": true,
                 "devices": [
-                    "MM29",
-                    "MM7",
                     "MM28",
-                    "MM3"
+                    "MM7",
+                    "MM3",
+                    "MM29"
                 ],
                 "nmos_devs": [],
                 "pmos_devs": [
-                    "MM29",
-                    "MM7",
                     "MM28",
-                    "MM3"
+                    "MM7",
+                    "MM3",
+                    "MM29"
                 ],
-                "span": 1.47,
-                "wire_length": 2.138001,
-                "x_max": 1.617,
+                "span": 0.588,
+                "wire_length": 1.256001,
+                "x_max": 0.735,
                 "x_min": 0.147
             },
             "Bb": {
                 "criticality": "signal",
                 "cross_row": true,
                 "devices": [
-                    "MM29",
                     "MM28",
                     "MM5",
-                    "MM8"
+                    "MM8",
+                    "MM29"
                 ],
                 "nmos_devs": [],
                 "pmos_devs": [
-                    "MM29",
                     "MM28",
                     "MM5",
-                    "MM8"
+                    "MM8",
+                    "MM29"
                 ],
                 "span": 1.176,
                 "wire_length": 1.844001,
@@ -898,78 +771,78 @@
                 "criticality": "critical",
                 "cross_row": true,
                 "devices": [
-                    "MM3",
                     "MM2",
                     "MM7",
-                    "MM6"
+                    "MM6",
+                    "MM3"
                 ],
                 "nmos_devs": [],
                 "pmos_devs": [
-                    "MM3",
                     "MM2",
                     "MM7",
-                    "MM6"
+                    "MM6",
+                    "MM3"
                 ],
-                "span": 0.882,
-                "wire_length": 1.550001,
-                "x_max": 1.617,
+                "span": 0.294,
+                "wire_length": 0.962001,
+                "x_max": 1.029,
                 "x_min": 0.735
             },
             "PDN": {
                 "criticality": "signal",
                 "cross_row": false,
                 "devices": [
-                    "MM3",
                     "MM4",
                     "MM2",
-                    "MM5"
+                    "MM5",
+                    "MM3"
                 ],
                 "nmos_devs": [],
                 "pmos_devs": [
-                    "MM3",
                     "MM4",
                     "MM2",
-                    "MM5"
+                    "MM5",
+                    "MM3"
                 ],
                 "span": 0.882,
                 "wire_length": 0.882,
-                "x_max": 1.617,
-                "x_min": 0.735
+                "x_max": 1.323,
+                "x_min": 0.441
             },
             "PUN": {
                 "criticality": "signal",
                 "cross_row": false,
                 "devices": [
-                    "MM9",
                     "MM7",
+                    "MM6",
                     "MM8",
-                    "MM6"
+                    "MM9"
                 ],
                 "nmos_devs": [],
                 "pmos_devs": [
-                    "MM9",
                     "MM7",
+                    "MM6",
                     "MM8",
-                    "MM6"
+                    "MM9"
                 ],
                 "span": 0.882,
                 "wire_length": 0.882,
-                "x_max": 1.617,
-                "x_min": 0.735
+                "x_max": 1.323,
+                "x_min": 0.441
             }
         },
         "net_spans": {
             "A": [
-                0.735,
-                2.205
+                1.029,
+                1.617
             ],
             "Ab": [
-                1.323,
-                2.205
+                0.441,
+                1.617
             ],
             "B": [
                 0.147,
-                1.617
+                0.735
             ],
             "Bb": [
                 0.147,
@@ -977,31 +850,31 @@
             ],
             "OUT": [
                 0.735,
-                1.617
+                1.029
             ],
             "PDN": [
-                0.735,
-                1.617
+                0.441,
+                1.323
             ],
             "PUN": [
-                0.735,
-                1.617
+                0.441,
+                1.323
             ]
         },
-        "placement_cost": 10.5039,
-        "score": 26,
-        "summary": "Routing preview: ~26 crossing(s), HPWL=10.984 \u00b5m. Worst: OUT(1.550\u00b5m), B(2.138\u00b5m), A(2.138\u00b5m)",
-        "total_wire_length": 10.984005,
-        "weighted_cost": 73.5274,
+        "placement_cost": 6.2556,
+        "score": 27,
+        "summary": "Routing preview: ~27 crossing(s), HPWL=8.926 \u00b5m. Worst: OUT(0.962\u00b5m), Bb(1.844\u00b5m), Ab(1.844\u00b5m)",
+        "total_wire_length": 8.926005,
+        "weighted_cost": 43.7893,
         "worst_nets": [
             "OUT",
-            "B",
-            "A",
             "Bb",
-            "Ab"
+            "Ab",
+            "B",
+            "A"
         ]
     },
-    "chat_response": "[Initial Placement Complete]\n- DRC: \u2713 Clean\n- Nodes: 16 placed\n\n\n==============================================================\n  PLACEMENT SUMMARY\n==============================================================\n  Layout Size  : 2.352um x 1.336um  (aspect 1.76)\n  Total Area   : 3.142 um\u00b2\n  Utilization  : 75.0%\n  DRC Status   : \u2713 Clean\n  PMOS/NMOS    : \u2713 OK\n  Devices      : 16 placed\n  Time Total   : 3m 16s\n==============================================================\n\n================================================================\n  MATCHING & SYMMETRY QUALITY BENCHMARK\n================================================================\n  Matched pairs : 4\n  Metric                     Score   Progress                Grade\n  ------------------------  ------   ----------------------  -----\n  Layout Y Symmetry         100.0%   ####################    A+\n  X Mirror Symmetry           0.0%   --------------------    F\n  Interdigitation              N/A   (not applicable)      \n  Common Centroid (2D)         N/A   (not applicable)      \n  DRC Clean                 100.0%   ####################    A+\n  ------------------------  ------   ----------------------  -----\n  COMPOSITE                  58.3%   ############--------    D\n================================================================\n\n\n7 nets analyzed  (1 critical, 6 signal, 0 bias, 0 power)\nTotal Manhattan HPWL : 10.984 \u00b5m\nEstimated crossings  : 26\nWeighted cost        : 73.5\n\nWorst nets (by weighted HPWL):\n  OUT            critical hpwl=1.550\u00b5m  (\u0394x=0.882, \u0394y=0.668)  [CROSS-ROW]\n  B              signal   hpwl=2.138\u00b5m  (\u0394x=1.470, \u0394y=0.668)  [CROSS-ROW]\n  A              signal   hpwl=2.138\u00b5m  (\u0394x=1.470, \u0394y=0.668)  [CROSS-ROW]\n  Bb             signal   hpwl=1.844\u00b5m  (\u0394x=1.176, \u0394y=0.668)  [CROSS-ROW]\n  Ab             signal   hpwl=1.550\u00b5m  (\u0394x=0.882, \u0394y=0.668)  [CROSS-ROW]\n\nRouting channels (inter-row bands):\n  band 0  y\u22480.334\u00b5m  0 track(s)  \u2192 widen to 0.134 \u00b5m\n",
+    "chat_response": "[Initial Placement Complete]\n- DRC: \u2713 Clean\n- Nodes: 12 placed\n\n\n==============================================================\n  PLACEMENT SUMMARY\n==============================================================\n  Layout Size  : 1.764um x 1.336um  (aspect 1.32)\n  Total Area   : 2.357 um\u00b2\n  Utilization  : 100.0%\n  DRC Status   : \u2713 Clean\n  PMOS/NMOS    : \u2713 OK\n  Devices      : 12 placed\n  Time Total   : 3m 3s\n==============================================================\n\n================================================================\n  MATCHING & SYMMETRY QUALITY BENCHMARK\n================================================================\n  Matched pairs : 4\n  Metric                     Score   Progress                Grade\n  ------------------------  ------   ----------------------  -----\n  Layout Y Symmetry         100.0%   ####################    A+\n  X Mirror Symmetry           0.0%   --------------------    F\n  Interdigitation              N/A   (not applicable)      \n  Common Centroid (2D)         N/A   (not applicable)      \n  DRC Clean                 100.0%   ####################    A+\n  ------------------------  ------   ----------------------  -----\n  COMPOSITE                  58.3%   ############--------    D\n================================================================\n\n\n7 nets analyzed  (1 critical, 6 signal, 0 bias, 0 power)\nTotal Manhattan HPWL : 8.926 \u00b5m\nEstimated crossings  : 27\nWeighted cost        : 43.8\n\nWorst nets (by weighted HPWL):\n  OUT            critical hpwl=0.962\u00b5m  (\u0394x=0.294, \u0394y=0.668)  [CROSS-ROW]\n  Bb             signal   hpwl=1.844\u00b5m  (\u0394x=1.176, \u0394y=0.668)  [CROSS-ROW]\n  Ab             signal   hpwl=1.844\u00b5m  (\u0394x=1.176, \u0394y=0.668)  [CROSS-ROW]\n  B              signal   hpwl=1.256\u00b5m  (\u0394x=0.588, \u0394y=0.668)  [CROSS-ROW]\n  A              signal   hpwl=1.256\u00b5m  (\u0394x=0.588, \u0394y=0.668)  [CROSS-ROW]\n\nRouting channels (inter-row bands):\n  band 0  y\u22480.334\u00b5m  0 track(s)  \u2192 widen to 0.134 \u00b5m\n",
     "groups": {
         "MM2": [
             "MM2"

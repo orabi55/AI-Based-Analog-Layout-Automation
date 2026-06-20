@@ -47,8 +47,16 @@ def test_expand_groups_restores_abutment_spacing():
         {"id": "MM0", "type": "nmos", "geometry": {"x": 0.0, "y": 0.0}},
         {"id": "MM1", "type": "nmos", "geometry": {"x": 10.0, "y": 0.0}},
     ]
-
-    expanded = expand_groups(placed_groups, finger_map, no_abutment=False)
+    import os
+    orig_val = os.environ.get("DISABLE_FILLER_DUMMIES")
+    os.environ["DISABLE_FILLER_DUMMIES"] = "1"
+    try:
+        expanded = expand_groups(placed_groups, finger_map, no_abutment=False)
+    finally:
+        if orig_val is None:
+            del os.environ["DISABLE_FILLER_DUMMIES"]
+        else:
+            os.environ["DISABLE_FILLER_DUMMIES"] = orig_val
     
     # Under Symbolic Slot System, fingers in editor are at STD_PITCH (0.294um).
     # We run heal_abutment_positions to compress them to physical FINGER_PITCH (0.07um) spacing.
@@ -215,3 +223,95 @@ def test_huge_transistor_autofolds_to_2d_matrix():
     expanded = expand_groups(placed_groups, finger_map, original_group_nodes=orig_lookup)
     ys = {n["geometry"]["y"] for n in expanded if not n.get("is_dummy")}
     assert len(ys) == matrix_data["rows"]
+
+
+def test_boundary_net_evaluation_even_odd_mirrored():
+    """Verify that boundary nets are computed correctly for even/odd and mirrored blocks."""
+    from ai_agent.placement.finger_grouper import get_block_boundary_nets
+    
+    # 1. Unflipped, odd fingers (nf=3)
+    nodes_odd = [
+        {"net_s": "NET_S", "net_d": "NET_D", "swapped_sd": False},
+        {"net_s": "NET_D", "net_d": "NET_S", "swapped_sd": True},
+        {"net_s": "NET_S", "net_d": "NET_D", "swapped_sd": False},
+    ]
+    left, right = get_block_boundary_nets(nodes_odd, is_flipped=False)
+    assert left == "NET_S"
+    assert right == "NET_D"
+    
+    # 2. Mirrored, odd fingers (nf=3)
+    left, right = get_block_boundary_nets(nodes_odd, is_flipped=True)
+    assert left == "NET_D"
+    assert right == "NET_S"
+    
+    # 3. Unflipped, even fingers (nf=2)
+    nodes_even = [
+        {"net_s": "NET_S", "net_d": "NET_D", "swapped_sd": False, "electrical": {"nf": 2}},
+        {"net_s": "NET_D", "net_d": "NET_S", "swapped_sd": True, "electrical": {"nf": 2}},
+    ]
+    left, right = get_block_boundary_nets(nodes_even, is_flipped=False)
+    assert left == "NET_S"
+    assert right == "NET_S"
+    
+    # 4. Mirrored, even fingers (nf=2)
+    left, right = get_block_boundary_nets(nodes_even, is_flipped=True)
+    assert left == "NET_D"
+    assert right == "NET_D"
+
+
+def test_row_alignment_and_dummy_padding():
+    """Verify that rows of unequal widths are aligned to the same maximum width with dummy cells when padding is active."""
+    from ai_agent.placement.finger_grouper import expand_groups
+    
+    # Create two groups of different sizes
+    # Group MM0: 4 fingers (NMOS)
+    # Group MM1: 2 fingers (PMOS) - will end up on different rows
+    # MM0 will be on y=0.0, MM1 on y=2.0 (different rows)
+    finger_map = {
+        "MM0": [{"id": f"MM0_f{i}", "type": "nmos", "geometry": {"x": 0.0, "y": 0.0, "width": 0.294, "height": 0.568}} for i in range(4)],
+        "MM1": [{"id": f"MM1_f{i}", "type": "pmos", "geometry": {"x": 0.0, "y": 2.0, "width": 0.294, "height": 0.568}} for i in range(2)],
+    }
+    
+    placed_groups = [
+        {"id": "MM0", "type": "nmos", "geometry": {"x": 0.0, "y": 0.0}},
+        {"id": "MM1", "type": "pmos", "geometry": {"x": 0.0, "y": 2.0}},
+    ]
+    
+    # We pass original_group_nodes to keep private metadata
+    orig_lookup = {
+        "MM0": {"id": "MM0", "type": "nmos", "geometry": {"x": 0.0, "y": 0.0, "width": 4 * 0.294, "height": 0.568}},
+        "MM1": {"id": "MM1", "type": "pmos", "geometry": {"x": 0.0, "y": 2.0, "width": 2 * 0.294, "height": 0.568}},
+    }
+    
+    # Temporarily force DISABLE_FILLER_DUMMIES = "0"
+    import os
+    orig_env = os.environ.get("DISABLE_FILLER_DUMMIES")
+    os.environ["DISABLE_FILLER_DUMMIES"] = "0"
+    
+    try:
+        expanded = expand_groups(placed_groups, finger_map, original_group_nodes=orig_lookup)
+        
+        # Verify both rows have the same width and count of slots
+        # Row 0 (nmos): 4 active fingers
+        # Row 1 (pmos): 2 active fingers + 2 filler dummies (1 left, 1 right or centered)
+        row_nmos = [n for n in expanded if n["type"] == "nmos"]
+        row_pmos = [n for n in expanded if n["type"] == "pmos"]
+        
+        assert len(row_nmos) == len(row_pmos), f"NMOS row has {len(row_nmos)} nodes, PMOS row has {len(row_pmos)}"
+        
+        # Check that filler dummies are generated in the PMOS row
+        pmos_dummies = [n for n in row_pmos if n.get("is_dummy") or n["id"].startswith("FILLER_DUMMY")]
+        assert len(pmos_dummies) == 2, f"Expected 2 filler dummies in PMOS row, got {len(pmos_dummies)}"
+        
+        # All slots must be aligned
+        xs_nmos = sorted(n["geometry"]["x"] for n in row_nmos)
+        xs_pmos = sorted(n["geometry"]["x"] for n in row_pmos)
+        for x_n, x_p in zip(xs_nmos, xs_pmos):
+            assert abs(x_n - x_p) < 1e-5, f"Mismatch in aligned coordinates: {x_n} vs {x_p}"
+            
+    finally:
+        if orig_env is not None:
+            os.environ["DISABLE_FILLER_DUMMIES"] = orig_env
+        else:
+            del os.environ["DISABLE_FILLER_DUMMIES"]
+

@@ -148,8 +148,14 @@ class LayoutExporter:
             with open(self.filename, "w") as f:
                 exported_names = set()
                 count = 0
+                dummy_counter = 0
 
                 for inst in self.instances:
+                    # Sequentially rename dummies to ensure uniqueness and proper Tool import (e.g. D0, D1, ...)
+                    if inst.get("is_dummy") and not inst.get("is_tap"):
+                        inst["name"] = f"D{dummy_counter}"
+                        dummy_counter += 1
+
                     if inst["name"] in exported_names:
                         continue
 
@@ -246,6 +252,21 @@ class LayoutExporter:
         parts = [name, x_str, y_str, orient]
         if param_str:
             parts.append(param_str)
+
+        # Terminal nets
+        net_d = inst.get("net_d")
+        net_g = inst.get("net_g")
+        net_s = inst.get("net_s")
+        net_b = inst.get("net_b")
+        if net_d:
+            parts.append(f"D={net_d}")
+        if net_g:
+            parts.append(f"G={net_g}")
+        if net_s:
+            parts.append(f"S={net_s}")
+        if net_b:
+            parts.append(f"B={net_b}")
+
         return " ".join(parts)
 
 

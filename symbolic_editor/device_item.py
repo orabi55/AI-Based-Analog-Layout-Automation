@@ -83,9 +83,11 @@ class DeviceItem(QGraphicsRectItem):
         dtype = self.device_type
         name_upper = str(name).upper()
         self._is_tap = (dtype == "tap" or name_upper.startswith("TAP"))
+        import re
         self._is_dummy = (name_upper.startswith("DUMMY")
                           or name_upper.startswith("FILLER_DUMMY")
-                          or name_upper.startswith("EDGE_DUMMY"))
+                          or name_upper.startswith("EDGE_DUMMY")
+                          or bool(re.match(r"^D\d+$", name_upper)))
         self._apply_default_palette()
 
         # Transparent fill — we paint everything custom
@@ -170,6 +172,26 @@ class DeviceItem(QGraphicsRectItem):
             return display_name.split("_")[0]
         return display_name
 
+    def _get_clean_display_name(self):
+        name = self.device_name
+        if not name:
+            return ""
+        if self._is_tap:
+            is_ntap = "NTAP" in name.upper() or "VDD" in name.upper()
+            return "Vdd" if is_ntap else "Gnd"
+        if self._is_dummy:
+            parts = name.split("_")
+            for p in parts:
+                if p.isdigit():
+                    return f"D{p}"
+            return "D"
+        
+        import re
+        display_name = name
+        display_name = re.sub(r'_[mM](\d+)', r'.m\1', display_name)
+        display_name = re.sub(r'_[fF](\d+)', r'.f\1', display_name)
+        return display_name
+
     def set_custom_color(self, base_color: QColor):
         self._source_color = base_color.lighter(130)
         self._drain_color  = base_color.lighter(130)
@@ -240,11 +262,15 @@ class DeviceItem(QGraphicsRectItem):
         self._is_swapped_sd = self._net_names.get("is_swapped", False)
         self.update()
 
+    def set_swapped_sd(self, swapped: bool):
+        """Set S/D swap state (independent of net labels visibility)."""
+        self._is_swapped_sd = bool(swapped)
+        self.update()
+
     def clear_net_labels(self):
         """Hide net name labels."""
         self._show_net_labels = False
         self._net_names = {}
-        self._is_swapped_sd = False
         self.update()
 
     def set_net_colorize_enabled(self, enabled: bool, seed: int = 0):
@@ -398,14 +424,13 @@ class DeviceItem(QGraphicsRectItem):
 
     def orientation_string(self):
         """Compact orientation token for save/export."""
-        base = "R0"
         if self._flip_h and self._flip_v:
-            return f"{base}_FH_FV"
+            return "R180"
         if self._flip_h:
-            return f"{base}_FH"
+            return "MY"
         if self._flip_v:
-            return f"{base}_FV"
-        return base
+            return "MX"
+        return "R0"
 
     def set_render_mode(self, mode):
         self._render_mode = mode if mode in {"detailed", "outline"} else "detailed"
@@ -493,6 +518,8 @@ class DeviceItem(QGraphicsRectItem):
 
         rect = self.rect()
         if self._render_mode == "outline":
+            w = rect.width()
+            h = rect.height()
             outline_color = QColor("#ff5252")
             fill_color = QColor(255, 82, 82, 18)
 
@@ -506,9 +533,7 @@ class DeviceItem(QGraphicsRectItem):
             painter.drawRoundedRect(rect, corner_r, corner_r)
 
             # ── Draw name text in screen coordinates so it always fits ──
-            display_name = self.device_name
-            if "_" in display_name and not self._is_dummy:
-                display_name = display_name.split("_")[-1]
+            display_name = self._get_clean_display_name()
 
             # Map the item rect to screen (device) coordinates
             xform = painter.transform()
@@ -607,6 +632,67 @@ class DeviceItem(QGraphicsRectItem):
                         painter.drawText(rect_lbl, Qt.AlignmentFlag.AlignCenter, lbl)
                         painter.restore()
 
+            # --- Manual and Candidate Abutment Highlights in Outline Mode ---
+            w_out = rect.width()
+            h_out = rect.height()
+            x0_out = rect.x()
+            y0_out = rect.y()
+            num_fingers = 0 if self._is_tap else self.nf
+            num_sd      = num_fingers + 1
+            sd_w_out    = w_out / (num_fingers + num_sd)
+
+            if self._manual_abut_left or self._manual_abut_right:
+                ABUT_COLOR = QColor("#f39c12")    # amber
+                ABUT_FILL  = QColor("#f39c12")
+                ABUT_FILL.setAlpha(50)
+                abut_w = max(3.5, sd_w_out * 0.20)
+
+                if self._manual_abut_left:
+                    painter.setBrush(QBrush(ABUT_FILL))
+                    painter.setPen(Qt.PenStyle.NoPen)
+                    painter.drawRect(QRectF(x0_out, y0_out, abut_w, h_out))
+                    painter.setPen(QPen(ABUT_COLOR, 3.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.FlatCap))
+                    painter.drawLine(QPointF(x0_out + 1.5, y0_out + 3), QPointF(x0_out + 1.5, y0_out + h_out - 3))
+                    mid = y0_out + h_out * 0.4
+                    painter.drawLine(QPointF(x0_out + abut_w + 1, mid), QPointF(x0_out + abut_w + 6, mid))
+                    mid2 = y0_out + h_out * 0.6
+                    painter.drawLine(QPointF(x0_out + abut_w + 1, mid2), QPointF(x0_out + abut_w + 6, mid2))
+
+                if self._manual_abut_right:
+                    painter.setBrush(QBrush(ABUT_FILL))
+                    painter.setPen(Qt.PenStyle.NoPen)
+                    painter.drawRect(QRectF(x0_out + w_out - abut_w, y0_out, abut_w, h_out))
+                    painter.setPen(QPen(ABUT_COLOR, 3.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.FlatCap))
+                    painter.drawLine(QPointF(x0_out + w_out - 1.5, y0_out + 3), QPointF(x0_out + w_out - 1.5, y0_out + h_out - 3))
+                    mid = y0_out + h_out * 0.4
+                    painter.drawLine(QPointF(x0_out + w_out - abut_w - 1, mid), QPointF(x0_out + w_out - abut_w - 6, mid))
+                    mid2 = y0_out + h_out * 0.6
+                    painter.drawLine(QPointF(x0_out + w_out - abut_w - 1, mid2), QPointF(x0_out + w_out - abut_w - 6, mid2))
+
+            if self._hl_left or self._hl_right:
+                CAND_COLOR = QColor("#2ecc71")    # neon green
+                CAND_FILL  = QColor("#2ecc71")
+                CAND_FILL.setAlpha(60)
+                glow_w = max(4.0, sd_w_out * 0.25)
+
+                if self._hl_left:
+                    painter.save()
+                    painter.setBrush(QBrush(CAND_FILL))
+                    painter.setPen(Qt.PenStyle.NoPen)
+                    painter.drawRect(QRectF(x0_out, y0_out, glow_w, h_out))
+                    painter.setPen(QPen(CAND_COLOR, 3.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+                    painter.drawLine(QPointF(x0_out + 1.5, y0_out + 2), QPointF(x0_out + 1.5, y0_out + h_out - 2))
+                    painter.restore()
+
+                if self._hl_right:
+                    painter.save()
+                    painter.setBrush(QBrush(CAND_FILL))
+                    painter.setPen(Qt.PenStyle.NoPen)
+                    painter.drawRect(QRectF(x0_out + w_out - glow_w, y0_out, glow_w, h_out))
+                    painter.setPen(QPen(CAND_COLOR, 3.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+                    painter.drawLine(QPointF(x0_out + w_out - 1.5, y0_out + 2), QPointF(x0_out + w_out - 1.5, y0_out + h_out - 2))
+                    painter.restore()
+
             self._draw_r0_notch(painter, rect)
             painter.restore()  # Balance top-level save()
             return
@@ -629,8 +715,9 @@ class DeviceItem(QGraphicsRectItem):
         sd_w   = part_w
 
         # S/D identity per column (before flip)
+        # Realigned to match PDK physical cell boundaries (leftmost is Drain, rightmost is Source)
         def _is_source_col(col):
-            return (col % 2 == 0)
+            return (col % 2 == 1)
 
         # Helpers for mirrored label placement after unflipping text
         def _flip_rect(rect):
@@ -865,26 +952,7 @@ class DeviceItem(QGraphicsRectItem):
         # ── Device name — pill badge in upper portion ────────────────
         self._draw_r0_notch(painter, rect)
 
-        display_name = self.device_name
-        if self._is_tap:
-            is_ntap = "NTAP" in self.device_name.upper() or "VDD" in self.device_name.upper()
-            display_name = "VDD Tap" if is_ntap else "GND Tap"
-        elif self._is_dummy:
-            parts = self.device_name.split("_")
-            for j, p in enumerate(parts):
-                if p.isdigit():
-                    display_name = f"D{p}"
-                    break
-            else:
-                display_name = "D"
-        else:
-            if "_" in display_name:
-                parts = display_name.split("_")
-                # If first part is a subcircuit instance name prefix (e.g. XI2, X1), show the actual device name (second part)
-                if parts[0].upper().startswith("X") and len(parts) > 1:
-                    display_name = parts[1]
-                else:
-                    display_name = parts[0]
+        display_name = self._get_clean_display_name()
 
         max_name_w = w * 0.85 - 8
         name_font = QFont("Segoe UI", name_font_size, QFont.Weight.Bold)
@@ -1102,11 +1170,6 @@ class DeviceItem(QGraphicsRectItem):
 
         mid_y = y0 + h / 2
 
-        if self._flip_h:
-            left_is_s = False
-        else:
-            left_is_s = True
-
         s_centers = []
         d_centers = []
         g_centers = []
@@ -1114,8 +1177,10 @@ class DeviceItem(QGraphicsRectItem):
         cursor_x = x0
         for i in range(num_sd):
             cx = cursor_x + sd_w / 2
-            is_source = (i % 2 == 0)
-            if left_is_s == is_source:
+            # Realigned to match PDK physical cell boundaries (leftmost is Drain, rightmost is Source)
+            col_is_source = (i % 2 == 1)
+            is_source = col_is_source ^ self._flip_h
+            if is_source:
                 s_centers.append(QPointF(cx, mid_y))
             else:
                 d_centers.append(QPointF(cx, mid_y))

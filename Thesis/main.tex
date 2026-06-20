@@ -1,0 +1,46 @@
+% ==============================================================================
+% MASTER THESIS DRIVER: main.tex
+% ==============================================================================
+
+\documentclass[12pt,a4paper,oneside]{report}
+
+% Input preamble settings (packages, colors, custom shapes, tcolorboxes)
+\input{preamble.tex}
+
+\begin{document}
+
+% --- FRONT MATTER ---
+\pagenumbering{roman}
+\include{frontmatter/titlepage}
+\include{frontmatter/abstract}
+\include{frontmatter/acknowledgements}
+
+\tableofcontents
+\listoffigures
+\listoftables
+
+\clearpage
+\pagenumbering{arabic}
+
+% --- MAIN CHAPTERS ---
+\include{chapters/ch1_introduction}
+\include{chapters/ch2_literature_review}
+\include{chapters/ch3_system_architecture}
+\include{chapters/ch4_input_parser}
+\include{chapters/ch5_ai_placement}
+\include{chapters/ch6_chatbot_copilot}
+\include{chapters/ch7_compaction_exporter}
+\include{chapters/ch8_results}
+\include{chapters/ch9_conclusion}
+
+% --- BACK MATTER (Appendices & References) ---
+\appendix
+\include{appendices/app_xml_commands}
+\include{appendices/app_tcl_scripts}
+\include{appendices/app_agent_prompts}
+
+% Bibliography using IEEE Transaction style
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}

@@ -781,3 +781,95 @@ def icon_gnd() -> QIcon:
     icon = _icon_from_painter(pm, p)
     _CACHE["gnd"] = icon
     return icon
+
+
+def icon_auto_taps() -> QIcon:
+    """Auto-insert VDD+GND taps: orange top stripe + cyan bottom stripe + lightning bolt."""
+    if "auto_taps" in _CACHE:
+        return _CACHE["auto_taps"]
+    pm, p = _make_pixmap()
+    # VDD top stripe (orange)
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QBrush(QColor(243, 156, 18, 180)))
+    p.drawRoundedRect(QRectF(5, 5, 22, 7), 2, 2)
+    # GND bottom stripe (cyan)
+    p.setBrush(QBrush(QColor(0, 229, 255, 180)))
+    p.drawRoundedRect(QRectF(5, 20, 22, 7), 2, 2)
+    # Device row in the middle
+    p.setBrush(QBrush(QColor(180, 200, 210, 80)))
+    p.setPen(QPen(QColor(150, 180, 200, 160), 1.0))
+    p.drawRoundedRect(QRectF(5, 13, 22, 6), 1, 1)
+    # Lightning bolt
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QBrush(QColor(255, 255, 255, 230)))
+    bolt = QPainterPath()
+    bolt.moveTo(17, 6)
+    bolt.lineTo(14, 14)
+    bolt.lineTo(16.5, 14)
+    bolt.lineTo(15, 21)
+    bolt.lineTo(20, 13)
+    bolt.lineTo(17.5, 13)
+    bolt.closeSubpath()
+    p.drawPath(bolt)
+    icon = _icon_from_painter(pm, p)
+    _CACHE["auto_taps"] = icon
+    return icon
+
+
+def icon_edge_dummies() -> QIcon:
+    """Edge-dummy insertion: center row with flanking pink dummies on both sides."""
+    if "edge_dummies" in _CACHE:
+        return _CACHE["edge_dummies"]
+    pm, p = _make_pixmap()
+    # Center active devices (cyan)
+    pen = QPen(_ACCENT, 1.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+    p.setPen(pen)
+    p.setBrush(QBrush(QColor(0, 229, 255, 35)))
+    p.drawRoundedRect(QRectF(11, 10, 5, 12), 1, 1)
+    p.drawRoundedRect(QRectF(16, 10, 5, 12), 1, 1)
+    # Left dummy (pink)
+    p.setPen(QPen(_PINK, 1.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    p.setBrush(QBrush(QColor(209, 77, 148, 55)))
+    p.drawRoundedRect(QRectF(5, 10, 5, 12), 1, 1)
+    # Right dummy (pink)
+    p.drawRoundedRect(QRectF(22, 10, 5, 12), 1, 1)
+    # Arrows from edges inward
+    p.setPen(QPen(_FG, 1.4, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+    p.drawLine(QPointF(3, 16), QPointF(5, 16))
+    p.drawLine(QPointF(5, 16), QPointF(3.5, 14.5))
+    p.drawLine(QPointF(5, 16), QPointF(3.5, 17.5))
+    p.drawLine(QPointF(29, 16), QPointF(27, 16))
+    p.drawLine(QPointF(27, 16), QPointF(28.5, 14.5))
+    p.drawLine(QPointF(27, 16), QPointF(28.5, 17.5))
+    icon = _icon_from_painter(pm, p)
+    _CACHE["edge_dummies"] = icon
+    return icon
+
+
+def icon_symmetry_axis() -> QIcon:
+    """Symmetry axis: bold neon cyan dashed vertical line with crosshair ticks."""
+    if "symmetry_axis" in _CACHE:
+        return _CACHE["symmetry_axis"]
+    pm, p = _make_pixmap()
+    # Faint device blocks on each side
+    p.setPen(QPen(QColor(150, 180, 200, 60), 1.0))
+    p.setBrush(QBrush(QColor(10, 25, 32, 80)))
+    p.drawRoundedRect(QRectF(5, 6, 9, 20), 2, 2)
+    p.drawRoundedRect(QRectF(18, 6, 9, 20), 2, 2)
+    # Vertical symmetry line (bold neon cyan dashed)
+    axis_pen = QPen(_ACCENT, 2.2, Qt.PenStyle.DashLine)
+    axis_pen.setDashPattern([4, 2])
+    p.setPen(axis_pen)
+    p.drawLine(QPointF(16, 3), QPointF(16, 29))
+    # Horizontal tick marks
+    p.setPen(QPen(_ACCENT, 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+    p.drawLine(QPointF(13, 16), QPointF(19, 16))
+    p.drawLine(QPointF(14, 10), QPointF(18, 10))
+    p.drawLine(QPointF(14, 22), QPointF(18, 22))
+    # Center dot
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QBrush(_ACCENT))
+    p.drawEllipse(QRectF(14, 14, 4, 4))
+    icon = _icon_from_painter(pm, p)
+    _CACHE["symmetry_axis"] = icon
+    return icon

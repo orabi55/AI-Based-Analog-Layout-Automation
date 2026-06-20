@@ -36,7 +36,7 @@ from PySide6.QtWidgets import (
     QStackedWidget,
     QToolBar,
     QLabel,
-    QSpinBox,
+    QSpinBox, QDoubleSpinBox,
     QDoubleSpinBox,
     QCheckBox,
     QWidget,
@@ -51,7 +51,11 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QSizePolicy,
 )
-from PySide6.QtCore import Qt, QSize
+from PySide6.QtCore import (
+    Qt,
+    QSize,
+    QSettings,
+)
 from PySide6.QtGui import (
     QAction,
     QKeySequence,
@@ -91,6 +95,9 @@ from symbolic_editor.icons import (
     icon_schematic,
     icon_route,
     icon_deploy_cc,
+    icon_auto_taps,
+    icon_edge_dummies,
+    icon_symmetry_axis,
 )
 from symbolic_editor.widgets.welcome_screen import WelcomeScreen, circuit_icon_for_name
 
@@ -103,7 +110,13 @@ class MainWindow(QMainWindow):
     def __init__(self, initial_file=None):
         super().__init__()
         self.setWindowTitle("Symbolic Layout Editor")
+        icon_path = os.path.join(_editor_dir, "app_icon.png")
+        if os.path.exists(icon_path):
+            self.setWindowIcon(QIcon(icon_path))
         self.resize(1500, 950)
+
+        self._recent_files = []
+        self._load_recent_files()
 
         # ── Central stack: Welcome / Tabs ────────────────────────
         self._stack = QStackedWidget()
@@ -113,6 +126,7 @@ class MainWindow(QMainWindow):
         self._welcome.open_file_requested.connect(self._on_open_file)
         self._welcome.import_requested.connect(self._on_import)
         self._welcome.example_requested.connect(self._on_load_example)
+        self._welcome.open_recent_requested.connect(self._new_tab)
         self._stack.addWidget(self._welcome)  # index 0
 
         self._tab_widget = QTabWidget()
@@ -308,8 +322,22 @@ class MainWindow(QMainWindow):
             self._syncing_document_tabs = False
         self._on_tab_changed(to_index)
 
-    def _new_tab(self, placement_file=None) -> LayoutEditorTab:
-        tab = LayoutEditorTab(placement_file, parent=self._tab_widget)
+    def _new_tab(self, placement_file=None) -> LayoutEditorTab | None:
+        try:
+            tab = LayoutEditorTab(placement_file, parent=self._tab_widget)
+        except Exception as exc:
+            import traceback
+            traceback.print_exc()
+            QMessageBox.critical(
+                self,
+                "Error Loading Layout",
+                f"Failed to load layout file:\n{exc}\n\nPlease ensure it is a valid layout JSON containing the 'nodes' key."
+            )
+            return None
+
+        if placement_file:
+            self._add_recent_file(placement_file)
+
         title = tab.document_title
         icon = self._tab_icon_for_title(title)
         idx = self._tab_widget.addTab(tab, icon, title)
@@ -383,6 +411,8 @@ class MainWindow(QMainWindow):
                 self._update_document_tab_bar_width()
         if tab is self.current_tab():
             self.setWindowTitle(f"Symbolic Layout Editor — {title}")
+        if hasattr(tab, "_current_file") and tab._current_file:
+            self._add_recent_file(tab._current_file)
 
     def _on_tab_workspace_mode_changed(self, tab):
         if tab is self.current_tab():
@@ -408,11 +438,56 @@ class MainWindow(QMainWindow):
 
     def _on_import(self):
         tab = self._new_tab()
-        tab.do_import()
+        if tab:
+            tab.do_import()
+
+    def _load_recent_files(self):
+        settings = QSettings("LayoutAutomation", "SymbolicEditor")
+        self._recent_files = settings.value("recent_files", [])
+
+    def _save_recent_files(self):
+        settings = QSettings("LayoutAutomation", "SymbolicEditor")
+        settings.setValue("recent_files", self._recent_files)
+
+    def _add_recent_file(self, filepath):
+        import os
+        filepath = os.path.abspath(filepath)
+        if filepath in self._recent_files:
+            self._recent_files.remove(filepath)
+        self._recent_files.insert(0, filepath)
+        if len(self._recent_files) > 10:
+            self._recent_files = self._recent_files[:10]
+        self._save_recent_files()
+        if hasattr(self, "_update_recent_files_menu"):
+            self._update_recent_files_menu()
+
+    def _update_recent_files_menu(self):
+        if not hasattr(self, "_recent_menu") or not self._recent_menu:
+            return
+        self._recent_menu.clear()
+        if not self._recent_files:
+            act = self._recent_menu.addAction("No Recent Files")
+            act.setEnabled(False)
+            return
+        
+        for filepath in self._recent_files:
+            import os
+            # Capture the current filepath in the lambda correctly
+            action = self._recent_menu.addAction(os.path.basename(filepath), lambda checked=False, f=filepath: self._new_tab(f))
+            action.setToolTip(filepath)
+        
+        self._recent_menu.addSeparator()
+        self._recent_menu.addAction("Clear Recent Files", self._clear_recent_files)
+
+    def _clear_recent_files(self):
+        self._recent_files.clear()
+        self._save_recent_files()
+        self._update_recent_files_menu()
 
     def _on_load_example(self, sp_path, oas_path):
         tab = self._new_tab()
-        tab.load_example(sp_path, oas_path)
+        if tab:
+            tab.load_example(sp_path, oas_path)
 
     # =================================================================
     #  Toolbar / status sync
@@ -492,6 +567,9 @@ class MainWindow(QMainWindow):
         act_open = file_menu.addAction("&Open JSON…", self._on_open_file, QKeySequence.StandardKey.Open)
         self.addAction(act_open)
         
+        self._recent_menu = file_menu.addMenu("Open Recent")
+        self._update_recent_files_menu()
+
         file_menu.addSeparator()
         act_save = file_menu.addAction("&Save", lambda: self._fwd("do_save"), QKeySequence.StandardKey.Save)
         self.addAction(act_save)
@@ -591,37 +669,41 @@ class MainWindow(QMainWindow):
         design_menu = mb.addMenu("&Design")
         self._top_level_menus.append(design_menu)
         
-        act_swap = design_menu.addAction("Swap Selected (2)", lambda: self._fwd("do_swap"), QKeySequence("Ctrl+Shift+X"))
-        self.addAction(act_swap)
-        
-        act_swap_sd = design_menu.addAction("Swap Source/Drain", lambda: self._fwd("do_swap_sd"), QKeySequence("Ctrl+D"))
-        self.addAction(act_swap_sd)
-        
-        design_menu.addAction("Merge Shared Source", lambda: self._fwd("do_merge_ss"))
-        design_menu.addAction("Merge Shared Drain", lambda: self._fwd("do_merge_dd"))
-        
-        act_flip_h = design_menu.addAction("Flip Horizontal", lambda: self._fwd("do_flip_h"), QKeySequence("Ctrl+H"))
-        self.addAction(act_flip_h)
-        
-        act_flip_v = design_menu.addAction("Flip Vertical", lambda: self._fwd("do_flip_v"), QKeySequence("Ctrl+J"))
-        self.addAction(act_flip_v)
-        
-        design_menu.addAction("Toggle Dummy Placement", self._toggle_dummy_action)
+        # Tools
+        design_menu.addAction("Auto Insert Taps", lambda: self._fwd("do_auto_insert_taps"))
+        design_menu.addAction("Edge Dummies", lambda: self._fwd("do_edge_dummies"))
+        design_menu.addAction("Symmetry Axis", lambda: self._fwd("do_symmetry_axis"))
         design_menu.addSeparator()
         
-        act_match = design_menu.addAction("Match Devices…", lambda: self._fwd("do_match"), QKeySequence("Ctrl+M"))
-        self.addAction(act_match)
+        # Highlights
+        design_menu.addAction("Highlight Net...", lambda: self._fwd("do_highlight_net"))
+        design_menu.addAction("Clear Overlays", lambda: self._fwd("do_clear_overlays"))
+        design_menu.addSeparator()
         
+        # Operations
+        act_match = design_menu.addAction("Match Devices...", lambda: self._fwd("do_match"), QKeySequence("Ctrl+M"))
+        self.addAction(act_match)
         act_unlock = design_menu.addAction("Unlock Matched", lambda: self._fwd("do_unlock_match"), QKeySequence("Ctrl+U"))
         self.addAction(act_unlock)
         
+        act_flip_h = design_menu.addAction("Flip Horizontally", lambda: self._fwd("do_flip_h"), QKeySequence("Ctrl+H"))
+        self.addAction(act_flip_h)
+        act_flip_v = design_menu.addAction("Flip Vertically", lambda: self._fwd("do_flip_v"), QKeySequence("Ctrl+J"))
+        self.addAction(act_flip_v)
+        
+        act_swap = design_menu.addAction("Swap Devices", lambda: self._fwd("do_swap"), QKeySequence("Ctrl+Shift+X"))
+        self.addAction(act_swap)
+        act_swap_sd = design_menu.addAction("Swap Source/Drain", lambda: self._fwd("do_swap_sd"), QKeySequence("Ctrl+D"))
+        self.addAction(act_swap_sd)
+        act_swap_rows = design_menu.addAction("Swap Rows", lambda: self._fwd("do_swap_rows"))
+        self.addAction(act_swap_rows)
         design_menu.addSeparator()
         
-        act_ai = design_menu.addAction("Run AI Placement…", lambda: self._fwd("do_ai_placement"), QKeySequence("Ctrl+P"))
+        # Advanced Actions
+        act_ai = design_menu.addAction("AI Placement...", lambda: self._fwd("do_ai_placement"), QKeySequence("Ctrl+P"))
         self.addAction(act_ai)
-        
-        design_menu.addSeparator()
-        design_menu.addAction("View in KLayout", lambda: self._fwd("on_view_in_klayout"))
+        design_menu.addAction("DRC Check", lambda: self._fwd("do_run_drc"))
+        design_menu.addAction("RAG Migration", lambda: self._fwd("do_run_rag"))
 
     # =================================================================
     #  Toolbar
@@ -816,6 +898,34 @@ class MainWindow(QMainWindow):
         tb.addAction(self._act_add_gnd)
         tb.addSeparator()
 
+        # ── Auto-action buttons (one-click, no manual interaction needed) ──────
+        self._tb_act_auto_taps = QAction(icon_auto_taps(), "Auto Insert Taps", self)
+        self._tb_act_auto_taps.setToolTip(
+            "Auto insert taps\n"
+            "VDD ntap directly above top PMOS row\n"
+            "GND ptap directly below bottom NMOS row"
+        )
+        self._tb_act_auto_taps.triggered.connect(lambda: self._fwd("do_auto_taps"))
+        tb.addAction(self._tb_act_auto_taps)
+
+        self._tb_act_edge_dummies = QAction(icon_edge_dummies(), "Insert Edge Dummies", self)
+        self._tb_act_edge_dummies.setToolTip(
+            "Insert dummy transistors at both left and right\n"
+            "edges of every active device row"
+        )
+        self._tb_act_edge_dummies.triggered.connect(lambda: self._fwd("do_insert_edge_dummies"))
+        tb.addAction(self._tb_act_edge_dummies)
+
+        self._tb_act_sym_axis = QAction(icon_symmetry_axis(), "Draw Symmetry Axis", self)
+        self._tb_act_sym_axis.setToolTip(
+            "Draw a vertical symmetry axis that automatically\n"
+            "splits the layout into two equal halves"
+        )
+        self._tb_act_sym_axis.triggered.connect(lambda: self._fwd("do_draw_symmetry_axis"))
+        tb.addAction(self._tb_act_sym_axis)
+
+        tb.addSeparator()
+
         self._tb_act_route = QAction(icon_route(), "Toggle Routing Channels", self)
         self._tb_act_route.setCheckable(True)
         self._tb_act_route.setToolTip("Insert/Remove Routing Channels")
@@ -885,6 +995,20 @@ class MainWindow(QMainWindow):
         self._row_spin.setStyleSheet(spin_style)
         self._row_spin.valueChanged.connect(self._on_row_spin_changed)
         tb.addWidget(self._row_spin)
+
+        lbl_rs = QLabel("Row Space")
+        lbl_rs.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl_rs.setToolTip("Space between rows in layout (um)")
+        tb.addWidget(lbl_rs)
+        self._row_space_spin = QDoubleSpinBox()
+        self._row_space_spin.setRange(0.0, 5.0)
+        self._row_space_spin.setSingleStep(0.1)
+        self._row_space_spin.setValue(0.0)
+        self._row_space_spin.setDecimals(3)
+        self._row_space_spin.setToolTip("Space between rows in layout (um)")
+        self._row_space_spin.setStyleSheet(spin_style)
+        self._row_space_spin.valueChanged.connect(self._on_row_space_changed)
+        tb.addWidget(self._row_space_spin)
 
         lbl_c = QLabel("Cols")
         lbl_c.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -970,6 +1094,20 @@ class MainWindow(QMainWindow):
         self._row_spin.valueChanged.connect(self._on_row_spin_changed)
         tb.addWidget(self._row_spin)
 
+        lbl_rs = QLabel("Row Space")
+        lbl_rs.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl_rs.setToolTip("Space between rows in layout (um)")
+        tb.addWidget(lbl_rs)
+        self._row_space_spin = QDoubleSpinBox()
+        self._row_space_spin.setRange(0.0, 5.0)
+        self._row_space_spin.setSingleStep(0.1)
+        self._row_space_spin.setValue(0.0)
+        self._row_space_spin.setDecimals(3)
+        self._row_space_spin.setToolTip("Space between rows in layout (um)")
+        self._row_space_spin.setStyleSheet(spin_style)
+        self._row_space_spin.valueChanged.connect(self._on_row_space_changed)
+        tb.addWidget(self._row_space_spin)
+
         lbl_c = QLabel(" Cols:")
         lbl_c.setStyleSheet("color: #8899aa; font-family: 'Segoe UI'; font-size: 9pt;")
         tb.addWidget(lbl_c)
@@ -1013,6 +1151,19 @@ class MainWindow(QMainWindow):
         self._row_spin.setStyleSheet(spin_style)
         self._row_spin.valueChanged.connect(self._on_row_spin_changed)
         sb.addPermanentWidget(self._row_spin)
+
+        lbl_rs = QLabel("Row Space")
+        lbl_rs.setToolTip("Space between rows in layout (um)")
+        sb.addPermanentWidget(lbl_rs)
+        self._row_space_spin = QDoubleSpinBox()
+        self._row_space_spin.setRange(0.0, 5.0)
+        self._row_space_spin.setSingleStep(0.1)
+        self._row_space_spin.setValue(0.0)
+        self._row_space_spin.setDecimals(3)
+        self._row_space_spin.setToolTip("Space between rows in layout (um)")
+        self._row_space_spin.setStyleSheet(spin_style)
+        self._row_space_spin.valueChanged.connect(self._on_row_space_changed)
+        sb.addPermanentWidget(self._row_space_spin)
 
         sb.addPermanentWidget(QLabel("Cols"))
         self._col_spin = QSpinBox()
@@ -1127,6 +1278,13 @@ class MainWindow(QMainWindow):
         tab = self.current_tab()
         if tab:
             tab.set_row_target(value)
+
+    def _on_row_space_changed(self, value):
+        if self._ignore_grid_spin:
+            return
+        tab = self.current_tab()
+        if hasattr(tab, "set_row_space"):
+            tab.set_row_space(value)
 
     def _on_col_spin_changed(self, value):
         if self._ignore_grid_spin:

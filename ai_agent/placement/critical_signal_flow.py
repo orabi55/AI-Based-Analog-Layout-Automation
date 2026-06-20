@@ -14,7 +14,10 @@ from typing import Iterable
 
 
 _FINGER_SUFFIX_RE = re.compile(r"^(.+?)(?:_[mf]\d+)+$", re.IGNORECASE)
-_DUMMY_PREFIXES = ("FILLER_DUMMY_", "EDGE_DUMMY", "DUMMY_matrix_", "DUMMY_MATRIX_")
+_DUMMY_PREFIXES = (
+    "FILLER_DUMMY_", "EDGE_DUMMY", "DUMMY_matrix_", "DUMMY_MATRIX_",
+    "STRUCT_DUMMY_", "MATCH_DUMMY_", "DUMMY_"
+)
 
 
 def _node_id(node: dict) -> str:

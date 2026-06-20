@@ -118,7 +118,10 @@ def _transistor_key(node_id: str) -> str:
     return m.group(1) if m else node_id
 
 
-_DUMMY_PREFIXES = ("EDGE_DUMMY", "FILLER_DUMMY", "FILLER", "DUMMY")
+_DUMMY_PREFIXES = (
+    "EDGE_DUMMY", "FILLER_DUMMY", "FILLER", "DUMMY",
+    "STRUCT_DUMMY", "MATCH_DUMMY", "DUMMY_"
+)
 
 
 def _is_dummy(node: dict) -> bool:

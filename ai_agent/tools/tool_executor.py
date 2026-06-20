@@ -21,10 +21,14 @@ class ToolExecutor:
         *,
         terminal_nets: dict | None = None,
         pdk: dict | None = None,
+        oas_path: str | None = None,
+        sp_path: str | None = None,
     ):
         self.nodes = list(nodes) if nodes is not None else []
         self.terminal_nets = terminal_nets if isinstance(terminal_nets, dict) else {}
         self.pdk = pdk
+        self.oas_path = oas_path
+        self.sp_path = sp_path
 
     def execute(self, tool_name: str, arguments: dict | None = None) -> LayoutToolResult:
         result = dispatch(
@@ -33,6 +37,8 @@ class ToolExecutor:
             self.nodes,
             self.pdk,
             terminal_nets=self.terminal_nets,
+            oas_path=self.oas_path,
+            sp_path=self.sp_path,
         )
         if result.success and result.changed:
             self.nodes = list(result.nodes)

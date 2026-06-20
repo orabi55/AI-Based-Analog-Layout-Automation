@@ -16,30 +16,32 @@ import copy
 import pytest
 import sys, types
 
-# Comprehensive langchain mock — the project imports many submodules at
-# import time (skill_injector, _shared, etc.).  We just need the symbols
-# to exist so the module-level code doesn't crash.
-def _ensure_mock(dotted_name, attrs=None):
-    if dotted_name not in sys.modules:
-        mod = types.ModuleType(dotted_name)
-        for a in (attrs or []):
-            setattr(mod, a, type(a, (), {}))
-        sys.modules[dotted_name] = mod
-    return sys.modules[dotted_name]
+# Try to import real modules; mock only if not installed.
+try:
+    import langchain
+    import langchain_core
+    import langgraph
+except ImportError:
+    def _ensure_mock(dotted_name, attrs=None):
+        if dotted_name not in sys.modules:
+            mod = types.ModuleType(dotted_name)
+            for a in (attrs or []):
+                setattr(mod, a, type(a, (), {}))
+            sys.modules[dotted_name] = mod
+        return sys.modules[dotted_name]
 
-_ensure_mock("langchain")
-_ensure_mock("langchain.agents")
-_ensure_mock("langchain.agents.middleware",
-             ["AgentMiddleware", "ModelRequest", "ModelResponse"])
-_ensure_mock("langchain.messages", ["SystemMessage"])
-_ensure_mock("langchain.tools")
-# langchain.tools.tool is a decorator — make it a passthrough
-sys.modules["langchain.tools"].tool = lambda f: f
-_ensure_mock("langchain_core")
-_ensure_mock("langchain_core.runnables", ["RunnableConfig"])
-_ensure_mock("langgraph")
-_ensure_mock("langgraph.types", ["interrupt"])
-sys.modules["langgraph.types"].interrupt = lambda *a, **kw: None
+    _ensure_mock("langchain")
+    _ensure_mock("langchain.agents")
+    _ensure_mock("langchain.agents.middleware",
+                 ["AgentMiddleware", "ModelRequest", "ModelResponse"])
+    _ensure_mock("langchain.messages", ["SystemMessage"])
+    _ensure_mock("langchain.tools")
+    sys.modules["langchain.tools"].tool = lambda f: f
+    _ensure_mock("langchain_core")
+    _ensure_mock("langchain_core.runnables", ["RunnableConfig"])
+    _ensure_mock("langgraph")
+    _ensure_mock("langgraph.types", ["interrupt"])
+    sys.modules["langgraph.types"].interrupt = lambda *a, **kw: None
 
 STD_PITCH = 0.294  # µm
 

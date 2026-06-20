@@ -47,13 +47,13 @@ proc ai_place_final {filename target_cell} {
         
         # Branch 1: TAP Cell Injection line (TAP <rail> <cell_type> <x> <y> <orient>)
         if {$type_flag == "TAP"} {
-            set name [lindex $elements 1]
+            set rail [lindex $elements 1]
             set cell_type [lindex $elements 2]
             set xPos [lindex $elements 3]
             set yPos [lindex $elements 4]
             set orient [lindex $elements 5]
             # Buffer the tap cell details for instantiation in Phase 3
-            lappend tap_list [list $name $cell_type $xPos $yPos $orient]
+            lappend tap_list [list $rail $cell_type $xPos $yPos $orient]
             continue ;# Skip remaining transistor parsing blocks for taps
         }
         
@@ -183,12 +183,17 @@ proc ai_place_final {filename target_cell} {
         # ======================================================================
         # PHASE 3: Create Taps (Instant Database Instantiation)
         # ======================================================================
+        set tap_counter 0
         foreach tap_data $tap_list {
-            set name [lindex $tap_data 0]
+            set rail [lindex $tap_data 0]
             set cell_type [lindex $tap_data 1]
             set x [expr {double([lindex $tap_data 2])}]
             set y [expr {double([lindex $tap_data 3])}]
             set orient [lindex $tap_data 4]
+            
+            # Generate a unique instance name to avoid collisions
+            set name "TAP_${rail}_${tap_counter}"
+            incr tap_counter
             
             set inst ""
             # Natively create the Ptap/Ntap cell reference instance in OpenAccess database memory
@@ -271,6 +276,11 @@ proc ai_place_final {filename target_cell} {
                 
                 update
                 after 150 ;# Cooldown delay to keep the GUI responsive
+                
+                # RE-APPLY ABUTMENT FLAGS IN CASE GUI CALLBACK RESET THEM
+                set leftVal [lindex $target 3]; set rightVal [lindex $target 4]
+                if {$leftVal != ""} { catch {db::setParamValue "leftAbut" -value $leftVal -of $fig} }
+                if {$rightVal != ""} { catch {db::setParamValue "rightAbut" -value $rightVal -of $fig} }
             }
         }
     }

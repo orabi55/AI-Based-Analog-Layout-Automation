@@ -353,19 +353,25 @@ class HierarchyGroupItem(QGraphicsRectItem):
         base_border = QColor(self._border_color) if self._border_color else QColor(220, 60, 60, 255)
         base_border.setAlpha(255)
         border_color = base_border
-        border_width = 2.5
+        border_width = 1.0  # Thin minimalist border
 
         if is_selected:
             border_color = base_border.lighter(135)
             border_color.setAlpha(255)
-            border_width = 3.5
+            border_width = 1.5
 
-        # Translucent fill from stored palette color (more opaque when selected).
-        fill = QColor(self._fill_color) if self._fill_color else QColor(base_border)
-        fill.setAlpha(85 if is_selected else 55)
-        painter.setBrush(QBrush(fill))
+        # Minimalist Border-Only View: No background fill. 
+        # Only use a very light selection tint if selected.
+        if is_selected:
+            fill = QColor(border_color)
+            fill.setAlpha(15)
+            painter.setBrush(QBrush(fill))
+        else:
+            painter.setBrush(Qt.BrushStyle.NoBrush)
 
-        pen = QPen(border_color, border_width, Qt.PenStyle.SolidLine)
+        # Use DashLine for nested groups, SolidLine for top-level groups
+        pen_style = Qt.PenStyle.DashLine if self._parent_group is not None else Qt.PenStyle.SolidLine
+        pen = QPen(border_color, border_width, pen_style)
         pen.setCosmetic(True)
         painter.setPen(pen)
         painter.drawRect(rect)
@@ -380,66 +386,58 @@ class HierarchyGroupItem(QGraphicsRectItem):
             painter.save()
             painter.resetTransform()
 
-            # Start with a reasonable font, shrink to fit
-            font_size = max(6, min(16, int(min(text_rect.width(), text_rect.height()) * 0.45)))
-            font = QFont("Segoe UI", font_size, QFont.Weight.Bold)
+            # Small minimalist tag in top-left
+            font = QFont("Segoe UI", 8, QFont.Weight.Bold)
             painter.setFont(font)
             fm = painter.fontMetrics()
+            
             type_label = self._compute_mosfet_type_label()
-            badge_size = max(6, int(font_size * 0.72))
-            badge_font = QFont("Segoe UI", badge_size, QFont.Weight.Bold)
-
-            def _combined_width():
-                if not type_label:
-                    return fm.horizontalAdvance(self._parent_name)
-                painter.setFont(badge_font)
-                bw = painter.fontMetrics().horizontalAdvance(type_label) + 10
-                painter.setFont(font)
-                return fm.horizontalAdvance(self._parent_name) + 8 + bw
-
-            while font_size > 5 and (_combined_width() > text_rect.width()
-                                     or fm.height() > text_rect.height()):
-                font_size -= 1
-                font = QFont("Segoe UI", font_size, QFont.Weight.Bold)
-                badge_size = max(6, int(font_size * 0.72))
-                badge_font = QFont("Segoe UI", badge_size, QFont.Weight.Bold)
-                painter.setFont(font)
-                fm = painter.fontMetrics()
-
-            if not type_label:
-                painter.setPen(QPen(QColor("#ffffff")))
-                painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, self._parent_name)
-            else:
-                # Layout name + pill side-by-side, centered together.
-                name_w = fm.horizontalAdvance(self._parent_name)
-                painter.setFont(badge_font)
-                bfm = painter.fontMetrics()
-                pill_w = bfm.horizontalAdvance(type_label) + 10
-                pill_h = bfm.height() + 2
-                spacing = 8
-                total_w = name_w + spacing + pill_w
-                start_x = text_rect.center().x() - total_w / 2
-
-                painter.setFont(font)
-                painter.setPen(QPen(QColor("#ffffff")))
-                from PySide6.QtCore import QRectF as _QR
-                name_rect = _QR(start_x, text_rect.y(), name_w, text_rect.height())
-                painter.drawText(
-                    name_rect,
-                    Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                    self._parent_name,
-                )
-
+            badge_font = QFont("Segoe UI", 7, QFont.Weight.Bold)
+            painter.setFont(badge_font)
+            bfm = painter.fontMetrics()
+            
+            name_w = fm.horizontalAdvance(self._parent_name)
+            pill_w = bfm.horizontalAdvance(type_label) + 8 if type_label else 0
+            pill_h = bfm.height() + 2
+            tag_h = fm.height()
+            
+            # Position the floating tag inside the top-left of the box
+            tag_x = screen_rect.x() + 6
+            tag_y = screen_rect.y() + 6
+            spacing = 6
+            
+            # Total width of text + badge
+            tag_total_w = name_w + (spacing if type_label else 0) + pill_w + 8
+            tag_total_h = max(tag_h, pill_h) + 4
+            
+            # Draw semi-transparent tag bubble for legibility over active nets/grid
+            tag_bg_rect = QRectF(tag_x - 4, tag_y - 2, tag_total_w, tag_total_h)
+            painter.setBrush(QBrush(QColor(15, 23, 42, 210)))  # Slate 900 tag bg
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawRoundedRect(tag_bg_rect, 3.0, 3.0)
+            
+            # Draw the name text
+            painter.setFont(font)
+            painter.setPen(QPen(QColor("#ffffff")))
+            name_draw_rect = QRectF(tag_x, tag_y + (tag_total_h - 4 - tag_h) / 2, name_w, tag_h)
+            painter.drawText(
+                name_draw_rect,
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                self._parent_name,
+            )
+            
+            # Draw type badge if present
+            if type_label:
                 if type_label == "N":
-                    pill_color = QColor("#3a7bd5")
+                    pill_color = QColor("#2563eb")  # Royal blue
                 elif type_label == "P":
-                    pill_color = QColor("#d54a4a")
+                    pill_color = QColor("#dc2626")  # Crimson red
                 else:
-                    pill_color = QColor("#9b85d6")
-
-                pill_rect = _QR(
-                    start_x + name_w + spacing,
-                    text_rect.center().y() - pill_h / 2,
+                    pill_color = QColor("#7c3aed")  # Purple
+                
+                pill_rect = QRectF(
+                    tag_x + name_w + spacing,
+                    tag_y + (tag_total_h - 4 - pill_h) / 2,
                     pill_w,
                     pill_h,
                 )

@@ -1,0 +1,229 @@
+% ==============================================================================
+% APPENDIX B: OpenAccess Integration TCL Watcher Script
+% ==============================================================================
+
+\chapter{OpenAccess Watcher Script}
+\label{app:tcl_scripts}
+
+\noindent
+This appendix lists the TCL background watchdog observer script (\texttt{cc\_}\allowbreak\texttt{watcher.tcl}) and the database placement script (\texttt{ai\_}\allowbreak\texttt{place.tcl}) that monitor coordinate exports from the layout chatbot and inject them into Synopsys Custom Compiler. By running this observer loop inside the EDA session, layout coordinates are synchronized in real-time without database locks.
+
+\section[Watchdog Observer Script (cc\_watcher.tcl)]{Background Watchdog Observer\\Script (\texttt{cc\_}\allowbreak\texttt{watcher.tcl})}
+\noindent
+The file-polling watchdog script monitors the active workspace directory for updates to the coordinate exchange file (\texttt{ai\_placement.txt}). It utilizes TCL's event-driven scheduling (\texttt{after}) to poll the file every 1000\,ms without blocking the Custom Compiler GUI thread. When a modification is detected (by comparing the file's modification time \texttt{mtime} against a cached timestamp), it sources the placement script to update the cell view.
+\begin{thesiscode}{OpenAccess File Watcher Script (eda/cc\_watcher.tcl)}{Tcl}
+# File Watcher: Monitoring coordinate exports from layout chatbot
+set placement_file "ai_placement.txt"
+set target_cell "comparator_latch"
+set last_mtime 0
+
+proc check_file_updates {} {
+    global placement_file target_cell last_mtime
+    
+    if {[file exists $placement_file]} {
+        set current_mtime [file mtime $placement_file]
+        if {$current_mtime > $last_mtime} {
+            set last_mtime $current_mtime
+            puts "Watcher: Detected coordinate updates. Reloading placements..."
+            source "ai_place.tcl"
+            ai_place $placement_file $target_cell
+        }
+    }
+    # Re-evaluate every 1000 milliseconds
+    after 1000 check_file_updates
+}
+
+# Start the file checking loop
+check_file_updates
+puts "Watcher: Background file observer active."
+\end{thesiscode}
+
+\section[Database Placement Script (ai\_place.tcl)]{OpenAccess Database Placement\\Script (\texttt{ai\_}\allowbreak\texttt{place.tcl})}
+\noindent
+The database placement script parses the coordinates and PDK parameters from the chatbot output and applies them directly to active OpenAccess layout cells. The script operates in four sequential phases to move existing transistors, instantiate dummy cells, add substrate taps, and update terminal nets via the GUI Property Editor to prevent database mismatches.
+\begin{thesiscode}{OpenAccess Placement Engine Script (eda/ai\_place.tcl)}{Tcl}
+# ==============================================================================
+# ai_place.tcl - High-Performance Database Integration & Placement Script
+# ==============================================================================
+proc ai_place_final {filename target_cell} {
+    puts "Starting Layout Radar & Placement... (VERSION 26 - Tap Integration)"
+    
+    # Get a list of all currently open layout/schematic designs in the EDA session
+    set iter [oa::DesignGetOpenDesigns]
+    set ns [oa::NativeNS]
+    set libName "SAED_PDK_14" 
+    set tapLibName "taps"
+
+    if [catch {open $filename r} fp] {
+        puts "ERROR: Cannot open $filename"
+        return
+    }
+
+    array set ai_data {}
+    set dummy_list {} 
+    set tap_list {}
+
+    while {[gets $fp line] >= 0} {
+        set line [string trim $line]
+        if {$line == ""} continue
+        
+        set elements [regexp -inline -all -- {\S+} $line]
+        set type_flag [lindex $elements 0]
+        set is_dummy 0; set cell_type ""
+        
+        # Branch 1: TAP Cell Injection line (TAP <rail> <cell_type> <x> <y> <orient>)
+        if {$type_flag == "TAP"} {
+            set rail [lindex $elements 1]
+            set cell_type [lindex $elements 2]
+            set xPos [lindex $elements 3]
+            set yPos [lindex $elements 4]
+            set orient [lindex $elements 5]
+            lappend tap_list [list $rail $cell_type $xPos $yPos $orient]
+            continue
+        }
+        
+        # Branch 2: DUMMY Transistor line (DUMMY <name> <cell_type> <x> <y> ...)
+        if {$type_flag == "DUMMY"} {
+            set is_dummy 1
+            set name [lindex $elements 1]
+            set cell_type [lindex $elements 2]
+            set xPos [lindex $elements 3]
+            set yPos [lindex $elements 4]
+            set orient [lindex $elements 5]
+            lappend dummy_list $name
+            
+        # Branch 3: Standard Active Device line (<name> <x> <y> <orient> ...)
+        } else {
+            set name [lindex $elements 0]
+            set xPos [lindex $elements 1]
+            set yPos [lindex $elements 2]
+            set orient [lindex $elements 3]
+        }
+        
+        set leftVal ""; set rightVal ""; set l_val ""; set m_val ""; set nf_val ""; set nfin_val ""
+        set d_net ""; set g_net ""; set s_net ""; set b_net ""
+        
+        regexp {left_abut=([01])} $line match val && {set leftVal $val}
+        regexp {right_abut=([01])} $line match val && {set rightVal $val}
+        regexp {l=([0-9.]+)} $line match val && {set l_val $val}
+        regexp {m=([0-9.]+)} $line match val && {set m_val $val}
+        regexp {nf=([0-9.]+)} $line match val && {set nf_val $val}
+        regexp {nfin=([0-9.]+)} $line match val && {set nfin_val $val}
+        
+        regexp {D=([^ ]+)} $line match val && {set d_net $val}
+        regexp {G=([^ ]+)} $line match val && {set g_net $val}
+        regexp {S=([^ ]+)} $line match val && {set s_net $val}
+        regexp {B=([^ ]+)} $line match val && {set b_net $val}
+        
+        set ai_data($name) [list $xPos $yPos $orient $leftVal $rightVal $is_dummy $cell_type $l_val $m_val $nf_val $nfin_val $d_net $g_net $s_net $b_net]
+    }
+    close $fp
+
+    set target_win [gi::getActiveWindow]
+    set target_ctx [de::getActiveContext]
+    set total_moved 0
+
+    while { [set cv [oa::getNext $iter]] != "0" && $cv != "" } {
+        set cellStr ""; set viewStr ""
+        catch { set cellStr [oa::get [oa::getCellName $cv] $ns] }
+        catch { set viewStr [oa::get [oa::getViewName $cv] $ns] }
+
+        if {$cellStr != $target_cell || [string match -nocase "*schematic*" $viewStr]} { continue }
+
+        set block [oa::getTopBlock $cv]
+        set instIter [oa::getInsts $block]
+
+        # PHASE 1: Move Existing Instances
+        while { [set inst [oa::getNext $instIter]] != "0" && $inst != "" } {
+            set instStr ""
+            catch { set instStr [oa::get [oa::getName $inst] $ns] }
+
+            if { [info exists ai_data($instStr)] } {
+                set target $ai_data($instStr)
+                if {[lindex $target 5]} { continue }
+
+                oa::setOrigin $inst [list [expr {double([lindex $target 0])}] [expr {double([lindex $target 1])}]]
+                oa::setOrient $inst [lindex $target 2]
+                
+                set leftVal [lindex $target 3]; set rightVal [lindex $target 4]
+                if {$leftVal != ""} { catch {db::setParamValue "leftAbut" -value $leftVal -of $inst} }
+                if {$rightVal != ""} { catch {db::setParamValue "rightAbut" -value $rightVal -of $inst} }
+                incr total_moved
+            }
+        }
+
+        # PHASE 2: Create Dummies & Size
+        foreach dummy_name $dummy_list {
+            set target $ai_data($dummy_name)
+            set cell_type [lindex $target 6]
+            set x [expr {double([lindex $target 0])}]
+            set y [expr {double([lindex $target 1])}]
+            
+            set inst ""
+            if {[catch {set inst [le::createInst $dummy_name -design $cv -libName $libName -cellName $cell_type -viewName "layout" -origin [list $x $y] -orient [lindex $target 2]]} err]} {
+                continue
+            }
+            set leftVal [lindex $target 3]; set rightVal [lindex $target 4]; set l_val [lindex $target 7]; set m_val [lindex $target 8]; set nf_val [lindex $target 9]; set nfin_val [lindex $target 10]
+            
+            catch {db::setParamValue "usage" -value "Dummy" -of $inst}
+            if {$leftVal != ""} { catch {db::setParamValue "leftAbut" -value $leftVal -of $inst} }
+            if {$rightVal != ""} { catch {db::setParamValue "rightAbut" -value $rightVal -of $inst} }
+            if {$l_val != ""} { catch {db::setParamValue "l" -value $l_val -of $inst} }
+            if {$m_val != ""} { catch {db::setParamValue "m" -value $m_val -of $inst} }
+            if {$nf_val != ""} { catch {db::setParamValue "nf" -value $nf_val -of $inst} }
+            if {$nfin_val != ""} { catch {db::setParamValue "nfin" -value $nfin_val -of $inst} }
+        }
+
+        # PHASE 3: Create Taps
+        set tap_counter 0
+        foreach tap_data $tap_list {
+            set rail [lindex $tap_data 0]
+            set cell_type [lindex $tap_data 1]
+            set x [expr {double([lindex $tap_data 2])}]
+            set y [expr {double([lindex $tap_data 3])}]
+            set orient [lindex $tap_data 4]
+            set name "TAP_${rail}_${tap_counter}"
+            incr tap_counter
+            
+            catch {le::createInst $name -design $cv -libName $tapLibName -cellName $cell_type -viewName "layout" -origin [list $x $y] -orient $orient}
+        }
+    }
+    
+    # PHASE 4: GUI Property Editor Connectivity Injection
+    set propEd ""
+    if { ![catch {set propEd [gi::getAssistants dePropertyEditor -from $target_win]}] } {
+        update; after 300
+        foreach dummy_name $dummy_list {
+            set target $ai_data($dummy_name)
+            set x [expr {double([lindex $target 0])}]; set y [expr {double([lindex $target 1])}]
+            set d_net [lindex $target 11]; set g_net [lindex $target 12]; set s_net [lindex $target 13]; set b_net [lindex $target 14]
+
+            de::deselectAll $target_ctx
+            set clicked 0
+            catch {
+                set fig [de::getActiveFigure $target_win -point [list $x $y] -index 0 -intent none]
+                if {$fig != "" && $fig != "0"} { de::select $fig; set clicked 1 }
+            }
+            if {$clicked} {
+                update; after 250
+                catch {
+                    gi::setItemSelection {attributes} -index {usage,all} -in $propEd
+                    gi::setField {attributes} -value {Dummy} -index {usage,Value} -in $propEd
+                    gi::setField {instanceTerminalsExpand} -value {true} -in $propEd
+                    
+                    if {$g_net != ""} { gi::setField {instanceTerminals} -value $g_net -index {G,Net Name} -in $propEd }
+                    if {$d_net != ""} { gi::setField {instanceTerminals} -value $d_net -index {D,Net Name} -in $propEd }
+                    if {$s_net != ""} { gi::setField {instanceTerminals} -value $s_net -index {S,Net Name} -in $propEd }
+                    if {$b_net != ""} { gi::setField {instanceTerminals} -value $b_net -index {B,Net Name} -in $propEd }
+                    gi::executeAction dePropertyEditorApplyChanges -in $propEd
+                }
+                update; after 150
+            }
+        }
+    }
+    de::deselectAll $target_ctx
+}
+proc ai_place {filename target_cell} {
+    ai_place_final $filename $target_cell
+}
+\end{thesiscode}

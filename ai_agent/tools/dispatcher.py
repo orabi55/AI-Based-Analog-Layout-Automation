@@ -29,6 +29,7 @@ from ai_agent.core.interfaces import LayoutToolResult
 from ai_agent.pdks.loader import load_pdk
 
 # ── Core imports ─────────────────────────────────────────────────────────────
+import os
 import ai_agent.core.drc                  as _drc
 import ai_agent.core.physical_cells       as _pc
 import ai_agent.core.common_centroid      as _cc
@@ -37,6 +38,7 @@ import ai_agent.core.circuit_detection    as _cd
 import ai_agent.core.group_placer         as _gp
 import ai_agent.core.circuit_orchestrator as _co
 import ai_agent.core.layout_ops           as _lo
+import ai_agent.core.rag_migration        as _rag
 
 from ai_agent.tools.cmd_parser import apply_cmds_to_nodes
 from ai_agent.placement.quality_metrics import score_placement, _transistor_key
@@ -49,11 +51,21 @@ logger = logging.getLogger("ai_agent")
 # ---------------------------------------------------------------------------
 
 def _is_dummy(node: dict) -> bool:
-    """True for any node that is a filler / dummy (not a structural dummy)."""
+    """True for any node that is a filler / dummy (including structural dummies)."""
+    if not isinstance(node, dict):
+        return False
     if node.get("is_dummy"):
         return True
     nid = str(node.get("id", ""))
-    return nid.startswith(("FILLER_DUMMY_", "DUMMY_matrix_", "EDGE_DUMMY", "FILLER_"))
+    nid_upper = nid.upper()
+    import re
+    return (
+        nid_upper.startswith((
+            "FILLER_DUMMY_", "DUMMY_MATRIX_", "EDGE_DUMMY", 
+            "FILLER_", "DUMMY", "STRUCT_DUMMY_", "MATCH_DUMMY_", "DUMMY_"
+        ))
+        or bool(re.match(r"^D\d+$", nid_upper))
+    )
 
 
 def _next_dummy_id(nodes: list, dev_type: str) -> str:
@@ -89,6 +101,8 @@ def dispatch(
     nodes: list,
     pdk: dict = None,
     terminal_nets: dict = None,
+    oas_path: str = None,
+    sp_path: str = None,
 ) -> LayoutToolResult:
     """Route a tool call to the appropriate core/ implementation.
 
@@ -108,7 +122,7 @@ def dispatch(
     args          = arguments or {}
 
     try:
-        return _route(tool_name, args, nodes, pdk, terminal_nets)
+        return _route(tool_name, args, nodes, pdk, terminal_nets, oas_path, sp_path)
     except Exception as exc:
         logger.error(
             "[dispatch] %s raised %s: %s",
@@ -128,7 +142,146 @@ def dispatch(
 # ---------------------------------------------------------------------------
 
 def _route(tool_name: str, args: dict, nodes: list, pdk: dict,
-           terminal_nets: dict) -> LayoutToolResult:
+           terminal_nets: dict, oas_path: str = None, sp_path: str = None) -> LayoutToolResult:
+
+    # ── Advanced Layout Capabilities ─────────────────────────────────────────
+
+    if tool_name == "insert_guard_ring":
+        return _pc.insert_guard_ring(
+            nodes,
+            pdk,
+            group_node_ids = args.get("group_node_ids"),
+            ring_type      = str(args.get("ring_type", "ptap")),
+            spacing_um     = float(args.get("spacing_um", 0.5)),
+            tap_width_um   = float(args.get("tap_width_um", 0.294)),
+            bounding_box   = args.get("bounding_box"),
+        )
+
+    if tool_name == "highlight_device_net":
+        return LayoutToolResult(
+            success = True,
+            message = f"Highlighted net '{args['net_name']}'",
+            changed = True,
+            nodes   = list(nodes),
+            metrics = {
+                "gui_commands": [
+                    {"action": "highlight_net", "net_name": args["net_name"]}
+                ]
+            },
+        )
+
+    if tool_name == "draw_symmetry_axis":
+        return LayoutToolResult(
+            success = True,
+            message = "Drew symmetry axis",
+            changed = True,
+            nodes   = list(nodes),
+            metrics = {
+                "gui_commands": [
+                    {
+                        "action": "draw_symmetry_axis",
+                        "x_um": args.get("x_um"),
+                        "y_um": args.get("y_um"),
+                        "color": args.get("color", "#00e5ff"),
+                    }
+                ]
+            },
+        )
+
+    if tool_name == "clear_canvas_decorations":
+        return LayoutToolResult(
+            success = True,
+            message = "Cleared all highlights and axes",
+            changed = True,
+            nodes   = list(nodes),
+            metrics = {
+                "gui_commands": [
+                    {"action": "clear_canvas_decorations"}
+                ]
+            },
+        )
+
+    if tool_name == "apply_rag_style_migration":
+        return _rag.apply_rag_style_migration(
+            nodes,
+            pdk,
+            style_query       = str(args["style_query"]),
+            target_device_ids = list(args["target_device_ids"]),
+        )
+
+    if tool_name == "reconfigure_floorplan":
+        return _lo.reconfigure_floorplan(
+            nodes,
+            aspect_ratio = float(args["aspect_ratio"]) if args.get("aspect_ratio") is not None else None,
+            row_height   = float(args["row_height"]) if args.get("row_height") is not None else None,
+            row_pitch    = float(args["row_pitch"]) if args.get("row_pitch") is not None else None,
+        )
+
+    if tool_name == "shield_net":
+        return _lo.shield_net(
+            nodes,
+            net_name      = str(args["net_name"]),
+            shield_type   = str(args.get("shield_type", "dummy")),
+            width_um      = float(args.get("width_um", 0.294)),
+            terminal_nets = terminal_nets,
+            pdk           = pdk,
+        )
+
+    if tool_name == "preview_layout_gds":
+        if not oas_path or not sp_path:
+            return LayoutToolResult(
+                success=False,
+                message="preview_layout_gds failed: active OAS/SPICE file paths not found in chat context. Load a design first.",
+                nodes=list(nodes),
+            )
+        
+        preview_oas = os.path.join(os.getcwd(), "layout_preview.oas")
+        preview_png = os.path.join(os.getcwd(), "layout_preview.png")
+        
+        try:
+            from export.oas_writer import update_oas_placement
+            from export.klayout_renderer import render_oas_to_file
+            
+            update_oas_placement(
+                oas_path=oas_path,
+                sp_path=sp_path,
+                nodes=nodes,
+                output_path=preview_oas
+            )
+            
+            render_oas_to_file(
+                oas_path=preview_oas,
+                output_png=preview_png,
+                width=800,
+                height=600
+            )
+            
+            abs_png_path = os.path.abspath(preview_png)
+            standardized_path = abs_png_path.replace("\\", "/")
+            img_url = f"file:///{standardized_path}"
+            
+            msg = (
+                f"Generated high-fidelity physical KLayout GDS/OAS preview.\n\n"
+                f"<div style='margin: 10px 0; border: 1px solid #142127; border-radius: 8px; overflow: hidden; background-color: #05090b; padding: 10px; text-align: center;'>"
+                f"  <img src='{img_url}' width='320' style='border-radius: 4px; max-width: 100%; border: 1px solid #00e5ff;' />"
+                f"  <div style='color: #64777e; font-size: 8pt; margin-top: 5px; font-family: Segoe UI;'>GDS/OAS Physical Layer Preview</div>"
+                f"</div>"
+            )
+            
+            return LayoutToolResult(
+                success=True,
+                message=msg,
+                changed=False,
+                nodes=list(nodes),
+                metrics={"preview_png_path": abs_png_path, "preview_oas_path": os.path.abspath(preview_oas)},
+            )
+        except Exception as exc:
+            logger.error(f"[preview_layout_gds] failed: {exc}", exc_info=True)
+            return LayoutToolResult(
+                success=False,
+                message=f"preview_layout_gds failed: {exc}",
+                nodes=list(nodes),
+            )
 
     # ── Layout inspection ────────────────────────────────────────────────────
 
@@ -205,6 +358,13 @@ def _route(tool_name: str, args: dict, nodes: list, pdk: dict,
             message=f"Swapped {args['device_a']} ↔ {args['device_b']}",
             changed=True,
             nodes=updated,
+        )
+
+    if tool_name == "swap_rows":
+        return _lo.swap_rows(
+            nodes,
+            row_y1=float(args["row_y1"]),
+            row_y2=float(args["row_y2"]),
         )
 
     if tool_name == "flip_device":
@@ -323,6 +483,9 @@ def _route(tool_name: str, args: dict, nodes: list, pdk: dict,
 
     if tool_name == "insert_all_physical_cells":
         return _pc.insert_all_physical_cells(nodes, pdk)
+
+    if tool_name == "insert_edge_dummies":
+        return _pc.insert_edge_dummies(nodes, pdk)
 
     # ── Common-centroid placement ─────────────────────────────────────────────
 

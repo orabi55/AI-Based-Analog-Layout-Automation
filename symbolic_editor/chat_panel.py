@@ -218,13 +218,17 @@ class ChatPanel(QWidget):
     # -----------------------------------------
     # Layout context
     # -----------------------------------------
-    def set_layout_context(self, nodes, edges=None, terminal_nets=None):
+    def set_layout_context(self, nodes, edges=None, terminal_nets=None, oas_path=None, sp_path=None):
         """Store the layout data so the LLM can reference it."""
         self._layout_context = {"nodes": nodes}
         if edges:
             self._layout_context["edges"] = edges
         if terminal_nets:
             self._layout_context["terminal_nets"] = terminal_nets
+        if oas_path:
+            self._layout_context["oas_path"] = oas_path
+        if sp_path:
+            self._layout_context["sp_path"] = sp_path
         # Keep the worker in sync so process_request_with_tools has access to nodes
         self._llm_worker.set_layout_context(self._layout_context)
 
@@ -400,6 +404,88 @@ class ChatPanel(QWidget):
         header_layout.addWidget(toggle_btn)
 
         layout.addWidget(header)
+
+        # Features Bar (Quick Access Dropdown) with premium dark glass aesthetics
+        features_bar = QFrame()
+        features_bar.setFixedHeight(40)
+        features_bar.setStyleSheet(
+            "background-color: #0b1216;"
+            "border-bottom: 1px solid #142127;"
+        )
+        features_layout = QHBoxLayout(features_bar)
+        features_layout.setContentsMargins(12, 0, 12, 0)
+        features_layout.setSpacing(8)
+
+        features_label = QLabel("⚡ Quick Access:")
+        features_label.setStyleSheet(
+            "color: #00e5ff;"
+            "font-family: 'Segoe UI';"
+            "font-size: 11px;"
+            "font-weight: bold;"
+            "background: transparent;"
+        )
+        features_layout.addWidget(features_label)
+
+        self._features_combo = QComboBox()
+        self._features_combo.setFixedHeight(26)
+        self._features_combo.setToolTip("Select a layout feature to auto-populate the prompt")
+        self._features_combo.setStyleSheet("""
+            QComboBox {
+                background-color: rgba(7, 16, 20, 0.7);
+                color: #bfd0d6;
+                border: 1px solid #1b3038;
+                border-radius: 4px;
+                padding: 2px 8px;
+                font-size: 11px;
+                font-family: 'Segoe UI';
+            }
+            QComboBox:hover {
+                border-color: #00e5ff;
+                background-color: rgba(11, 26, 32, 0.9);
+            }
+            QComboBox::drop-down {
+                border: none;
+                width: 20px;
+            }
+            QComboBox::down-arrow {
+                image: none;
+                border-left: 4px solid transparent;
+                border-right: 4px solid transparent;
+                border-top: 5px solid #00e5ff;
+                margin-right: 6px;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #071014;
+                color: #bfd0d6;
+                border: 1px solid #1b3038;
+                selection-background-color: #0d2a35;
+                selection-color: #00e5ff;
+                outline: none;
+            }
+        """)
+
+        self.quick_features = {
+            "-- Select a Feature for Quick Access --": "",
+            "🚀 Layout Optimization": "Optimize the placement to reduce routing congestion and crossings.",
+            "📐 Floorplan row reconfig": "Reconfigure the floorplan to distribute devices across 2 rows with a row height of 45.44um and row pitch of 10.0um.",
+            "⚡ Auto Place VDD/GND Taps": "Insert substrate and well tap cells automatically — VDD tap above the topmost PMOS row and GND tap below the bottommost NMOS row.",
+            "🪨 Auto Row-Edge Dummies": "Automatically insert dummy transistors at both left and right edges of every active device row for lithography isolation.",
+            "💡 Net Highlighting": "Highlight terminal labels connected to net VDD on the canvas.",
+            "📏 Auto Symmetry Axis": "Draw a vertical symmetry axis that automatically splits the layout into two equal halves.",
+            "🧹 Clear Canvas Overlays": "Clear all highlights, colors, and drawn symmetry axes from the canvas.",
+            "🧬 RAG Matching Migration": "Apply a high-quality common-centroid matching style migration using interdigitation pattern ABBA on devices MM0, MM1, MM2, MM3.",
+            "🧱 Critical Net Shielding": "Shield the critical net clk by placing dummy spacing channels next to it.",
+            "🖼️ Layout Preview (PNG)": "Render a physical layout preview image of the GDS/OAS layout.",
+            "🔍 DRC Spacing Check": "Run the legalizer to check overlaps and apply mechanical spacing fixes.",
+
+            "🪵 Dummy Transistor Fill": "Add a dummy nmos fill cell at X=15.0um, Y=45.44um with width 0.294um."
+        }
+
+        self._features_combo.addItems(list(self.quick_features.keys()))
+        self._features_combo.currentIndexChanged.connect(self._on_feature_selected)
+        features_layout.addWidget(self._features_combo, 1)
+
+        layout.addWidget(features_bar)
 
         # Chat display
         self.chat_display = QTextEdit()
@@ -791,7 +877,10 @@ class ChatPanel(QWidget):
         if status == "error":
             color = "#ff6b6b"
         title = html.escape(str(msg.get("content") or "Tool update"))
-        detail = html.escape(str(meta.get("detail") or ""))
+        raw_detail = str(meta.get("detail") or "")
+        # Detect HTML content in detail (e.g. image tags from preview_layout_gds)
+        _has_html = "<img" in raw_detail or "<div" in raw_detail or "<table" in raw_detail
+        detail = raw_detail if _has_html else html.escape(raw_detail)
         detail_html = f"<div style='color:#9aa8b8;font-size:12px;margin-top:5px;'>{detail}</div>" if detail else ""
         dots = "" if status in ("done", "error") else html.escape(str(meta.get("dots", "")))
         return f"""
@@ -981,7 +1070,7 @@ class ChatPanel(QWidget):
     # -----------------------------------------
     def _ensure_activity_timer(self, interval=400):
         if self._thinking_timer is not None:
-            return
+            self._thinking_timer.stop()
         self._thinking_timer = QTimer(self)
         self._thinking_timer.timeout.connect(self._animate_thinking)
         self._thinking_timer.start(interval)
@@ -989,25 +1078,18 @@ class ChatPanel(QWidget):
     def _start_thinking(self):
         self._thinking_dots = 0
         self._thinking_stage = 0
-        label = "Thinking"
+        if self._is_orchestrated:
+            label = _ORCHESTRATOR_STAGES[0][1]
+        else:
+            label = "Thinking"
         self._add_message(
             "assistant",
             label,
             status="running",
             meta={"kind": "thinking"},
         )
-        self._ensure_activity_timer()
-        return
-        if self._is_orchestrated:
-            label = _ORCHESTRATOR_STAGES[0][1]
-        else:
-            label = "Thinking"
-        self._append_bubble("ai", label)
-        self._thinking_timer = QTimer(self)
-        self._thinking_timer.timeout.connect(self._animate_thinking)
-        # Slower tick for orchestrator (stage labels change every ~4 s)
-        interval = 3800 if self._is_orchestrated else 400
-        self._thinking_timer.start(interval)
+        interval = 2500 if self._is_orchestrated else 400
+        self._ensure_activity_timer(interval)
 
     def _animate_thinking(self):
         msg = None
@@ -1023,40 +1105,12 @@ class ChatPanel(QWidget):
         msg.setdefault("meta", {})["dots"] = dots
         if self._is_orchestrated:
             self._thinking_stage = (self._thinking_stage + 1) % max(1, len(_ORCHESTRATOR_STAGES))
-        if msg.get("meta", {}).get("kind") == "thinking":
-            msg["content"] = "Thinking" + dots
-        self._render_messages()
-        return
-        if self._is_orchestrated:
-            # Cycle through pipeline stage labels
-            self._thinking_stage = (self._thinking_stage + 1) % len(_ORCHESTRATOR_STAGES)
             label = _ORCHESTRATOR_STAGES[self._thinking_stage][1]
-            html = self.chat_display.toHtml()
-            # replace the last stage label with the next one
-            for _, stage_text in _ORCHESTRATOR_STAGES:
-                idx = html.rfind(stage_text.split("—")[0].strip())
-                if idx != -1:
-                    # find enclosing tag boundary
-                    end = html.find("<", idx + 1)
-                    if end == -1:
-                        end = idx + len(stage_text)
-                    html = html[:idx] + label + html[end:]
-                    break
-            self.chat_display.setHtml(html)
+            msg["content"] = label + dots
         else:
-            # Original dot animation
-            self._thinking_dots = (self._thinking_dots + 1) % 4
-            dots = "." * self._thinking_dots
-            html = self.chat_display.toHtml()
-            idx = html.rfind("Thinking")
-            if idx != -1:
-                end = html.find("<", idx)
-                if end != -1:
-                    html = html[:idx] + "Thinking" + dots + html[end:]
-                    self.chat_display.setHtml(html)
-        self.chat_display.verticalScrollBar().setValue(
-            self.chat_display.verticalScrollBar().maximum()
-        )
+            if msg.get("meta", {}).get("kind") == "thinking":
+                msg["content"] = "Thinking" + dots
+        self._render_messages()
 
     def _stop_thinking(self):
         if self._thinking_timer:
@@ -1546,3 +1600,27 @@ class ChatPanel(QWidget):
             return
         self._messages.pop()
         self._render_messages()
+
+    @Slot(int)
+    def _on_feature_selected(self, index):
+        if index <= 0:
+            return
+        
+        feature_name = self._features_combo.itemText(index)
+        prompt = self.quick_features.get(feature_name, "")
+        if prompt:
+            # Populate input field
+            self.input_field.setPlainText(prompt)
+            
+            # Move cursor to the end
+            cursor = self.input_field.textCursor()
+            cursor.movePosition(cursor.MoveOperation.End)
+            self.input_field.setTextCursor(cursor)
+            
+            # Set focus to the input field
+            self.input_field.setFocus()
+            
+        # Reset the combo box selection silently to avoid re-triggering slots recursively
+        self._features_combo.blockSignals(True)
+        self._features_combo.setCurrentIndex(0)
+        self._features_combo.blockSignals(False)

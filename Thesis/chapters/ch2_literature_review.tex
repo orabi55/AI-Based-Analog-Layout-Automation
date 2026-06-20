@@ -1,0 +1,335 @@
+% ==============================================================================
+% CHAPTER 2: Literature Review & Theoretical Foundation
+% ==============================================================================
+
+\chapter{Literature Review}
+\label{ch:lit_review}
+
+\lettrine[lines=3]{A}{n review of the state-of-the-art} in analog layout automation reveals a shift from purely algorithmic, grid-less placement optimization to machine-learning-assisted flows. More recently, Large Language Models (LLMs) and multi-agent systems have emerged as tools for interactive layout generation. This chapter reviews the literature, analyzing the papers provided for this research. We trace the development from open-source design compilers to constraint-driven systems, machine learning quality predictors, and interactive LLM co-pilots.
+
+To structure this analysis, we categorize existing research into four major paradigms:
+\begin{enumerate}
+    \item \textbf{Procedural and Compiling Frameworks:} Deterministic compilers that transform netlists to layout geometries using graph theory and classic mathematical programming.
+    \item \textbf{Constraint-Driven Synthesizers:} Systems that focus on translating circuit performance requirements and sensitivities into physical design rules.
+    \item \textbf{ML-Based Quality Predictors:} Neural net architectures and search algorithms that estimate routing feasibility and parasitics prior to actual physical generation.
+    \item \textbf{Agentic and Interactive Co-Pilots:} LLM-driven interfaces that accept natural language commands to modify layouts and compile geometry dynamically.
+\end{enumerate}
+
+% ==============================================================================
+\section[Evolution of Layout Automation]{The Evolution of Analog Layout Automation Paradigms}
+\label{sec:lit_evolution}
+
+The automation of integrated circuit (IC) physical design has historically been split between digital and analog domains. In digital design, the standardization of cell heights, pin locations, and power routing enabled the development of highly scalable automated placement and routing (P\&R) algorithms. These digital algorithms utilize discrete optimization techniques, representing the layout canvas as a routing grid where logic cells can be placed and connected deterministically. 
+
+In contrast, analog integrated circuits rely on custom device sizing tailored to specific noise, power, bandwidth, and gain requirements. This customization prevents the direct application of standard-cell digital placement methodologies. In the analog domain, physical proximity directly affects circuit performance through thermal gradients, electrical coupling, and manufacturing variations. For instance, matched devices in a differential pair must be placed close to each other and share symmetric boundaries to minimize electrical offsets. Consequently, analog layout remains a highly specialized task performed manually by physical design engineers.
+
+To address this manual bottleneck, the electronic design automation (EDA) community has developed various paradigms. Early efforts focused on procedural cell generators (macro-cell layout compilation), which write custom code scripts for specific circuit topologies. While procedural generators produce DRC-correct layouts rapidly, they suffer from poor portability and high maintenance overhead, as any change in the process node requires rewriting the layout code. 
+
+Later, optimization-based placers emerged, framing the placement task as a mathematical search problem using Simulated Annealing (SA) or Integer Linear Programming (ILP). These tools optimize analytical cost functions that represent layout area, wirelength, and constraint penalties. However, they operate as "black boxes," making it difficult for designers to interactively adjust the layout or incorporate qualitative design intents.
+
+More recently, machine learning (ML) models have been introduced to predict layout quality, estimate parasitic capacitance, and generate layout constraints automatically. Furthermore, the advent of Large Language Models has enabled the creation of interactive, agent-based layout co-pilots. Figure~\ref{fig:lit_taxonomy} illustrates the taxonomy of these various analog layout automation paradigms.
+
+\begin{figure}[H]
+    \centering
+    \fbox{\begin{tikzpicture}[
+        level 1/.style={sibling distance=6.0cm, level distance=1.8cm},
+        level 2/.style={sibling distance=3.2cm, level distance=2.2cm},
+        root/.style={draw=WarmGold, fill=AcademicBlue, text=white, font=\small\sffamily\bfseries, inner sep=8pt, rounded corners=6pt, align=center, drop shadow={shadow xshift=1.5pt, shadow yshift=-1.5pt, fill=black!15}},
+        leftlevel1/.style={draw=RoyalBlue, fill=RoyalBlue!8, text=AcademicBlue, font=\small\sffamily\bfseries, inner sep=6pt, rounded corners=4pt, align=center, drop shadow={shadow xshift=1pt, shadow yshift=-1pt, fill=black!15}},
+        rightlevel1/.style={draw=CodeBlue, fill=CodeBlue!8, text=CodeBlue!80!black, font=\small\sffamily\bfseries, inner sep=6pt, rounded corners=4pt, align=center, drop shadow={shadow xshift=1pt, shadow yshift=-1pt, fill=black!15}},
+        leftleaf/.style={draw=RoyalBlue!50, fill=SoftCream, text=TextCharcoal, font=\small\sffamily, inner sep=6pt, rounded corners=3pt, align=center, drop shadow={shadow xshift=0.8pt, shadow yshift=-0.8pt, fill=black!10}},
+        rightleaf/.style={draw=CodeBlue!50, fill=SoftCream, text=TextCharcoal, font=\small\sffamily, inner sep=6pt, rounded corners=3pt, align=center, drop shadow={shadow xshift=0.8pt, shadow yshift=-0.8pt, fill=black!10}}
+    ]
+    \node[root] {Analog Layout\\Automation}
+        child[edge from parent/.style={draw=RoyalBlue, line width=1.3pt}] { node[leftlevel1] {Algorithmic\\(Procedural)}
+            child { node[leftleaf] {Macro-cell\\Generators} }
+            child { node[leftleaf] {ILP / SA\\Placers} }
+        }
+        child[edge from parent/.style={draw=CodeBlue, line width=1.3pt}] { node[rightlevel1] {AI-Assisted\\(Interactive)}
+            child { node[rightleaf] {ML Predictors\\(WPE/STI)} }
+            child { node[rightleaf] {LLM Co-Pilots\\(Agentic)} }
+        };
+    \end{tikzpicture}}
+    \caption{Taxonomy of Analog Layout Automation Methodologies.}
+    \label{fig:lit_taxonomy}
+\end{figure}
+
+% ==============================================================================
+\section[Foundational Compilers]{Foundational Procedural \& Open-Source Compilers}
+\label{sec:lit_align}
+
+Automating the translation from a SPICE netlist to physical layout geometries has been a long-standing goal of the EDA community. Two major foundational frameworks in this domain are the ALIGN project and the Berkeley Analog Generator (BAG).
+
+\subsection{ALIGN: Analog Layout, Generatively Integrated}
+
+The ALIGN (Analog Layout, Generatively Integrated) project~\cite{align} represents a major effort to automate analog layout design from the ground up. Developed by a consortium of universities and industry partners, ALIGN aims to compile SPICE netlists into DRC-clean layouts automatically. ALIGN utilizes a modular flow consisting of three core stages: hierarchy detection, grid-based design rule mapping, and hierarchical placement and routing. The typical flow is illustrated in Figure~\ref{fig:align_flow}.
+
+\begin{figure}[H]
+    \centering
+    \fbox{\begin{tikzpicture}[
+        node distance=1.2cm and 0.45cm,
+        preproc/.style={draw=CodeBlue, fill=CodeBlue!8, text=CodeBlue!80!black, thick, rounded corners, minimum width=2.0cm, minimum height=1.1cm, align=center, font=\small\sffamily\bfseries, drop shadow={shadow xshift=1.5pt, shadow yshift=-1.5pt, fill=black!15}},
+        solver/.style={draw=RoyalBlue, fill=LightBlueBg, text=AcademicBlue, thick, rounded corners, minimum width=2.0cm, minimum height=1.1cm, align=center, font=\small\sffamily\bfseries, drop shadow={shadow xshift=1.5pt, shadow yshift=-1.5pt, fill=black!15}},
+        cleanout/.style={draw=CodeGreen, fill=CodeGreen!10, text=CodeGreen!80!black, thick, rounded corners, minimum width=2.0cm, minimum height=1.1cm, align=center, font=\small\sffamily\bfseries, drop shadow={shadow xshift=1.5pt, shadow yshift=-1.5pt, fill=black!15}},
+        arrow/.style={-Latex, line width=1.3pt, draw=AcademicBlue}
+    ]
+        \node[preproc, align=center] (netlist) {SPICE Netlist};
+        \node[solver, right=of netlist, align=center] (subgraph) {Hierarchical\\Detection\\(Isomorphism)};
+        \node[solver, right=of subgraph, align=center] (grid) {Grid-Based\\Abstraction};
+        \node[solver, right=of grid, align=center] (placer) {ILP Placement\\\& A* Routing};
+        \node[cleanout, right=of placer, align=center] (layout) {DRC-Clean\\GDSII Output};
+
+        \draw[arrow] (netlist) -- (subgraph);
+        \draw[arrow] (subgraph) -- (grid);
+        \draw[arrow] (grid) -- (placer);
+        \draw[arrow] (placer) -- (layout);
+    \end{tikzpicture}}
+    \caption{Hierarchical compilation pipeline of the ALIGN framework.}
+    \label{fig:align_flow}
+\end{figure}
+
+In the hierarchy detection stage, ALIGN identifies structural patterns (such as differential pairs, current mirrors, and passive arrays) within netlists using graph-matching techniques. The circuit schematic is modeled as a netlist graph $G_s = (V_s, E_s)$, where vertices $V_s$ represent devices (transistors, resistors, capacitors) and edges $E_s$ represent electrical connections (nets). ALIGN executes a subgraph isomorphism algorithm to match subgraphs in $G_s$ against a library of pre-defined template circuits $T$:
+\begin{equation}
+    g \subseteq G_s \text{ matches } T_{\text{diff\_pair}} \implies \text{group devices into hierarchical block}
+\end{equation}
+The subgraph isomorphism problem searches for a bijective mapping $\phi: V(T) \to V(g)$ such that if $(u, v) \in E(T)$, then $(\phi(u), \phi(v)) \in E(g)$. Because this problem is NP-complete, ALIGN utilizes heuristic matching rules based on transistor terminal types (Gate, Source, Drain) and device parameters (width, length, fingers) to reduce the search complexity.
+
+Once hierarchy is detected, ALIGN maps design rules onto discrete layout grids. By mapping track spacings and cell boundaries to a uniform grid, the continuous coordinate space is discretized, reducing the complexity of the subsequent placement phase.
+
+In the final stage, ALIGN places blocks and routes interconnects using deterministic Integer Linear Programming (ILP) and A* routing heuristics. The placer minimizes the bounding box area and total wire length under strict boundary and symmetry line constraints. The placement problem for a set of modules $M$ is formulated as finding coordinates $(X_i, Y_i)$ for each module $M_i$ to minimize:
+\begin{equation}
+    \text{Minimize } \left( \text{Area} + \lambda \sum_{(i,j) \in \text{Nets}} \text{WireLength}_{ij} \right)
+\end{equation}
+subject to non-overlapping and symmetry constraints. For a symmetric pair of modules $M_a$ and $M_b$ with symmetry axis $X_{\text{sym}}$, the constraint is written as:
+\begin{equation}
+    X_a + X_b + W_b = 2 \cdot X_{\text{sym}}
+\end{equation}
+where $W_b$ is the width of module $M_b$. Non-overlapping between module $M_i$ and $M_j$ is enforced using binary variables $p_{ij}$ and $q_{ij}$:
+\begin{align}
+    X_i + W_i &\le X_j + \mathcal{M}(1 - p_{ij}) \\
+    X_j + W_j &\le X_i + \mathcal{M} \cdot p_{ij} \\
+    Y_i + H_i &\le Y_j + \mathcal{M}(1 - q_{ij}) \\
+    Y_j + H_j &\le Y_i + \mathcal{M} \cdot q_{ij}
+\end{align}
+where $W_i, H_i$ represent the width and height of module $M_i$, and $\mathcal{M}$ is a sufficiently large positive constant.
+
+While ALIGN demonstrated the feasibility of fully algorithmic generation, it exhibits limitations in handling manual design intents and designer-driven modifications. The system acts as a "black-box" compiler. Once the SPICE file is ingested, the pipeline runs to completion without human intervention. If the resulting placement is sub-optimal or if the designer wishes to adjust a specific device's orientation, the entire compiler must be re-run, with no mechanism for local, interactive adjustments.
+
+\subsection{BAG: Berkeley Analog Generator}
+
+The Berkeley Analog Generator (BAG)~\cite{align} takes a procedural, generator-based approach to layout automation. Rather than compiling an arbitrary netlist, BAG requires circuit designers to write parameterized Python scripts that describe both the circuit sizing equations and the physical layout templates. BAG defines a unified framework where:
+\begin{itemize}
+    \item Layout parameters (such as number of fingers, transistor width, and routing track assignments) are computed dynamically based on performance specifications.
+    \item A parameterized layout engine uses code templates to draw geometric shapes in the target PDK.
+\end{itemize}
+
+To achieve process portability, BAG introduces a virtual routing grid. Instead of specifying wires in physical nanometers, layouts are drawn in terms of tracks on specific routing layers. Let $T_k$ be track number $k$ on layer $L$. The physical center of track $T_k$ is calculated as:
+\begin{equation}
+    y(k) = Y_0 + k \cdot P_{\text{layer}}
+\end{equation}
+where $Y_0$ is the layer coordinate offset and $P_{\text{layer}}$ is the track pitch. The layout engine automatically translates these track coordinates to PDK-specific design rules during GDSII export.
+
+The major drawback of BAG is its extremely high setup overhead. Designers must write complex code templates for every new circuit topology, effectively shifting the bottleneck from manual layout drawing to manual template programming. Furthermore, BAG templates are highly process-specific; migrating a design from a planar bulk CMOS process to a FinFET process requires completely rewriting the layout generation code due to different physical structures and routing requirements.
+
+\subsection{Comparison of Template-Based and Compiling Approaches}
+
+The trade-offs between template-based (procedural) layout generation and compile-based automated layout generation are significant. In template-based generators like BAG, layout correctness is enforced by construction. The layout script is designed by an expert developer who knows the technology constraints, spacing rules, and parasitic concerns. Therefore, the resulting layout is highly optimized for performance and is guaranteed to pass DRC. However, the development time for a single complex generator (like a high-speed ADC component or a phase-locked loop) can exceed several months. 
+
+Conversely, compiler-based methods like ALIGN abstract the physical layer completely. The designer only supplies a SPICE netlist. The compiler uses graph algorithms and solvers to find coordinates automatically. While this minimizes setup time, the resulting layout is often less compact than a custom layout and can contain sub-optimal routing paths that degrade analog performance. This discrepancy highlights the need for an interactive approach where the compiler generates the initial layout but allows the designer to make local, fine-grained updates.
+
+% ==============================================================================
+\section{Constraint-Driven and AI-Enabled Frameworks}
+\label{sec:lit_constraints}
+
+In advanced process nodes, layout parasitics and layout dependent effects (LDE) play a dominant role in determining circuit performance. As highlighted in the review by Wang et al.~\cite{rfit_review}, classical automation tools fail to capture these sensitivities, resulting in multiple layout-to-simulation iterations.
+
+To resolve this issue, the Intel team proposed CDLS (Constraint Driven Generative AI Framework)~\cite{cdls}. CDLS uses generative AI and machine learning models to analyze schematic intent and automatically generate optimal placement and routing constraints. Instead of directly placing cells, the AI generates rules (such as matching constraints, spacing parameters, and symmetry axes) that drive a downstream physical engine.
+
+\begin{thesisremark}{Significance of Constraint-Driven Layout (CDLS)}
+  The CDLS framework~\cite{cdls} establishes that generative AI models are most effective when generating high-level placement constraints rather than detailed, micron-level coordinates. This validates the decoupled design approach, where strategic decisions are separated from physical execution.
+\end{thesisremark}
+
+By focusing on constraint generation rather than direct coordinate generation, CDLS avoids the pitfalls of sub-micron coordinate failures. The AI model is trained on a dataset of circuit designs where layout constraints were manually specified by expert designers. During inference, the model recognizes equivalent electrical environments in the new schematic and outputs constraints in a structured text format (e.g., XML or JSON). 
+
+These constraints are then parsed by a traditional, deterministic placer. However, CDLS remains a unidirectional flow; if the physical placer fails to find a solution that satisfies all the AI-generated constraints, the loop breaks, requiring manual intervention to relax constraints. Furthermore, CDLS does not support interactive editing or real-time layout feedback, limiting its usability in practical design environments.
+
+\subsection{CDLS Constraint Parsing and Downstream Verification}
+
+The primary bottleneck in constraint-driven frameworks like CDLS is the verification of constraint feasibility. When the AI model parses a netlist, it generates a set of geometric constraints:
+\begin{equation}
+    \mathbf{C} = \{ c_1, c_2, \dots, c_m \}
+\end{equation}
+where each $c_k$ represents a constraint such as symmetry, alignment, or separation. 
+
+The downstream physical placer translates these constraints into mathematical bounding inequalities. However, because these inequalities are non-convex and highly interdependent, there is no guarantee that a feasible region exists. For instance, a constraint enforcing symmetry between two devices may conflict with a constraint requiring one of those devices to be placed adjacent to a well edge to minimize well proximity effects. When conflicts occur, the solver fails to converge, or output layouts violate spacing rules. Resolving this issue requires a closed-loop critic system that can detect constraint failures and iteratively relax or modify the constraint parameters.
+
+% ==============================================================================
+\section{Machine Learning for Layout Quality Prediction}
+\label{sec:lit_quality}
+
+A key challenge in analog layout is evaluating whether a placement is "good" prior to running complete routing and post-layout parasitic extraction. Chang et al.~\cite{nasplacement} addressed this by proposing a machine learning framework for predicting analog placement quality.
+
+Recognizing that different circuit topologies (e.g., amplifiers vs. comparators) are sensitive to different metrics (e.g., common-mode rejection ratio vs. offset voltage), the authors leverage \textit{Neural Architecture Search (NAS)}. Rather than training a single static model, their system searches a Directed Acyclic Graph (DAG) of neural layers to construct customized prediction models for each circuit family. This approach enables early layout validation, helping to identify placement problems before executing the routing phase.
+
+The system works by extracting graph-based features from both the schematic netlist and the candidate placement. For each device, local features such as WPE bounding boxes, STI active lengths, and expected interconnect lengths are compiled. The GNN learns vector representations (embeddings) $\mathbf{h}_v$ for each circuit component $v \in V_s$ by message passing:
+\begin{equation}
+    \mathbf{h}_v^{(k+1)} = \text{Update}^{(k)}\left(\mathbf{h}_v^{(k)}, \text{Aggregate}^{(k)}\left(\left\{\mathbf{h}_u^{(k)}, \forall u \in \mathcal{N}(v)\right\}\right)\right)
+\end{equation}
+where $\mathcal{N}(v)$ represents the neighbors of node $v$, and $k$ is the iteration index. The final layout quality score is predicted using a pooling layer over the graph nodes.
+
+The NAS controller searches for the optimal combination of features and neural network layers to predict post-layout performance degradation ($\Delta \text{Gain}$, $\Delta \text{Phase Margin}$) with high accuracy. While this provides valuable feedback, it is primarily diagnostic; it tells the designer *if* a layout is bad, but it does not automatically fix the placement errors.
+
+\subsection{LDE Influence on Circuit Sensitivity Parameters}
+
+In advanced process nodes, layout-dependent effects (LDE) such as Well Proximity Effect (WPE) and Shallow Trench Isolation (STI) mechanical stress have a direct impact on the electrical characteristics of transistors. The threshold voltage shift $\Delta V_{th}$ and mobility variation $\Delta \mu$ alter the small-signal parameters of matched devices, degrading circuit performance. 
+
+    \begin{thesiscallout}{Input-Referred Offset and Gain Sensitivity under LDE}
+    For a differential pair, the input-referred offset voltage $\Delta V_{os}$ is defined as:
+    \begin{equation}
+        \Delta V_{os} = \Delta V_{th} + \frac{V_{gs} - V_{th}}{2} \left( \frac{\Delta \beta}{\beta} \right)
+    \end{equation}
+    where $\beta = \mu C_{ox} (W/L)$ is the transistor transconductance parameter. Under asymmetric WPE/STI conditions, the mismatch between the two input devices increases, leading to a significant input-referred offset voltage. 
+
+    Similarly, the voltage gain $A_v$ of a differential amplifier is given by:
+    \begin{equation}
+        A_v = g_m \cdot (r_{o1} \parallel r_{o2})
+    \end{equation}
+    Because the transconductance $g_m$ is proportional to carrier mobility $\mu$:
+    \begin{equation}
+        g_m = \sqrt{2 \mu C_{ox} \frac{W}{L} I_d}
+    \end{equation}
+    STI stress directly modulates $g_m$ and the output resistance $r_o$, leading to gain degradation and phase margin shifts. Therefore, automated placers must model these stress-induced variations during the initial placement phase rather than relying on post-layout simulations.
+    \end{thesiscallout}
+
+\subsection{Reinforcement Learning in Floorplanning}
+
+To address the limitations of diagnostic ML models, reinforcement learning (RL) has been applied to analog floorplanning. In this paradigm, the placement task is modeled as a Markov Decision Process (MDP) defined by the tuple $\langle \mathcal{S}, \mathcal{A}, \mathcal{P}, \mathcal{R}, \gamma \rangle$:
+\begin{itemize}
+    \item \textbf{State Space $\mathcal{S}$:} Represents the current partial placement layout configuration, including occupied grid slots, pin locations, and net connections.
+    \item \textbf{Action Space $\mathcal{A}$:} Defines the actions available to the placement agent, such as placing a device in a slot, changing a device's orientation, or inserting a dummy transistor.
+    \item \textbf{Reward Function $\mathcal{R}$:} Encourages area minimization and constraint satisfaction while penalizing DRC violations and wirelength:
+    \begin{equation}
+        \mathcal{R} = - \left( w_{\text{area}} \cdot \text{Area} + w_{\text{wire}} \cdot \text{WireLength} + w_{\text{DRC}} \cdot N_{\text{viol}} \right)
+    \end{equation}
+    where $N_{\text{viol}}$ is the number of design rule violations.
+\end{itemize}
+A policy network $\pi_{\theta}(a|s)$ is trained using policy gradient methods (e.g., PPO) to maximize the expected cumulative reward:
+\begin{equation}
+    J(\theta) = \mathbb{E}_{\pi_{\theta}}\left[ \sum_{t=0}^{T} \gamma^t \mathcal{R}_t \right]
+\end{equation}
+Although RL models can find placements that minimize cost functions, they struggle with high-dimensional constraint spaces and fail to handle natural language instructions from designers.
+
+% ==============================================================================
+\section[Interactive LLM Co-Pilots]{Interactive LLM and Agent-Based Co-Pilots}
+\label{sec:lit_llms}
+
+The emergence of Large Language Models has introduced new paradigms for human-in-the-loop CAD tools. Two primary frameworks in this space are GLayout~\cite{glayout} and LayoutCopilot~\cite{layoutcopilot}.
+
+\subsection{GLayout: Technology-Generic Text Representations}
+
+GLayout~\cite{glayout} proposes representing physical layouts using a generic, text-based syntax. By describing layout geometries, device unrolling, and routing templates in text, GLayout enables LLMs to process analog layouts. The authors fine-tuned quantized LLMs (ranging from 3.8B to 22B parameters) using Retrieval-Augmented Generation (RAG) and in-context learning. This approach allows the models to generate placements for unseen circuits based on textual PDK guidelines.
+
+GLayout's key strength is technology-generic layout generation. By translating PDK geometry parameters (like minimum gate spacing and metal widths) into natural-language tokens, the LLM can apply placement rules to different technology nodes without retraining. 
+
+However, GLayout relies on text compilation, which lacks a direct visual interface, making it difficult for designers to verify placements interactively. Moreover, direct coordinate generation by LLMs is prone to precision errors and rounding violations.
+
+\subsection{LayoutCopilot: Multi-Agent Collaboration}
+
+LayoutCopilot~\cite{layoutcopilot} (developed by Peking University) focuses on interactive layout editing. It introduces a multi-agent framework powered by LLMs that converts natural language commands into executable layout tool scripts. The flow of LayoutCopilot is illustrated in Figure~\ref{fig:layoutcopilot_flow}.
+
+\begin{figure}[H]
+    \centering
+    \fbox{\begin{tikzpicture}[
+        node distance=1.5cm and 0.55cm,
+        usercmd/.style={draw=CodeGreen, fill=CodeGreen!10, text=CodeGreen!60!black, thick, rounded corners, minimum width=2.3cm, minimum height=1.1cm, align=center, font=\small\sffamily\bfseries, drop shadow={shadow xshift=1.5pt, shadow yshift=-1.5pt, fill=black!15}},
+        agent/.style={draw=RoyalBlue, fill=LightBlueBg, text=AcademicBlue, thick, rounded corners, minimum width=2.3cm, minimum height=1.1cm, align=center, font=\small\sffamily\bfseries, drop shadow={shadow xshift=1.5pt, shadow yshift=-1.5pt, fill=black!15}},
+        db/.style={draw=WarmGold, fill=PaleGold!30, cylinder, shape border rotate=90, minimum width=2.0cm, minimum height=1.3cm, align=center, font=\small\sffamily\bfseries, drop shadow={shadow xshift=1.5pt, shadow yshift=-1.5pt, fill=black!15}},
+        critic/.style={draw=WarmGold, fill=PaleGold!20, text=AcademicBlue, thick, rounded corners, minimum width=2.3cm, minimum height=1.1cm, align=center, font=\small\sffamily\bfseries, drop shadow={shadow xshift=1.5pt, shadow yshift=-1.5pt, fill=black!15}},
+        arrow/.style={-Latex, line width=1.3pt, draw=AcademicBlue}
+    ]
+        % Nodes
+        \node[usercmd] (user) {User Command \\ (Natural Language)};
+        \node[agent, right=of user] (planner) {Planner Agent \\ (Intent \& \\ Command Synthesis)};
+        \node[agent, right=of planner] (exec) {Execution Engine \\ (Tool Scripts / \\ Command Queue)};
+        \node[db, below=of exec] (db) {Layout Database \\ (GDS/OpenAccess)};
+        \node[critic, below=of planner] (feedback) {DRC/LVS Evaluator \\ (Critic Feedback)};
+
+        % Connections
+        \draw[arrow] (user) -- (planner);
+        \draw[arrow] (planner) -- (exec);
+        \draw[arrow] (exec) -- (db);
+        \draw[arrow] (db) -- (feedback);
+        \draw[arrow] (feedback) -- (planner);
+    \end{tikzpicture}}
+    \caption{The Multi-Agent Collaborative Flow of LayoutCopilot.}
+    \label{fig:layoutcopilot_flow}
+\end{figure}
+
+LayoutCopilot organizes agents into specific roles:
+\begin{itemize}
+    \item \textbf{Planner Agent:} Interprets high-level designer commands and outlines a sequence of moves.
+    \item \textbf{Tool Executor Agent:} Translates the plan into tool commands (e.g., SKILL, TCL, or XML scripts).
+    \item \textbf{Critic Agent:} Evaluates geometric clearances and provides corrections.
+\end{itemize}
+This multi-agent organization allows LayoutCopilot to handle interactive layout adjustments, bridging the usability gap of complex CAD software. The sequence of agent communication during an interactive layout session is shown in Figure~\ref{fig:agent_sequence}.
+
+\begin{figure}[H]
+    \centering
+    \fbox{\begin{tikzpicture}[
+        node distance=2cm,
+        lbl/.style={draw=AcademicBlue, fill=LightBlueBg, text=AcademicBlue, font=\small\sffamily\bfseries, minimum width=2.0cm, minimum height=0.7cm, align=center, rounded corners=3pt, drop shadow={shadow xshift=1pt, shadow yshift=-1pt, fill=black!15}},
+        line/.style={draw=AcademicBlue, line width=1pt, dashed},
+        cmdarrow/.style={-Latex, line width=1.2pt, draw=CodeGreen},
+        planarrow/.style={-Latex, line width=1.2pt, draw=RoyalBlue},
+        feedbackarrow/.style={-Latex, line width=1.2pt, draw=WarmGold}
+    ]
+        % Lifelines
+        \node (user) [lbl] {Designer};
+        \node (planner) [lbl, right=2.2cm of user] {Planner};
+        \node (exec) [lbl, right=2.2cm of planner] {Executor};
+        \node (critic) [lbl, right=2.2cm of exec] {Critic};
+
+        \draw[line] (user) -- ++(0,-4.5);
+        \draw[line] (planner) -- ++(0,-4.5);
+        \draw[line] (exec) -- ++(0,-4.5);
+        \draw[line] (critic) -- ++(0,-4.5);
+
+        % Messages
+        \draw[cmdarrow] ($(user)+(0,-1)$) -- ($(planner)+(0,-1)$) node[midway, above, font=\scriptsize\bfseries\sffamily\color{CodeGreen!60!black}] {1. Natural Language Cmd};
+        \draw[planarrow] ($(planner)+(0,-1.8)$) -- ($(exec)+(0,-1.8)$) node[midway, above, font=\scriptsize\bfseries\sffamily\color{RoyalBlue}] {2. Command Synthesis};
+        \draw[planarrow] ($(exec)+(0,-2.6)$) -- ($(critic)+(0,-2.6)$) node[midway, above, font=\scriptsize\bfseries\sffamily\color{RoyalBlue}] {3. Layout Draft (GDS)};
+        \draw[feedbackarrow] ($(critic)+(0,-3.4)$) -- ($(planner)+(0,-3.4)$) node[midway, above, font=\scriptsize\bfseries\sffamily\color{WarmGold}] {4. DRC/LVS Feedback};
+        \draw[cmdarrow] ($(planner)+(0,-4.2)$) -- ($(user)+(0,-4.2)$) node[midway, above, font=\scriptsize\bfseries\sffamily\color{CodeGreen!60!black}] {5. Refined Design};
+    \end{tikzpicture}}
+    \caption{Agent Communication Sequence in Interactive Layout Design.}
+    \label{fig:agent_sequence}
+\end{figure}
+
+However, LayoutCopilot does not solve the physical layout compaction problem. It acts as a translator, converting natural language commands into CAD commands. If the starting layout has spacing violations or if the designer requests a tight placement, the LLM must calculate the sub-micron coordinate spacing itself, which often leads to grid mismatch and DRC failures due to the model's limited spatial reasoning.
+
+% ==============================================================================
+\section{Comparative Analysis of Literature}
+\label{sec:lit_comparison}
+
+Table~\ref{tab:lit_comparison} summarizes the differences between existing automation frameworks and the multi-stage system proposed in this thesis.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Comparative Summary of Analog Layout Automation Methods.}
+    \label{tab:lit_comparison}
+    \begin{tabularx}{\textwidth}{l p{2.2cm} p{2.2cm} p{2.2cm} X}
+        \toprule
+        \textbf{Framework} & \textbf{Methodology} & \textbf{Input Interface} & \textbf{Target Verification} & \textbf{Interaction Paradigm} \\
+        \midrule
+        \textbf{ALIGN}~\cite{align} & Graph Matching + ILP Placer & SPICE Netlist & Grid-based DRC & Black-box; batch compiler. \\
+        \textbf{CDLS}~\cite{cdls} & GenAI + Optimization & Schematics & LDE \& Simulation & Constraint generator. \\
+        \textbf{GLayout}~\cite{glayout} & RAG + Fine-tuned LLMs & Natural Language & Technology DRC & Textual code compilation. \\
+        \textbf{LayoutCopilot}~\cite{layoutcopilot} & Multi-Agent LLMs & Natural Language & Layout Database & Chatbot editing. \\
+        \textbf{This Work} & LangGraph + Abutment Compactor & SPICE + Template Layouts & Sub-micron DRC \& OpenAccess LVS & Dual-mode: Local PySide6 GUI Chatbot \& MCP Server. \\
+        \bottomrule
+    \end{tabularx}
+\end{table}
+
+As shown in the comparison, our work builds upon the interactive concepts of LayoutCopilot~\cite{layoutcopilot} and the structural matching of ALIGN~\cite{align}, while introducing a physical diffusion compaction engine to produce high-density, simulation-ready layout outputs. 
+
+By separating the LLM reasoning layer from the physical coordinate compiler, our system ensures perfect design rule compliance while supporting interactive editing and natural-language commands. This decoupled compiler model is detailed in Chapter 3.

@@ -99,7 +99,7 @@ def _find_finger_ids(logical_id: str, nodes: List[dict]) -> List[str]:
 
     Tries three strategies:
     1. Node has a '_fingers' list.
-    2. Prefix match: node id starts with logical_id + '_f'.
+    2. Prefix/parent match: parse node id and match its base/parent name.
     3. Exact match (single-finger device).
     """
     # Strategy 1: explicit _fingers list on a logical node
@@ -107,13 +107,16 @@ def _find_finger_ids(logical_id: str, nodes: List[dict]) -> List[str]:
         if str(n.get("id", "")) == logical_id and "_fingers" in n:
             return [str(f) for f in n["_fingers"] if f]
 
-    # Strategy 2: prefix match on physical finger nodes
-    prefix = logical_id + "_f"
-    prefix_matches = [
-        str(n["id"]) for n in nodes
-        if str(n.get("id", "")).startswith(prefix)
-    ]
+    # Strategy 2: prefix/parent match using _parse_id
+    from ai_agent.placement.finger_grouper import _parse_id
+    prefix_matches = []
+    for n in nodes:
+        nid = str(n.get("id", ""))
+        parent, _, _ = _parse_id(nid)
+        if parent == logical_id:
+            prefix_matches.append(nid)
     if prefix_matches:
+        # Sort them physically or alphabetically to maintain layout consistency
         return sorted(prefix_matches)
 
     # Strategy 3: exact match (single finger or already physical)
@@ -302,6 +305,15 @@ def node_symmetry_enforcer(state: dict) -> dict:
     vprint("  STAGE 3.5: SYMMETRY ENFORCER", flush=True)
     vprint("-" * 60, flush=True)
 
+    # Check if independent row optimization is active
+    # We now support symmetry enforcement even with independent rows mode
+    # by applying row-aware symmetry that preserves abutment
+    import os
+    enable_independent = os.environ.get("ENABLE_INDEPENDENT_ROWS", "1").lower() in ("1", "true", "yes")
+    if enable_independent:
+        vprint("[SYMM] ENABLE_INDEPENDENT_ROWS=1 -- applying row-aware symmetry enforcement")
+        # Continue with symmetry enforcement below, but use row-aware logic
+
     # ── Respect placement_goals: skip when symmetry priority is Low ──────
     goals = state.get("placement_goals")      # None = panel was not opened
     if goals is not None:
@@ -361,7 +373,8 @@ def node_symmetry_enforcer(state: dict) -> dict:
 
     # Snap positions back to grid, regenerate correct fillers, and legalize rows
     no_abutment_flag = state.get("no_abutment", False)
-    working = _resolve_row_overlaps(working, no_abutment_flag, preserve_order=True)
+    terminal_nets = state.get("terminal_nets", {})
+    working = _resolve_row_overlaps(working, no_abutment_flag, preserve_order=True, terminal_nets=terminal_nets)
     working = legalize_vertical_rows(working)
 
     elapsed = time.time() - t0

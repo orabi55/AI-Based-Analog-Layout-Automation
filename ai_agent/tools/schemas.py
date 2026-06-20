@@ -799,7 +799,139 @@ _PLACE_SEQUENCE = {
     },
 }
 
+_SWAP_ROWS = {
+    "name": "swap_rows",
+    "description": (
+        "Swap all devices between two different row y-coordinates in the layout. "
+        "Useful for rapidly changing the relative vertical placement of entire rows."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "row_y1": _prop("number", "Y coordinate of the first row in µm"),
+            "row_y2": _prop("number", "Y coordinate of the second row in µm"),
+        },
+        "required": ["row_y1", "row_y2"],
+    },
+}
+
+_INSERT_GUARD_RING = {
+    "name": "insert_guard_ring",
+    "description": (
+        "Add an automated substrate isolation guard ring around the selected group of devices or around "
+        "the entire layout bounding box. Places ptap cells for NMOS / p-substrate and ntap cells for PMOS / n-well."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "group_node_ids": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Optional list of device IDs to surround. If empty/omitted, surrounds the entire layout.",
+            },
+            "ring_type": _prop("string", "Type of tap cell to place: 'ptap', 'ntap', or 'both' (default 'ptap')"),
+            "spacing_um": _prop("number", "Distance from device boundary to the guard ring in micrometers (default 0.5)"),
+            "tap_width_um": _prop("number", "Width of each tap cell in micrometers (default 0.294)"),
+        },
+        "required": [],
+    },
+}
+
+_HIGHLIGHT_DEVICE_NET = {
+    "name": "highlight_device_net",
+    "description": "Highlight terminal labels connected to a specific net and dim other devices on the canvas.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "net_name": _prop("string", "Name of the net to highlight, e.g. 'VDD', 'GND', 'clk'"),
+        },
+        "required": ["net_name"],
+    },
+}
+
+_DRAW_SYMMETRY_AXIS = {
+    "name": "draw_symmetry_axis",
+    "description": "Draw a dashed symmetry line overlay at a specific X or Y coordinate on the canvas.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "x_um": _prop("number", "X coordinate in micrometers for a vertical symmetry line"),
+            "y_um": _prop("number", "Y coordinate in micrometers for a horizontal symmetry line"),
+            "color": _prop("string", "Hex color string for the axis line (default '#00e5ff')"),
+        },
+        "required": [],
+    },
+}
+
+_CLEAR_CANVAS_DECORATIONS = {
+    "name": "clear_canvas_decorations",
+    "description": "Clear all net highlights, color overrides, and drawn symmetry axes from the editor canvas.",
+    "input_schema": {"type": "object", "properties": {}, "required": []},
+}
+
+_APPLY_RAG_STYLE_MIGRATION = {
+    "name": "apply_rag_style_migration",
+    "description": (
+        "Replicate a high-quality interdigitated or common-centroid analog matching style retrieved "
+        "from the ChromaDB vector database, and apply it to target device IDs."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "style_query": _prop("string", "Description of the target style or matching pattern, e.g. 'diff pair common centroid'"),
+            "target_device_ids": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "List of target device IDs to apply the style to.",
+            },
+        },
+        "required": ["style_query", "target_device_ids"],
+    },
+}
+
+_RECONFIGURE_FLOORPLAN = {
+    "name": "reconfigure_floorplan",
+    "description": "Reconfigure the layout floorplan grid: adjust row heights, row pitches, or distribute devices across a new number of rows.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "aspect_ratio": _prop("number", "Optional target aspect ratio (width/height) or number of rows to pack nodes into"),
+            "row_height": _prop("number", "Optional vertical height of each row in micrometers"),
+            "row_pitch": _prop("number", "Optional spacing/pitch between rows in micrometers"),
+        },
+        "required": [],
+    },
+}
+
+_SHIELD_NET = {
+    "name": "shield_net",
+    "description": "Shield a critical net (like a clock or sensitive signal path) by inserting dummy isolation cells or empty space channels next to it.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "net_name": _prop("string", "Name of the critical net to shield"),
+            "shield_type": _prop("string", "Type of shielding: 'dummy' (places dummy cells) or 'empty_space' (creates spacing channels, default 'dummy')"),
+            "width_um": _prop("number", "Width of the shield/channel in micrometers (default 0.294)"),
+        },
+        "required": ["net_name"],
+    },
+}
+
+_PREVIEW_LAYOUT_GDS = {
+    "name": "preview_layout_gds",
+    "description": "Render and display a high-fidelity physical KLayout GDS/OAS preview image directly inside the chat panel.",
+    "input_schema": {"type": "object", "properties": {}, "required": []},
+}
+
 TOOL_REGISTRY: list = [
+    _INSERT_GUARD_RING,
+    _HIGHLIGHT_DEVICE_NET,
+    _DRAW_SYMMETRY_AXIS,
+    _CLEAR_CANVAS_DECORATIONS,
+    _APPLY_RAG_STYLE_MIGRATION,
+    _RECONFIGURE_FLOORPLAN,
+    _SHIELD_NET,
+    _PREVIEW_LAYOUT_GDS,
     # Layout inspection
     _READ_LAYOUT,
     _LIST_DEVICES,
@@ -810,6 +942,7 @@ TOOL_REGISTRY: list = [
     _MOVE_DEVICE,
     _PLACE_SEQUENCE,
     _SWAP_DEVICES,
+    _SWAP_ROWS,
     _FLIP_DEVICE,
     _DELETE_DEVICE,
     _ALIGN_DEVICES,

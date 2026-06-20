@@ -12,7 +12,7 @@ from parser.layout_reader import extract_layout_instances_from_library
 
 
 def test_orchestrated_request_propagates_selected_model(monkeypatch):
-    from ai_agent.ai_chat_bot.llm_worker import OrchestratorWorker
+    from ai_agent.llm.workers import OrchestratorWorker
 
     seen = {}
 
@@ -20,16 +20,26 @@ def test_orchestrated_request_propagates_selected_model(monkeypatch):
         seen["classifier_model"] = selected_model
         return "question"
 
-    def fake_run_llm(chat_messages, full_prompt, selected_model="Gemini", task_weight="light"):
+    def fake_invoke_with_retry(messages, selected_model, task_weight, stage_tag):
         seen["reply_model"] = selected_model
         seen["task_weight"] = task_weight
-        return "ok"
+        # Create a mock response object
+        class MockResponse:
+            content = "ok"
+        return MockResponse()
 
     monkeypatch.setattr(
-        "ai_agent.ai_chat_bot.agents.classifier.classify_intent",
+        "ai_agent.agents.classifier.classify_intent",
         fake_classify_intent,
     )
-    monkeypatch.setattr("ai_agent.ai_chat_bot.run_llm.run_llm", fake_run_llm)
+    monkeypatch.setattr(
+        "ai_agent.graph.builder.classify_intent",
+        fake_classify_intent,
+    )
+    monkeypatch.setattr(
+        "ai_agent.nodes.general_chatbot._invoke_with_retry",
+        fake_invoke_with_retry,
+    )
 
     worker = OrchestratorWorker()
     replies = []
@@ -92,9 +102,26 @@ def test_package_import_of_main_window():
 
 
 def test_layout_reader_can_return_reference_metadata_for_export():
-    lib = gdstk.read_oas("examples/std_cell/Std_Cell.oas")
-    devices = extract_layout_instances_from_library(lib, include_references=True)
+    import tempfile
+    import os
 
-    assert devices
-    assert "reference" in devices[0]
-    assert "parent_transform" in devices[0]
+    # Create a dummy library with a cell and a reference
+    lib = gdstk.Library()
+    cell = lib.new_cell("TEST_CELL")
+    ref_cell = lib.new_cell("nfet_pcell")
+    ref_cell.add(gdstk.rectangle((0, 0), (1, 1)))
+    cell.add(gdstk.Reference(ref_cell, (0, 0)))
+
+    temp_fd, temp_path = tempfile.mkstemp(suffix=".oas")
+    os.close(temp_fd)
+    try:
+        lib.write_oas(temp_path)
+        read_lib = gdstk.read_oas(temp_path)
+        devices = extract_layout_instances_from_library(read_lib, include_references=True)
+
+        assert devices
+        assert "reference" in devices[0]
+        assert "parent_transform" in devices[0]
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)

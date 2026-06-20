@@ -408,8 +408,36 @@ def get_layout_bounds(nodes: list) -> LayoutToolResult:
 
 
 # ---------------------------------------------------------------------------
+# swap_rows
+# ---------------------------------------------------------------------------
+
+@wrap_tool
+def swap_rows(nodes: list, row_y1: float, row_y2: float) -> LayoutToolResult:
+    """Swap the Y coordinates of all devices that reside on row_y1 and row_y2."""
+    updated = copy.deepcopy(nodes)
+    count = 0
+    for n in updated:
+        if "geometry" not in n:
+            continue
+        ny = float(n["geometry"].get("y", 0.0))
+        if abs(ny - row_y1) < 1e-3:
+            n["geometry"]["y"] = float(row_y2)
+            count += 1
+        elif abs(ny - row_y2) < 1e-3:
+            n["geometry"]["y"] = float(row_y1)
+            count += 1
+            
+    return LayoutToolResult(
+        success=True,
+        message=f"Swapped {count} devices between row {row_y1:.3f} and {row_y2:.3f}",
+        changed=count > 0,
+        nodes=updated,
+    )
+
+# ---------------------------------------------------------------------------
 # place_sequence
 # ---------------------------------------------------------------------------
+
 
 @wrap_tool
 def place_sequence(
@@ -563,3 +591,220 @@ def match_devices(
         metrics={"technique": technique, "device_count": len(targets),
                  "parent_count": len(parents)},
     )
+
+
+@wrap_tool
+def reconfigure_floorplan(
+    nodes: list,
+    aspect_ratio: float = None,
+    row_height: float = None,
+    row_pitch: float = None,
+) -> LayoutToolResult:
+    """Reconfigure the layout floorplan grid: adjust row heights, row pitches, or distribute devices across a new number of rows."""
+    updated = copy.deepcopy(nodes)
+    
+    # 1. Gather all nodes with geometry
+    geom_nodes = [n for n in updated if isinstance(n.get("geometry"), dict)]
+    if not geom_nodes:
+        return LayoutToolResult(
+            success=False,
+            message="reconfigure_floorplan failed: no devices with geometry found.",
+            nodes=list(nodes),
+        )
+        
+    # Group devices by their current Y coordinate (row bands)
+    rows_dict = {}
+    for n in geom_nodes:
+        y = round(float(n["geometry"].get("y", 0.0)), 6)
+        rows_dict.setdefault(y, []).append(n)
+        
+    sorted_ys = sorted(rows_dict.keys())
+    
+    # 2. If row height and/or pitch are specified, vertically shift rows
+    height = float(row_height) if row_height is not None else 0.568
+    pitch = float(row_pitch) if row_pitch is not None else 0.240
+    
+    # Apply vertical heights and shift Ys
+    if row_height is not None or row_pitch is not None:
+        y_curr = sorted_ys[0]  # keep the bottommost row as reference anchor
+        for i, y in enumerate(sorted_ys):
+            for n in rows_dict[y]:
+                n["geometry"]["y"] = round(y_curr, 6)
+                n["geometry"]["height"] = round(height, 6)
+            if i < len(sorted_ys) - 1:
+                # PMOS rows are usually positive/above NMOS rows in symbolic coords
+                y_curr += height + pitch
+                
+    # 3. If aspect_ratio or grid redistribution is requested (represented as a target number of rows/packing)
+    if aspect_ratio is not None:
+        # Let's say aspect_ratio acts as a target number of rows.
+        # Ensure aspect_ratio is treated as integer representing target rows if <= 10, otherwise estimate target rows.
+        target_rows = int(round(aspect_ratio)) if aspect_ratio <= 10 else max(1, int(len(geom_nodes) ** 0.5 / aspect_ratio))
+        target_rows = max(1, target_rows)
+        
+        # Sort all devices horizontally (by X) to distribute them evenly
+        sorted_nodes = sorted(geom_nodes, key=lambda n: float(n["geometry"].get("x", 0.0)))
+        
+        # Chunk nodes into rows
+        chunk_size = max(1, len(sorted_nodes) // target_rows + (1 if len(sorted_nodes) % target_rows != 0 else 0))
+        
+        new_rows = []
+        for i in range(0, len(sorted_nodes), chunk_size):
+            new_rows.append(sorted_nodes[i:i+chunk_size])
+            
+        # Re-place sequentially row by row
+        y_curr = sorted_ys[0] if sorted_ys else 0.0
+        for row_idx, row_nodes in enumerate(new_rows):
+            cursor_x = 0.0
+            for node in row_nodes:
+                node["geometry"]["x"] = round(cursor_x, 6)
+                node["geometry"]["y"] = round(y_curr, 6)
+                node["geometry"]["height"] = round(height, 6)
+                cursor_x += float(node["geometry"].get("width", 0.294))
+            y_curr += height + pitch
+
+    return LayoutToolResult(
+        success=True,
+        message=f"Reconfigured floorplan: row_height={row_height}um, row_pitch={row_pitch}um, aspect_ratio={aspect_ratio}.",
+        changed=True,
+        nodes=updated,
+    )
+
+
+@wrap_tool
+def shield_net(
+    nodes: list,
+    net_name: str,
+    shield_type: str = "dummy",
+    width_um: float = 0.294,
+    terminal_nets: dict = None,
+    pdk: dict = None,
+) -> LayoutToolResult:
+    """Shield a critical net by placing dummy cells or shifting adjacent cells to create empty spacing channels."""
+    pdk = pdk or {}
+    terminal_nets = terminal_nets or {}
+    updated = copy.deepcopy(nodes)
+    
+    # 1. Identify all matched device IDs connected to net_name
+    matched_ids = set()
+    for n in updated:
+        nid = n.get("id")
+        if not nid:
+            continue
+        # Check node-level terminal nets
+        if (str(n.get("net_s")).lower() == net_name.lower() or 
+            str(n.get("net_d")).lower() == net_name.lower() or 
+            str(n.get("net_g")).lower() == net_name.lower()):
+            matched_ids.add(nid)
+            continue
+            
+        # Check global terminal nets dictionary
+        nets = terminal_nets.get(nid, {})
+        if (str(nets.get("S")).lower() == net_name.lower() or 
+            str(nets.get("D")).lower() == net_name.lower() or 
+            str(nets.get("G")).lower() == net_name.lower()):
+            matched_ids.add(nid)
+            
+    if not matched_ids:
+        return LayoutToolResult(
+            success=True,
+            message=f"No devices found connected to net '{net_name}'. No shielding added.",
+            changed=False,
+            nodes=list(nodes),
+        )
+        
+    # 2. Implement Spacing Channels (horizontal shifting in rows)
+    if shield_type == "empty_space":
+        # Group nodes by row Y coordinate
+        rows_dict = {}
+        for n in updated:
+            if not isinstance(n.get("geometry"), dict):
+                continue
+            y = round(float(n["geometry"].get("y", 0.0)), 6)
+            rows_dict.setdefault(y, []).append(n)
+            
+        for y, row_nodes in rows_dict.items():
+            # Sort horizontally
+            sorted_nodes = sorted(row_nodes, key=lambda n: float(n["geometry"].get("x", 0.0)))
+            
+            # Left and right shift offsets
+            offset = 0.0
+            for n in sorted_nodes:
+                nid = n.get("id")
+                # If this node needs shielding, shift it right by width_um (creating left spacing channel),
+                # and add width_um to subsequent offsets.
+                if nid in matched_ids:
+                    offset += width_um
+                    n["geometry"]["x"] = round(n["geometry"]["x"] + offset, 6)
+                    # Right spacing channel: all subsequent nodes will be shifted by another width_um
+                    offset += width_um
+                else:
+                    n["geometry"]["x"] = round(n["geometry"]["x"] + offset, 6)
+                    
+        return LayoutToolResult(
+            success=True,
+            message=f"Created physical spacing channels of {width_um}um around net '{net_name}'.",
+            changed=True,
+            nodes=updated,
+        )
+        
+    # 3. Implement Dummy Insertion
+    inserted_shields = []
+    ctr = 0
+    for n in updated:
+        nid = n.get("id")
+        if nid not in matched_ids:
+            continue
+        geom = n.get("geometry")
+        if not isinstance(geom, dict):
+            continue
+        x = float(geom.get("x", 0.0))
+        y = float(geom.get("y", 0.0))
+        w = float(geom.get("width", 0.294))
+        h = float(geom.get("height", 0.568))
+        
+        # Place Left dummy shield
+        ctr += 1
+        inserted_shields.append({
+            "id": f"SHIELD_{ctr}_L_{nid}_{net_name}",
+            "type": "tap",
+            "is_dummy": True,
+            "is_shield": True,
+            "color": "#7f8c8d",
+            "physical_only": True,
+            "geometry": {
+                "x": round(x - width_um, 6),
+                "y": y,
+                "width": width_um,
+                "height": h,
+                "orientation": "R0",
+            }
+        })
+        
+        # Place Right dummy shield
+        ctr += 1
+        inserted_shields.append({
+            "id": f"SHIELD_{ctr}_R_{nid}_{net_name}",
+            "type": "tap",
+            "is_dummy": True,
+            "is_shield": True,
+            "color": "#7f8c8d",
+            "physical_only": True,
+            "geometry": {
+                "x": round(x + w, 6),
+                "y": y,
+                "width": width_um,
+                "height": h,
+                "orientation": "R0",
+            }
+        })
+        
+    return LayoutToolResult(
+        success=True,
+        message=f"Shielded net '{net_name}' by inserting {len(inserted_shields)} dummy cell(s).",
+        changed=len(inserted_shields) > 0,
+        nodes=list(nodes) + inserted_shields,
+        metrics={"shields_inserted": len(inserted_shields)},
+    )
+
+

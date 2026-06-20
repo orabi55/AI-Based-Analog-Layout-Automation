@@ -1,71 +1,90 @@
-M5.m1 0.000 2.454 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M5.m2 0.882 2.454 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=1
-M5.m3 1.176 2.454 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=1
-M5.m4 2.058 2.454 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=0
-M4.m1 0.294 2.454 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=1
-M4.m2 0.588 2.454 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=1
-M4.m3 1.470 2.454 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=1
-M4.m4 1.764 2.454 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=1
-M3.m1 0.294 1.636 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M3.m2 0.882 1.636 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M3.m3 1.470 1.636 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M3.m4 2.058 1.636 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M3.m5 2.646 1.636 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M3.m6 3.234 1.636 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M3.m7 3.822 1.636 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M3.m8 4.410 1.636 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M2.m1 0.294 3.272 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M2.m2 0.882 3.272 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M2.m3 1.470 3.272 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M2.m4 2.058 3.272 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M2.m5 2.646 3.272 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M2.m6 3.234 3.272 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M2.m7 3.822 3.272 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M2.m8 4.410 3.272 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M1.m1 0.588 3.272 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M1.m2 1.176 3.272 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M1.m3 1.764 3.272 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M1.m4 2.352 3.272 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M1.m5 2.940 3.272 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M1.m6 3.528 3.272 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M1.m7 4.116 3.272 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M1.m8 4.704 3.272 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M0.m1 0.588 1.636 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M0.m2 1.176 1.636 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M0.m3 1.764 1.636 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M0.m4 2.352 1.636 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M0.m5 2.940 1.636 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M0.m6 3.528 1.636 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M0.m7 4.116 1.636 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M0.m8 4.704 1.636 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M9.m8 4.704 0.000 R0 l=0.028 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M9.m7 4.116 0.000 R0 l=0.028 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M9.m6 3.528 0.000 R0 l=0.028 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M9.m5 2.940 0.000 R0 l=0.028 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M9.m4 2.352 0.000 R0 l=0.028 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M9.m3 1.764 0.000 R0 l=0.028 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M9.m2 1.176 0.000 R0 l=0.028 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M9.m1 0.588 0.000 R0 l=0.028 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M8.m8 4.410 0.000 R0 l=0.028 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M8.m7 3.822 0.000 R0 l=0.028 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M8.m6 3.234 0.000 R0 l=0.028 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M8.m5 2.646 0.000 R0 l=0.028 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M8.m4 2.058 0.000 R0 l=0.028 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M8.m3 1.470 0.000 R0 l=0.028 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M8.m2 0.882 0.000 R0 l=0.028 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M8.m1 0.294 0.000 R0 l=0.028 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M10.m4 1.764 0.818 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=0
-M10.m3 1.470 0.818 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=1
-M10.m2 0.882 0.818 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=0
-M10.m1 0.588 0.818 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=1
-M7 0.000 0.818 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-M6 2.352 0.818 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0
-DUMMY EDGE_DUMMY_L_MM8_MM9_matched_0 nfet 0.000 0.000 R0 l=0.028 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 B=gnd!
-DUMMY EDGE_DUMMY_R_MM8_MM9_matched_17 nfet 4.998 0.000 R0 l=0.028 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 B=gnd!
-DUMMY EDGE_DUMMY_L_MM2_MM1_matched_0 pfet 0.000 3.272 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 B=vdd!
-DUMMY EDGE_DUMMY_R_MM2_MM1_matched_17 pfet 4.998 3.272 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 B=vdd!
-DUMMY EDGE_DUMMY_L_MM3_MM0_matched_0 pfet 0.000 1.636 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 B=vdd!
-DUMMY EDGE_DUMMY_R_MM3_MM0_matched_17 pfet 4.998 1.636 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 B=vdd!
-DUMMY FILLER_DUMMY_BRIDGE_0.818001_0_nmos nfet 0.294 0.818 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 multiplier=1 nf_per_device=1 D=net2<0> G=vss! S=VOUTN B=gnd!
-DUMMY FILLER_DUMMY_BRIDGE_0.818001_2_nmos nfet 1.176 0.818 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 multiplier=1 nf_per_device=1 D=net2<2> G=vss! S=net2<1> B=gnd!
-DUMMY FILLER_DUMMY_BRIDGE_0.818001_4_nmos nfet 2.058 0.818 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 multiplier=1 nf_per_device=1 D=VY G=vss! S=net2<3> B=gnd!
+M5.m1 0.350 2.454 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=0 D=VDD G=VOUTN S=VOUTP B=vdd!
+M5.m2 0.700 2.454 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=1 D=VOUTP G=VOUTN S=VDD B=vdd!
+M5.m3 0.770 2.454 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=0 D=VDD G=VOUTN S=VOUTP B=vdd!
+M5.m4 1.120 2.454 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=1 D=VOUTP G=VOUTN S=VDD B=vdd!
+M4.m1 0.490 2.454 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=1 D=VOUTN G=VOUTP S=VDD B=vdd!
+M4.m2 0.560 2.454 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=0 D=VDD G=VOUTP S=VOUTN B=vdd!
+M4.m3 0.910 2.454 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=1 D=VDD G=VOUTP S=VOUTN B=vdd!
+M4.m4 0.980 2.454 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=0 D=VOUTN G=VOUTP S=VDD B=vdd!
+M3.m1 0.070 1.636 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=0 D=VDD G=CLK S=VY B=vdd!
+M3.m2 0.350 1.636 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=VDD G=CLK S=VY B=vdd!
+M3.m3 0.630 1.636 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=VDD G=CLK S=VY B=vdd!
+M3.m4 0.910 1.636 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=VDD G=CLK S=VY B=vdd!
+M3.m5 1.190 1.636 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=VDD G=CLK S=VY B=vdd!
+M3.m6 1.470 1.636 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=VDD G=CLK S=VY B=vdd!
+M3.m7 1.750 1.636 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=VDD G=CLK S=VY B=vdd!
+M3.m8 2.030 1.636 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=VDD G=CLK S=VY B=vdd!
+M2.m1 0.070 3.272 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=0 D=VDD G=CLK S=VOUTP B=vdd!
+M2.m2 0.350 3.272 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=VDD G=CLK S=VOUTP B=vdd!
+M2.m3 0.630 3.272 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=VDD G=CLK S=VOUTP B=vdd!
+M2.m4 0.910 3.272 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=VDD G=CLK S=VOUTP B=vdd!
+M2.m5 1.190 3.272 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=VDD G=CLK S=VOUTP B=vdd!
+M2.m6 1.470 3.272 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=VDD G=CLK S=VOUTP B=vdd!
+M2.m7 1.750 3.272 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=VDD G=CLK S=VOUTP B=vdd!
+M2.m8 2.030 3.272 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=VDD G=CLK S=VOUTP B=vdd!
+M1.m1 0.210 3.272 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=VOUTN G=CLK S=VDD B=vdd!
+M1.m2 0.490 3.272 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=VOUTN G=CLK S=VDD B=vdd!
+M1.m3 0.770 3.272 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=VOUTN G=CLK S=VDD B=vdd!
+M1.m4 1.050 3.272 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=VOUTN G=CLK S=VDD B=vdd!
+M1.m5 1.330 3.272 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=VOUTN G=CLK S=VDD B=vdd!
+M1.m6 1.610 3.272 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=VOUTN G=CLK S=VDD B=vdd!
+M1.m7 1.890 3.272 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=VOUTN G=CLK S=VDD B=vdd!
+M1.m8 2.170 3.272 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=1 D=VOUTN G=CLK S=VDD B=vdd!
+M0.m1 0.210 1.636 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=VX G=CLK S=VDD B=vdd!
+M0.m2 0.490 1.636 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=VX G=CLK S=VDD B=vdd!
+M0.m3 0.770 1.636 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=VX G=CLK S=VDD B=vdd!
+M0.m4 1.050 1.636 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=VX G=CLK S=VDD B=vdd!
+M0.m5 1.330 1.636 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=VX G=CLK S=VDD B=vdd!
+M0.m6 1.610 1.636 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=VX G=CLK S=VDD B=vdd!
+M0.m7 1.890 1.636 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=VX G=CLK S=VDD B=vdd!
+M0.m8 2.170 1.636 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=1 D=VX G=CLK S=VDD B=vdd!
+M9.m8 2.170 -0.000 R0 l=0.028 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=1 D=VY G=VINN S=net2<3> B=gnd!
+M9.m7 1.890 -0.000 R0 l=0.028 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=VY G=VINN S=net2<2> B=gnd!
+M9.m6 1.610 -0.000 R0 l=0.028 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=VY G=VINN S=net2<1> B=gnd!
+M9.m5 1.330 -0.000 R0 l=0.028 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=VY G=VINN S=net2<0> B=gnd!
+M9.m4 1.050 -0.000 R0 l=0.028 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=VY G=VINN S=net2<3> B=gnd!
+M9.m3 0.770 -0.000 R0 l=0.028 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=VY G=VINN S=net2<2> B=gnd!
+M9.m2 0.490 -0.000 R0 l=0.028 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=VY G=VINN S=net2<1> B=gnd!
+M9.m1 0.210 -0.000 R0 l=0.028 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=VY G=VINN S=net2<0> B=gnd!
+M8.m8 2.030 -0.000 R0 l=0.028 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=net2<3> G=VINP S=VX B=gnd!
+M8.m7 1.750 -0.000 R0 l=0.028 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=net2<2> G=VINP S=VX B=gnd!
+M8.m6 1.470 -0.000 R0 l=0.028 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=net2<1> G=VINP S=VX B=gnd!
+M8.m5 1.190 -0.000 R0 l=0.028 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=net2<0> G=VINP S=VX B=gnd!
+M8.m4 0.910 -0.000 R0 l=0.028 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=net2<3> G=VINP S=VX B=gnd!
+M8.m3 0.630 -0.000 R0 l=0.028 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=net2<2> G=VINP S=VX B=gnd!
+M8.m2 0.350 -0.000 R0 l=0.028 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=0 D=net2<1> G=VINP S=VX B=gnd!
+M8.m1 0.070 -0.000 R0 l=0.028 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=0 D=net2<0> G=VINP S=VX B=gnd!
+M10.m4 0.700 0.818 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=1 D=GND G=CLK S=net2<0> B=gnd!
+M10.m3 0.630 0.818 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=1 D=net2<0> G=CLK S=GND B=gnd!
+M10.m2 0.560 0.818 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=1 D=GND G=CLK S=net2<0> B=gnd!
+M10.m1 0.490 0.818 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=1 D=net2<0> G=CLK S=GND B=gnd!
+M7 0.840 0.818 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=1 D=VX G=VOUTP S=VOUTN B=gnd!
+M6 0.350 0.818 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=1 D=VOUTP G=VOUTN S=VY B=gnd!
+DUMMY D0 nfet 0.000 -0.000 R0 l=0.028 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=1 D=vss! G=vss! S=vss! B=gnd!
+DUMMY D1 nfet 2.240 -0.000 R0 l=0.028 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=0 D=vss! G=vss! S=vss! B=gnd!
+DUMMY D2 pfet 0.000 3.272 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=1 D=vdd! G=vdd! S=vdd! B=vdd!
+DUMMY D3 pfet 2.240 3.272 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=0 D=vdd! G=vdd! S=vdd! B=vdd!
+DUMMY D4 pfet 0.000 2.454 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=1 multiplier=1 nf_per_device=1 D=vdd! G=vdd! S=vdd! B=vdd!
+DUMMY D5 pfet 0.070 2.454 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=1 multiplier=1 nf_per_device=1 D=vdd! G=vdd! S=vdd! B=vdd!
+DUMMY D6 pfet 0.140 2.454 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=1 multiplier=1 nf_per_device=1 D=vdd! G=vdd! S=vdd! B=vdd!
+DUMMY D7 pfet 0.210 2.454 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=1 multiplier=1 nf_per_device=1 D=vdd! G=vdd! S=vdd! B=vdd!
+DUMMY D8 pfet 0.280 2.454 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=1 multiplier=1 nf_per_device=1 D=vdd! G=vdd! S=vdd! B=vdd!
+DUMMY D9 pfet 1.190 2.454 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=1 multiplier=1 nf_per_device=1 D=vdd! G=vdd! S=vdd! B=vdd!
+DUMMY D10 pfet 1.260 2.454 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=1 multiplier=1 nf_per_device=1 D=vdd! G=vdd! S=vdd! B=vdd!
+DUMMY D11 pfet 1.330 2.454 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=1 multiplier=1 nf_per_device=1 D=vdd! G=vdd! S=vdd! B=vdd!
+DUMMY D12 pfet 1.400 2.454 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=1 multiplier=1 nf_per_device=1 D=vdd! G=vdd! S=vdd! B=vdd!
+DUMMY D13 pfet 1.470 2.454 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=0 multiplier=1 nf_per_device=1 D=vdd! G=vdd! S=vdd! B=vdd!
+DUMMY D14 pfet 0.000 1.636 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=1 D=vdd! G=vdd! S=vdd! B=vdd!
+DUMMY D15 pfet 2.240 1.636 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=0 D=vdd! G=vdd! S=vdd! B=vdd!
+DUMMY D16 nfet 0.000 0.818 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=0 right_abut=1 multiplier=1 nf_per_device=1 D=vss! G=vss! S=vss! B=gnd!
+DUMMY D17 nfet 0.070 0.818 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=1 multiplier=1 nf_per_device=1 D=vss! G=vss! S=vss! B=gnd!
+DUMMY D18 nfet 0.140 0.818 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=1 multiplier=1 nf_per_device=1 D=vss! G=vss! S=vss! B=gnd!
+DUMMY D19 nfet 0.210 0.818 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=1 multiplier=1 nf_per_device=1 D=vss! G=vss! S=vss! B=gnd!
+DUMMY D20 nfet 0.280 0.818 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=1 multiplier=1 nf_per_device=1 D=vss! G=vss! S=vss! B=gnd!
+DUMMY D21 nfet 0.420 0.818 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=1 multiplier=1 nf_per_device=1 D=net2<0> G=VY S=VY B=gnd!
+DUMMY D22 nfet 0.770 0.818 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=1 multiplier=1 nf_per_device=1 D=gnd! G=VX S=VX B=gnd!
+DUMMY D23 nfet 0.910 0.818 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=1 multiplier=1 nf_per_device=1 D=vss! G=vss! S=vss! B=gnd!
+DUMMY D24 nfet 0.980 0.818 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=1 multiplier=1 nf_per_device=1 D=vss! G=vss! S=vss! B=gnd!
+DUMMY D25 nfet 1.050 0.818 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=1 multiplier=1 nf_per_device=1 D=vss! G=vss! S=vss! B=gnd!
+DUMMY D26 nfet 1.120 0.818 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=1 multiplier=1 nf_per_device=1 D=vss! G=vss! S=vss! B=gnd!
+DUMMY D27 nfet 1.190 0.818 R0 l=0.014 nf=1 nfin=7.0 m=1 left_abut=1 right_abut=0 multiplier=1 nf_per_device=1 D=vss! G=vss! S=vss! B=gnd!

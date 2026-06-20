@@ -1,0 +1,529 @@
+% ==============================================================================
+% CHAPTER 4: Stage 1: Input Ingestion & Graph Unification
+% ==============================================================================
+
+\chapter{Stage 1: Input Ingestion \& Graph Unification}
+\label{ch:input_parser}
+
+\lettrine[lines=3]{T}{he ingestion pipeline} acts as the primary compiler front-end of the LayoutCopilot framework. In analog integrated circuit (IC) design, the logical schematic representation and the physical layout representation exist as distinct, decoupled abstractions. The schematic netlist details the logical connectivity of devices, whereas the layout stream (GDSII or OASIS) specifies physical boundary geometries, layers, and coordinate grids. To enable autonomous placement agents to reason about physical design structures while preserving schematic intent, the compiler front-end must merge these two representations into a unified mathematical structure: a unified graph representation.
+
+This chapter details the design, algorithmic framework, and implementation of the Input Ingestion and Graph Unification stage. It covers the automated CAD extraction scripting using Synopsys Custom Compiler Tcl commands, the recursive SPICE netlist parsing and hierarchy flattening, the PDK-aware binary property extraction from OASIS layout files, the spatial-logical device matching algorithms, and the unified NetworkX-based graph representation.
+
+% ==============================================================================
+\section[CAD Tool Extraction]{EDA CAD Custom Compiler Scripting \& Input Extraction}
+\label{sec:cad_extraction}
+
+The physical and logical inputs used by the compiler are extracted directly from the Synopsys Custom Compiler database. Custom Compiler exposes a Tcl interface with namespaces for database management (\texttt{db::}) and graphical user interface automation (\texttt{gi::}). The extraction process is orchestrated by a master manager script, \texttt{run.tcl}, which triggers the schematic netlist extraction (\texttt{extract\_net.tcl}) and physical layout extraction (\texttt{extract\_oasis.tcl}) depending on the user's execution flags.
+
+Programmatic database control is vital for high-throughput layout compilers. Rather than relying on manual exports, which are error-prone and time-consuming, LayoutCopilot wraps Custom Compiler APIs. The \texttt{db::} namespace provides a direct link to the OpenAccess (OA) database, while the \texttt{gi::} namespace allows the compiler to programmatically open dialogues, change inputs, and press buttons, simulating user clicks inside the Custom Compiler interface.
+
+\subsection{Schematic Netlist Extraction}
+The logical schematic netlist must capture all device parameters, including device type, channel width ($W$), channel length ($L$), finger counts ($nf$), and multi-finger multipliers ($m$). The script \texttt{extract\_net.tcl} automates this by launching the netlister dialogue, configuring target view options, and generating a CDL-compatible netlist file (\texttt{.sp}).
+
+\begin{thesiscode}{Synopsys Custom Compiler Netlist Extraction Script (extract\_net.tcl)}{Tcl}
+set netlistFile "$cell.sp"
+
+set netlist_dir [file join $EDA_TOOLS_DIR "netlist"]
+file mkdir $netlist_dir
+
+db::showExportNetlist
+gi::setActiveDialog [gi::getDialogs {runNetlister}]
+db::setAttr geometry -of [gi::getDialogs {runNetlister}] -value 488x465+610+181
+gi::setField {/topTabGroup/mainTab/design/schCellViewLibrary} -value $lib -in [gi::getDialogs {runNetlister}]
+gi::setField {/topTabGroup/mainTab/design/schCellViewCell} -value $cell -in [gi::getDialogs {runNetlister}]
+gi::setField {/topTabGroup/mainTab/design/schCellView} -value {schematic} -in [gi::getDialogs {runNetlister}]
+gi::setField {/topTabGroup/mainTab/design/netlistFile/entryField} -value $netlistFile -in [gi::getDialogs {runNetlister}]
+gi::setField {/topTabGroup/mainTab/design/netlistDir/entryField} -value $netlist_dir -in [gi::getDialogs {runNetlister}]
+gi::pressButton {/ok} -in [gi::getDialogs {runNetlister}]
+\end{thesiscode}
+
+\subsection{Physical Layout Stream Extraction}
+The physical layout stream contains the placement coordinate markers and PCell boundaries. The script \texttt{extract\_oasis.tcl} extracts layout geometry files in the OASIS (\texttt{.oa}) format, which has higher data compression rates than GDSII.
+
+\begin{thesiscode}{OASIS Stream Extraction Script (extract\_oasis.tcl)}{Tcl}
+set oasisFile "$cell.oa"
+set parent_dir [file dirname $EDA_TOOLS_DIR]
+set oasis_dir [file join $EDA_TOOLS_DIR "oasis"]
+file mkdir $oasis_dir
+
+set BASE_DIR [file join $parent_dir $lib $cell]
+set layout_dir [file join $BASE_DIR "layout"]
+set config_dir [file join $BASE_DIR "layout#2econfig"]
+
+if {[file isdirectory $layout_dir] && [file isdirectory $config_dir]} {
+    set target_oa_file [file join $oasis_dir $oasisFile]
+    if {[file exists $target_oa_file]} {
+        file delete $target_oa_file
+    }
+    db::showExportOasis
+    gi::setActiveDialog [gi::getDialogs {dbExportOasis}]
+    db::setAttr geometry -of [gi::getDialogs {dbExportOasis}] -value 685x634+416+75
+    gi::setField {libName} -value $lib -in [gi::getDialogs {dbExportOasis}]
+    gi::setField {topCellName} -value $cell -in [gi::getDialogs {dbExportOasis}]
+    gi::setField {runDirectory} -value $oasis_dir -in [gi::getDialogs {dbExportOasis}]
+    gi::setField {fileName} -value $oasisFile -in [gi::getDialogs {dbExportOasis}]
+    gi::pressButton {ok} -in [gi::getDialogs {dbExportOasis}]
+} else {
+    echo "Error: One or both directories are missing."
+}
+\end{thesiscode}
+
+% ==============================================================================
+\section[Pipeline Architecture]{Ingestion \& Graph Unification Pipeline Architecture}
+\label{sec:pipeline_architecture}
+
+Once the raw schematic and layout files are extracted, they are passed to the parser subsystem. The ingestion pipeline consists of four serial steps that convert logical netlists and layout geometries into a unified NetworkX graph. Figure~\ref{fig:parser_pipeline_flowchart} illustrates the pipeline block diagram.
+
+The first stage parses raw files: the Netlist Reader parses schematic netlists into memory, while the Layout Reader walks the OASIS layout database cell tree. The Device Matcher maps devices between the two databases. The Circuit Graph Builder constructs the final graph, which contains spatial and electrical parameters.
+
+\begin{figure}[H]
+    \centering
+    \fbox{\begin{tikzpicture}[
+        node distance=1.0cm and 1.2cm,
+        database/.style={draw=AcademicBlue, fill=LightBlueBg, cylinder, shape border rotate=90, minimum width=1.8cm, minimum height=1.5cm, align=center, font=\small\sffamily\bfseries, drop shadow={shadow xshift=1.5pt, shadow yshift=-1.5pt, fill=black!15}},
+        process/.style={draw=RoyalBlue, fill=LightBlueBg!50, text=AcademicBlue, thick, rounded corners, minimum width=3.2cm, minimum height=1.2cm, align=center, font=\small\sffamily\bfseries, drop shadow={shadow xshift=1.5pt, shadow yshift=-1.5pt, fill=black!15}},
+        output/.style={draw=CodeGreen, fill=CodeGreen!10, text=CodeGreen!80!black, thick, rounded corners, minimum width=3.2cm, minimum height=1.2cm, align=center, font=\small\sffamily\bfseries, drop shadow={shadow xshift=1.5pt, shadow yshift=-1.5pt, fill=black!15}},
+        arrow/.style={-Latex, line width=1.3pt, draw=AcademicBlue}
+    ]
+        % Nodes
+        \node[database] (spice) {Schematic \\ Netlist (.sp)};
+        \node[database, below=1.5cm of spice] (oasis) {OASIS \\ Layout (.oa)};
+        
+        \node[process, right=1.5cm of spice] (step1a) {Netlist Reader \\ (hierarchy.py / \\ netlist\_reader.py)};
+        \node[process, right=1.5cm of oasis] (step1b) {Layout Reader \\ (layout\_reader.py)};
+        
+        \node[process, right=1.2cm of step1a] (step2) {Device Matcher \\ (device\_matcher.py)};
+        \node[process, right=1.2cm of step2] (step3) {Circuit Graph \\ Builder \\ (circuit\_graph.py)};
+        
+        \node[output, below=1.5cm of step3] (out) {Unified Graph \\ (NetworkX JSON)};
+
+        % Connect
+        \draw[arrow] (spice) -- (step1a);
+        \draw[arrow] (oasis) -- (step1b);
+        \draw[arrow] (step1a) -- (step2);
+        \draw[arrow] (step1b) |- ($(step2.west) + (0,-0.3)$);
+        \draw[arrow] (step2) -- (step3);
+        \draw[arrow] (step3) -- (out);
+    \end{tikzpicture}}
+    \caption{Detailed Ingestion Pipeline Flowchart mapping raw layout and SPICE inputs to a unified NetworkX model.}
+    \label{fig:parser_pipeline_flowchart}
+\end{figure}
+
+% ==============================================================================
+\section[Netlist Parsing]{SPICE Netlist Parsing \& Hierarchy Flattening}
+\label{sec:spice_flattening}
+
+The SPICE reader (\texttt{netlist\_reader.py}) parses text-based SPICE and CDL files. Schematic designs are typically hierarchical, utilizing subcircuits (\texttt{.subckt}) to encapsulate blocks like bias generators or operational amplifiers. Layout placing agents, however, operate on a flat coordinate space where each physical transistor finger must be resolved individually. The parser resolves this by executing two operations: subcircuit flattening and parameter expansion.
+
+During layout placement, the agent needs to allocate specific physical slots for each transistor finger. If the netlist remains hierarchical, the spatial relationships between components in different hierarchical blocks are hidden from the solver, making absolute positioning, row/slot alignment, and sharing diffusions across hierarchical boundaries extremely complex. Therefore, the compiler flattens the hierarchy and resolves replication down to leaf fingers before placement.
+
+\subsection{Recursive Subcircuit Expansion}
+The flattening engine (\texttt{hierarchy.py}) parses the subcircuit definitions first. It identifies the top-level subcircuit candidate based on name matching or instantiation tree analysis. The engine then recursively expands all instance calls (\texttt{X}-instances) down to leaf primitives (transistors: \texttt{M}, resistors: \texttt{R}, capacitors: \texttt{C}). 
+
+During expansion, the ports of the subcircuit are mapped to the net names passed by the parent instance. Internal nets are prefixed with the instance names (e.g., \texttt{XI0\_net3}) to avoid namespace collisions. The mathematical mapping of internal nets is defined as:
+\begin{equation}
+    N_{\text{flat}}(net) = \begin{cases} 
+      parent\_net & \text{if } net \in Ports(subckt) \\
+      prefix \mathbin{\Vert} net & \text{otherwise}
+   \end{cases}
+\end{equation}
+where $\mathbin{\Vert}$ represents string concatenation, and $prefix$ is the hierarchical path prefix.
+
+\subsection{Replication \& Parameter Expansion}
+Replicated transistors can be specified in SPICE through multiple options:
+\begin{enumerate}
+    \item \textbf{Array Suffixes:} E.g., \texttt{MM9<7>} refers to the 8th copy (0-based index 7) of device \texttt{MM9}.
+    \item \textbf{Multipliers (m):} E.g., \texttt{m=8} instantiates 8 identical parallel devices.
+    \item \textbf{Fingers (nf):} E.g., \texttt{nf=10} splits a single device width into 10 adjacent fingers.
+\end{enumerate}
+
+To match layout stream cells (where fingers and multipliers occupy individual physical locations), the parser expands a single logical SPICE device statement with $m=M$ and $nf=F$ into $M \times F$ independent leaf device instances. The leaf devices are named using a systematic indexing scheme:
+\begin{equation}
+    Name_{\text{leaf}} = \{Parent\}\text{\_m}\{i\}\text{\_f}\{j\} \quad \forall i \in \{1,\dots,M\}, j \in \{1,\dots,F\}
+\end{equation}
+This ensures that every physical finger in the layout corresponds to a unique node in the parsed netlist model.
+
+\begin{thesiscode}{Subcircuit Expansion and Parameter Parsing (netlist\_reader.py)}{python}
+def expand_instance(line, subckts, prefix=""):
+    """Expand a single X-instance line into its constituent device lines.
+    Recursively expands if the subcircuit contains further X-instances.
+    """
+    tokens = line.split()
+    inst_name = tokens[0]           # e.g. XI0
+    nets = tokens[1:-1]             # actual net connections
+    subckt_name = tokens[-1]        # subcircuit being instantiated
+
+    if subckt_name not in subckts:
+        return []
+
+    subckt = subckts[subckt_name]
+    port_map = dict(zip(subckt.ports, nets))
+    full_prefix = f"{prefix}{inst_name}_" if prefix else f"{inst_name}_"
+    expanded = []
+
+    for internal_line in subckt.lines:
+        parts = internal_line.split()
+        if not parts:
+            continue
+        devname = parts[0]
+        if devname.startswith("*") or devname.startswith("."):
+            continue
+
+        if devname[0].upper() == "X":
+            remapped_parts = [f"{full_prefix}{devname}"]
+            for i in range(1, len(parts)):
+                token = parts[i]
+                if token in port_map:
+                    remapped_parts.append(port_map[token])
+                else:
+                    remapped_parts.append(f"{full_prefix}{token}")
+            remapped_line = " ".join(remapped_parts)
+            expanded.extend(expand_instance(remapped_line, subckts, prefix=""))
+        else:
+            parts[0] = f"{full_prefix}{devname}"
+            for i in range(1, len(parts)):
+                token = parts[i]
+                if token in port_map:
+                    parts[i] = port_map[token]
+                elif "=" not in token:
+                    if i <= 4 or (i == 5 and not token[0].isalpha()):
+                        parts[i] = f"{full_prefix}{token}"
+            expanded.append(" ".join(parts))
+    return expanded
+\end{thesiscode}
+
+% ==============================================================================
+\section[Layout Stream Ingestion]{Physical Layout Stream Parsing \& PDK Ingestion}
+\label{sec:layout_ingestion}
+
+The physical layout stream parser (\texttt{layout\_reader.py}) interfaces with the binary OASIS or GDSII file using the high-performance \texttt{gdstk} C++ library. The layout reader walks the hierarchical cell reference tree from the top cell down to the leaf cells representing PDK parameterized cells (PCells) using a depth-first search (DFS) traversal.
+
+OASIS files offer several advantages over traditional GDSII files. GDSII files are uncompressed and use fixed-size record blocks, which can lead to very large files for modern sub-micron designs. In contrast, OASIS uses byte-aligned variable-length records, coordinate offsets, and string/cell reference tables to achieve significant file-size reductions, allowing the compiler front-end to ingest complex layouts in milliseconds.
+
+\subsection{Device Classification}
+Cells are filtered by name heuristics to categorize their function:
+\begin{itemize}
+    \item \textbf{Transistors:} Cells matching keywords \texttt{nfet}, \texttt{pfet}, \texttt{nmos}, \texttt{pmos}.
+    \item \textbf{Passives:} Resistors (\texttt{rppoly}, \texttt{rnwell}) and capacitors (\texttt{ccap}, \texttt{mimcap}).
+    \item \textbf{Dummies:} Cells designated as dummy structures (\texttt{dummy}, \texttt{filler}) used for density matching.
+    \item \textbf{Vias \& Taps:} Ignored for high-level device matching to minimize graph complexity.
+\end{itemize}
+
+\subsection{PDK Parameter Property Decoding}
+PCell instances store their parameters (such as finger width, channel length, finger count, and diffusion abutment configurations) as binary key-value properties inside the GDSII/OASIS files. For our target PDK (SAED 14nm), these parameters are encoded in the \texttt{'pcell'} property block.
+
+The parameters are written as string arrays where the parameter name and value are separated by a specific byte-signature marker: \texttt{"\#\#32\#\#"}. This serialization approach is common in PDK databases. The layout reader extracts these properties by parsing the raw byte stream, identifying the separator, and parsing the key-value attributes.
+
+\begin{thesiscode}{PDK PCell Parameter Property Decoding (layout\_reader.py)}{python}
+def _parse_pcell_params(*objs):
+    """Parse parameters from multiple objects (e.g. Cell and Reference) and merge them.
+    The SAED PDK encodes these as bytes in a 'pcell' property entry.
+    Returns: dict of parameters {key: value_string}.
+    """
+    params = {}
+    for obj in objs:
+        if not hasattr(obj, "properties"):
+            continue
+        try:
+            for prop in obj.properties:
+                if not prop or len(prop) < 1:
+                    continue
+                key = prop[0]
+                if isinstance(key, bytes):
+                    key = key.decode("utf-8", errors="ignore")
+                if str(key).lower() != "pcell":
+                    continue
+
+                for entry in prop[1:]:
+                    if isinstance(entry, (bytes, bytearray)):
+                        s = entry.decode("utf-8", errors="ignore")
+                    elif isinstance(entry, str):
+                        s = entry
+                    else:
+                        continue
+
+                    if "##32##" in s:
+                        parts = s.split("##32##")
+                        if len(parts) >= 3:
+                            param_key = parts[0].strip()
+                            val = parts[-1].strip()
+                            params[param_key] = val
+        except (AttributeError, IndexError, TypeError):
+            pass
+    return params
+\end{thesiscode}
+
+% ==============================================================================
+\section[Device Matching]{Deterministic Spatial-Logical Device Matching}
+\label{sec:device_matching}
+
+A core challenge in layout automation front-ends is matching the parsed logical netlist devices with the extracted physical layout instances. Because the EDA tool's netlister and layout generator do not share a common naming database for leaf components (often naming them \texttt{MM0\_f1} on one side and cell references \texttt{nfet\_ref\_0} on the other), a deterministic matching algorithm is required.
+
+The matcher module (\texttt{device\_matcher.py}) executes a three-phase alignment algorithm:
+\begin{enumerate}
+    \item \textbf{Type-Based Partitioning:} Both netlist devices and layout instances are partitioned into separate queues based on device types (NMOS, PMOS, Resistors, Capacitors).
+    \item \textbf{Deterministic Sorting:} 
+        \begin{itemize}
+            \item Netlist devices are sorted alphanumerically based on their hierarchical names (e.g., \texttt{MM0\_m1\_f1}, \texttt{MM0\_m1\_f2}, \texttt{MM1\_f1}).
+            \item Layout instances are sorted spatially based on their absolute $(x, y)$ coordinates. The sorting prioritizes the horizontal axis first (left-to-right), followed by the vertical axis (bottom-to-top):
+            \begin{equation}
+                \text{Key}_{\text{layout}}(inst) = (x_{inst}, y_{inst})
+            \end{equation}
+        \end{itemize}
+    \item \textbf{Index-Based Mapping:} 
+        \begin{itemize}
+            \item If the netlist device count equals the layout instance count, a 1-to-1 sequential mapping is established.
+            \item If a mismatch exists due to finger grouping (where the netlist lists individual fingers but the layout exporter outputs a single multi-finger PCell block), the matcher groups netlist fingers belonging to the same logical parent device and maps them onto the shared layout instance.
+        \end{itemize}
+\end{enumerate}
+
+Sorting logical netlist names alphanumerically is effective because SPICE netlist generators output leaf devices in a systematic order. Similarly, sorting layout devices spatially matches the horizontal rows common in analog designs (like differential pairs and current mirrors). This matching method aligns the queues without needing complex subgraph isomorphism solvers (which are NP-complete). The compiler also includes fallback checks to warn the designer if the device counts do not match.
+
+Figure~\ref{fig:device_matching_visual} illustrates this matching mechanism.
+
+\begin{figure}[H]
+    \centering
+    \fbox{\begin{tikzpicture}[
+        node distance=0.8cm and 1.5cm,
+        netlistbox/.style={draw=RoyalBlue, fill=LightBlueBg, thick, rounded corners, minimum width=2.5cm, minimum height=0.9cm, align=center, font=\small\ttfamily},
+        layoutbox/.style={draw=CopperAccent, fill=CopperAccent!8, thick, rounded corners, minimum width=2.5cm, minimum height=0.9cm, align=center, font=\small\ttfamily},
+        matcharrow/.style={Latex-Latex, line width=1.5pt, draw=WarmGold, dashed}
+    ]
+        % Netlist Nodes (sorted alphanumerically)
+        \node[netlistbox] (n0) {MM0\_f1};
+        \node[netlistbox, below=of n0] (n1) {MM0\_f2};
+        \node[netlistbox, below=of n1] (n2) {MM1\_f1};
+        \node[netlistbox, below=of n2] (n3) {MM1\_f2};
+        
+        % Layout Nodes (sorted spatially)
+        \node[layoutbox, right=3cm of n0] (l0) {nfet\_0 \\ (x=0.0, y=0.0)};
+        \node[layoutbox, below=of l0] (l1) {nfet\_1 \\ (x=0.29, y=0.0)};
+        \node[layoutbox, below=of l1] (l2) {nfet\_2 \\ (x=0.58, y=0.0)};
+        \node[layoutbox, below=of l2] (l3) {nfet\_3 \\ (x=0.88, y=0.0)};
+
+        % Connect Matchings
+        \draw[matcharrow] (n0) -- (l0) node[midway, above, font=\tiny\sffamily, color=TextCharcoal] {Match 1};
+        \draw[matcharrow] (n1) -- (l1) node[midway, above, font=\tiny\sffamily, color=TextCharcoal] {Match 2};
+        \draw[matcharrow] (n2) -- (l2) node[midway, above, font=\tiny\sffamily, color=TextCharcoal] {Match 3};
+        \draw[matcharrow] (n3) -- (l3) node[midway, above, font=\tiny\sffamily, color=TextCharcoal] {Match 4};
+        
+        % Group labels
+        \node[above=0.2cm of n0, font=\small\sffamily\bfseries\color{RoyalBlue}] {Logical Netlist Queue};
+        \node[above=0.2cm of l0, font=\small\sffamily\bfseries\color{CopperAccent}] {Spatial Layout Queue};
+    \end{tikzpicture}}
+    \caption{Deterministic Alignment between logical netlist devices and physical layout geometries.}
+    \label{fig:device_matching_visual}
+\end{figure}
+
+% ==============================================================================
+\section[Graph Unification]{Unified Circuit Graph Construction \& Node/Edge Classification}
+\label{sec:graph_unification}
+
+The final step of Stage 1 is building the unified graph structure using the NetworkX library (\texttt{circuit\_graph.py}). Let the unified graph be $G(V, E)$, where $V$ represents the set of circuit device nodes and $E$ represents the set of electrical net connections.
+
+\subsection{Node Properties}
+Each device node $v \in V$ combines attributes from both the netlist and the layout:
+\begin{equation}
+    v = \langle \text{id}, \text{type}, \text{electrical\_params}, \text{geometric\_params} \rangle
+\end{equation}
+where:
+\begin{itemize}
+    \item \texttt{electrical\_params} $= \{W, L, nf, nfin, parent, array\_index\}$.
+    \item \texttt{geometric\_params} $= \{x, y, width, height, orientation\}$.
+\end{itemize}
+
+\subsection{Edge Relations and Classification}
+Edges represent physical wiring connections between device terminals (Gate, Drain, Source, Bulk). To guide placement heuristics, edges are classified into behavioral relations. First, global nets (such as \texttt{vdd}, \texttt{vss}, and \texttt{gnd}) are pruned from the edge list. Because power nets connect to almost every device bulk or source, including them would create a dense, low-diameter graph, masking critical signal and matching paths. Pruning well and bulk connections prevents the sparse circuit graph from becoming a dense clique, which would complicate graph-based placement reasoning.
+
+For the remaining signals, the net is classified by counting the terminal types connected to it:
+\begin{itemize}
+    \item \textbf{Bias Net:} If the net connects to $\ge 3$ sources and 0 gates, it is tagged as a bias line.
+    \item \textbf{Gate Net:} If it connects to $\ge 2$ gates, it is a shared gate signal.
+    \item \textbf{Signal Net:} If it connects to $\ge 2$ drains and 0 gates, it is a signal path.
+\end{itemize}
+
+Based on this classification, the edges connecting device pairs $v_1$ and $v_2$ are assigned specific relationship tags:
+\begin{enumerate}
+    \item \textbf{\texttt{shared\_gate}:} Gates of $v_1$ and $v_2$ are connected. This indicates matching pairs (e.g. current mirror mirrors, differential input gates). LangGraph placement agents use these edges to enforce matching constraints.
+    \item \textbf{\texttt{shared\_source}:} Sources of $v_1$ and $v_2$ are connected.
+    \item \textbf{\texttt{shared\_drain}:} Drains of $v_1$ and $v_2$ are connected.
+    \item \textbf{\texttt{shared\_bias}:} Sources of $v_1$ and $v_2$ connect to a common bias line.
+\end{enumerate}
+
+\begin{thesiscode}{Edge Classification and Graph Construction (circuit\_graph.py)}{python}
+def classify_net(net, connections):
+    source_count = 0
+    gate_count = 0
+    drain_count = 0
+    for dev, pin in connections:
+        role = normalize_pin(pin)
+        if role == "source": source_count += 1
+        if role == "gate":   gate_count += 1
+        if role == "drain":  drain_count += 1
+
+    if source_count >= 3 and gate_count == 0:
+        return "bias"
+    if drain_count >= 2 and gate_count == 0:
+        return "signal"
+    if gate_count >= 2:
+        return "gate"
+    return "other"
+
+def add_net_edges(G, netlist):
+    for net, connections in netlist.nets.items():
+        if net.lower() in GLOBAL_NETS:
+            continue
+        net_type = classify_net(net, connections)
+        for i in range(len(connections)):
+            dev1, pin1 = connections[i]
+            role1 = normalize_pin(pin1)
+            for j in range(i+1, len(connections)):
+                dev2, pin2 = connections[j]
+                if dev1 == dev2:
+                    continue
+                role2 = normalize_pin(pin2)
+                relation = "connection"
+
+                if role1 == "source" and role2 == "source":
+                    relation = "shared_bias" if net_type == "bias" else "shared_source"
+                elif role1 == "gate" and role2 == "gate":
+                    relation = "shared_gate"
+                elif role1 == "drain" and role2 == "drain":
+                    relation = "shared_drain"
+
+                G.add_edge(dev1, dev2, relation=relation, net=net)
+\end{thesiscode}
+
+% ==============================================================================
+\section[I/O Schemas]{Input \& Output Interface Schemas}
+\label{sec:io_schemas}
+
+To ensure interoperability, Stage 1 exposes structured inputs and outputs.
+
+\subsection{Input SPICE Schema}
+The input SPICE file consists of standard device lines. Transistors are defined starting with character \texttt{M}, specifying pins in order (Drain, Gate, Source, Bulk) followed by the PDK model name and key-value properties:
+\begin{lstlisting}[language=text]
+M{name} {Drain} {Gate} {Source} {Bulk} {model} w={width} l={length} nf={fingers}
+\end{lstlisting}
+
+\subsection{Output Graph JSON Schema}
+The unified output graph is serialized into a JSON structure, defining both nodes (with physical and electrical profiles) and edges (with relation tags).
+
+\begin{thesiscode}{Output Graph JSON Schema Structure}{json}
+{
+  "nodes": [
+    {
+      "id": "MM2_f1",
+      "type": "nmos",
+      "electrical": {
+        "l": 1.4e-08,
+        "nf": 1,
+        "nfin": 2.0,
+        "w": 0,
+        "parent": "MM2",
+        "m": 1,
+        "multiplier_index": null,
+        "finger_index": 1,
+        "array_index": null
+      },
+      "geometry": {
+        "x": 0.0,
+        "y": 0.668,
+        "width": 0.294,
+        "height": 0.668,
+        "orientation": "R0"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "MM0_f1",
+      "target": "MM1_f1",
+      "relation": "shared_gate",
+      "net": "C"
+    }
+  ]
+}
+\end{thesiscode}
+
+% ==============================================================================
+\section[Example Walkthrough]{Example Walkthrough: Current Mirror Ingestion}
+\label{sec:example_walkthrough}
+
+To demonstrate the parsing and graph construction flow, this section traces the ingestion of the current mirror circuit (\texttt{CM}) from the \texttt{examples/current\_mirror} directory.
+
+\subsection{Input Schematic File}
+The input file \texttt{Current\_Mirror\_CM.sp} defines a symmetric current mirror. The schematic netlist contains NMOS and PMOS groups:
+
+\begin{thesiscode}{Current Mirror SPICE Input File (Current\_Mirror\_CM.sp)}{text}
+* Library: Current_Mirror  Cell: CM  View: schematic
+.subckt CM A B C VDD X Y Z gnd
+MM2 A C gnd gnd n08 l=0.014u nf=4 nfin=2
+MM1 B C gnd gnd n08 l=0.014u nf=8 nfin=2
+MM0 C C gnd gnd n08 l=0.014u nf=16 nfin=2
+MM5 Z X VDD VDD p08 l=0.014u nf=4 m=1 nfin=2
+MM4 Y X VDD VDD p08 l=0.014u nf=8 m=1 nfin=2
+MM3 X X VDD VDD p08 l=0.014u nf=16 m=1 nfin=2
+.ends CM
+\end{thesiscode}
+
+\subsection{Ingestion Processing Steps}
+\begin{enumerate}
+    \item \textbf{Flattening \& Expansion:} The schematic is already flat, but devices have finger counts. The device \texttt{MM2} ($nf=4$) is expanded into four leaf devices: \texttt{MM2\_f1}, \texttt{MM2\_f2}, \texttt{MM2\_f3}, and \texttt{MM2\_f4}.
+    \item \texttt{gdstk} Layout Processing: The layout reader parses the corresponding OASIS layout file \texttt{Current\_Mirror.oas}. It extracts physical dimensions (e.g. height, width) and positions.
+    \item \textbf{Sorting and Matching:}
+        \begin{itemize}
+            \item Netlist devices sorted: \texttt{MM0\_f1} to \texttt{MM0\_f16}, \texttt{MM1\_f1} to \texttt{MM1\_f8}, \texttt{MM2\_f1} to \texttt{MM2\_f4}.
+            \item Layout instances sorted spatially.
+            \item A 1-to-1 matching matches logical nodes with their corresponding layout geometries.
+        \end{itemize}
+    \item \textbf{Graph Building:} Global nets \texttt{gnd} and \texttt{VDD} are pruned. The net \texttt{C} connects the gates of \texttt{MM0}, \texttt{MM1}, and \texttt{MM2}. Since this connects multiple gates, it is classified as a \texttt{shared\_gate} relation, establishing edges between the devices.
+\end{enumerate}
+
+\subsection{Output Compressed Graph JSON}
+The resulting unified graph is stored in the compressed graph output structure, capturing node configurations and connections (truncated sample):
+
+\begin{thesiscode}{Output Graph JSON (Current\_Mirror\_CM\_graph\_compressed.json)}{json}
+{
+    "version": "2.0",
+    "device_types": {
+        "pmos": {
+            "y_row": 0.668,
+            "default_width": 0.294,
+            "default_height": 0.818
+        },
+        "nmos": {
+            "y_row": 0.0,
+            "default_width": 0.294,
+            "default_height": 0.668
+        }
+    },
+    "devices": {
+        "MM2": {
+            "type": "nmos",
+            "m": 1,
+            "nf": 1,
+            "nfin": 2.0,
+            "l": 1.4e-08,
+            "terminal_nets": {
+                "D": "A",
+                "G": "C",
+                "S": "gnd"
+            }
+        },
+        "// ... [MM0, MM1, MM3, MM4, MM5 entries truncated for brevity] ... //"
+    },
+    "connectivity": {
+        "nets": {
+            "C": [
+                "MM0",
+                "MM1",
+                "MM2"
+            ],
+            "// ... [other net connectivity entries] ... //"
+        }
+    }
+}
+\end{thesiscode}
+
+This structured data is then sent to Stage 2, allowing AI placing agents to construct placements on a row/slot grid while respecting electrical relations like gate matching.
