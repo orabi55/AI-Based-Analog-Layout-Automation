@@ -165,7 +165,60 @@ Displays the input stage of a dynamic comparator. The AI placement specialist an
 
 ---
 
-## 7. Operational Workflow (How to Use the Tool)
+## 7. Installation and Setup
+
+Follow these steps to clone the repository, install the required dependencies, and launch the application:
+
+### Step 1: Clone the Repository
+Open a terminal and clone the repository using Git:
+```bash
+git clone https://github.com/orabi55/AI-Based-Analog-Layout-Automation.git
+cd AI-Based-Analog-Layout-Automation
+```
+
+### Step 2: Set Up a Virtual Environment
+Create and activate a Python virtual environment to manage dependencies locally:
+* **On Windows (PowerShell)**:
+  ```powershell
+  python -m venv .venv
+  .venv\Scripts\Activate.ps1
+  ```
+* **On macOS / Linux**:
+  ```bash
+  python -m venv .venv
+  source .venv/bin/activate
+  ```
+
+### Step 3: Install Required Dependencies
+Install the package requirements listed in `requirements.txt` via `pip`:
+```bash
+pip install -r requirements.txt
+```
+
+### Step 4: Configure API Keys
+Copy the example environment file to `.env` and fill in your LLM API keys:
+* **On Windows**:
+  ```powershell
+  copy .env.example .env
+  ```
+* **On macOS / Linux**:
+  ```bash
+  cp .env.example .env
+  ```
+Open the `.env` file and insert your API credentials (Gemini is recommended for free, high-performance execution):
+```env
+GEMINI_API_KEY=your_gemini_api_key_here
+```
+
+### Step 5: Launch the Application
+Run the main symbolic editor script to open the graphical welcome dialog:
+```bash
+python symbolic_editor/main.py
+```
+
+---
+
+## 8. Operational Workflow (How to Use the Tool)
 
 Operating the layout editor is simple and follows a standard EDA front-to-back workflow. Below is a detailed description of each phase in the design loop:
 
@@ -213,7 +266,7 @@ Use the right-side **AI Co-Pilot Chat Panel** to interact with the strategist:
 
 ---
 
-## 8. Conclusion and Future Work
+## 9. Conclusion and Future Work
 
 ### 🏁 Conclusion
 The AI-Based Analog Layout Automation platform successfully bridges schematic topologies and physical layout geometries. By combining **LangGraph multi-agent strategic floorplanning** with a **deterministic physical engine**, the platform eliminates manual layout bottlenecks, enforces matching symmetries, and automatically self-heals design rule violations.
@@ -225,7 +278,7 @@ The AI-Based Analog Layout Automation platform successfully bridges schematic to
 
 ---
 
-## 9. Acknowledgements
+## 10. Acknowledgements
 
 This project was developed as an academic senior design project focused on the intersection of Machine Learning, Geometric Compaction, and Electronic Design Automation (EDA).
 
