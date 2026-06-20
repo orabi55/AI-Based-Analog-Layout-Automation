@@ -165,7 +165,55 @@ Displays the input stage of a dynamic comparator. The AI placement specialist an
 
 ---
 
-## 7. Conclusion and Future Work
+## 7. Operational Workflow (How to Use the Tool)
+
+Operating the layout editor is simple and follows a standard EDA front-to-back workflow. Below is a detailed description of each phase in the design loop:
+
+### Phase 1: Setup & Import
+1. **Launch the Editor**: Start the application using:
+   ```bash
+   python symbolic_editor/main.py
+   ```
+2. **Import design files**: Press `Ctrl+I` (or go to `File > Import from Netlist + Layout`).
+   * Select a **SPICE Netlist file (`.sp`)** containing your transistor subcircuits.
+   * Select a **Template OASIS Layout file (`.oas`)** containing your physical PDK cell templates.
+3. The editor automatically parses the spice subcircuit, calculates cell bounding boxes, maps Gate/Source/Drain terminals, and displays unplaced logical transistor blocks on the left **Hierarchy Tree Panel**.
+
+### Phase 2: AI-Assisted Initial Placement
+1. **Run AI Floorplanning**: Press `Ctrl+P` (or go to `Design > Run AI Initial Placement`).
+2. An **AI Settings Dialog** will open:
+   * **Select AI Model**: Choose from the dropdown (Google Gemini, Alibaba Qwen, etc.).
+   * **Toggle Abutment**: Check/uncheck to enable/disable touch-abutment compaction.
+3. Click **Proceed**. The LangGraph multi-agent pipeline starts in a background thread:
+   * The **Topology Analyst** matches differential pairs/mirrors.
+   * The **Strategy Selector** assigns rows and symmetry axes.
+   * The **Placement Specialist** calculates slot coordinates.
+   * The **DRC Critic** automatically repairs placement overlaps.
+4. Once completed, the final layout snaps onto the **Symbolic Canvas** with connection ratsnest lines showing signal nets.
+
+### Phase 3: Interactive Visual Editing
+Designers can manually refine the AI-generated layout using standard keyboard and mouse controls on the symbolic canvas:
+* **Move Mode (`M` key)**: Select a transistor block and drag it left or right. It automatically snaps to the symbolic coordinate grid slot.
+* **Gate / Net Swapping**: Double-click (or right-click) on any active transistor to toggle its `swapped_sd` flag. This swaps its Source and Drain terminals, optimizing local diffusion sharing.
+* **Place Dummy Transistors (`D` key)**: Select an empty slot in a row and press `D` to place a dummy cell. Dummy cells can be merged with active transistors to isolate signal boundaries.
+* **Tap Cell Integration**: Use shortcut keys `V` and `G` to place VDD (N-well tap) and GND (substrate tap) cell boundaries.
+* **Canvas Focus (`F` key)**: Press `F` to center and scale the view to fit all placed components.
+
+### Phase 4: Chatbot Co-Pilot Dialogue
+Use the right-side **AI Co-Pilot Chat Panel** to interact with the strategist:
+* Ask **General questions**: Type *"What is a common-centroid matching pattern?"*. The classifier selects `"general_chat"`, bypassing layout data to stream answers in under 1 second.
+* Ask **Layout queries**: Type *"Are MM1 and MM2 sharing source diffusions?"*. The classifier selects `"layout_query"`, injecting the device properties to answer.
+* Execute **Layout actions**: Type *"Align MM1 and MM2 on Row 1"*. The chatbot compiles this to `[CMD] ALIGN MM1 MM2 row=1 [/CMD]`, updating the canvas.
+
+### Phase 5: Compaction & Physical Export
+1. **Compile layout**: Press `Ctrl+Shift+E` (or go to `File > Export to OASIS`).
+2. The physical compiler performs touch-abutment compaction, compressing symbolic $0.3\,\mu\text{m}$ spacings down to PDK-minimum $0.070\,\mu\text{m}$ pitch.
+3. The engine recursively infills tap cells, merges contiguous diffusions, and writes a physical `.oas` layout binary stream.
+4. **Live KLayout Sync**: The refresh is sent to a headless KLayout socket process to display the compiled sub-micron shapes in real-time.
+
+---
+
+## 8. Conclusion and Future Work
 
 ### 🏁 Conclusion
 The AI-Based Analog Layout Automation platform successfully bridges schematic topologies and physical layout geometries. By combining **LangGraph multi-agent strategic floorplanning** with a **deterministic physical engine**, the platform eliminates manual layout bottlenecks, enforces matching symmetries, and automatically self-heals design rule violations.
@@ -177,7 +225,7 @@ The AI-Based Analog Layout Automation platform successfully bridges schematic to
 
 ---
 
-## 8. Acknowledgements
+## 9. Acknowledgements
 
 This project was developed as an academic senior design project focused on the intersection of Machine Learning, Geometric Compaction, and Electronic Design Automation (EDA).
 
