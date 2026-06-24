@@ -37,10 +37,10 @@ def _placement_steps_only() -> bool:
 
 
 def _flog(*args, **kwargs) -> None:
-    """Log line for LLM factory — writes to placement_live_output.log, never to stdout."""
+    """Log line for LLM factory — writes to placement_debug.log, never to stdout."""
     text = " ".join(str(a) for a in args)
     try:
-        with open("placement_live_output.log", "a", encoding="utf-8") as f:
+        with open("placement_debug.log", "a", encoding="utf-8") as f:
             f.write(text + "\n")
     except Exception:
         pass

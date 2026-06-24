@@ -90,6 +90,7 @@ _stage_times: dict[str, float] = {}
 _pipeline_name: str = "LangGraph"
 _total_stages: int = 5
 _log_file_path: str = "placement_live_output.log"
+_debug_log_file_path: str = "placement_debug.log"
 
 
 def _safe_print(*args, **kwargs) -> None:
@@ -106,9 +107,16 @@ def _safe_print(*args, **kwargs) -> None:
         )
         print(safe, **kwargs)
 
-    # Also write to log file
+    # Also write to live log file
     try:
         with open(_log_file_path, "a", encoding="utf-8") as f:
+            f.write(text + "\n")
+    except Exception:
+        pass
+
+    # Also write to debug log file
+    try:
+        with open(_debug_log_file_path, "a", encoding="utf-8") as f:
             f.write(text + "\n")
     except Exception:
         pass
@@ -125,12 +133,18 @@ def steps_only() -> bool:
 def vprint(*args, **kwargs) -> None:
     """Print when not in step-only mode (full debug / legacy behavior).
     
-    Always writes to the log file regardless of step-only mode.
+    Always writes to the live log file and debug log file regardless of step-only mode.
     """
     text = " ".join(str(a) for a in args)
-    # Always write to log file
+    # Always write to live log file
     try:
         with open(_log_file_path, "a", encoding="utf-8") as f:
+            f.write(text + "\n")
+    except Exception:
+        pass
+    # Always write to debug log file
+    try:
+        with open(_debug_log_file_path, "a", encoding="utf-8") as f:
             f.write(text + "\n")
     except Exception:
         pass
@@ -141,6 +155,31 @@ def vprint(*args, **kwargs) -> None:
             print(text, **kwargs)
         except UnicodeEncodeError:
             pass
+
+
+def dprint(*args, **kwargs) -> None:
+    """Print detailed debug messages only to the debug log file.
+    
+    If PLACEMENT_DEBUG environment variable is enabled, also prints to stdout.
+    """
+    text = " ".join(str(a) for a in args)
+    # Write to debug log file
+    try:
+        with open(_debug_log_file_path, "a", encoding="utf-8") as f:
+            f.write(text + "\n")
+    except Exception:
+        pass
+
+    # Print to stdout if verbose debug is enabled
+    if os.environ.get("PLACEMENT_DEBUG", "0").lower() in ("1", "true", "yes"):
+        kwargs.setdefault("flush", True)
+        try:
+            print(f"[DEBUG] {text}", **kwargs)
+        except UnicodeEncodeError:
+            safe = text.encode(sys.stdout.encoding or "utf-8", errors="replace").decode(
+                sys.stdout.encoding or "utf-8", errors="replace"
+            )
+            print(f"[DEBUG] {safe}", **kwargs)
 
 
 def ip_step(stage: str, message: str) -> None:
@@ -181,7 +220,13 @@ def pipeline_start(name: str, total_stages: int, config: dict | None = None) -> 
 
     try:
         with open(_log_file_path, "w", encoding="utf-8") as f:
-            pass  # clear the log file
+            pass  # clear the live log file
+    except Exception:
+        pass
+
+    try:
+        with open(_debug_log_file_path, "w", encoding="utf-8") as f:
+            pass  # clear the debug log file
     except Exception:
         pass
 

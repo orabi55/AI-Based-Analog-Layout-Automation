@@ -30,7 +30,7 @@ from ai_agent.knowledge.skill_injector import SkillMiddleware
 
 from ai_agent.graph.state import LayoutState
 from ai_agent.llm.factory import get_langchain_llm
-from ai_agent.utils.logging import steps_only, vprint, ip_step
+from ai_agent.utils.logging import steps_only, vprint, ip_step, dprint
 
 CHAT_HISTORY_JSON_PATH = Path(__file__).resolve().parents[2] / "chat_history.json"
 MAX_CHAT_HISTORY = 50
@@ -257,12 +257,20 @@ def _invoke_with_retry(messages, selected_model: str, task_weight: str, stage_ta
                 prompt_text = json.dumps(messages, indent=2, ensure_ascii=False, default=str)
             except Exception:
                 prompt_text = str(messages)
-            vprint(f"[{stage_tag}] Prompt:\n{prompt_text}")
+            dprint(f"[{stage_tag}] Prompt:\n{prompt_text}")
+            vprint(f"[{stage_tag}] Calling LLM (Model: {selected_model}, Weight: {task_weight})...")
 
             response = llm.invoke(messages)
             response_payload = getattr(response, "content", response)
             response_text = _content_to_text(response_payload) or str(response_payload)
-            vprint(f"[{stage_tag}] Response:\n{response_text}")
+            dprint(f"[{stage_tag}] Response:\n{response_text}")
+            
+            # Print response beautifully wrapped in live output log
+            vprint(f"\n[{stage_tag}] Response:")
+            vprint("─" * 60)
+            vprint(response_text)
+            vprint("─" * 60 + "\n")
+            
             return response
         except Exception as exc:
             msg = str(exc).lower()
@@ -366,9 +374,22 @@ def _invoke_react_agent_with_retry(
                 )
             except Exception:
                 prompt_text = str(user_prompt)
-            vprint(f"[{stage_tag}] ReAct Prompt (attempt {attempt + 1}):\n{prompt_text}")
+            dprint(f"[{stage_tag}] ReAct Prompt (attempt {attempt + 1}):\n{prompt_text}")
+            vprint(f"[{stage_tag}] Calling ReAct Agent (Model: {selected_model}, Weight: {task_weight}, attempt {attempt + 1})...")
 
             result = agent_runnable.invoke({"messages": messages})
+
+            try:
+                result_text = json.dumps(result, indent=2, ensure_ascii=False, default=str)
+            except Exception:
+                result_text = str(result)
+            dprint(f"[{stage_tag}] ReAct Agent Response:\n{result_text}")
+
+            response_text = _extract_agent_output_content(result)
+            vprint(f"\n[{stage_tag}] ReAct Agent Response:")
+            vprint("─" * 60)
+            vprint(response_text)
+            vprint("─" * 60 + "\n")
 
             return result
 

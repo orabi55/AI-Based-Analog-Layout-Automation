@@ -61,7 +61,7 @@ from ai_agent.nodes._shared import (
     ip_step,
 )
 from ai_agent.utils.logging import (
-    log_section, log_detail, log_device_positions, stage_start, vprint,
+    log_section, log_detail, log_device_positions, stage_start, vprint, dprint,
 )
 from ai_agent.tools.inventory import validate_device_count
 from ai_agent.placement.symmetry import enforce_reflection_symmetry
@@ -1072,9 +1072,9 @@ def node_placement_specialist_chatbot(state):
         terminal_nets=terminal_nets, edges=edges, no_abutment=no_abutment_flag,
     )
 
-    vprint("Placement context")
-    vprint(context_text)
-    vprint("-" * 40)   
+    dprint("Placement context")
+    dprint(context_text)
+    dprint("-" * 40)   
 
     # ── Step 3b: Call LLM via ReAct + SkillMiddleware ───────────────────────
     log_section("Step 3b: Calling LLM (ReAct + SkillMiddleware)")
@@ -1112,8 +1112,8 @@ def node_placement_specialist_chatbot(state):
             task_weight="heavy",
             stage_tag="PLACEMENT",
         )
-        vprint("Raw LLM output:")
-        vprint(placement_result)
+        dprint("Raw LLM output:")
+        dprint(placement_result)
         placement_response_text, thinking = _extract_agent_output_parts(placement_result)
         llm_elapsed = time.time() - llm_t0
 

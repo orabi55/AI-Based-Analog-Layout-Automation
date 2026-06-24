@@ -29,7 +29,7 @@ import re
 import time
 from typing import Any, List, Tuple
 
-from ai_agent.utils.logging import vprint
+from ai_agent.utils.logging import vprint, dprint
 
 logger = logging.getLogger("ai_agent")
 
@@ -277,14 +277,15 @@ def run_llm_with_tools(
     from ai_agent.tools.tool_executor import ToolExecutor
     from ai_agent.llm.runner import stream_llm
 
-    vprint("[TOOL_RUNNER] run_llm_with_tools start")
-    vprint(f"[TOOL_RUNNER] selected_model={selected_model}, task_weight={task_weight}")
+    dprint("[TOOL_RUNNER] run_llm_with_tools start")
+    dprint(f"[TOOL_RUNNER] selected_model={selected_model}, task_weight={task_weight}")
+    vprint(f"[TOOL_RUNNER] Initiating tool-enabled LLM call (Model: {selected_model})...")
 
     nodes = list(nodes) if nodes is not None else []
 
     # Build LLM with tools (or without, for Alibaba)
     llm, tools_bound = _build_tool_enabled_llm(selected_model, task_weight)
-    vprint(f"[TOOL_RUNNER] tools_bound={tools_bound}")
+    dprint(f"[TOOL_RUNNER] tools_bound={tools_bound}")
 
     # Build LangChain-style messages
     lc_messages = []
@@ -301,11 +302,11 @@ def run_llm_with_tools(
         lc_messages = [{"role": "user", "content": full_prompt or "Hello"}]
 
     lc_messages = _scrub_drc_from_messages(lc_messages)
-    vprint("[TOOL_RUNNER] prompts sent to LLM:")
+    dprint("[TOOL_RUNNER] prompts sent to LLM:")
     for idx, msg in enumerate(lc_messages):
         role = msg.get("role", "user")
         content = msg.get("content", "")
-        vprint(f"  [{idx}] {role}: {content}")
+        dprint(f"  [{idx}] {role}: {content}")
 
     # ── 1. Stream the LLM text response (tool_calls land in the merged AIMessage) ──
     t0 = time.time()
@@ -337,12 +338,12 @@ def run_llm_with_tools(
     elapsed = time.time() - t0
     logger.debug("[TOOL_RUNNER] llm took %.2fs (tools_bound=%s, streamed=%s)",
                  elapsed, tools_bound, worker is not None)
-    vprint(f"[TOOL_RUNNER] llm took {elapsed:.2f}s (streamed={worker is not None})")
-    vprint(f"[TOOL_RUNNER] raw response: {response}")
-    vprint(f"[TOOL_RUNNER] extracted text: {text}")
+    vprint(f"[TOOL_RUNNER] LLM responded in {elapsed:.2f}s (streamed={worker is not None}).")
+    dprint(f"[TOOL_RUNNER] raw response: {response}")
+    dprint(f"[TOOL_RUNNER] extracted text: {text}")
 
     tool_calls = _extract_tool_calls(response) if tools_bound else []
-    vprint(f"[TOOL_RUNNER] tool_calls extracted: {tool_calls}")
+    dprint(f"[TOOL_RUNNER] tool_calls extracted: {tool_calls}")
 
     # ── 2. No FC → return streamed text for [CMD]-block fallback ──
     if not tool_calls:
@@ -373,7 +374,7 @@ def run_llm_with_tools(
         args = tc.get("args", {}) or {}
 
         vprint(f"[TOOL_RUNNER] tool call -> {name}")
-        vprint(f"[TOOL_RUNNER] tool args -> {args}")
+        dprint(f"[TOOL_RUNNER] tool args -> {args}")
 
         # Legacy tool_progress callback (string-typed signal)
         if progress_cb:
@@ -397,7 +398,10 @@ def run_llm_with_tools(
         vprint(
             "[TOOL_RUNNER] tool response -> "
             f"success={bool(result.success)} "
-            f"changed={bool(result.changed)} "
+            f"changed={bool(result.changed)}"
+        )
+        dprint(
+            "[TOOL_RUNNER] tool detailed response -> "
             f"message={result.message} "
             f"metrics={result.metrics}"
         )
