@@ -48,6 +48,7 @@ try:
     from .widgets.loading_overlay import LoadingOverlay
     from .dialogs.import_dialog import ImportDialog
     from .dialogs.ai_model_dialog import AIModelSelectionDialog
+    from .dialogs.ai_progress_dialog import AIPlacementProgressDialog
     from .dialogs.match_dialog import _MatchDialog
 except ImportError:
     from chat_panel import ChatPanel
@@ -63,6 +64,7 @@ except ImportError:
     from widgets.loading_overlay import LoadingOverlay
     from dialogs.import_dialog import ImportDialog
     from dialogs.ai_model_dialog import AIModelSelectionDialog
+    from dialogs.ai_progress_dialog import AIPlacementProgressDialog
     from dialogs.match_dialog import _MatchDialog
 
 from ai_agent.matching.engine import MatchingEngine
@@ -3209,10 +3211,14 @@ class LayoutEditorTab(QWidget):
         self._last_placement_goals = data["placement_goals"]
         abut_label = "with abutment" if abutment_enabled else "no abutment"
         pipeline_label = "LangGraph"
-        self.overlay.show_message(
-            f"Running AI initial placement ({pipeline_label}, {model_choice}, {abut_label})...",
-            show_cancel=True
+
+        # ── Show the new progress dialog instead of the plain overlay ──
+        self._ai_progress_dlg = AIPlacementProgressDialog(
+            self, model_name=model_choice, abutment=abutment_enabled
         )
+        self._ai_progress_dlg.cancel_requested.connect(self._cancel_ai_placement)
+        self._ai_progress_dlg.show()
+
         self._saved_locked_positions = {}
         for group in self._matched_groups:
             for gid in group["ids"]:
@@ -3232,16 +3238,34 @@ class LayoutEditorTab(QWidget):
         if hasattr(self, "_ai_worker") and self._ai_worker and self._ai_worker.isRunning():
             self._ai_worker.terminate()
             self._ai_worker.wait()
-            self.overlay.hide_overlay()
-            
+
+            # Close progress dialog if open
+            dlg = getattr(self, "_ai_progress_dlg", None)
+            if dlg is not None:
+                dlg.on_error("Cancelled by user")
+                dlg.cleanup()
+                dlg.close()
+                self._ai_progress_dlg = None
+            else:
+                self.overlay.hide_overlay()
+
             if hasattr(self, "chat_panel"):
                 self.chat_panel._append_message("AI", "❌ Placement process cancelled by user.", "#3d1a1a", "#ff6b6b")
-                
+
             from PySide6.QtWidgets import QMessageBox
             QMessageBox.warning(self, "Cancelled", "Initial placement was cancelled.")
 
     def _on_ai_placement_completed(self, data):
-        self.overlay.hide_overlay()
+        # Signal the progress dialog (if open) that we're done
+        dlg = getattr(self, "_ai_progress_dlg", None)
+        if dlg is not None:
+            dlg.on_completed()
+            # Wait for the user to click "View Layout" before proceeding
+            dlg.exec()
+            dlg.cleanup()
+            self._ai_progress_dlg = None
+        else:
+            self.overlay.hide_overlay()
         saved = getattr(self, "_saved_locked_positions", {})
         if saved and "nodes" in data:
             for node in data["nodes"]:
@@ -3331,8 +3355,15 @@ class LayoutEditorTab(QWidget):
         self.overlay.hide_overlay()
 
     def _on_ai_placement_error(self, err_msg):
-        self.overlay.hide_overlay()
-        QMessageBox.warning(self, "AI Placement Failed", f"AI placement failed:\n\n{err_msg}")
+        dlg = getattr(self, "_ai_progress_dlg", None)
+        if dlg is not None:
+            dlg.on_error(err_msg)
+            dlg.exec()
+            dlg.cleanup()
+            self._ai_progress_dlg = None
+        else:
+            self.overlay.hide_overlay()
+            QMessageBox.warning(self, "AI Placement Failed", f"AI placement failed:\n\n{err_msg}")
 
     def _compute_layout_area(self) -> float:
         """Return bounding-box area of all current nodes in µm²."""
