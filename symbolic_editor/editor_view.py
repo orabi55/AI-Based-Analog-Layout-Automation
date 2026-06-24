@@ -198,6 +198,11 @@ def _get_taps_info():
     if not os.path.exists(oas_path):
         project_root = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
         oas_path = os.path.join(project_root, "tests", "taps.oas")
+    if not os.path.exists(oas_path):
+        oas_path = "taps.oas"
+    if not os.path.exists(oas_path):
+        project_root = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+        oas_path = os.path.join(project_root, "taps.oas")
         
     if os.path.isfile(oas_path):
         try:
@@ -1025,11 +1030,28 @@ class SymbolicEditor(QGraphicsView):
             geom = node.get("geometry", {})
 
             x = geom.get("x", 0) * self.scale_factor
+            
+            y_val = geom.get("y", 0)
+            dtype_tmp = node.get("type", "nmos")
+            if dtype_tmp == "tap":
+                subtype = node.get("subtype", "ptap")
+                row_type = "pmos" if subtype == "ntap" else "nmos"
+                h_row = next((float(n.get("geometry", {}).get("height", 0.568)) for n in nodes if str(n.get("type", "")).lower() == row_type), 0.568)
+                tap_h = float(geom.get("height", 0.200))
+                if subtype == "ntap":
+                    template = next((n for n in nodes if str(n.get("type", "")).lower() == row_type), None)
+                    nfin = float(template.get("electrical", {}).get("nfin", 2.0)) if template else 2.0
+                    h_physical = round(0.468 + nfin * 0.050, 6)
+                    offset = tap_h - h_physical + 0.330
+                else:
+                    offset = tap_h - h_row + 0.330
+                y_val += offset
+
             # Layout JSON uses math convention: y increases upward.
             # Qt uses screen convention: y increases downward.
             # Negate y so PMOS (layout y=0) stays at top and
             # NMOS (layout y < 0) renders BELOW PMOS.
-            y = -geom.get("y", 0) * self.scale_factor
+            y = -y_val * self.scale_factor
 
             raw_width = geom.get("width", 1) * self.scale_factor
             raw_height = geom.get("height", 0.5) * self.scale_factor

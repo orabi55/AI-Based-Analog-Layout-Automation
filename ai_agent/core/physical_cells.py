@@ -184,7 +184,10 @@ def insert_taps(nodes: list, pdk: dict) -> LayoutToolResult:
             if max_pmos_y is not None and abs(y - max_pmos_y) < 1e-4:
                 tap_subtype = "ntap"
                 # Place Vdd tap above the topmost PMOS row with visual_margin
-                tap_y = _snap(y + tap_h + visual_margin, fin_pitch)
+                # Use true physical height based on nfin to ensure layout symmetry
+                nfin = float(n.get("electrical", {}).get("nfin", 2.0))
+                h_physical = round(0.468 + nfin * 0.050, 6)
+                tap_y = _snap(y + h_physical - 0.330 + visual_margin, fin_pitch)
                 
                 ctr += 1
                 tap_node = {
@@ -210,7 +213,7 @@ def insert_taps(nodes: list, pdk: dict) -> LayoutToolResult:
             if min_nmos_y is not None and abs(y - min_nmos_y) < 1e-4:
                 tap_subtype = "ptap"
                 # Place Gnd tap below the bottommost NMOS row with visual_margin
-                tap_y = _snap(y - h - visual_margin, fin_pitch)
+                tap_y = _snap(y - tap_h - 0.330 - visual_margin, fin_pitch)
                 
                 ctr += 1
                 tap_node = {

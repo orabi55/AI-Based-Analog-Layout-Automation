@@ -330,6 +330,11 @@ def update_oas_placement(oas_path, sp_path, nodes, output_path,
     if not os.path.exists(taps_oas_path):
         project_root = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
         taps_oas_path = os.path.join(project_root, "tests", "taps.oas")
+    if not os.path.exists(taps_oas_path):
+        taps_oas_path = "taps.oas"
+    if not os.path.exists(taps_oas_path):
+        project_root = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+        taps_oas_path = os.path.join(project_root, "taps.oas")
     if os.path.exists(taps_oas_path):
         try:
             taps_lib = gdstk.read_oas(taps_oas_path)

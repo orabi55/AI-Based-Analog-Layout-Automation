@@ -2816,7 +2816,18 @@ class LayoutEditorTab(QWidget):
             None,
         )
         x = candidate["x"] / self.editor.scale_factor
-        y = -candidate["y"] / self.editor.scale_factor
+        y_val = -candidate["y"] / self.editor.scale_factor
+        
+        h_row = float(template.get("geometry", {}).get("height", 0.568)) if template else 0.568
+        tap_h = candidate["height"] / self.editor.scale_factor
+        if subtype == "ntap":
+            nfin = float(template.get("electrical", {}).get("nfin", 2.0)) if template else 2.0
+            h_physical = round(0.468 + nfin * 0.050, 6)
+            offset = tap_h - h_physical + 0.330
+        else:
+            offset = tap_h - h_row + 0.330
+        y = y_val - offset
+        
         width = candidate["width"] / self.editor.scale_factor
         height = candidate["height"] / self.editor.scale_factor
         
@@ -4778,6 +4789,20 @@ class LayoutEditorTab(QWidget):
             if dev_id not in positions:
                 continue
             canvas_x, canvas_y = positions[dev_id]
+            if node.get("type") == "tap":
+                subtype = node.get("subtype", "ptap")
+                row_type = "pmos" if subtype == "ntap" else "nmos"
+                h_row = next((float(n.get("geometry", {}).get("height", 0.568)) for n in self.nodes if str(n.get("type", "")).lower() == row_type), 0.568)
+                tap_h = float(node.get("geometry", {}).get("height", 0.200))
+                if subtype == "ntap":
+                    template = next((n for n in self.nodes if str(n.get("type", "")).lower() == row_type), None)
+                    nfin = float(template.get("electrical", {}).get("nfin", 2.0)) if template else 2.0
+                    h_physical = round(0.468 + nfin * 0.050, 6)
+                    offset = tap_h - h_physical + 0.330
+                else:
+                    offset = tap_h - h_row + 0.330
+                canvas_y -= offset
+                
             item = self.editor.device_items.get(dev_id)
             snap_disabled = item is not None and getattr(item, "_snap_grid_x", None) is None
             if snap_disabled:
