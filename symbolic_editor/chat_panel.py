@@ -904,8 +904,26 @@ class ChatPanel(QWidget):
         """
 
     def _render_messages(self):
-        html_parts = [self._message_html(msg) for msg in self._messages]
-        self.chat_display.setHtml("".join(html_parts))
+        if not hasattr(self, "_render_timer"):
+            self._render_timer = QTimer(self)
+            self._render_timer.setSingleShot(True)
+            self._render_timer.timeout.connect(self._do_render_messages)
+        if not self._render_timer.isActive():
+            self._render_timer.start(50)
+
+    def _do_render_messages(self):
+        html_parts = []
+        for msg in self._messages:
+            if msg.get("role") == "tool" and msg.get("status") == "done":
+                continue
+            html_parts.append(self._message_html(msg))
+            
+        new_html = "".join(html_parts)
+        if getattr(self, "_last_rendered_html", None) == new_html:
+            return
+        self._last_rendered_html = new_html
+        
+        self.chat_display.setHtml(new_html)
         self.chat_display.verticalScrollBar().setValue(
             self.chat_display.verticalScrollBar().maximum()
         )
